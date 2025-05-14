@@ -2,11 +2,11 @@
 "use client";
 
 import type React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { WorkspaceData } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, Database } from 'lucide-react'; // Adicionado Database
+import { PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, Database, ChevronDown } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -27,6 +27,22 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Switch } from '@/components/ui/switch';
+
+// Ícone SVG simples para Supabase (um 'S' estilizado)
+const SupabaseIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+    <path d="M12.1721 2.00244C12.8801 1.98791 13.576 2.21863 14.1116 2.64953C14.6472 3.08043 14.9816 3.68122 15.0491 4.32663L15.0536 4.43311L15.2402 13.4907C15.2811 14.5963 14.4145 15.5223 13.3045 15.5629C12.9977 15.5745 12.6978 15.5302 12.4233 15.4326L12.1933 15.3496C11.2835 14.9872 10.7389 13.9861 10.9305 13.005L11.9976 7.54346C11.7963 7.44211 11.5823 7.36858 11.3608 7.32471L8.75981 8.00806C7.7488 8.25358 6.85304 7.43087 6.85179 6.39187C6.85091 5.69923 7.32011 5.09048 7.97152 4.89367L8.08993 4.85168L12.0001 3.56348V2.09302C12.0001 2.06352 12.0025 2.03488 12.007 2.00767L12.1721 2.00244ZM12.0001 16.8091L11.9425 16.8323C10.3604 17.5281 8.97375 18.6318 8.06805 20.0061C7.51501 20.8504 7.84881 22.0024 8.78293 22.0024H15.2172C16.1513 22.0024 16.4851 20.8504 15.9321 20.0061C15.0264 18.6318 13.6397 17.5281 12.0577 16.8323L12.0001 16.8091Z"/>
+  </svg>
+);
+
+// Ícone SVG simples para PostgreSQL (um elefante estilizado ou 'Pg')
+const PostgresIcon = () => (
+ <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+    <path d="M5.10526 2H18.8947C19.9381 2 20.7895 2.82911 20.7895 3.8421V7.52631H16.6316V14.0526C16.6316 15.3461 15.5772 16.3684 14.2632 16.3684H9.73684C8.42283 16.3684 7.36842 15.3461 7.36842 14.0526V7.52631H3.21053V3.8421C3.21053 2.82911 4.06193 2 5.10526 2ZM12.5789 7.52631H16.6316V3.8421H12.5789V7.52631ZM7.36842 7.52631H11.4211V3.8421H7.36842V7.52631ZM9.73684 17.6316H14.2632C16.3051 17.6316 17.9474 19.2293 17.9474 21.2105C17.9474 21.6453 17.6047 22 17.1579 22H6.84211C6.39526 22 6.05263 21.6453 6.05263 21.2105C6.05263 19.2293 7.69491 17.6316 9.73684 17.6316ZM13.7368 11.2105H10.2632C9.91571 11.2105 9.73684 11.0373 9.73684 10.7895C9.73684 10.5416 9.91571 10.3684 10.2632 10.3684H13.7368C14.0843 10.3684 14.2632 10.5416 14.2632 10.7895C14.2632 11.0373 14.0843 11.2105 13.7368 11.2105Z" />
+  </svg>
+);
 
 
 interface TopBarProps {
@@ -51,28 +67,56 @@ const TopBar: React.FC<TopBarProps> = ({
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   
-  // Estados para configurações do Supabase
   const [supabaseUrl, setSupabaseUrl] = useState(''); 
   const [supabaseAnonKey, setSupabaseAnonKey] = useState(''); 
+  const [isSupabaseEnabled, setIsSupabaseEnabled] = useState(false);
 
-  // Estados placeholder para PostgreSQL (apenas para UI)
   const [postgresHost, setPostgresHost] = useState('');
   const [postgresPort, setPostgresPort] = useState('');
   const [postgresUser, setPostgresUser] = useState('');
   const [postgresPassword, setPostgresPassword] = useState('');
   const [postgresDatabase, setPostgresDatabase] = useState('');
+  const [isPostgresEnabled, setIsPostgresEnabled] = useState(false);
 
+  // Load settings from localStorage on component mount
+  useEffect(() => {
+    const savedSupabaseUrl = localStorage.getItem('supabaseUrl');
+    const savedSupabaseAnonKey = localStorage.getItem('supabaseAnonKey');
+    const savedIsSupabaseEnabled = localStorage.getItem('isSupabaseEnabled') === 'true';
+    
+    if (savedSupabaseUrl) setSupabaseUrl(savedSupabaseUrl);
+    if (savedSupabaseAnonKey) setSupabaseAnonKey(savedSupabaseAnonKey);
+    setIsSupabaseEnabled(savedIsSupabaseEnabled);
+
+    // Placeholder for loading PostgreSQL settings similarly
+    const savedPostgresHost = localStorage.getItem('postgresHost');
+    // ... load other postgres settings ...
+    const savedIsPostgresEnabled = localStorage.getItem('isPostgresEnabled') === 'true';
+
+    if (savedPostgresHost) setPostgresHost(savedPostgresHost);
+    setIsPostgresEnabled(savedIsPostgresEnabled);
+
+  }, []);
 
   const handleSaveSettings = () => {
-    // Em uma aplicação real, você salvaria isso (ex: localStorage ou backend)
-    // e provavelmente separaria o salvamento por categoria.
-    console.log("Configurações Salvas (Simulado):", { 
-      supabase: { supabaseUrl, supabaseAnonKey },
-      postgresql: { postgresHost, postgresPort, postgresUser, postgresDatabase, postgresPasswordExists: postgresPassword.length > 0 }
+    localStorage.setItem('supabaseUrl', supabaseUrl);
+    localStorage.setItem('supabaseAnonKey', supabaseAnonKey);
+    localStorage.setItem('isSupabaseEnabled', String(isSupabaseEnabled));
+
+    localStorage.setItem('postgresHost', postgresHost);
+    localStorage.setItem('postgresPort', postgresPort);
+    localStorage.setItem('postgresUser', postgresUser);
+    localStorage.setItem('postgresPassword', postgresPassword);
+    localStorage.setItem('postgresDatabase', postgresDatabase);
+    localStorage.setItem('isPostgresEnabled', String(isPostgresEnabled));
+
+    console.log("Configurações Salvas:", { 
+      supabase: { supabaseUrl, supabaseAnonKey, isSupabaseEnabled },
+      postgresql: { postgresHost, postgresPort, postgresUser, postgresDatabase, isPostgresEnabled, postgresPasswordExists: postgresPassword.length > 0 }
     });
     toast({
       title: "Configurações Salvas!",
-      description: "Suas configurações foram (simuladamente) salvas.",
+      description: "Suas configurações foram salvas no localStorage.",
     });
     setIsSettingsDialogOpen(false);
   };
@@ -114,7 +158,6 @@ const TopBar: React.FC<TopBarProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Dropdown para telas menores */}
           <div className="md:hidden">
             {activeWorkspaceId && workspaces.length > 0 && (
               <Select
@@ -222,98 +265,118 @@ const TopBar: React.FC<TopBarProps> = ({
         <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl bg-card max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-xl">Configurações da Aplicação</DialogTitle>
-            {/* <DialogDescription>
-              Gerencie as configurações globais da sua aplicação aqui.
-            </DialogDescription> */}
           </DialogHeader>
           
-          <div className="flex-grow overflow-y-auto pr-2 space-y-8 py-4">
-            {/* Categoria Banco de Dados */}
+          <div className="flex-grow overflow-y-auto pr-2 space-y-6 py-4">
             <section>
-              <div className="flex items-center mb-4">
+              <div className="flex items-center mb-3">
                 <Database className="w-6 h-6 mr-3 text-primary" />
                 <h3 className="text-lg font-semibold text-card-foreground">Banco de Dados</h3>
               </div>
-              <Separator className="mb-6" />
+              <Separator className="mb-5" />
 
-              {/* Sub-seção Supabase */}
-              <div className="ml-4 pl-4 border-l-2 border-border space-y-6">
-                <div>
-                    <h4 className="font-medium leading-none text-md text-card-foreground mb-1">Supabase</h4>
-                    <p className="text-sm text-muted-foreground mb-4">
-                        Configure as credenciais para integração com seu projeto Supabase.
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                        <div>
-                            <Label htmlFor="supabase-url" className="text-card-foreground">URL do Projeto Supabase</Label>
-                            <Input
-                                id="supabase-url"
-                                placeholder="https://seunomeprojeto.supabase.co"
-                                value={supabaseUrl}
-                                onChange={(e) => setSupabaseUrl(e.target.value)}
-                                className="bg-input text-foreground mt-1"
-                            />
-                        </div>
-                        <div>
-                            <Label htmlFor="supabase-anon-key" className="text-card-foreground">Chave Anônima (Anon Key)</Label>
-                            <Input
-                                id="supabase-anon-key"
-                                type="password"
-                                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                                value={supabaseAnonKey}
-                                onChange={(e) => setSupabaseAnonKey(e.target.value)}
-                                className="bg-input text-foreground mt-1"
-                            />
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Esta chave é usada para acesso público aos dados do seu projeto.
-                            </p>
-                        </div>
+              <Accordion type="multiple" className="w-full space-y-4">
+                {/* Configuração Supabase */}
+                <AccordionItem value="supabase" className="border rounded-lg shadow-sm">
+                  <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
+                    <div className="flex items-center space-x-3">
+                      <SupabaseIcon />
+                      <span className="font-medium text-card-foreground">Supabase</span>
                     </div>
-                </div>
-
-                <Separator className="my-8" />
-
-                {/* Sub-seção PostgreSQL (Placeholder) */}
-                <div>
-                    <h4 className="font-medium leading-none text-md text-card-foreground mb-1">PostgreSQL</h4>
-                    <p className="text-sm text-muted-foreground mb-4">
-                        Configure as credenciais para conexão com seu banco de dados PostgreSQL. (Em breve)
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                        <div>
-                            <Label htmlFor="postgres-host" className="text-card-foreground">Host</Label>
-                            <Input id="postgres-host" placeholder="localhost" value={postgresHost} onChange={e => setPostgresHost(e.target.value)} disabled className="bg-input text-foreground mt-1" />
-                        </div>
-                        <div>
-                            <Label htmlFor="postgres-port" className="text-card-foreground">Porta</Label>
-                            <Input id="postgres-port" placeholder="5432" value={postgresPort} onChange={e => setPostgresPort(e.target.value)} disabled className="bg-input text-foreground mt-1" />
-                        </div>
-                        <div>
-                            <Label htmlFor="postgres-user" className="text-card-foreground">Usuário</Label>
-                            <Input id="postgres-user" placeholder="seu_usuario" value={postgresUser} onChange={e => setPostgresUser(e.target.value)} disabled className="bg-input text-foreground mt-1" />
-                        </div>
-                        <div>
-                            <Label htmlFor="postgres-password" className="text-card-foreground">Senha</Label>
-                            <Input id="postgres-password" type="password" placeholder="********" value={postgresPassword} onChange={e => setPostgresPassword(e.target.value)} disabled className="bg-input text-foreground mt-1" />
-                        </div>
-                        <div className="md:col-span-2">
-                            <Label htmlFor="postgres-database" className="text-card-foreground">Nome do Banco</Label>
-                            <Input id="postgres-database" placeholder="nome_do_banco" value={postgresDatabase} onChange={e => setPostgresDatabase(e.target.value)} disabled className="bg-input text-foreground mt-1" />
-                        </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4 pt-3 pb-4 border-t">
+                    <div className="flex items-center space-x-2 mb-4">
+                      <Switch 
+                        id="enable-supabase" 
+                        checked={isSupabaseEnabled} 
+                        onCheckedChange={setIsSupabaseEnabled}
+                        aria-label="Habilitar Integração Supabase"
+                      />
+                      <Label htmlFor="enable-supabase" className="text-sm font-medium">Habilitar Integração Supabase</Label>
                     </div>
-                </div>
-              </div>
-            </section>
+                    {isSupabaseEnabled && (
+                      <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
+                        <div>
+                          <Label htmlFor="supabase-url" className="text-card-foreground/90 text-sm">URL do Projeto Supabase</Label>
+                          <Input
+                            id="supabase-url"
+                            placeholder="https://seunomeprojeto.supabase.co"
+                            value={supabaseUrl}
+                            onChange={(e) => setSupabaseUrl(e.target.value)}
+                            className="bg-input text-foreground mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="supabase-anon-key" className="text-card-foreground/90 text-sm">Chave Anônima (Anon Key)</Label>
+                          <Input
+                            id="supabase-anon-key"
+                            type="password"
+                            placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                            value={supabaseAnonKey}
+                            onChange={(e) => setSupabaseAnonKey(e.target.value)}
+                            className="bg-input text-foreground mt-1"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Usada para acesso público aos dados do seu projeto.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
 
-            {/* Outras Categorias de Configuração (Placeholder) */}
-            {/* 
-            <section>
-              <h3 className="text-lg font-semibold text-card-foreground mb-2">Outra Categoria</h3>
-              <Separator className="mb-4" />
-              <p className="text-sm text-muted-foreground">Configurações para outra categoria aqui...</p>
+                {/* Configuração PostgreSQL */}
+                <AccordionItem value="postgresql" className="border rounded-lg shadow-sm">
+                  <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
+                     <div className="flex items-center space-x-3">
+                      <PostgresIcon />
+                      <span className="font-medium text-card-foreground">PostgreSQL</span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4 pt-3 pb-4 border-t">
+                    <div className="flex items-center space-x-2 mb-4">
+                      <Switch 
+                        id="enable-postgres" 
+                        checked={isPostgresEnabled} 
+                        onCheckedChange={setIsPostgresEnabled}
+                        aria-label="Habilitar Integração PostgreSQL"
+                      />
+                      <Label htmlFor="enable-postgres" className="text-sm font-medium">Habilitar Integração PostgreSQL</Label>
+                    </div>
+                    {isPostgresEnabled && (
+                      <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                            <div>
+                                <Label htmlFor="postgres-host" className="text-card-foreground/90 text-sm">Host</Label>
+                                <Input id="postgres-host" placeholder="localhost" value={postgresHost} onChange={e => setPostgresHost(e.target.value)} className="bg-input text-foreground mt-1" />
+                            </div>
+                            <div>
+                                <Label htmlFor="postgres-port" className="text-card-foreground/90 text-sm">Porta</Label>
+                                <Input id="postgres-port" placeholder="5432" value={postgresPort} onChange={e => setPostgresPort(e.target.value)} className="bg-input text-foreground mt-1" />
+                            </div>
+                            <div>
+                                <Label htmlFor="postgres-user" className="text-card-foreground/90 text-sm">Usuário</Label>
+                                <Input id="postgres-user" placeholder="seu_usuario" value={postgresUser} onChange={e => setPostgresUser(e.target.value)} className="bg-input text-foreground mt-1" />
+                            </div>
+                            <div>
+                                <Label htmlFor="postgres-password" className="text-card-foreground/90 text-sm">Senha</Label>
+                                <Input id="postgres-password" type="password" placeholder="********" value={postgresPassword} onChange={e => setPostgresPassword(e.target.value)} className="bg-input text-foreground mt-1" />
+                            </div>
+                            <div className="md:col-span-2">
+                                <Label htmlFor="postgres-database" className="text-card-foreground/90 text-sm">Nome do Banco</Label>
+                                <Input id="postgres-database" placeholder="nome_do_banco" value={postgresDatabase} onChange={e => setPostgresDatabase(e.target.value)} className="bg-input text-foreground mt-1" />
+                            </div>
+                        </div>
+                         <p className="text-xs text-muted-foreground mt-1">
+                            As configurações do PostgreSQL são para demonstração e não estão funcionalmente integradas.
+                        </p>
+                      </div>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
+                {/* Adicionar outros bancos de dados aqui seguindo o mesmo padrão */}
+              </Accordion>
             </section>
-            */}
-
           </div>
           
           <DialogFooter className="mt-auto pt-4 border-t">
@@ -327,4 +390,3 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
-
