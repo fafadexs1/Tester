@@ -24,38 +24,26 @@ export default function FlowBuilderClient() {
 
   const handleDropNode = useCallback((item: DraggableBlockItemData, viewportOffset: { x: number, y: number }) => {
     const baseNodeData: Omit<NodeData, 'id' | 'type' | 'title' | 'x' | 'y'> = {
-      // message (Exibir Texto)
       text: '',
-      // input (Entrada do Usuário)
       promptText: '',
       inputType: 'text',
       variableToSaveResponse: '',
-      // option (Múltiplas Escolhas)
       questionText: '',
       optionsList: '',
       variableToSaveChoice: '',
-      // whatsapp-*
       instanceName: 'evolution_instance',
       phoneNumber: '', textMessage: '', mediaUrl: '', mediaType: 'image', caption: '',
       groupName: '', participants: '',
-      // condition
       conditionVariable: '', conditionOperator: '==',
       conditionValue: '',
-      // set-variable
       variableName: '', variableValue: '',
-      // api-call
       apiUrl: '',
       apiMethod: 'GET', apiHeaders: '{ "Content-Type": "application/json" }', apiBody: '{}',
-      // delay
       delayDuration: 1000,
-      // date-input
       dateInputLabel: '',
       variableToSaveDate: '',
-      // redirect
       redirectUrl: '',
-      // typing-emulation
       typingDuration: 1500,
-      // media-display
       mediaDisplayType: 'image',
       mediaDisplayUrl: '',
       mediaDisplayText: '',
@@ -65,8 +53,8 @@ export default function FlowBuilderClient() {
       id: uuidv4(),
       type: item.type as NodeData['type'],
       title: item.label,
-      ...baseNodeData, // Apply all defaults
-      ...(item.defaultData || {}), // Override with specific block defaults
+      ...baseNodeData, 
+      ...(item.defaultData || {}), 
       x: viewportOffset.x - NODE_WIDTH / 2, 
       y: viewportOffset.y - NODE_HEADER_HEIGHT_APPROX / 2, 
     };
@@ -114,7 +102,7 @@ export default function FlowBuilderClient() {
       currentX: lineCurrentX, 
       currentY: lineCurrentY, 
     });
-  }, [nodes]);
+  }, [nodes, canvasOffset]); // Added canvasOffset as it's indirectly used via canvasRect for initial currentX/Y calculations
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) { 
@@ -147,7 +135,7 @@ export default function FlowBuilderClient() {
         };
       });
     }
-  }, [drawingLine, canvasOffset]);
+  }, [drawingLine, canvasOffset]); 
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -162,7 +150,7 @@ export default function FlowBuilderClient() {
       let toId = null;
       if (targetHandleElement) {
           toId = targetHandleElement.closest('[data-node-id]')?.getAttribute('data-node-id');
-      } else if (targetNodeElement) {
+      } else if (targetNodeElement) { 
           toId = targetNodeElement.getAttribute('data-node-id');
       }
 
@@ -216,6 +204,7 @@ export default function FlowBuilderClient() {
         const canvasElement = canvasWrapperRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null;
         if (canvasElement) canvasElement.style.cursor = 'grab';
       }
+      // Access the current value of drawingLine from the closure of this specific effect setup
       if (drawingLine) { 
         setDrawingLine(null);
       }
@@ -228,7 +217,8 @@ export default function FlowBuilderClient() {
       document.removeEventListener('mouseup', handleGlobalMouseUp);
       document.body.removeEventListener('mouseleave', handleMouseLeaveWindow);
     };
-  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine]);
+  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine]); // drawingLine is kept here because handleMouseLeaveWindow's closure depends on it.
+                                                                 // The callbacks handleGlobalMouseMove/Up also depend on drawingLine.
   
   return (
     <DndProvider backend={HTML5Backend}>
@@ -252,3 +242,4 @@ export default function FlowBuilderClient() {
     </DndProvider>
   );
 }
+
