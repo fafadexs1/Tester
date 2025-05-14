@@ -2,36 +2,22 @@
 "use client";
 
 import type React from 'react';
-import type { WorkspaceData } from '@/lib/types';
+// Removido WorkspaceData, pois não é mais gerenciado aqui
 import DraggableBlock from './DraggableBlock';
 import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
-  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, PlusCircle,
-  Save, Undo2, LayoutGrid // Adicionado LayoutGrid como exemplo de ícone para acionar painel
+  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, 
+  // Removidos PlusCircle, Save, Undo2, LayoutGrid
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
+// Removidos Button, Label, Selects, Separator, pois os controles de workspace foram movidos
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
+// Props foram removidas pois a sidebar agora só exibe blocos
+interface FlowSidebarProps {}
 
-interface FlowSidebarProps {
-  workspaces: WorkspaceData[];
-  activeWorkspaceId: string | null;
-  onAddWorkspace: () => void;
-  onSwitchWorkspace: (id: string) => void;
-  onSaveWorkspaces: () => void;
-  onDiscardChanges: () => void;
-}
-
-
-const FlowSidebar: React.FC<FlowSidebarProps> = ({
-  workspaces, activeWorkspaceId, onAddWorkspace, onSwitchWorkspace,
-  onSaveWorkspaces, onDiscardChanges
-}) => {
+const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
   const iconProps = { className: "w-4 h-4" };
 
   const blockCategories = [
@@ -90,54 +76,9 @@ const FlowSidebar: React.FC<FlowSidebarProps> = ({
     }
   ];
 
-
   return (
     <aside className="w-80 bg-sidebar border-r border-sidebar-border shadow-lg flex flex-col">
-      <div className="p-4 border-b border-sidebar-border">
-        <h2 className="text-lg font-semibold text-sidebar-foreground">Workspaces</h2>
-        <Button onClick={onAddWorkspace} className="w-full mt-2" variant="outline">
-          <PlusCircle className="mr-2 h-4 w-4" /> Novo Fluxo
-        </Button>
-        {workspaces.length > 0 && activeWorkspaceId && (
-          <div className="mt-4">
-            <Label htmlFor="workspace-select" className="text-sidebar-foreground/80">Fluxo Ativo</Label>
-            <Select
-              value={activeWorkspaceId}
-              onValueChange={onSwitchWorkspace}
-            >
-              <SelectTrigger id="workspace-select" className="mt-1 bg-card text-card-foreground">
-                <SelectValue placeholder="Selecione um fluxo" />
-              </SelectTrigger>
-              <SelectContent>
-                {workspaces.map(ws => (
-                  <SelectItem key={ws.id} value={ws.id}>
-                    {ws.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        <Separator className="my-4 bg-sidebar-border" />
-        <div className="space-y-2">
-          <Button 
-            onClick={onSaveWorkspaces} 
-            className="w-full" 
-            variant="default"
-            disabled={!activeWorkspaceId}
-          >
-            <Save className="mr-2 h-4 w-4" /> Salvar Fluxos
-          </Button>
-          <Button 
-            onClick={onDiscardChanges} 
-            className="w-full" 
-            variant="destructive"
-            disabled={!activeWorkspaceId}
-          >
-            <Undo2 className="mr-2 h-4 w-4" /> Descartar Alterações
-          </Button>
-        </div>
-      </div>
+      {/* Seção de Workspaces removida daqui */}
       
       <div className="p-4 border-b border-sidebar-border">
         <h2 className="text-lg font-semibold text-sidebar-foreground">Blocos de Fluxo</h2>
@@ -169,5 +110,3 @@ const FlowSidebar: React.FC<FlowSidebarProps> = ({
 };
 
 export default FlowSidebar;
-
-    

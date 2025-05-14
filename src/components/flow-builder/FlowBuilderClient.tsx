@@ -6,6 +6,7 @@ import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBloc
 import { NODE_WIDTH, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX, GRID_SIZE } from '@/lib/constants';
 import FlowSidebar from './FlowSidebar';
 import Canvas from './Canvas';
+import TopBar from './TopBar'; // Importar o TopBar
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { v4 as uuidv4 } from 'uuid';
@@ -26,7 +27,7 @@ export default function FlowBuilderClient() {
   const isPanning = useRef(false);
   const panStartMousePosition = useRef({ x: 0, y: 0 });
   const initialCanvasOffsetOnPanStart = useRef({ x: 0, y: 0 });
-  const canvasWrapperRef = useRef<HTMLDivElement>(null); 
+  const mainContentRef = useRef<HTMLDivElement>(null); // Alterado de canvasWrapperRef para mainContentRef
 
   // Load workspaces from localStorage on initial mount
   useEffect(() => {
@@ -85,7 +86,6 @@ export default function FlowBuilderClient() {
       };
       setWorkspaces([initialWorkspace]);
       setActiveWorkspaceId(initialId);
-      // Save the initial workspace immediately
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify([initialWorkspace]));
         localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, initialId);
@@ -94,9 +94,8 @@ export default function FlowBuilderClient() {
         console.error("[FlowBuilderClient] Failed to save initial workspace to localStorage", e);
       }
     }
-  }, []); // Removed toast dependency
+  }, []);
 
-  // Save active workspace ID to localStorage when it changes
   useEffect(() => {
     if (activeWorkspaceId) {
         try {
@@ -149,14 +148,13 @@ export default function FlowBuilderClient() {
             description: "Fluxos recarregados a partir do último salvamento.",
             variant: "default",
           });
-          // Ensure activeWorkspaceId is still valid, or reset if needed
           const currentActiveId = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE);
           if (currentActiveId && parsedData.some(ws => ws.id === currentActiveId)) {
             setActiveWorkspaceId(currentActiveId);
           } else if (parsedData.length > 0) {
             setActiveWorkspaceId(parsedData[0].id);
           } else {
-            setActiveWorkspaceId(null); // No workspaces left
+            setActiveWorkspaceId(null);
           }
         } else {
           console.warn("[FlowBuilderClient] (Discard) Loaded workspaces from localStorage is not valid. No changes made.");
@@ -179,11 +177,10 @@ export default function FlowBuilderClient() {
       toast({
         title: "Nenhum Dado Salvo",
         description: "Não há dados salvos no localStorage para reverter.",
-        variant: "default", // Or "destructive" depending on desired UX
+        variant: "default",
       });
     }
   }, [toast]);
-
 
   const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
   const currentNodes = activeWorkspace ? activeWorkspace.nodes : [];
@@ -201,10 +198,9 @@ export default function FlowBuilderClient() {
     setWorkspaces(updatedWorkspaces);
     setActiveWorkspaceId(newWorkspaceId);
     console.log('[FlowBuilderClient] Workspace added. New ID:', newWorkspaceId);
-    // Save immediately after adding a new workspace
     try {
       localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify(updatedWorkspaces));
-      localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, newWorkspaceId); // Ensure active ID is also saved
+      localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, newWorkspaceId);
       console.log('[FlowBuilderClient] New workspace and active ID saved to localStorage.');
       toast({
         title: "Novo Fluxo Criado",
@@ -236,7 +232,6 @@ export default function FlowBuilderClient() {
       )
     );
   }, [activeWorkspaceId]);
-
 
   const handleDropNode = useCallback((item: DraggableBlockItemData, viewportOffset: { x: number, y: number }) => {
     console.log('[FlowBuilderClient] handleDropNode called with:', { item, viewportOffset: JSON.parse(JSON.stringify(viewportOffset)), activeWorkspaceId });
@@ -303,9 +298,9 @@ export default function FlowBuilderClient() {
 
   const handleStartConnection = useCallback((e: React.MouseEvent, fromId: string, sourceHandleId = 'default') => {
     const fromNode = currentNodes.find(n => n.id === fromId); 
-    if (!fromNode || !canvasWrapperRef.current) return;
+    if (!fromNode || !mainContentRef.current) return; // Alterado para mainContentRef
     
-    const canvasElement = canvasWrapperRef.current?.querySelector('.relative.flex-1.bg-background'); 
+    const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background'); 
     if (!canvasElement) return;
     const canvasRect = canvasElement.getBoundingClientRect();
 
@@ -350,7 +345,7 @@ export default function FlowBuilderClient() {
         y: initialCanvasOffsetOnPanStart.current.y + dy,
       });
     } else if (drawingLine) {
-      const canvasElement = canvasWrapperRef.current?.querySelector('.relative.flex-1.bg-background');
+      const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background'); // Alterado para mainContentRef
       if (!canvasElement) return;
       const canvasRect = canvasElement.getBoundingClientRect();
       setDrawingLine((prev) => {
@@ -367,7 +362,7 @@ export default function FlowBuilderClient() {
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
       isPanning.current = false;
-       const canvasElement = canvasWrapperRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null;
+       const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null; // Alterado para mainContentRef
       if (canvasElement) canvasElement.style.cursor = 'grab';
     } else if (drawingLine) {
       const targetElement = document.elementFromPoint(e.clientX, e.clientY);
@@ -455,7 +450,7 @@ export default function FlowBuilderClient() {
     const handleMouseLeaveWindow = () => {
       if (isPanning.current) {
         isPanning.current = false;
-        const canvasElement = canvasWrapperRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null;
+        const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null; // Alterado para mainContentRef
         if (canvasElement) canvasElement.style.cursor = 'grab';
       }
       if (drawingLineRef.current) { 
@@ -473,32 +468,34 @@ export default function FlowBuilderClient() {
   
   return (
     <DndProvider backend={HTML5Backend}>
-      <div ref={canvasWrapperRef} className="flex h-screen bg-background font-sans select-none overflow-hidden">
-        <FlowSidebar 
+      <div className="flex flex-col h-screen bg-background font-sans select-none overflow-hidden">
+        <TopBar
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspaceId}
           onAddWorkspace={addWorkspace}
           onSwitchWorkspace={switchWorkspace}
           onSaveWorkspaces={handleSaveWorkspaces}
           onDiscardChanges={handleDiscardChanges}
+          appName="Flowise Lite"
         />
-        <Canvas
-          nodes={currentNodes}
-          connections={currentConnections}
-          drawingLine={drawingLine}
-          canvasOffset={canvasOffset}
-          onDropNode={handleDropNode}
-          onUpdateNode={updateNode}
-          onStartConnection={handleStartConnection}
-          onDeleteNode={deleteNode}
-          onDeleteConnection={deleteConnection}
-          onCanvasMouseDown={handleCanvasMouseDownForPanning}
-          highlightedConnectionId={highlightedConnectionId}
-          setHighlightedConnectionId={setHighlightedConnectionId}
-        />
+        <div ref={mainContentRef} className="flex flex-1 overflow-hidden">
+          <FlowSidebar /> {/* Props removidas pois agora são gerenciadas pelo TopBar ou não são mais necessárias na Sidebar */}
+          <Canvas
+            nodes={currentNodes}
+            connections={currentConnections}
+            drawingLine={drawingLine}
+            canvasOffset={canvasOffset}
+            onDropNode={handleDropNode}
+            onUpdateNode={updateNode}
+            onStartConnection={handleStartConnection}
+            onDeleteNode={deleteNode}
+            onDeleteConnection={deleteConnection}
+            onCanvasMouseDown={handleCanvasMouseDownForPanning}
+            highlightedConnectionId={highlightedConnectionId}
+            setHighlightedConnectionId={setHighlightedConnectionId}
+          />
+        </div>
       </div>
     </DndProvider>
   );
 }
-
-    
