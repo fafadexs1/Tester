@@ -20,15 +20,15 @@ export type NodeType =
   | 'redirect'
   | 'typing-emulation'
   | 'media-display'
-  // Novos tipos de nós
-  | 'log-console'         // Para registrar mensagens no console (para debugging)
-  | 'code-execution'      // Para executar trechos de código JavaScript (server-side)
-  | 'json-transform'      // Para transformar dados JSON usando JSONata ou similar
-  | 'file-upload'         // Para permitir que o usuário faça upload de um arquivo
-  | 'rating-input'        // Para coletar uma avaliação do usuário (estrelas, etc.)
-  | 'ai-text-generation'  // Para gerar texto usando um modelo de IA
-  | 'send-email'          // Para enviar e-mails
-  | 'google-sheets-append'; // Para adicionar uma linha a uma Planilha Google
+  | 'log-console'
+  | 'code-execution'
+  | 'json-transform'
+  | 'file-upload'
+  | 'rating-input'
+  | 'ai-text-generation'
+  | 'send-email'
+  | 'google-sheets-append'
+  | 'intelligent-agent'; // Novo tipo de nó
 
 export interface NodeData {
   id: string;
@@ -94,44 +94,53 @@ export interface NodeData {
   mediaDisplayText?: string; // alt text ou legenda
 
   // Para 'log-console'
-  logMessage?: string; // PT: Mensagem para Log
+  logMessage?: string;
 
   // Para 'code-execution'
-  codeSnippet?: string; // PT: Trecho de Código (JS)
-  codeOutputVariable?: string; // PT: Salvar Saída na Variável
+  codeSnippet?: string;
+  codeOutputVariable?: string;
 
   // Para 'json-transform'
-  inputJson?: string; // PT: JSON de Entrada (ou variável)
-  jsonataExpression?: string; // PT: Expressão JSONata
-  jsonOutputVariable?: string; // PT: Salvar JSON Transformado na Variável
+  inputJson?: string;
+  jsonataExpression?: string;
+  jsonOutputVariable?: string;
 
   // Para 'file-upload'
-  uploadPromptText?: string; // PT: Texto do Prompt de Upload
-  fileTypeFilter?: string; // PT: Filtro de Tipo de Arquivo (ex: image/*, .pdf)
-  maxFileSizeMB?: number; // PT: Tam. Máx. Arquivo (MB)
-  fileUrlVariable?: string; // PT: Salvar URL do Arquivo na Variável
+  uploadPromptText?: string;
+  fileTypeFilter?: string;
+  maxFileSizeMB?: number;
+  fileUrlVariable?: string;
 
   // Para 'rating-input'
-  ratingQuestionText?: string; // PT: Pergunta da Avaliação
-  maxRatingValue?: number; // PT: Avaliação Máxima (ex: 5)
-  ratingIconType?: 'star' | 'heart' | 'number'; // PT: Ícone de Avaliação
-  ratingOutputVariable?: string; // PT: Salvar Avaliação na Variável
+  ratingQuestionText?: string;
+  maxRatingValue?: number;
+  ratingIconType?: 'star' | 'heart' | 'number';
+  ratingOutputVariable?: string;
 
   // Para 'ai-text-generation'
-  aiPromptText?: string; // PT: Prompt para IA
-  aiModelName?: string; // PT: Modelo de IA (opcional)
-  aiOutputVariable?: string; // PT: Salvar Resposta da IA na Variável
+  aiPromptText?: string;
+  aiModelName?: string;
+  aiOutputVariable?: string;
   
   // Para 'send-email'
-  emailTo?: string; // PT: Para (E-mail)
-  emailSubject?: string; // PT: Assunto
-  emailBody?: string; // PT: Corpo do E-mail (HTML/Texto)
-  emailFrom?: string; // PT: De (E-mail - opcional)
+  emailTo?: string;
+  emailSubject?: string;
+  emailBody?: string;
+  emailFrom?: string;
 
   // Para 'google-sheets-append'
-  googleSheetId?: string; // PT: ID da Planilha Google
-  googleSheetName?: string; // PT: Nome da Aba
-  googleSheetRowData?: string; // PT: Dados da Linha (JSON array ou CSV)
+  googleSheetId?: string;
+  googleSheetName?: string;
+  googleSheetRowData?: string;
+
+  // Para 'intelligent-agent'
+  agentName?: string;
+  agentSystemPrompt?: string;
+  userInputVariable?: string; // Variável contendo a pergunta do usuário para o agente
+  agentResponseVariable?: string; // Variável para salvar a resposta do agente
+  // aiModelName já existe em ai-text-generation, pode ser reutilizado ou ter um específico.
+  maxConversationTurns?: number;
+  temperature?: number; // 0.0 to 1.0
 }
 
 export interface Connection {

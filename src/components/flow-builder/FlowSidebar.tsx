@@ -6,7 +6,7 @@ import DraggableBlock from './DraggableBlock';
 import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
-  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit
+  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -57,9 +57,20 @@ const FlowSidebar: React.FC = () => {
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Inteligência Artificial</h3>
           <DraggableBlock type="ai-text-generation" label="Gerar Texto com IA" icon={<Sparkles {...iconProps} className="text-rose-500" />}
             defaultData={{ aiPromptText: 'Resuma o seguinte texto: {{input.texto_longo}}', aiOutputVariable: 'texto_resumido_ia' }} />
-          {/* Placeholder para outros blocos de IA, como sugerido no histórico */}
-          {/* <DraggableBlock type="ai-image-generation" label="Gerar Imagem com IA" icon={<ImageIcon {...iconProps} className="text-cyan-400" />} defaultData={{}} /> */}
-          {/* <DraggableBlock type="ai-data-extraction" label="Extrair Dados com IA" icon={<DatabaseZap {...iconProps} className="text-lime-500" />} defaultData={{}} /> */}
+          <DraggableBlock 
+            type="intelligent-agent" 
+            label="Agente Inteligente" 
+            icon={<Headset {...iconProps} className="text-sky-500" />} 
+            defaultData={{ 
+              agentName: 'Agente de Suporte', 
+              agentSystemPrompt: 'Você é um agente de suporte virtual. Ajude o usuário com suas dúvidas.', 
+              userInputVariable: '{{pergunta_do_usuario}}',
+              agentResponseVariable: 'resposta_do_agente',
+              aiModelName: 'gemini-2.0-flash',
+              maxConversationTurns: 5,
+              temperature: 0.7,
+            }} 
+          />
         </div>
 
         <div className="mt-3">
@@ -73,7 +84,7 @@ const FlowSidebar: React.FC = () => {
           <DraggableBlock type="send-email" label="Enviar E-mail" icon={<Mail {...iconProps} className="text-blue-600" />}
             defaultData={{ emailTo: 'destinatario@exemplo.com', emailSubject: 'Assunto do E-mail', emailBody: 'Olá, {{input.nome}}!' }} />
           <DraggableBlock type="google-sheets-append" label="Adicionar Linha Planilha Google" icon={<Sheet {...iconProps} className="text-emerald-500" />}
-            defaultData={{ spreadsheetId: 'SEU_SPREADSHEET_ID', sheetName: 'Página1', googleSheetRowData: '["{{input.campo1}}", "{{input.campo2}}"]' }} />
+            defaultData={{ googleSheetId: 'SEU_SPREADSHEET_ID', sheetName: 'Página1', googleSheetRowData: '["{{input.campo1}}", "{{input.campo2}}"]' }} />
         </div>
 
         <div className="mt-3">

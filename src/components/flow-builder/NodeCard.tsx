@@ -9,7 +9,7 @@ import {
   MessageSquareText, Type as InputIcon, ListChecks, Trash2, BotMessageSquare,
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
-  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit
+  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +19,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Hash } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
+
 
 interface NodeCardProps {
   node: NodeData;
@@ -81,7 +83,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       'redirect': <ExternalLink {...iconProps} className="text-lime-500" />,
       'typing-emulation': <MoreHorizontal {...iconProps} className="text-gray-500" />,
       'media-display': <FileImage {...iconProps} className="text-blue-500" />,
-      // Novos ícones
       'log-console': <TerminalSquare {...iconProps} className="text-slate-500" />,
       'code-execution': <Code2 {...iconProps} className="text-amber-500" />,
       'json-transform': <Shuffle {...iconProps} className="text-violet-500" />,
@@ -90,6 +91,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       'ai-text-generation': <Sparkles {...iconProps} className="text-rose-500" />,
       'send-email': <Mail {...iconProps} className="text-blue-600" />,
       'google-sheets-append': <Sheet {...iconProps} className="text-emerald-500" />,
+      'intelligent-agent': <Headset {...iconProps} className="text-sky-500" />,
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
     return icons[node.type] || icons.default;
@@ -285,7 +287,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <div><Label htmlFor={`${node.id}-mediadisplaytext`}>Texto Alternativo/Legenda</Label><Input id={`${node.id}-mediadisplaytext`} placeholder="Descrição da mídia" value={node.mediaDisplayText || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayText: e.target.value })} /></div>
           </div>
         );
-      // Novos nós
       case 'log-console':
         return (
           <div>
@@ -304,7 +305,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       case 'json-transform':
         return (
           <div className="space-y-3">
-            <div><Label htmlFor={`${node.id}-inputjson`}>JSON de Entrada (ou variável {{nome_variavel}})</Label><Textarea id={`${node.id}-inputjson`} placeholder='{ "chave": "valor" } ou {{dados_api}}' value={node.inputJson || ''} onChange={(e) => onUpdate(node.id, { inputJson: e.target.value })} rows={3}/></div>
+            <div><Label htmlFor={`${node.id}-inputjson`}>JSON de Entrada (ou variável {"{{nome_variavel}}"})</Label><Textarea id={`${node.id}-inputjson`} placeholder='{ "chave": "valor" } ou {{dados_api}}' value={node.inputJson || ''} onChange={(e) => onUpdate(node.id, { inputJson: e.target.value })} rows={3}/></div>
             <div><Label htmlFor={`${node.id}-jsonata`}>Expressão JSONata</Label><Input id={`${node.id}-jsonata`} placeholder="$.chave" value={node.jsonataExpression || ''} onChange={(e) => onUpdate(node.id, { jsonataExpression: e.target.value })}/></div>
             <div><Label htmlFor={`${node.id}-jsonoutputvar`}>Salvar JSON Transformado na Variável</Label><Input id={`${node.id}-jsonoutputvar`} placeholder="json_transformado" value={node.jsonOutputVariable || ''} onChange={(e) => onUpdate(node.id, { jsonOutputVariable: e.target.value })} /></div>
           </div>
@@ -358,6 +359,35 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <div><Label htmlFor={`${node.id}-gsheetname`}>Nome da Aba</Label><Input id={`${node.id}-gsheetname`} placeholder="Página1" value={node.googleSheetName || ''} onChange={(e) => onUpdate(node.id, { googleSheetName: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-gsheetdata`}>Dados da Linha (JSON array ou CSV)</Label><Textarea id={`${node.id}-gsheetdata`} placeholder='["{{input.valor1}}", "{{input.valor2}}"] ou {{input.valor1}},{{input.valor2}}' value={node.googleSheetRowData || ''} onChange={(e) => onUpdate(node.id, { googleSheetRowData: e.target.value })} rows={2}/></div>
             <p className="text-xs text-muted-foreground">Certifique-se que a API do Google Sheets está habilitada e as credenciais configuradas no servidor.</p>
+          </div>
+        );
+      case 'intelligent-agent':
+        return (
+          <div className="space-y-3">
+            <div><Label htmlFor={`${node.id}-agentname`}>Nome do Agente</Label><Input id={`${node.id}-agentname`} placeholder="Agente de Suporte N1" value={node.agentName || ''} onChange={(e) => onUpdate(node.id, { agentName: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-agentsystemprompt`}>Prompt do Sistema / Instruções</Label><Textarea id={`${node.id}-agentsystemprompt`} placeholder="Você é um assistente virtual especializado em..." value={node.agentSystemPrompt || ''} onChange={(e) => onUpdate(node.id, { agentSystemPrompt: e.target.value })} rows={4}/></div>
+            <div><Label htmlFor={`${node.id}-userinputvar`}>Variável com Entrada do Usuário</Label><Input id={`${node.id}-userinputvar`} placeholder="{{pergunta_usuario}}" value={node.userInputVariable || ''} onChange={(e) => onUpdate(node.id, { userInputVariable: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-agentresponsevar`}>Salvar Resposta na Variável</Label><Input id={`${node.id}-agentresponsevar`} placeholder="resposta_agente" value={node.agentResponseVariable || ''} onChange={(e) => onUpdate(node.id, { agentResponseVariable: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional)</Label><Input id={`${node.id}-aimodel`} placeholder="gemini-2.0-flash (padrão)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })}/></div>
+            <div><Label htmlFor={`${node.id}-maxturns`}>Máx. Turnos (opcional)</Label><Input id={`${node.id}-maxturns`} type="number" placeholder="5" value={node.maxConversationTurns || ''} onChange={(e) => onUpdate(node.id, { maxConversationTurns: e.target.value ? parseInt(e.target.value, 10) : undefined })} /></div>
+            <div>
+              <Label htmlFor={`${node.id}-temperature`}>Temperatura (0-1, opcional)</Label>
+              <div className="flex items-center space-x-2">
+                <Slider
+                  id={`${node.id}-temperature`}
+                  min={0} max={1} step={0.01}
+                  defaultValue={[node.temperature ?? 0.7]}
+                  onValueChange={(value) => onUpdate(node.id, { temperature: value[0] })}
+                  className="flex-1"
+                />
+                <Input
+                  type="number" min={0} max={1} step={0.01}
+                  value={node.temperature ?? 0.7}
+                  onChange={(e) => onUpdate(node.id, { temperature: e.target.value ? parseFloat(e.target.value) : undefined })}
+                  className="w-20"
+                />
+              </div>
+            </div>
           </div>
         );
       default:

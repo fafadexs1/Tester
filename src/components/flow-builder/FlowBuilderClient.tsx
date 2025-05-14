@@ -57,6 +57,15 @@ export default function FlowBuilderClient() {
       
       // AI
       aiPromptText: '', aiModelName: '', aiOutputVariable: '',
+
+      // Intelligent Agent
+      agentName: 'Agente Inteligente Padrão',
+      agentSystemPrompt: 'Você é um assistente IA. Responda às perguntas do usuário de forma concisa e prestativa.',
+      userInputVariable: '{{entrada_usuario}}',
+      agentResponseVariable: 'resposta_do_agente',
+      // aiModelName is already defined for ai-text-generation, we can reuse or specify here if needed for agent context
+      maxConversationTurns: 5,
+      temperature: 0.7,
     };
 
     const newNode: NodeData = {
@@ -101,8 +110,6 @@ export default function FlowBuilderClient() {
     const lineStartX = fromNode.x + NODE_WIDTH; 
     const lineStartY = fromNode.y + startYOffset; 
     
-    // Calculate initial currentX and currentY relative to the canvas itself, not the viewport
-    // This requires accounting for the current canvasOffset
     const lineCurrentX = (e.clientX - canvasRect.left);
     const lineCurrentY = (e.clientY - canvasRect.top);
 
@@ -115,7 +122,7 @@ export default function FlowBuilderClient() {
       currentX: lineCurrentX, 
       currentY: lineCurrentY, 
     });
-  }, [nodes]); 
+  }, [nodes, canvasOffset]); 
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) { 
@@ -141,8 +148,6 @@ export default function FlowBuilderClient() {
       const canvasRect = canvasElement.getBoundingClientRect();
       setDrawingLine((prev) => {
         if (!prev) return null;
-        // When updating drawing line, currentX/Y should be relative to the viewport for direct SVG rendering
-        // The canvasOffset is applied within the Canvas component for the final path rendering
         return {
           ...prev,
           currentX: (e.clientX - canvasRect.left),
@@ -150,7 +155,7 @@ export default function FlowBuilderClient() {
         };
       });
     }
-  }, [drawingLine, canvasOffset]); 
+  }, [drawingLine]); 
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -214,7 +219,6 @@ export default function FlowBuilderClient() {
     document.addEventListener('mousemove', handleGlobalMouseMove);
     document.addEventListener('mouseup', handleGlobalMouseUp);
     
-    // Store the current drawingLine state in a ref for the cleanup function
     const drawingLineRef = React.createRef<DrawingLineData | null>();
     drawingLineRef.current = drawingLine;
 
@@ -224,7 +228,6 @@ export default function FlowBuilderClient() {
         const canvasElement = canvasWrapperRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null;
         if (canvasElement) canvasElement.style.cursor = 'grab';
       }
-      // Access the drawingLine value via the ref inside the cleanup
       if (drawingLineRef.current) { 
         setDrawingLine(null);
       }
@@ -237,8 +240,6 @@ export default function FlowBuilderClient() {
       document.removeEventListener('mouseup', handleGlobalMouseUp);
       document.body.removeEventListener('mouseleave', handleMouseLeaveWindow);
     };
-  // handleGlobalMouseMove and handleGlobalMouseUp have drawingLine in their dependency array.
-  // The effect itself also needs drawingLine because of drawingLineRef.current = drawingLine;
   }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine]); 
   
   return (
