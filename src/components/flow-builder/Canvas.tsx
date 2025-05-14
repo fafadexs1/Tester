@@ -1,3 +1,4 @@
+
 "use client";
 
 import type React from 'react';
@@ -80,14 +81,12 @@ const Canvas: React.FC<CanvasProps> = ({
             initial={{ scale: 0.95, opacity: 0.8 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            // Removed drag and onDrag props to defer to NodeCard's internal drag handling
           >
             <NodeCard
               node={node}
               onUpdate={onUpdateNode}
               onStartConnection={onStartConnection}
               onDeleteNode={onDeleteNode}
-              // Removed canvasOffset prop as it's not used by NodeCard's drag logic
             />
           </motion.div>
         );
@@ -96,10 +95,10 @@ const Canvas: React.FC<CanvasProps> = ({
       <svg className="absolute inset-0 w-full h-full pointer-events-none">
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="8.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
-            <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--flow-connection))" />
+            <polygon points="0 0, 10 3.5, 0 7" fill="var(--flow-connection)" />
           </marker>
           <marker id="arrowhead-highlight" markerWidth="10" markerHeight="7" refX="8.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
-            <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--flow-connection-highlight))" />
+            <polygon points="0 0, 10 3.5, 0 7" fill="var(--flow-connection-highlight)" />
           </marker>
         </defs>
         {connections.map((conn) => {
@@ -120,6 +119,8 @@ const Canvas: React.FC<CanvasProps> = ({
           const y2 = targetNode.y + NODE_HEADER_CONNECTOR_Y_OFFSET + canvasOffset.y;
           
           const isHighlighted = highlightedConnectionId === conn.id;
+          const strokeColor = isHighlighted ? 'var(--flow-connection-highlight)' : 'var(--flow-connection)';
+          
           return (
             <g key={conn.id} className="cursor-pointer" 
                 onClick={(e) => { e.stopPropagation(); onDeleteConnection(conn.id); }}
@@ -132,7 +133,7 @@ const Canvas: React.FC<CanvasProps> = ({
                 {/* Visible path */}
                 <path
                     d={drawBezierPath(x1, y1, x2, y2)}
-                    stroke={isHighlighted ? 'hsl(var(--flow-connection-highlight))' : 'hsl(var(--flow-connection))'}
+                    stroke={strokeColor}
                     strokeWidth={isHighlighted ? 2.5 : 2} fill="none"
                     markerEnd={isHighlighted ? "url(#arrowhead-highlight)" : "url(#arrowhead)"}
                     className="transition-all duration-100"
@@ -146,8 +147,9 @@ const Canvas: React.FC<CanvasProps> = ({
               drawingLine.startX + canvasOffset.x, drawingLine.startY + canvasOffset.y,
               drawingLine.currentX, drawingLine.currentY 
             )}
-            stroke="hsl(var(--accent))" strokeOpacity="0.7" strokeWidth={2} fill="none" strokeDasharray="5,3"
-            markerEnd="url(#arrowhead)"
+            stroke="hsl(var(--accent))" // --accent is HSL components, so hsl() is needed here
+            strokeOpacity="0.7" strokeWidth={2} fill="none" strokeDasharray="5,3"
+            markerEnd="url(#arrowhead)" // arrowhead uses --flow-connection which is already a full hsl string
           />
         )}
       </svg>
@@ -156,3 +158,4 @@ const Canvas: React.FC<CanvasProps> = ({
 };
 
 export default Canvas;
+
