@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, 
-  Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose 
+  Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound
 } from 'lucide-react';
 import {
   Dialog,
@@ -76,6 +76,7 @@ const TopBar: React.FC<TopBarProps> = ({
   
   const [supabaseUrl, setSupabaseUrl] = useState(''); 
   const [supabaseAnonKey, setSupabaseAnonKey] = useState(''); 
+  const [supabaseServiceKey, setSupabaseServiceKey] = useState(''); // Novo estado
   const [isSupabaseEnabled, setIsSupabaseEnabled] = useState(false);
 
   const [postgresHost, setPostgresHost] = useState('');
@@ -92,10 +93,12 @@ const TopBar: React.FC<TopBarProps> = ({
   useEffect(() => {
     const savedSupabaseUrl = localStorage.getItem('supabaseUrl');
     const savedSupabaseAnonKey = localStorage.getItem('supabaseAnonKey');
+    const savedSupabaseServiceKey = localStorage.getItem('supabaseServiceKey'); // Carregar
     const savedIsSupabaseEnabled = localStorage.getItem('isSupabaseEnabled') === 'true';
     
     if (savedSupabaseUrl) setSupabaseUrl(savedSupabaseUrl);
     if (savedSupabaseAnonKey) setSupabaseAnonKey(savedSupabaseAnonKey);
+    if (savedSupabaseServiceKey) setSupabaseServiceKey(savedSupabaseServiceKey); // Carregar
     setIsSupabaseEnabled(savedIsSupabaseEnabled);
 
     const savedPostgresHost = localStorage.getItem('postgresHost');
@@ -122,6 +125,7 @@ const TopBar: React.FC<TopBarProps> = ({
   const handleSaveSettings = () => {
     localStorage.setItem('supabaseUrl', supabaseUrl);
     localStorage.setItem('supabaseAnonKey', supabaseAnonKey);
+    localStorage.setItem('supabaseServiceKey', supabaseServiceKey); // Salvar
     localStorage.setItem('isSupabaseEnabled', String(isSupabaseEnabled));
 
     localStorage.setItem('postgresHost', postgresHost);
@@ -135,7 +139,7 @@ const TopBar: React.FC<TopBarProps> = ({
     localStorage.setItem('isEvolutionApiEnabled', String(isEvolutionApiEnabled));
 
     console.log("Configurações Salvas:", { 
-      supabase: { supabaseUrl, supabaseAnonKey, isSupabaseEnabled },
+      supabase: { supabaseUrl, supabaseAnonKey, supabaseServiceKeyExists: supabaseServiceKey.length > 0, isSupabaseEnabled },
       postgresql: { postgresHost, postgresPort, postgresUser, postgresDatabase, isPostgresEnabled, postgresPasswordExists: postgresPassword.length > 0 },
       evolutionApi: { evolutionApiUrl, isEvolutionApiEnabled }
     });
@@ -396,17 +400,37 @@ const TopBar: React.FC<TopBarProps> = ({
                               />
                             </div>
                             <div>
-                              <Label htmlFor="supabase-anon-key" className="text-card-foreground/90 text-sm">Chave Anônima (Anon Key)</Label>
-                              <Input
-                                id="supabase-anon-key"
-                                type="password"
-                                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                                value={supabaseAnonKey}
-                                onChange={(e) => setSupabaseAnonKey(e.target.value)}
-                                className="bg-input text-foreground mt-1"
-                              />
+                              <Label htmlFor="supabase-anon-key" className="text-card-foreground/90 text-sm">Chave Pública (Anon Key)</Label>
+                               <div className="flex items-center space-x-2">
+                                <KeyRound className="w-4 h-4 text-muted-foreground" />
+                                <Input
+                                    id="supabase-anon-key"
+                                    type="password"
+                                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                                    value={supabaseAnonKey}
+                                    onChange={(e) => setSupabaseAnonKey(e.target.value)}
+                                    className="bg-input text-foreground flex-1"
+                                />
+                               </div>
                               <p className="text-xs text-muted-foreground mt-1">
-                                Usada para acesso público aos dados do seu projeto.
+                                Usada para acesso público e RLS (Row Level Security).
+                              </p>
+                            </div>
+                             <div>
+                              <Label htmlFor="supabase-service-key" className="text-card-foreground/90 text-sm">Chave de Serviço (Service Role Key)</Label>
+                               <div className="flex items-center space-x-2">
+                                <KeyRound className="w-4 h-4 text-muted-foreground" />
+                                <Input
+                                    id="supabase-service-key"
+                                    type="password"
+                                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                                    value={supabaseServiceKey}
+                                    onChange={(e) => setSupabaseServiceKey(e.target.value)}
+                                    className="bg-input text-foreground flex-1"
+                                />
+                               </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Usada para operações de backend que bypassam RLS (ex: buscar schema). Mantenha em segredo.
                               </p>
                             </div>
                           </div>
@@ -448,7 +472,10 @@ const TopBar: React.FC<TopBarProps> = ({
                                 </div>
                                 <div>
                                     <Label htmlFor="postgres-password" className="text-card-foreground/90 text-sm">Senha</Label>
-                                    <Input id="postgres-password" type="password" placeholder="********" value={postgresPassword} onChange={e => setPostgresPassword(e.target.value)} className="bg-input text-foreground mt-1" />
+                                     <div className="flex items-center space-x-2 mt-1">
+                                        <KeyRound className="w-4 h-4 text-muted-foreground" />
+                                        <Input id="postgres-password" type="password" placeholder="********" value={postgresPassword} onChange={e => setPostgresPassword(e.target.value)} className="bg-input text-foreground flex-1" />
+                                     </div>
                                 </div>
                                 <div className="md:col-span-2">
                                     <Label htmlFor="postgres-database" className="text-card-foreground/90 text-sm">Nome do Banco</Label>
@@ -499,7 +526,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                 className="bg-input text-foreground mt-1"
                               />
                               <p className="text-xs text-muted-foreground mt-1">
-                                Exemplo: ws://localhost:8080 ou wss://sua-api.com
+                                Exemplo: ws://localhost:8080 ou wss://sua-api.com. A lógica de conexão real deve ser implementada.
                               </p>
                             </div>
                           </div>

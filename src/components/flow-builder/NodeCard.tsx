@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash, 
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,15 +47,89 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   const [testResponseError, setTestResponseError] = useState<string | null>(null);
   const [isTestingApi, setIsTestingApi] = useState(false);
 
+  // State for Supabase schema simulation
+  const [supabaseTables, setSupabaseTables] = useState<string[]>([]);
+  const [supabaseColumns, setSupabaseColumns] = useState<string[]>([]);
+  const [isLoadingSupabaseTables, setIsLoadingSupabaseTables] = useState(false);
+  const [isLoadingSupabaseColumns, setIsLoadingSupabaseColumns] = useState(false);
+  const [supabaseSchemaError, setSupabaseSchemaError] = useState<string | null>(null);
+
+  // Simulate fetching Supabase tables
+  useEffect(() => {
+    if (node.type.startsWith('supabase-')) {
+      const savedSupabaseUrl = localStorage.getItem('supabaseUrl');
+      const savedSupabaseAnonKey = localStorage.getItem('supabaseAnonKey');
+      const isSupabaseConfigured = localStorage.getItem('isSupabaseEnabled') === 'true' && savedSupabaseUrl && savedSupabaseAnonKey;
+
+      if (isSupabaseConfigured) {
+        setIsLoadingSupabaseTables(true);
+        setSupabaseSchemaError(null);
+        console.log(`[NodeCard - ${node.id}] Simulating fetch for Supabase tables...`);
+        // TODO: Replace with actual Server Action call: const tables = await fetchSupabaseTablesAction(savedSupabaseUrl, savedSupabaseAnonKey);
+        setTimeout(() => {
+          // Simulate success/failure
+          if (Math.random() > 0.1) { // 90% success rate for simulation
+            setSupabaseTables(['sim_clientes', 'sim_produtos', 'sim_pedidos_faturamento', 'sim_usuarios_ativos']);
+            console.log(`[NodeCard - ${node.id}] Simulated tables fetched:`, ['sim_clientes', 'sim_produtos', 'sim_pedidos_faturamento', 'sim_usuarios_ativos']);
+          } else {
+            setSupabaseSchemaError('Falha simulada ao buscar tabelas do Supabase.');
+            console.error(`[NodeCard - ${node.id}] Simulated error fetching Supabase tables.`);
+            setSupabaseTables([]);
+          }
+          setIsLoadingSupabaseTables(false);
+        }, 1500);
+      } else {
+        setSupabaseSchemaError('Supabase não configurado ou desabilitado. Verifique as Configurações Globais.');
+        setSupabaseTables([]);
+        setSupabaseColumns([]);
+      }
+    }
+  }, [node.type, node.id]); // Re-run if node type changes (though unlikely for an existing node)
+
+  // Simulate fetching Supabase columns when table changes
+  useEffect(() => {
+    if (node.type.startsWith('supabase-') && node.supabaseTableName) {
+      const savedSupabaseUrl = localStorage.getItem('supabaseUrl');
+      const savedSupabaseAnonKey = localStorage.getItem('supabaseAnonKey');
+       const isSupabaseConfigured = localStorage.getItem('isSupabaseEnabled') === 'true' && savedSupabaseUrl && savedSupabaseAnonKey;
+
+      if (isSupabaseConfigured) {
+        setIsLoadingSupabaseColumns(true);
+        setSupabaseSchemaError(null);
+        console.log(`[NodeCard - ${node.id}] Simulating fetch for columns of table: ${node.supabaseTableName}`);
+        // TODO: Replace with actual Server Action call: const columns = await fetchSupabaseTableColumnsAction(savedSupabaseUrl, savedSupabaseAnonKey, node.supabaseTableName);
+        setTimeout(() => {
+          let newColumns: string[] = [];
+          if (node.supabaseTableName === 'sim_clientes') {
+            newColumns = ['id', 'nome_completo', 'email_principal', 'telefone_contato', 'data_cadastro', 'status_cliente'];
+          } else if (node.supabaseTableName === 'sim_produtos') {
+            newColumns = ['product_id', 'sku', 'nome_produto', 'descricao_detalhada', 'preco_unitario', 'estoque_disponivel'];
+          } else if (node.supabaseTableName === 'sim_pedidos_faturamento') {
+            newColumns = ['pedido_uuid', 'cliente_id_fk', 'data_pedido', 'valor_total_pedido', 'status_pagamento', 'nota_fiscal_id'];
+          } else if (node.supabaseTableName === 'sim_usuarios_ativos') {
+            newColumns = ['user_internal_id', 'username', 'last_login_timestamp', 'role_assigned', 'is_active_flag'];
+          }
+          setSupabaseColumns(newColumns);
+          console.log(`[NodeCard - ${node.id}] Simulated columns for ${node.supabaseTableName}:`, newColumns);
+          setIsLoadingSupabaseColumns(false);
+        }, 1200);
+      } else {
+         setSupabaseColumns([]); // Clear columns if supabase is not configured
+      }
+    } else if (node.type.startsWith('supabase-')) {
+      setSupabaseColumns([]); // Clear columns if no table is selected
+    }
+  }, [node.type, node.id, node.supabaseTableName]);
+
+
   const handleNodeMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    // Enhanced check to prevent drag on interactive elements including Popover content
     if (
         target.dataset.connector === 'true' || 
         target.closest('[data-action="delete-node"]') ||
         target.closest('[data-no-drag="true"]') || 
-        target.closest('[role="dialog"]') || // Prevent drag if interacting with any dialog
-        target.closest('[data-radix-popover-content]') || // Specifically for PopoverContent
+        target.closest('[role="dialog"]') || 
+        target.closest('[data-radix-popover-content]') || 
         (target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target))
     ) {
       return;
@@ -244,7 +318,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   const handleVariableInsert = (
     currentValue: string | undefined,
     variableName: string,
-    updateCallback: (newText: string) => void
+    updateCallback: (newText: string) => void,
   ) => {
     const newText = `${currentValue || ''}{{${variableName}}}`;
     updateCallback(newText);
@@ -256,7 +330,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     updateCallback: (newText: string) => void,
     isTextarea: boolean = false
   ) => {
-    if (!definedVariablesInFlow) return null;
+    if (!definedVariablesInFlow || definedVariablesInFlow.length === 0) return null;
     return (
       <Popover>
         <PopoverTrigger asChild>
@@ -270,22 +344,18 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <Braces className="h-4 w-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-1" data-no-drag="true">
+        <PopoverContent className="w-auto p-1" data-no-drag="true" align="end">
           <ScrollArea className="h-auto max-h-[150px] text-xs">
-            {definedVariablesInFlow.length > 0 ? (
-              definedVariablesInFlow.map((varName) => (
-                <Button
-                  key={varName}
-                  variant="ghost"
-                  className="w-full justify-start h-7 px-2 text-xs"
-                  onClick={() => handleVariableInsert(currentValue, varName, updateCallback)}
-                >
-                  {varName}
-                </Button>
-              ))
-            ) : (
-              <p className="text-xs text-muted-foreground p-2">Nenhuma variável definida no fluxo.</p>
-            )}
+            {definedVariablesInFlow.map((varName) => (
+              <Button
+                key={varName}
+                variant="ghost"
+                className="w-full justify-start h-7 px-2 text-xs"
+                onClick={() => handleVariableInsert(currentValue, varName, updateCallback)}
+              >
+                {varName}
+              </Button>
+            ))}
           </ScrollArea>
         </PopoverContent>
       </Popover>
@@ -470,8 +540,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     );
   };
 
-  const exampleSupabaseTables = ["clientes", "produtos", "pedidos", "usuarios", "tarefas"];
-  const exampleSupabaseColumns = ["id", "uuid", "email", "nome", "created_at", "status", "preco", "user_id", "descricao", "data_limite"];
 
   const renderKeyValueList = (
     listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList',
@@ -1159,134 +1227,90 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           </div>
         );
       case 'supabase-create-row':
+      case 'supabase-read-row':
+      case 'supabase-update-row':
+      case 'supabase-delete-row':
+        const isReadOp = node.type === 'supabase-read-row';
+        const isDeleteOp = node.type === 'supabase-delete-row';
+        const isCreateOp = node.type === 'supabase-create-row';
+        const needsIdentifier = isReadOp || node.type === 'supabase-update-row' || isDeleteOp;
+        const needsDataJson = isCreateOp || node.type === 'supabase-update-row';
+        
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
               <Label htmlFor={`${node.id}-tableName`}>Nome da Tabela Supabase</Label>
-              <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
-                <SelectTrigger id={`${node.id}-tableName`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
-                <SelectContent>
-                  {exampleSupabaseTables.map(table => <SelectItem key={table} value={table}>{table}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              {isLoadingSupabaseTables && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando tabelas...</div>}
+              {!isLoadingSupabaseTables && supabaseSchemaError && <p className="text-xs text-destructive">{supabaseSchemaError}</p>}
+              {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tabela encontrada ou Supabase não configurado.</p>}
+              {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length > 0 && (
+                <Select 
+                    value={node.supabaseTableName || ''} 
+                    onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value, supabaseIdentifierColumn: '', supabaseColumnsToSelect: '*' })}
+                >
+                  <SelectTrigger id={`${node.id}-tableName`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
+                  <SelectContent>
+                    {supabaseTables.map(table => <SelectItem key={table} value={table}>{table}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
-            <div>
-                <Label htmlFor={`${node.id}-dataJson`}>Dados da Linha (JSON)</Label>
-                <div className="relative">
-                    <Textarea id={`${node.id}-dataJson`} placeholder='{ "coluna1": "valor1", "coluna2": "{{variavel_col2}}" }' value={node.supabaseDataJson || ''} onChange={(e) => onUpdate(node.id, { supabaseDataJson: e.target.value })} rows={3} className="pr-8"/>
-                    {renderVariableInserter(node.supabaseDataJson, (newText) => onUpdate(node.id, { supabaseDataJson: newText }), true)}
+
+            {needsIdentifier && (
+              <>
+                <div>
+                  <Label htmlFor={`${node.id}-identifierCol`}>Coluna Identificadora (Filtro)</Label>
+                  {isLoadingSupabaseColumns && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando colunas...</div>}
+                  {!isLoadingSupabaseColumns && !node.supabaseTableName && <p className="text-xs text-muted-foreground">Selecione uma tabela para ver as colunas.</p>}
+                  {!isLoadingSupabaseColumns && node.supabaseTableName && supabaseColumns.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma coluna encontrada para a tabela selecionada.</p>}
+                  {!isLoadingSupabaseColumns && supabaseColumns.length > 0 && (
+                     <Select value={node.supabaseIdentifierColumn || ''} onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}>
+                        <SelectTrigger id={`${node.id}-identifierCol`} disabled={!node.supabaseTableName || supabaseColumns.length === 0}>
+                            <SelectValue placeholder="Selecione a Coluna para filtrar" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {supabaseColumns.map(col => <SelectItem key={col} value={col}>{col}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                  )}
                 </div>
-            </div>
-            <div><Label htmlFor={`${node.id}-resultVarCreate`}>Salvar Resultado na Variável (opcional)</Label><Input id={`${node.id}-resultVarCreate`} placeholder="id_linha_criada_supabase" value={node.supabaseResultVariable || ''} onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} /></div>
-            <p className="text-xs text-muted-foreground">Requer configuração do Supabase nas Configurações Globais.</p>
-          </div>
-        );
-      case 'supabase-read-row':
-        return (
-          <div className="space-y-3" data-no-drag="true">
-             <div>
-              <Label htmlFor={`${node.id}-tableNameRead`}>Nome da Tabela Supabase</Label>
-              <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
-                <SelectTrigger id={`${node.id}-tableNameRead`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
-                <SelectContent>
-                  {exampleSupabaseTables.map(table => <SelectItem key={table} value={table}>{table}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor={`${node.id}-identifierColRead`}>Coluna Identificadora (Filtro)</Label>
-              <Select value={node.supabaseIdentifierColumn || ''} onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}>
-                <SelectTrigger id={`${node.id}-identifierColRead`}><SelectValue placeholder="Selecione a Coluna para filtrar" /></SelectTrigger>
-                <SelectContent>
-                  {exampleSupabaseColumns.map(col => <SelectItem key={col} value={col}>{col}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-                <Label htmlFor={`${node.id}-identifierValRead`}>Valor do Identificador (Filtro)</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-identifierValRead`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.supabaseIdentifierValue, (newText) => onUpdate(node.id, { supabaseIdentifierValue: newText }))}
+                <div>
+                    <Label htmlFor={`${node.id}-identifierVal`}>Valor do Identificador (Filtro)</Label>
+                    <div className="relative">
+                        <Input id={`${node.id}-identifierVal`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} className="pr-8"/>
+                        {renderVariableInserter(node.supabaseIdentifierValue, (newText) => onUpdate(node.id, { supabaseIdentifierValue: newText }))}
+                    </div>
                 </div>
-            </div>
-            <div>
-                <Label htmlFor={`${node.id}-columnsToSelectRead`}>Colunas a Selecionar (ex: *, nome, email)</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-columnsToSelectRead`} placeholder="*, nome, email" value={node.supabaseColumnsToSelect || '*'} onChange={(e) => onUpdate(node.id, { supabaseColumnsToSelect: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.supabaseColumnsToSelect, (newText) => onUpdate(node.id, { supabaseColumnsToSelect: newText }))}
+              </>
+            )}
+            
+            {isReadOp && (
+                 <div>
+                    <Label htmlFor={`${node.id}-columnsToSelectRead`}>Colunas a Selecionar (ex: *, nome, email)</Label>
+                    <div className="relative">
+                        <Input id={`${node.id}-columnsToSelectRead`} placeholder="*, nome, email_principal" value={node.supabaseColumnsToSelect || '*'} onChange={(e) => onUpdate(node.id, { supabaseColumnsToSelect: e.target.value })} className="pr-8"/>
+                        {renderVariableInserter(node.supabaseColumnsToSelect, (newText) => onUpdate(node.id, { supabaseColumnsToSelect: newText }))}
+                    </div>
                 </div>
-            </div>
-            <div><Label htmlFor={`${node.id}-resultVarRead`}>Salvar Resultado (array de objetos) na Variável</Label><Input id={`${node.id}-resultVarRead`} placeholder="dados_lidos_supabase" value={node.supabaseResultVariable || ''} onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} /></div>
-            <p className="text-xs text-muted-foreground">Requer configuração do Supabase.</p>
-          </div>
-        );
-      case 'supabase-update-row':
-        return (
-          <div className="space-y-3" data-no-drag="true">
-            <div>
-              <Label htmlFor={`${node.id}-tableNameUpdate`}>Nome da Tabela Supabase</Label>
-              <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
-                <SelectTrigger id={`${node.id}-tableNameUpdate`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
-                <SelectContent>
-                  {exampleSupabaseTables.map(table => <SelectItem key={table} value={table}>{table}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor={`${node.id}-identifierColUpdate`}>Coluna Identificadora (Filtro)</Label>
-              <Select value={node.supabaseIdentifierColumn || ''} onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}>
-                <SelectTrigger id={`${node.id}-identifierColUpdate`}><SelectValue placeholder="Selecione a Coluna para filtrar" /></SelectTrigger>
-                <SelectContent>
-                  {exampleSupabaseColumns.map(col => <SelectItem key={col} value={col}>{col}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-                <Label htmlFor={`${node.id}-identifierValUpdate`}>Valor do Identificador (Filtro)</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-identifierValUpdate`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.supabaseIdentifierValue, (newText) => onUpdate(node.id, { supabaseIdentifierValue: newText }))}
-                </div>
-            </div>
-            <div>
-                <Label htmlFor={`${node.id}-dataJsonUpdate`}>Dados para Atualizar (JSON)</Label>
-                <div className="relative">
-                    <Textarea id={`${node.id}-dataJsonUpdate`} placeholder='{ "coluna1": "novo_valor" }' value={node.supabaseDataJson || ''} onChange={(e) => onUpdate(node.id, { supabaseDataJson: e.target.value })} rows={3} className="pr-8"/>
-                    {renderVariableInserter(node.supabaseDataJson, (newText) => onUpdate(node.id, { supabaseDataJson: newText }), true)}
-                </div>
-            </div>
-            <p className="text-xs text-muted-foreground">Requer configuração do Supabase.</p>
-          </div>
-        );
-      case 'supabase-delete-row':
-        return (
-          <div className="space-y-3" data-no-drag="true">
-            <div>
-              <Label htmlFor={`${node.id}-tableNameDelete`}>Nome da Tabela Supabase</Label>
-              <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
-                <SelectTrigger id={`${node.id}-tableNameDelete`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
-                <SelectContent>
-                  {exampleSupabaseTables.map(table => <SelectItem key={table} value={table}>{table}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor={`${node.id}-identifierColDelete`}>Coluna Identificadora (Filtro)</Label>
-              <Select value={node.supabaseIdentifierColumn || ''} onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}>
-                <SelectTrigger id={`${node.id}-identifierColDelete`}><SelectValue placeholder="Selecione a Coluna para filtrar" /></SelectTrigger>
-                <SelectContent>
-                  {exampleSupabaseColumns.map(col => <SelectItem key={col} value={col}>{col}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-                <Label htmlFor={`${node.id}-identifierValDelete`}>Valor do Identificador (Filtro)</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-identifierValDelete`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.supabaseIdentifierValue, (newText) => onUpdate(node.id, { supabaseIdentifierValue: newText }))}
-                </div>
-            </div>
-            <p className="text-xs text-muted-foreground">Requer configuração do Supabase.</p>
+            )}
+
+            {needsDataJson && (
+              <div>
+                  <Label htmlFor={`${node.id}-dataJson`}>{isCreateOp ? 'Dados da Nova Linha (JSON)' : 'Dados para Atualizar (JSON)'}</Label>
+                  <div className="relative">
+                      <Textarea id={`${node.id}-dataJson`} placeholder='{ "coluna1": "valor1", "coluna2": "{{variavel_col2}}" }' value={node.supabaseDataJson || ''} onChange={(e) => onUpdate(node.id, { supabaseDataJson: e.target.value })} rows={3} className="pr-8"/>
+                      {renderVariableInserter(node.supabaseDataJson, (newText) => onUpdate(node.id, { supabaseDataJson: newText }), true)}
+                  </div>
+              </div>
+            )}
+
+            {(isReadOp || isCreateOp) && (
+              <div>
+                <Label htmlFor={`${node.id}-resultVar`}>Salvar Resultado na Variável</Label>
+                <Input id={`${node.id}-resultVar`} placeholder={isReadOp ? "dados_lidos_supabase" : "id_linha_criada_supabase"} value={node.supabaseResultVariable || ''} onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} />
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">Requer configuração do Supabase nas Configurações Globais e que a tabela e colunas existam.</p>
           </div>
         );
       default:
@@ -1311,7 +1335,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             target.closest('[data-radix-popover-content]') ||
             target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target) ||
             target.closest('[role="tablist"]') || 
-            target.closest('[role="tabpanel"]')
+            target.closest('[role="tabpanel"]') ||
+            target.closest('.rc-select-dropdown') // Prevenir arrasto ao interagir com dropdowns do Radix
         ) {
           return;
         }
@@ -1340,7 +1365,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
         </CardHeader>
-        <CardContent className="p-3.5 text-sm" data-no-drag={node.type === 'api-call' || node.type === 'start' || node.type === 'option' || node.type.startsWith('supabase')}>
+        <CardContent className="p-3.5 text-sm" data-no-drag={node.type === 'api-call' || node.type === 'start' || node.type === 'option' || node.type.startsWith('supabase-')}>
           {renderNodeContent()}
         </CardContent>
       </Card>
