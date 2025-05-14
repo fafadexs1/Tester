@@ -36,24 +36,40 @@ export default function FlowBuilderClient() {
   const mainContentRef = useRef<HTMLDivElement>(null);
 
   const [isChatPanelOpen, setIsChatPanelOpen] = useState(true);
+  const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasMounted) return; // Não interagir com localStorage até o cliente montar
+
     const savedIsChatPanelOpen = localStorage.getItem(LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN);
     if (savedIsChatPanelOpen !== null) {
-      setIsChatPanelOpen(JSON.parse(savedIsChatPanelOpen));
+      try {
+        setIsChatPanelOpen(JSON.parse(savedIsChatPanelOpen));
+      } catch (e) {
+        console.warn("[FlowBuilderClient] Failed to parse chat panel state from localStorage.", e);
+        // Mantenha o padrão ou defina um padrão seguro
+        setIsChatPanelOpen(true); 
+      }
     }
-  }, []);
+  }, [hasMounted]);
 
   const toggleChatPanel = useCallback(() => {
     setIsChatPanelOpen(prev => {
       const newState = !prev;
-      localStorage.setItem(LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN, JSON.stringify(newState));
+      if (hasMounted) { // Só salvar no localStorage se estiver montado no cliente
+        localStorage.setItem(LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN, JSON.stringify(newState));
+      }
       return newState;
     });
-  }, []);
+  }, [hasMounted]);
 
 
   useEffect(() => {
+    if (!hasMounted) return;
     console.log('[FlowBuilderClient] Initializing: Attempting to load workspaces from localStorage.');
     const savedWorkspacesStr = localStorage.getItem(LOCAL_STORAGE_KEY_WORKSPACES);
     let loadedWorkspaces: WorkspaceData[] = [];
@@ -117,20 +133,20 @@ export default function FlowBuilderClient() {
         console.error("[FlowBuilderClient] Failed to save initial workspace to localStorage", e);
       }
     }
-  }, []);
+  }, [hasMounted]);
 
   useEffect(() => {
-    if (activeWorkspaceId) {
-        try {
-            localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, activeWorkspaceId);
-            console.log('[FlowBuilderClient] Active workspace ID saved to localStorage:', activeWorkspaceId);
-        } catch (e) {
-            console.error("[FlowBuilderClient] Failed to save active workspace ID to localStorage", e);
-        }
+    if (!hasMounted || !activeWorkspaceId) return;
+    try {
+        localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, activeWorkspaceId);
+        console.log('[FlowBuilderClient] Active workspace ID saved to localStorage:', activeWorkspaceId);
+    } catch (e) {
+        console.error("[FlowBuilderClient] Failed to save active workspace ID to localStorage", e);
     }
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, hasMounted]);
 
   const handleSaveWorkspaces = useCallback(() => {
+    if (!hasMounted) return;
     try {
       localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify(workspaces));
       console.log('[FlowBuilderClient] Workspaces explicitly saved to localStorage. Count:', workspaces.length);
@@ -147,9 +163,10 @@ export default function FlowBuilderClient() {
         variant: "destructive",
       });
     }
-  }, [workspaces, toast]);
+  }, [workspaces, toast, hasMounted]);
 
   const handleDiscardChanges = useCallback(() => {
+    if (!hasMounted) return;
     console.log('[FlowBuilderClient] Discarding changes: Attempting to load workspaces from localStorage.');
     const savedWorkspacesStr = localStorage.getItem(LOCAL_STORAGE_KEY_WORKSPACES);
     if (savedWorkspacesStr) {
@@ -203,7 +220,7 @@ export default function FlowBuilderClient() {
         variant: "default",
       });
     }
-  }, [toast]);
+  }, [toast, hasMounted]);
 
   const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
   const currentNodes = activeWorkspace ? activeWorkspace.nodes : [];
@@ -221,23 +238,26 @@ export default function FlowBuilderClient() {
     setWorkspaces(updatedWorkspaces);
     setActiveWorkspaceId(newWorkspaceId);
     console.log('[FlowBuilderClient] Workspace added. New ID:', newWorkspaceId);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify(updatedWorkspaces));
-      localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, newWorkspaceId);
-      console.log('[FlowBuilderClient] New workspace and active ID saved to localStorage.');
-      toast({
-        title: "Novo Fluxo Criado",
-        description: `${newWorkspace.name} foi criado e salvo.`,
-      });
-    } catch (e) {
-        console.error("[FlowBuilderClient] Failed to save new workspace to localStorage", e);
+    
+    if (hasMounted) { // Só salvar se estiver montado
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify(updatedWorkspaces));
+        localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, newWorkspaceId);
+        console.log('[FlowBuilderClient] New workspace and active ID saved to localStorage.');
         toast({
-          title: "Erro ao Salvar Novo Fluxo",
-          description: "Não foi possível salvar o novo fluxo. Verifique o console.",
-          variant: "destructive",
+          title: "Novo Fluxo Criado",
+          description: `${newWorkspace.name} foi criado e salvo.`,
         });
+      } catch (e) {
+          console.error("[FlowBuilderClient] Failed to save new workspace to localStorage", e);
+          toast({
+            title: "Erro ao Salvar Novo Fluxo",
+            description: "Não foi possível salvar o novo fluxo. Verifique o console.",
+            variant: "destructive",
+          });
+      }
     }
-  }, [workspaces, toast]);
+  }, [workspaces, toast, hasMounted]);
 
   const switchWorkspace = useCallback((workspaceId: string) => {
     setActiveWorkspaceId(workspaceId);
@@ -523,7 +543,7 @@ export default function FlowBuilderClient() {
               setHighlightedConnectionId={setHighlightedConnectionId}
             />
           </div>
-          {isChatPanelOpen && (
+          {hasMounted && isChatPanelOpen && (
             <TestChatPanel
               activeWorkspace={activeWorkspace}
             />
