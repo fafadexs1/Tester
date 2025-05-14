@@ -13,7 +13,7 @@ const fontSans = FontSans({
 
 export const metadata: Metadata = {
     title: 'Flowise Lite',
-    description: 'A drag-and-drop conversational flow builder.',
+    description: 'Um construtor de fluxos de conversação com interface de arrastar e soltar.',
 };
 
 export default function RootLayout({
@@ -22,7 +22,7 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en" suppressHydrationWarning>
+        <html lang="pt-BR" suppressHydrationWarning>
         <body className={cn(
             "min-h-screen bg-background font-sans antialiased",
             fontSans.variable

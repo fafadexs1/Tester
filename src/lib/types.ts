@@ -15,7 +15,11 @@ export type NodeType =
   | 'condition' 
   | 'set-variable' 
   | 'api-call' 
-  | 'delay';
+  | 'delay'
+  | 'date-input'
+  | 'redirect'
+  | 'typing-emulation'
+  | 'media-display';
 
 export interface NodeData {
   id: string;
@@ -24,33 +28,68 @@ export interface NodeData {
   x: number;
   y: number;
   
-  // Specific node type properties
-  message?: string; // For 'message'
-  instanceName?: string; // For 'whatsapp-*'
-  phoneNumber?: string; // For 'whatsapp-text', 'whatsapp-media'
-  textMessage?: string; // For 'whatsapp-text'
-  mediaUrl?: string; // For 'whatsapp-media'
-  mediaType?: 'image' | 'video' | 'document' | 'audio'; // For 'whatsapp-media'
-  caption?: string; // For 'whatsapp-media'
-  groupName?: string; // For 'whatsapp-group'
-  participants?: string; // For 'whatsapp-group'
-  conditionVariable?: string; // For 'condition'
-  conditionOperator?: '==' | '!=' | '>' | '<' | 'contains' | 'startsWith' | 'endsWith'; // For 'condition'
-  conditionValue?: string; // For 'condition'
-  variableName?: string; // For 'set-variable'
-  variableValue?: string; // For 'set-variable'
-  apiUrl?: string; // For 'api-call'
-  apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE'; // For 'api-call'
-  apiHeaders?: string; // For 'api-call' (JSON string)
-  apiBody?: string; // For 'api-call' (JSON string)
-  delayDuration?: number; // For 'delay' (in ms)
+  // Propriedades específicas dos tipos de nó
+  text?: string; // Para 'message' (anteriormente 'message')
+  
+  // Para 'input'
+  promptText?: string; 
+  inputType?: 'text' | 'email' | 'phone' | 'number';
+  variableToSaveResponse?: string;
+
+  // Para 'option'
+  questionText?: string;
+  optionsList?: string; // string, uma opção por linha
+  variableToSaveChoice?: string;
+
+  // Para 'whatsapp-*'
+  instanceName?: string; 
+  phoneNumber?: string; 
+  textMessage?: string; 
+  mediaUrl?: string; 
+  mediaType?: 'image' | 'video' | 'document' | 'audio'; 
+  caption?: string; 
+  groupName?: string; 
+  participants?: string; 
+  
+  // Para 'condition'
+  conditionVariable?: string; 
+  conditionOperator?: '==' | '!=' | '>' | '<' | 'contains' | 'startsWith' | 'endsWith'; 
+  conditionValue?: string; 
+  
+  // Para 'set-variable'
+  variableName?: string; 
+  variableValue?: string; 
+  
+  // Para 'api-call'
+  apiUrl?: string; 
+  apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE'; 
+  apiHeaders?: string; // JSON string
+  apiBody?: string; // JSON string
+  
+  // Para 'delay'
+  delayDuration?: number; // em ms
+
+  // Para 'date-input'
+  dateInputLabel?: string;
+  variableToSaveDate?: string;
+
+  // Para 'redirect'
+  redirectUrl?: string;
+
+  // Para 'typing-emulation'
+  typingDuration?: number; // em ms
+
+  // Para 'media-display'
+  mediaDisplayType?: 'image' | 'video' | 'audio';
+  mediaDisplayUrl?: string;
+  mediaDisplayText?: string; // alt text ou legenda
 }
 
 export interface Connection {
   id: string;
-  from: string; // Source node ID
-  to: string;   // Target node ID
-  sourceHandle?: string; // e.g., 'true', 'false' for condition, 'default' otherwise
+  from: string; // ID do nó de origem
+  to: string;   // ID do nó de destino
+  sourceHandle?: string; // ex: 'true', 'false' para condição, 'default' para outros
 }
 
 export interface DrawingLineData {

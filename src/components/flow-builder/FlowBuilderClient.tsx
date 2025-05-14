@@ -20,27 +20,55 @@ export default function FlowBuilderClient() {
   const isPanning = useRef(false);
   const panStartMousePosition = useRef({ x: 0, y: 0 });
   const initialCanvasOffsetOnPanStart = useRef({ x: 0, y: 0 });
-  const canvasWrapperRef = useRef<HTMLDivElement>(null); // Ref for the main flex container
+  const canvasWrapperRef = useRef<HTMLDivElement>(null); 
 
   const handleDropNode = useCallback((item: DraggableBlockItemData, viewportOffset: { x: number, y: number }) => {
-    // viewportOffset is already adjusted for canvasRect.left/top and canvasOffset
-    // It represents the desired model coordinates for the center of the node
     const baseNodeData: Omit<NodeData, 'id' | 'type' | 'title' | 'x' | 'y'> = {
+      // message (Exibir Texto)
+      text: '',
+      // input (Entrada do Usuário)
+      promptText: '',
+      inputType: 'text',
+      variableToSaveResponse: '',
+      // option (Múltiplas Escolhas)
+      questionText: '',
+      optionsList: '',
+      variableToSaveChoice: '',
+      // whatsapp-*
       instanceName: 'evolution_instance',
       phoneNumber: '', textMessage: '', mediaUrl: '', mediaType: 'image', caption: '',
-      groupName: '', participants: '', conditionVariable: '', conditionOperator: '==',
-      conditionValue: '', variableName: '', variableValue: '', apiUrl: '',
-      apiMethod: 'GET', apiHeaders: '{ "Content-Type": "application/json" }', apiBody: '{}', delayDuration: 1000,
+      groupName: '', participants: '',
+      // condition
+      conditionVariable: '', conditionOperator: '==',
+      conditionValue: '',
+      // set-variable
+      variableName: '', variableValue: '',
+      // api-call
+      apiUrl: '',
+      apiMethod: 'GET', apiHeaders: '{ "Content-Type": "application/json" }', apiBody: '{}',
+      // delay
+      delayDuration: 1000,
+      // date-input
+      dateInputLabel: '',
+      variableToSaveDate: '',
+      // redirect
+      redirectUrl: '',
+      // typing-emulation
+      typingDuration: 1500,
+      // media-display
+      mediaDisplayType: 'image',
+      mediaDisplayUrl: '',
+      mediaDisplayText: '',
     };
 
     const newNode: NodeData = {
       id: uuidv4(),
       type: item.type as NodeData['type'],
       title: item.label,
-      ...baseNodeData,
-      ...(item.defaultData || {}),
-      x: viewportOffset.x - NODE_WIDTH / 2, // Adjust to top-left from center
-      y: viewportOffset.y - NODE_HEADER_HEIGHT_APPROX / 2, // Adjust to top-left from center
+      ...baseNodeData, // Apply all defaults
+      ...(item.defaultData || {}), // Override with specific block defaults
+      x: viewportOffset.x - NODE_WIDTH / 2, 
+      y: viewportOffset.y - NODE_HEADER_HEIGHT_APPROX / 2, 
     };
     setNodes((prevNodes) => [...prevNodes, newNode]);
   }, []);
@@ -62,7 +90,7 @@ export default function FlowBuilderClient() {
     const fromNode = nodes.find(n => n.id === fromId);
     if (!fromNode || !canvasWrapperRef.current) return;
     
-    const canvasElement = canvasWrapperRef.current?.querySelector('.relative.flex-1.bg-background'); // target the canvas div
+    const canvasElement = canvasWrapperRef.current?.querySelector('.relative.flex-1.bg-background'); 
     if (!canvasElement) return;
     const canvasRect = canvasElement.getBoundingClientRect();
 
@@ -72,25 +100,23 @@ export default function FlowBuilderClient() {
         else if (sourceHandleId === 'false') startYOffset = NODE_HEADER_HEIGHT_APPROX * (2/3) + 6;
     }
 
-    const lineStartX = fromNode.x + NODE_WIDTH; // Relative to node model
-    const lineStartY = fromNode.y + startYOffset; // Relative to node model
+    const lineStartX = fromNode.x + NODE_WIDTH; 
+    const lineStartY = fromNode.y + startYOffset; 
     
-    // currentX/Y should be relative to the canvas div, including its current pan/offset
     const lineCurrentX = (e.clientX - canvasRect.left);
     const lineCurrentY = (e.clientY - canvasRect.top);
 
     setDrawingLine({
       fromId,
       sourceHandleId,
-      startX: lineStartX, // Model coordinate for line start
-      startY: lineStartY, // Model coordinate for line start
-      currentX: lineCurrentX, // Viewport coordinate for line end, relative to canvas origin
-      currentY: lineCurrentY, // Viewport coordinate for line end, relative to canvas origin
+      startX: lineStartX, 
+      startY: lineStartY, 
+      currentX: lineCurrentX, 
+      currentY: lineCurrentY, 
     });
   }, [nodes]);
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    // Ensure click is directly on the canvas background, not on a node or other element
     if (e.target === e.currentTarget) { 
       e.preventDefault();
       isPanning.current = true;
@@ -190,7 +216,7 @@ export default function FlowBuilderClient() {
         const canvasElement = canvasWrapperRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null;
         if (canvasElement) canvasElement.style.cursor = 'grab';
       }
-      if (drawingLine) { // Cancel drawing if mouse leaves window
+      if (drawingLine) { 
         setDrawingLine(null);
       }
     };
