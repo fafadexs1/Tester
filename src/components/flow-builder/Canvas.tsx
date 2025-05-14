@@ -27,12 +27,14 @@ interface CanvasProps {
   onCanvasMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
   highlightedConnectionId: string | null;
   setHighlightedConnectionId: (id: string | null) => void;
+  definedVariablesInFlow: string[];
 }
 
 const Canvas: React.FC<CanvasProps> = ({
   nodes, connections, drawingLine, canvasOffset,
   onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDeleteConnection,
-  onCanvasMouseDown, highlightedConnectionId, setHighlightedConnectionId
+  onCanvasMouseDown, highlightedConnectionId, setHighlightedConnectionId,
+  definedVariablesInFlow
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -105,6 +107,7 @@ const Canvas: React.FC<CanvasProps> = ({
               onUpdate={onUpdateNode}
               onStartConnection={onStartConnection}
               onDeleteNode={onDeleteNode}
+              definedVariablesInFlow={definedVariablesInFlow}
             />
           </motion.div>
         );

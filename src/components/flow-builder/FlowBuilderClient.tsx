@@ -37,10 +37,39 @@ export default function FlowBuilderClient() {
 
   const [isChatPanelOpen, setIsChatPanelOpen] = useState(true);
   const [hasMounted, setHasMounted] = useState(false);
+  const [definedVariablesInFlow, setDefinedVariablesInFlow] = useState<string[]>([]);
 
   useEffect(() => {
     setHasMounted(true);
   }, []);
+
+  const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
+  const currentNodes = activeWorkspace ? activeWorkspace.nodes : [];
+  const currentConnections = activeWorkspace ? activeWorkspace.connections : [];
+
+  useEffect(() => {
+    if (activeWorkspace?.nodes) {
+      const variables: Set<string> = new Set();
+      activeWorkspace.nodes.forEach(n => {
+        if (n.variableToSaveResponse && n.variableToSaveResponse.trim() !== '') variables.add(n.variableToSaveResponse.trim());
+        if (n.variableToSaveChoice && n.variableToSaveChoice.trim() !== '') variables.add(n.variableToSaveChoice.trim());
+        if (n.variableName && n.variableName.trim() !== '') variables.add(n.variableName.trim());
+        if (n.apiOutputVariable && n.apiOutputVariable.trim() !== '') variables.add(n.apiOutputVariable.trim());
+        if (n.variableToSaveDate && n.variableToSaveDate.trim() !== '') variables.add(n.variableToSaveDate.trim());
+        if (n.codeOutputVariable && n.codeOutputVariable.trim() !== '') variables.add(n.codeOutputVariable.trim());
+        if (n.jsonOutputVariable && n.jsonOutputVariable.trim() !== '') variables.add(n.jsonOutputVariable.trim());
+        if (n.fileUrlVariable && n.fileUrlVariable.trim() !== '') variables.add(n.fileUrlVariable.trim());
+        if (n.ratingOutputVariable && n.ratingOutputVariable.trim() !== '') variables.add(n.ratingOutputVariable.trim());
+        if (n.aiOutputVariable && n.aiOutputVariable.trim() !== '') variables.add(n.aiOutputVariable.trim());
+        if (n.agentResponseVariable && n.agentResponseVariable.trim() !== '') variables.add(n.agentResponseVariable.trim());
+        if (n.supabaseResultVariable && n.supabaseResultVariable.trim() !== '') variables.add(n.supabaseResultVariable.trim());
+      });
+      setDefinedVariablesInFlow(Array.from(variables).sort());
+    } else {
+      setDefinedVariablesInFlow([]);
+    }
+  }, [activeWorkspace?.nodes]);
+
 
   useEffect(() => {
     if (!hasMounted) return; 
@@ -221,9 +250,6 @@ export default function FlowBuilderClient() {
     }
   }, [toast, hasMounted]);
 
-  const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
-  const currentNodes = activeWorkspace ? activeWorkspace.nodes : [];
-  const currentConnections = activeWorkspace ? activeWorkspace.connections : [];
 
   const addWorkspace = useCallback(() => {
     const newWorkspaceId = uuidv4();
@@ -292,7 +318,6 @@ export default function FlowBuilderClient() {
       uploadPromptText: '', fileTypeFilter: '', maxFileSizeMB: 5, fileUrlVariable: '',
       ratingQuestionText: '', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: '',
       
-      // API Call Node Defaults
       apiUrl: '', 
       apiMethod: 'GET', 
       apiAuthType: 'none',
@@ -555,6 +580,7 @@ export default function FlowBuilderClient() {
               onCanvasMouseDown={handleCanvasMouseDownForPanning}
               highlightedConnectionId={highlightedConnectionId}
               setHighlightedConnectionId={setHighlightedConnectionId}
+              definedVariablesInFlow={definedVariablesInFlow}
             />
           </div>
           {hasMounted && isChatPanelOpen && (
