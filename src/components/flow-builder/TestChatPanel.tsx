@@ -38,7 +38,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
   const findNextNodeId = (fromNodeId: string, sourceHandle?: string): string | null => {
     console.log(`[TestChatPanel] findNextNodeId: fromNodeId=${fromNodeId}, sourceHandle=${sourceHandle}`);
-    console.log('[TestChatPanel] findNextNodeId: activeWorkspace?.connections', activeWorkspace?.connections);
+    // console.log('[TestChatPanel] findNextNodeId: activeWorkspace?.connections', activeWorkspace?.connections);
     const connection = activeWorkspace?.connections.find(
       conn => conn.from === fromNodeId && (conn.sourceHandle === sourceHandle || (!sourceHandle && conn.sourceHandle === 'default'))
     );
@@ -55,21 +55,18 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       mutableText = String(mutableText);
     }
   
-    // Regex para encontrar todas as ocorrências de {{variavel}}
     const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
   
     const substitutedText = mutableText.replace(variableRegex, (match, variableName) => {
-      // Tenta buscar a variável em flowVariables
-      // TODO: Implementar busca aninhada (ex: {{objeto.propriedade}}) se necessário
       const value = flowVariables[variableName];
   
       if (value === undefined || value === null) {
-        return ''; // Substitui por string vazia se a variável não for encontrada ou for null/undefined
+        return ''; 
       }
       if (typeof value === 'object' || Array.isArray(value)) {
-        return JSON.stringify(value, null, 2); // Stringify objetos/arrays
+        return JSON.stringify(value, null, 2); 
       }
-      return String(value); // Converte outros tipos para string
+      return String(value);
     });
   
     return substitutedText;
@@ -101,6 +98,8 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
   };
   
   const simulateVariableSave = (node: NodeData) => {
+    // Esta função agora só lida com simulação para nós NÃO-Supabase.
+    // As operações Supabase são reais e definem variáveis diretamente em processNode.
     let variableName: string | undefined = undefined;
     let simulatedValue: any = `[Valor simulado para ${node.title || node.type}]`;
 
@@ -113,17 +112,14 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       case 'rating-input': variableName = node.ratingOutputVariable; simulatedValue = Math.floor(Math.random() * (node.maxRatingValue || 5)) + 1; break;
       case 'ai-text-generation': variableName = node.aiOutputVariable; simulatedValue = "Texto gerado por IA simulado."; break;
       case 'intelligent-agent': variableName = node.agentResponseVariable; simulatedValue = "Resposta do agente inteligente simulada."; break;
+      // Casos Supabase foram removidos daqui
     }
 
     if (variableName && variableName.trim() !== '') {
       setFlowVariables(prev => {
         const newVars = {...prev, [variableName as string]: simulatedValue};
-        console.log(`[TestChatPanel] Simulating save for node ${node.id} (${node.type}): ${variableName} =`, simulatedValue, "New flowVariables:", newVars);
-        // Não adicionaremos mais mensagens de "simulado" aqui para Supabase, pois ele é real.
-        // Para os outros, podemos manter ou remover se quisermos menos verbosidade.
-        if (!node.type.startsWith('supabase-')) {
-            setMessages(prevMessages => [...prevMessages, { id: uuidv4(), text: `(Simulado) Variável "${variableName}" definida como: ${JSON.stringify(simulatedValue)}.`, sender: 'bot'}]);
-        }
+        console.log(`[TestChatPanel] Simulating save for node ${node.id} (${node.type}): ${variableName} =`, simulatedValue, "New flowVariables:", JSON.parse(JSON.stringify(newVars)));
+        setMessages(prevMessages => [...prevMessages, { id: uuidv4(), text: `(Simulado) Variável "${variableName}" definida como: ${JSON.stringify(simulatedValue)}.`, sender: 'bot'}]);
         return newVars;
       });
     }
@@ -335,11 +331,16 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             console.error(`[TestChatPanel] Supabase create error for node ${node.id}:`, error);
             setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Erro ao criar linha: ${error.message}`, sender: 'bot' }]);
           } else {
-            setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Linha criada com sucesso na tabela '${tableName}'.`, sender: 'bot' }]);
+            const resultData = data && data.length > 0 ? data[0] : data;
+            setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Linha criada com sucesso na tabela '${tableName}'. Resultado: ${JSON.stringify(resultData, null, 2)}`, sender: 'bot' }]);
             if (node.supabaseResultVariable && node.supabaseResultVariable.trim() !== '') {
-              const resultData = data && data.length > 0 ? data[0] : data; 
-              setFlowVariables(prevVars => ({ ...prevVars, [node.supabaseResultVariable as string]: resultData }));
-              setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${node.supabaseResultVariable}" definida com: ${JSON.stringify(resultData, null, 2)}`, sender: 'bot' }]);
+              console.log(`[TestChatPanel] CREATE: Attempting to set variable "${node.supabaseResultVariable}" with data:`, JSON.parse(JSON.stringify(resultData)));
+              setFlowVariables(prevVars => {
+                const newVars = { ...prevVars, [node.supabaseResultVariable as string]: resultData };
+                console.log(`[TestChatPanel] CREATE: Variable "${node.supabaseResultVariable}" set. New flowVariables:`, JSON.parse(JSON.stringify(newVars)));
+                return newVars;
+              });
+              setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${node.supabaseResultVariable}" definida.`, sender: 'bot' }]);
             }
           }
         } catch (e: any) {
@@ -363,7 +364,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         let columnsToSelect = substituteVariables(node.supabaseColumnsToSelect);
 
         if (!columnsToSelect || columnsToSelect.trim() === '') {
-            columnsToSelect = '*'; // Default to all columns if not specified
+            columnsToSelect = '*';
         }
         console.log(`[TestChatPanel] Supabase Read - Table: ${tableName}, ID Column: ${idColumn}, ID Value: ${idValue}, Select: ${columnsToSelect}`);
 
@@ -379,18 +380,28 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             console.error(`[TestChatPanel] Supabase read error for node ${node.id}:`, error);
             setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Erro ao ler dados: ${error.message}`, sender: 'bot' }]);
           } else {
-            console.log(`[TestChatPanel] Supabase read data for node ${node.id}:`, data);
+            console.log(`[TestChatPanel] Supabase read RAW data for node ${node.id}:`, data);
             if (data && data.length > 0) {
               const resultData = data.length === 1 ? data[0] : data;
               setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Dados lidos da tabela '${tableName}':\n${JSON.stringify(resultData, null, 2)}`, sender: 'bot' }]);
               if (node.supabaseResultVariable && node.supabaseResultVariable.trim() !== '') {
-                setFlowVariables(prevVars => ({ ...prevVars, [node.supabaseResultVariable as string]: resultData }));
-                setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${node.supabaseResultVariable}" definida.`, sender: 'bot' }]);
+                console.log(`[TestChatPanel] READ: Attempting to set variable "${node.supabaseResultVariable}" with data:`, JSON.parse(JSON.stringify(resultData)));
+                setFlowVariables(prevVars => {
+                  const newVars = { ...prevVars, [node.supabaseResultVariable as string]: resultData };
+                  console.log(`[TestChatPanel] READ: Variable "${node.supabaseResultVariable}" set. New flowVariables:`, JSON.parse(JSON.stringify(newVars)));
+                  return newVars;
+                });
+                setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${node.supabaseResultVariable}" definida com os dados lidos.`, sender: 'bot' }]);
               }
             } else {
               setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Nenhum registro encontrado na tabela '${tableName}' para ${idColumn} = '${idValue}'.`, sender: 'bot' }]);
                if (node.supabaseResultVariable && node.supabaseResultVariable.trim() !== '') {
-                setFlowVariables(prevVars => ({ ...prevVars, [node.supabaseResultVariable as string]: null }));
+                console.log(`[TestChatPanel] READ: Attempting to set variable "${node.supabaseResultVariable}" to null (no data found).`);
+                setFlowVariables(prevVars => {
+                  const newVars = { ...prevVars, [node.supabaseResultVariable as string]: null };
+                   console.log(`[TestChatPanel] READ: Variable "${node.supabaseResultVariable}" set to null. New flowVariables:`, JSON.parse(JSON.stringify(newVars)));
+                  return newVars;
+                });
                 setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${node.supabaseResultVariable}" definida como null (nenhum registro encontrado).`, sender: 'bot' }]);
               }
             }
@@ -437,11 +448,16 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             console.error(`[TestChatPanel] Supabase update error for node ${node.id}:`, error);
             setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Erro ao atualizar linha: ${error.message}`, sender: 'bot' }]);
           } else {
-            setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Linha atualizada com sucesso na tabela '${tableName}'.`, sender: 'bot' }]);
+            const resultData = data && data.length > 0 ? data[0] : data;
+            setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Linha atualizada com sucesso na tabela '${tableName}'. Resultado: ${JSON.stringify(resultData, null, 2)}`, sender: 'bot' }]);
              if (node.supabaseResultVariable && node.supabaseResultVariable.trim() !== '') {
-              const resultData = data && data.length > 0 ? data[0] : data;
-              setFlowVariables(prevVars => ({ ...prevVars, [node.supabaseResultVariable as string]: resultData }));
-              setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${node.supabaseResultVariable}" definida com: ${JSON.stringify(resultData, null, 2)}`, sender: 'bot' }]);
+              console.log(`[TestChatPanel] UPDATE: Attempting to set variable "${node.supabaseResultVariable}" with data:`, JSON.parse(JSON.stringify(resultData)));
+              setFlowVariables(prevVars => {
+                const newVars = { ...prevVars, [node.supabaseResultVariable as string]: resultData };
+                console.log(`[TestChatPanel] UPDATE: Variable "${node.supabaseResultVariable}" set. New flowVariables:`, JSON.parse(JSON.stringify(newVars)));
+                return newVars;
+              });
+              setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${node.supabaseResultVariable}" definida com os dados atualizados.`, sender: 'bot' }]);
             }
           }
         } catch (e: any) {
@@ -469,12 +485,16 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         }
 
         try {
-          const { error } = await supabase.from(tableName).delete().eq(idColumn, String(idValue));
+          const { error, data } = await supabase.from(tableName).delete().eq(idColumn, String(idValue)).select(); // Adicionado .select() para verificar o que foi deletado
           if (error) {
             console.error(`[TestChatPanel] Supabase delete error for node ${node.id}:`, error);
             setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Erro ao deletar linha: ${error.message}`, sender: 'bot' }]);
           } else {
-            setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Linha deletada com sucesso da tabela '${tableName}'.`, sender: 'bot' }]);
+            setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Linha(s) deletada(s) com sucesso da tabela '${tableName}'. Dados afetados (se houver): ${JSON.stringify(data, null, 2)}`, sender: 'bot' }]);
+            // Geralmente não se salva resultado de delete, mas se precisasse:
+            // if (node.supabaseResultVariable && node.supabaseResultVariable.trim() !== '') {
+            //   setFlowVariables(prevVars => ({ ...prevVars, [node.supabaseResultVariable as string]: data || { status: 'deleted' } }));
+            // }
           }
         } catch (e: any) {
           console.error(`[TestChatPanel] Exception during Supabase delete for node ${node.id}:`, e);
@@ -527,8 +547,8 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         break;
 
       default:
-        const exhaustiveCheck: never = node.type; 
-        setMessages(prev => [...prev, { id: uuidv4(), text: `Tipo de nó "${exhaustiveCheck}" (${node.title || 'Sem título'}) não implementado no chat de teste. Fim da simulação.`, sender: 'bot' }]);
+        // const exhaustiveCheck: never = node.type; // Comentado para evitar erro de tipo com novas string literais
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Tipo de nó "${node.type}" (${node.title || 'Sem título'}) não implementado no chat de teste. Fim da simulação.`, sender: 'bot' }]);
         autoAdvance = false; 
         setIsTesting(false);
         setAwaitingInputFor(null);
@@ -551,8 +571,8 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       return;
     }
     console.log('[TestChatPanel] handleStartTest iniciado. ID do Workspace:', activeWorkspace.id, 'Qtd. de Nós:', activeWorkspace.nodes.length);
-    console.log('[TestChatPanel] Workspace nodes:', JSON.stringify(activeWorkspace.nodes, null, 2));
-    console.log('[TestChatPanel] Workspace connections:', JSON.stringify(activeWorkspace.connections, null, 2));
+    // console.log('[TestChatPanel] Workspace nodes:', JSON.stringify(activeWorkspace.nodes, null, 2));
+    // console.log('[TestChatPanel] Workspace connections:', JSON.stringify(activeWorkspace.connections, null, 2));
     setMessages([]);
     setFlowVariables({});
     setAwaitingInputFor(null);
@@ -587,15 +607,16 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         return;
     }
     console.log('[TestChatPanel] awaitingInputFor (input node):', JSON.parse(JSON.stringify(awaitingInputFor)));
-    console.log('[TestChatPanel] Current flowVariables before update:', JSON.parse(JSON.stringify(flowVariables)));
+    // console.log('[TestChatPanel] Current flowVariables before update:', JSON.parse(JSON.stringify(flowVariables)));
 
     const userMessageText = inputValue;
     setMessages(prev => [...prev, { id: uuidv4(), text: userMessageText, sender: 'user' }]);
     
     if (awaitingInputFor.variableToSaveResponse && awaitingInputFor.variableToSaveResponse.trim() !== '') {
-      console.log(`[TestChatPanel] Saving input to variable: ${awaitingInputFor.variableToSaveResponse} = ${userMessageText}`);
+      const varName = awaitingInputFor.variableToSaveResponse as string;
+      console.log(`[TestChatPanel] Saving input to variable: ${varName} = ${userMessageText}`);
       setFlowVariables(prevVars => {
-          const newVars = {...prevVars, [awaitingInputFor.variableToSaveResponse as string]: userMessageText };
+          const newVars = {...prevVars, [varName]: userMessageText };
           console.log('[TestChatPanel] flowVariables after input save:', JSON.parse(JSON.stringify(newVars)));
           return newVars;
       });
@@ -615,14 +636,15 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       return;
     }
     console.log('[TestChatPanel] awaitingInputFor (option node):', JSON.parse(JSON.stringify(awaitingInputFor)));
-    console.log('[TestChatPanel] Current flowVariables before update:', JSON.parse(JSON.stringify(flowVariables)));
+    // console.log('[TestChatPanel] Current flowVariables before update:', JSON.parse(JSON.stringify(flowVariables)));
 
     setMessages(prev => [...prev, { id: uuidv4(), text: `Você escolheu: ${optionText}`, sender: 'user' }]);
     
     if (awaitingInputFor.variableToSaveChoice && awaitingInputFor.variableToSaveChoice.trim() !== '') {
-      console.log(`[TestChatPanel] Saving choice to variable: ${awaitingInputFor.variableToSaveChoice} = ${optionText}`);
+      const varName = awaitingInputFor.variableToSaveChoice as string;
+      console.log(`[TestChatPanel] Saving choice to variable: ${varName} = ${optionText}`);
       setFlowVariables(prevVars => {
-        const newVars = {...prevVars, [awaitingInputFor.variableToSaveChoice as string]: optionText };
+        const newVars = {...prevVars, [varName]: optionText };
         console.log('[TestChatPanel] flowVariables after option save:', JSON.parse(JSON.stringify(newVars)));
         return newVars;
       });
@@ -756,3 +778,4 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 };
 
 export default TestChatPanel;
+
