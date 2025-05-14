@@ -1,7 +1,7 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react'; // Adicionado useState
 import { useRef, useCallback } from 'react';
 import type { NodeData } from '@/lib/types';
 import { motion } from 'framer-motion';
@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle // Adicionado PlayCircle
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle // Adicionado PlayCircle, PlusCircle
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
+import { START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y } from '@/lib/constants';
 
 
 interface NodeCardProps {
@@ -32,17 +33,15 @@ interface NodeCardProps {
 
 const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartConnection, onDeleteNode }) => {
   const isDraggingNode = useRef(false);
+  const [newTriggerName, setNewTriggerName] = useState('');
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    // Permitir arrastar se o clique for no header, mas não em inputs, textareas, selects, botões ou conectores dentro do CardContent ou CardHeader (exceto o próprio header)
     if (
         target.dataset.connector === 'true' || 
         target.closest('[data-action="delete-node"]') ||
         target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target)
     ) {
-      // Se o clique foi num conector, botão de deletar, ou elemento de formulário (exceto se for no drag handle)
-      // não iniciar o drag do nó.
       return;
     }
     
@@ -73,6 +72,31 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     e.stopPropagation(); 
     onDeleteNode(node.id);
   }, [node.id, onDeleteNode]);
+
+  const handleAddTrigger = () => {
+    if (newTriggerName.trim() === '') return;
+    const currentTriggers = node.triggers || [];
+    // Evitar nomes duplicados (opcional, mas bom para consistência)
+    if (currentTriggers.includes(newTriggerName.trim())) {
+        // Poderia mostrar um toast aqui
+        console.warn("Nome do gatilho já existe.");
+        return;
+    }
+    onUpdate(node.id, { triggers: [...currentTriggers, newTriggerName.trim()] });
+    setNewTriggerName('');
+  };
+
+  const handleRemoveTrigger = (indexToRemove: number) => {
+    const currentTriggers = node.triggers || [];
+    onUpdate(node.id, { triggers: currentTriggers.filter((_, index) => index !== indexToRemove) });
+  };
+
+  const handleTriggerNameChange = (indexToChange: number, newName: string) => {
+    const currentTriggers = [...(node.triggers || [])];
+    currentTriggers[indexToChange] = newName;
+    onUpdate(node.id, { triggers: currentTriggers });
+  };
+
 
   const renderNodeIcon = () => {
     const iconProps = { className: "w-5 h-5" };
@@ -111,6 +135,27 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   };
   
   const renderOutputConnectors = () => {
+    if (node.type === 'start') {
+      return (node.triggers || []).map((triggerName, index) => (
+        <div
+          key={triggerName} // Idealmente usar um ID único se os nomes puderem se repetir, mas para handles, o nome é o ID.
+          className="absolute -right-2.5 z-10 flex items-center"
+          style={{ top: `${START_NODE_TRIGGER_INITIAL_Y_OFFSET + index * START_NODE_TRIGGER_SPACING_Y - 10}px` }} // -10 para centralizar o conector de 20px de altura
+          title={`Gatilho: ${triggerName}`}
+        >
+          <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{triggerName}</span>
+          <div
+            className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node.id, triggerName); }}
+            data-connector="true"
+            data-handle-type="source"
+            data-handle-id={triggerName}
+          >
+            <Hash className="w-3 h-3 text-accent-foreground" />
+          </div>
+        </div>
+      ));
+    }
     if (node.type === 'condition') {
       return (
         <>
@@ -137,9 +182,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         </>
       );
     }
-    // O nó 'start' também não deve ter conector de entrada, mas só de saída.
-    // No entanto, o conector de entrada é adicionado por padrão a todos.
-    // O conector de saída é comum a todos os outros nós (exceto 'condition').
     return (
       <div className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">
         <div
@@ -155,7 +197,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   };
 
   const renderWhatsAppToggle = () => {
-    // Only show toggle for specific node types that can send messages
     if (node.type !== 'message' && node.type !== 'media-display') {
       return null;
     }
@@ -199,8 +240,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     );
   };
 
-  // Exemplo de dados para simulação de dropdowns do Supabase
-  // Em uma aplicação real, estes dados viriam de uma API que consulta o schema do Supabase
   const exampleSupabaseTables = ["clientes", "produtos", "pedidos", "usuarios"];
   const exampleSupabaseColumns = ["id", "uuid", "email", "nome", "created_at", "status", "preco", "user_id"];
 
@@ -208,7 +247,39 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   const renderNodeContent = () => {
     switch (node.type) {
       case 'start':
-        return <p className="text-sm text-muted-foreground italic text-center py-2">O fluxo começa aqui.</p>;
+        return (
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Gatilhos de Início</Label>
+            {(node.triggers || []).map((trigger, index) => (
+              <div key={index} className="flex items-center space-x-2">
+                <Input
+                  type="text"
+                  value={trigger}
+                  onChange={(e) => handleTriggerNameChange(index, e.target.value)}
+                  placeholder={`Nome do Gatilho ${index + 1}`}
+                  className="flex-grow"
+                />
+                <Button variant="ghost" size="icon" onClick={() => handleRemoveTrigger(index)} className="text-destructive hover:text-destructive/80 w-8 h-8">
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+            <div className="flex items-center space-x-2 pt-2">
+              <Input
+                type="text"
+                value={newTriggerName}
+                onChange={(e) => setNewTriggerName(e.target.value)}
+                placeholder="Novo nome de gatilho"
+                className="flex-grow"
+                onKeyDown={(e) => e.key === 'Enter' && handleAddTrigger()}
+              />
+              <Button onClick={handleAddTrigger} size="sm" variant="outline">
+                <PlusCircle className="w-4 h-4 mr-1" /> Adicionar
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground italic pt-1">Cada gatilho pode iniciar um caminho diferente no fluxo.</p>
+          </div>
+        );
       case 'message':
         return (
           <>
@@ -472,7 +543,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           <div className="space-y-3">
             <div>
               <Label htmlFor={`${node.id}-tableName`}>Nome da Tabela</Label>
-              {/* Em uma aplicação real, este Select seria populado dinamicamente com tabelas do Supabase. */}
               <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
                 <SelectTrigger id={`${node.id}-tableName`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
                 <SelectContent>
@@ -489,7 +559,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           <div className="space-y-3">
              <div>
               <Label htmlFor={`${node.id}-tableNameRead`}>Nome da Tabela</Label>
-              {/* Em uma aplicação real, este Select seria populado dinamicamente com tabelas do Supabase. */}
               <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
                 <SelectTrigger id={`${node.id}-tableNameRead`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
                 <SelectContent>
@@ -499,7 +568,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             </div>
             <div>
               <Label htmlFor={`${node.id}-identifierColRead`}>Coluna Identificadora</Label>
-              {/* Em uma aplicação real, as opções deste Select dependeriam da tabela selecionada acima. */}
               <Select value={node.supabaseIdentifierColumn || ''} onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}>
                 <SelectTrigger id={`${node.id}-identifierColRead`}><SelectValue placeholder="Selecione a Coluna" /></SelectTrigger>
                 <SelectContent>
@@ -572,7 +640,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   return (
     <motion.div
       className="w-full cursor-grab bg-card rounded-lg shadow-xl border border-border relative"
-      // onMouseDown={handleNodeMouseDown}  // Movido para o CardHeader
       whileHover={{ scale: 1.01, boxShadow: "0px 5px 25px rgba(0,0,0,0.1)" }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
       data-node-id={node.id}
@@ -580,11 +647,11 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     >
       <Card className="shadow-none border-none bg-transparent">
         <CardHeader 
-          onMouseDown={handleNodeMouseDown} // Aplicar o onMouseDown aqui
-          data-drag-handle="true" // Identificador para o handle de arrastar
+          onMouseDown={handleNodeMouseDown}
+          data-drag-handle="true"
           className="py-2.5 px-3.5 bg-secondary/50 rounded-t-lg flex items-center justify-between cursor-grab active:cursor-grabbing"
         >
-          <div className="flex items-center min-w-0 pointer-events-none"> {/* Evitar que ícone/título capturem o mouse down */}
+          <div className="flex items-center min-w-0 pointer-events-none">
             {renderNodeIcon()}
             <CardTitle id={`${node.id}-title`} className="ml-2 text-sm font-medium text-secondary-foreground truncate" title={node.title}>
               {node.title}
@@ -604,7 +671,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           {renderNodeContent()}
         </CardContent>
       </Card>
-      {/* Input Connector - não renderizar para o nó 'start' */}
+      
       {node.type !== 'start' && (
         <div className="absolute -left-2.5 top-1/2 -translate-y-1/2 z-10">
           <div
@@ -614,7 +681,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           />
         </div>
       )}
-      {/* Output Connector(s) */}
+      
       {renderOutputConnectors()}
     </motion.div>
   );

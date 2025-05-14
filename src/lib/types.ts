@@ -158,13 +158,16 @@ export interface NodeData {
   supabaseDataJson?: string; // Para create/update, ex: '{ "name": "{{input.user_name}}", "age": 30 }'
   supabaseColumnsToSelect?: string; // Para read, ex: '*', 'name, email, age'
   supabaseResultVariable?: string; // Para read, nome da variável para salvar os dados lidos
+
+  // Para 'start' node
+  triggers?: string[];
 }
 
 export interface Connection {
   id: string;
   from: string; // ID do nó de origem
   to: string;   // ID do nó de destino
-  sourceHandle?: string; // ex: 'true', 'false' para condição, 'default' para outros
+  sourceHandle?: string; // ex: 'true', 'false' para condição, 'default' para outros, nome do gatilho para 'start'
 }
 
 export interface DrawingLineData {

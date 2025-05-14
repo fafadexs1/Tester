@@ -3,10 +3,13 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, WorkspaceData } from '@/lib/types';
-import { NODE_WIDTH, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX, GRID_SIZE } from '@/lib/constants';
+import { 
+  NODE_WIDTH, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX, GRID_SIZE,
+  START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y
+} from '@/lib/constants';
 import FlowSidebar from './FlowSidebar';
 import Canvas from './Canvas';
-import TopBar from './TopBar'; // Importar o TopBar
+import TopBar from './TopBar';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { v4 as uuidv4 } from 'uuid';
@@ -27,9 +30,8 @@ export default function FlowBuilderClient() {
   const isPanning = useRef(false);
   const panStartMousePosition = useRef({ x: 0, y: 0 });
   const initialCanvasOffsetOnPanStart = useRef({ x: 0, y: 0 });
-  const mainContentRef = useRef<HTMLDivElement>(null); // Alterado de canvasWrapperRef para mainContentRef
+  const mainContentRef = useRef<HTMLDivElement>(null);
 
-  // Load workspaces from localStorage on initial mount
   useEffect(() => {
     console.log('[FlowBuilderClient] Initializing: Attempting to load workspaces from localStorage.');
     const savedWorkspacesStr = localStorage.getItem(LOCAL_STORAGE_KEY_WORKSPACES);
@@ -258,6 +260,7 @@ export default function FlowBuilderClient() {
       aiPromptText: '', aiModelName: '', aiOutputVariable: '',
       agentName: 'Agente Inteligente Padrão', agentSystemPrompt: 'Você é um assistente IA. Responda às perguntas do usuário de forma concisa e prestativa.',
       userInputVariable: '{{entrada_usuario}}', agentResponseVariable: 'resposta_do_agente', maxConversationTurns: 5, temperature: 0.7,
+      triggers: [], // Default para o nó 'start'
     };
 
     const newNode: NodeData = {
@@ -298,14 +301,19 @@ export default function FlowBuilderClient() {
 
   const handleStartConnection = useCallback((e: React.MouseEvent, fromId: string, sourceHandleId = 'default') => {
     const fromNode = currentNodes.find(n => n.id === fromId); 
-    if (!fromNode || !mainContentRef.current) return; // Alterado para mainContentRef
+    if (!fromNode || !mainContentRef.current) return;
     
     const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background'); 
     if (!canvasElement) return;
     const canvasRect = canvasElement.getBoundingClientRect();
 
-    let startYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET;
-    if (fromNode.type === 'condition') {
+    let startYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET; // Padrão
+    if (fromNode.type === 'start' && fromNode.triggers && sourceHandleId) {
+        const triggerIndex = fromNode.triggers.indexOf(sourceHandleId);
+        if (triggerIndex !== -1) {
+            startYOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET + (triggerIndex * START_NODE_TRIGGER_SPACING_Y);
+        }
+    } else if (fromNode.type === 'condition') {
         if (sourceHandleId === 'true') startYOffset = NODE_HEADER_HEIGHT_APPROX * (1/3) + 6;
         else if (sourceHandleId === 'false') startYOffset = NODE_HEADER_HEIGHT_APPROX * (2/3) + 6;
     }
@@ -345,7 +353,7 @@ export default function FlowBuilderClient() {
         y: initialCanvasOffsetOnPanStart.current.y + dy,
       });
     } else if (drawingLine) {
-      const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background'); // Alterado para mainContentRef
+      const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background');
       if (!canvasElement) return;
       const canvasRect = canvasElement.getBoundingClientRect();
       setDrawingLine((prev) => {
@@ -362,7 +370,7 @@ export default function FlowBuilderClient() {
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
       isPanning.current = false;
-       const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null; // Alterado para mainContentRef
+       const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null;
       if (canvasElement) canvasElement.style.cursor = 'grab';
     } else if (drawingLine) {
       const targetElement = document.elementFromPoint(e.clientX, e.clientY);
@@ -388,41 +396,30 @@ export default function FlowBuilderClient() {
                 id: uuidv4(),
                 from: drawingLine.fromId,
                 to: toId as string,
-                sourceHandle: drawingLine.sourceHandleId,
+                sourceHandle: drawingLine.sourceHandleId, // Este é o nome do gatilho para o nó 'start'
             };
             console.log("[FlowBuilderClient] Attempting to add connection:", JSON.parse(JSON.stringify(newConnection)));
 
             const isDuplicate = newConnectionsArray.some(
-                c => c.from === newConnection.from && c.to === newConnection.to && c.sourceHandle === newConnection.sourceHandle
+                c => c.from === newConnection.from && 
+                     c.to === newConnection.to && 
+                     c.sourceHandle === newConnection.sourceHandle
             );
 
-            if (!isDuplicate) {
-                const sourceNode = ws.nodes.find(n => n.id === drawingLine.fromId);
-                if (sourceNode?.type === 'condition') {
-                    const existingConnectionFromHandle = newConnectionsArray.find(
-                        c => c.from === drawingLine.fromId && c.sourceHandle === drawingLine.sourceHandleId
-                    );
-                    if (existingConnectionFromHandle) {
-                        newConnectionsArray = [...newConnectionsArray.filter(c => c.id !== existingConnectionFromHandle.id), newConnection];
-                         console.log("[FlowBuilderClient] Replaced existing condition connection from handle.");
-                    } else {
-                        newConnectionsArray.push(newConnection);
-                        console.log("[FlowBuilderClient] Added new condition connection.");
-                    }
-                } else { 
-                    const existingConnectionFromDefaultHandle = newConnectionsArray.find(
-                        c => c.from === drawingLine.fromId && c.sourceHandle === 'default'
-                    );
-                    if (existingConnectionFromDefaultHandle) {
-                        newConnectionsArray = [...newConnectionsArray.filter(c => c.id !== existingConnectionFromDefaultHandle.id), newConnection];
-                        console.log("[FlowBuilderClient] Replaced existing default connection.");
-                    } else {
-                        newConnectionsArray.push(newConnection);
-                        console.log("[FlowBuilderClient] Added new default connection.");
-                    }
-                }
+            const existingConnectionFromThisSourceHandle = newConnectionsArray.find(
+                c => c.from === newConnection.from && c.sourceHandle === newConnection.sourceHandle
+            );
+
+            if (isDuplicate) {
+                console.log("[FlowBuilderClient] Duplicate connection prevented (same from, to, and handle).");
+            } else if (existingConnectionFromThisSourceHandle) {
+                // Se já existe uma conexão saindo DESTE handle (from + sourceHandle), substitua-a.
+                newConnectionsArray = newConnectionsArray.filter(c => c.id !== existingConnectionFromThisSourceHandle.id);
+                newConnectionsArray.push(newConnection);
+                console.log("[FlowBuilderClient] Replaced existing connection from this specific source handle.");
             } else {
-                console.log("[FlowBuilderClient] Duplicate connection prevented.");
+                newConnectionsArray.push(newConnection);
+                console.log("[FlowBuilderClient] Added new connection.");
             }
             return { ...ws, connections: newConnectionsArray };
         });
@@ -450,7 +447,7 @@ export default function FlowBuilderClient() {
     const handleMouseLeaveWindow = () => {
       if (isPanning.current) {
         isPanning.current = false;
-        const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null; // Alterado para mainContentRef
+        const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null;
         if (canvasElement) canvasElement.style.cursor = 'grab';
       }
       if (drawingLineRef.current) { 
@@ -479,7 +476,7 @@ export default function FlowBuilderClient() {
           appName="Flowise Lite"
         />
         <div ref={mainContentRef} className="flex flex-1 overflow-hidden">
-          <FlowSidebar /> {/* Props removidas pois agora são gerenciadas pelo TopBar ou não são mais necessárias na Sidebar */}
+          <FlowSidebar />
           <Canvas
             nodes={currentNodes}
             connections={currentConnections}

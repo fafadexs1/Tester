@@ -26,7 +26,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
       value: "basic",
       title: "Básicos",
       blocks: [
-        { type: "start", label: "Início do Fluxo", icon: <PlayCircle {...iconProps} color="hsl(var(--primary))" />, defaultData: {} },
+        { type: "start", label: "Início do Fluxo", icon: <PlayCircle {...iconProps} color="hsl(var(--primary))" />, defaultData: { triggers: ['Gatilho Inicial'] } },
         { type: "message", label: "Exibir Texto", icon: <MessageSquareText {...iconProps} color="hsl(var(--accent))" />, defaultData: { text: 'Olá!'} },
         { type: "input", label: "Entrada do Usuário", icon: <Type {...iconProps} className="text-green-600" />, defaultData: { inputType: 'text', promptText: 'Qual é o seu nome?', variableToSaveResponse: 'nome_usuario' } },
         { type: "option", label: "Múltiplas Escolhas", icon: <ListChecks {...iconProps} className="text-purple-600" />, defaultData: { questionText: 'Escolha uma opção:', optionsList: 'Opção A\nOpção B', variableToSaveChoice: 'escolha_usuario' }},

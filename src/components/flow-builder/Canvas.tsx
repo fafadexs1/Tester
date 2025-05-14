@@ -4,7 +4,11 @@
 import type React from 'react';
 import { useRef, useEffect } from 'react';
 import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData } from '@/lib/types';
-import { ITEM_TYPE_BLOCK, NODE_WIDTH, GRID_SIZE, NODE_CENTER_Y_OFFSET, NODE_DRAG_HANDLE_OFFSET_X, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX } from '@/lib/constants';
+import { 
+  ITEM_TYPE_BLOCK, NODE_WIDTH, GRID_SIZE, 
+  NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX,
+  START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y
+} from '@/lib/constants';
 import NodeCard from './NodeCard';
 import { useDrop } from 'react-dnd';
 import { motion } from 'framer-motion';
@@ -37,12 +41,8 @@ const Canvas: React.FC<CanvasProps> = ({
       const clientOffset = monitor.getClientOffset();
       if (clientOffset && canvasRef.current) {
         const canvasRect = canvasRef.current.getBoundingClientRect();
-        // Estas são as coordenadas relativas ao canto superior esquerdo do elemento canvas DOM
         const xRelativeToCanvasElement = clientOffset.x - canvasRect.left;
         const yRelativeToCanvasElement = clientOffset.y - canvasRect.top;
-
-        // Para obter as coordenadas lógicas dentro do conteúdo do canvas (desconsiderando o pan/zoom do canvasOffset)
-        // e já centralizando o nó no cursor.
         const logicalX = xRelativeToCanvasElement - canvasOffset.x;
         const logicalY = yRelativeToCanvasElement - canvasOffset.y;
         
@@ -50,21 +50,19 @@ const Canvas: React.FC<CanvasProps> = ({
             item, 
             clientOffset, 
             canvasRect, 
-            canvasOffset: JSON.parse(JSON.stringify(canvasOffset)), // Para log seguro
+            canvasOffset: JSON.parse(JSON.stringify(canvasOffset)),
             xRelativeToCanvasElement,
             yRelativeToCanvasElement,
             logicalX, 
             logicalY 
         });
-        // onDropNode espera as coordenadas do mouse relativas ao conteúdo lógico do canvas
         onDropNode(item, { x: logicalX, y: logicalY });
       } else {
         console.warn('[Canvas] Drop failed: clientOffset or canvasRef.current is null', {clientOffset, canvasRefCurrent: canvasRef.current});
       }
     },
-  }), [onDropNode, canvasOffset]); // canvasOffset é uma dependência
+  }), [onDropNode, canvasOffset]);
 
-  // Attach drop target to the canvasRef
   useEffect(() => {
     if (canvasRef.current) {
       drop(canvasRef);
@@ -72,7 +70,6 @@ const Canvas: React.FC<CanvasProps> = ({
   }, [drop]);
 
   const drawBezierPath = (x1: number, y1: number, x2: number, y2: number) => {
-    // Simple curve, adjust control points for a more S-like shape if needed
     const dx = Math.abs(x2 - x1) * 0.5;
     const c1x = x1 + dx;
     const c2x = x2 - dx;
@@ -127,7 +124,16 @@ const Canvas: React.FC<CanvasProps> = ({
           if (!sourceNode || !targetNode) return null;
 
           let sourceHandleYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET;
-          if (sourceNode.type === 'condition') {
+          
+          if (sourceNode.type === 'start' && sourceNode.triggers && conn.sourceHandle) {
+            const triggerIndex = sourceNode.triggers.indexOf(conn.sourceHandle);
+            if (triggerIndex !== -1) {
+              sourceHandleYOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET + (triggerIndex * START_NODE_TRIGGER_SPACING_Y);
+            } else {
+              // Fallback se o handle não for encontrado, embora não devesse acontecer
+              sourceHandleYOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET; 
+            }
+          } else if (sourceNode.type === 'condition') {
             if (conn.sourceHandle === 'true') sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (1/3) + 6;
             else if (conn.sourceHandle === 'false') sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (2/3) + 6;
           }
@@ -136,7 +142,7 @@ const Canvas: React.FC<CanvasProps> = ({
           const y1 = sourceNode.y + sourceHandleYOffset + canvasOffset.y;
           
           const x2 = targetNode.x + canvasOffset.x; 
-          const y2 = targetNode.y + NODE_HEADER_CONNECTOR_Y_OFFSET + canvasOffset.y;
+          const y2 = targetNode.y + NODE_HEADER_CONNECTOR_Y_OFFSET + canvasOffset.y; // Conector de entrada sempre no meio do header
           
           const isHighlighted = highlightedConnectionId === conn.id;
           const strokeColor = isHighlighted ? 'var(--flow-connection-highlight)' : 'var(--flow-connection)';
@@ -146,11 +152,9 @@ const Canvas: React.FC<CanvasProps> = ({
                 onClick={(e) => { e.stopPropagation(); onDeleteConnection(conn.id); }}
                 onMouseEnter={() => setHighlightedConnectionId(conn.id)}
                 onMouseLeave={() => setHighlightedConnectionId(null)}
-                style={{ pointerEvents: 'all' }} // Make the g element clickable
+                style={{ pointerEvents: 'all' }}
             >
-                {/* Invisible wider path for easier clicking */}
                 <path d={drawBezierPath(x1, y1, x2, y2)} stroke="transparent" strokeWidth={12} fill="none"/>
-                {/* Visible path */}
                 <path
                     d={drawBezierPath(x1, y1, x2, y2)}
                     stroke={strokeColor}
@@ -167,9 +171,9 @@ const Canvas: React.FC<CanvasProps> = ({
               drawingLine.startX + canvasOffset.x, drawingLine.startY + canvasOffset.y,
               drawingLine.currentX, drawingLine.currentY 
             )}
-            stroke="hsl(var(--accent))" // --accent is HSL components, so hsl() is needed here
+            stroke="hsl(var(--accent))"
             strokeOpacity="0.7" strokeWidth={2} fill="none" strokeDasharray="5,3"
-            markerEnd="url(#arrowhead)" // arrowhead uses --flow-connection which is already a full hsl string
+            markerEnd="url(#arrowhead)"
           />
         )}
       </svg>
@@ -178,4 +182,3 @@ const Canvas: React.FC<CanvasProps> = ({
 };
 
 export default Canvas;
-
