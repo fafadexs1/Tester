@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -24,7 +23,7 @@ interface NodeCardProps {
   onUpdate: (id: string, changes: Partial<NodeData>) => void;
   onStartConnection: (event: React.MouseEvent, fromId: string, sourceHandleId?: string) => void;
   onDeleteNode: (id: string) => void;
-  canvasOffset: { x: number; y: number }; 
+  // Removed canvasOffset as it's not used for node dragging logic here
 }
 
 const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartConnection, onDeleteNode }) => {
@@ -32,10 +31,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
+    // If clicking on a connector or delete button, let their specific handlers manage the event (they call stopPropagation)
     if (target.dataset.connector === 'true' || target.closest('[data-action="delete-node"]')) {
+      // Event propagation is stopped by the specific handlers for connectors/delete
       return;
     }
     
+    // If clicking on the card body, initiate node dragging
     isDraggingNode.current = true;
     const startX = e.clientX;
     const startY = e.clientY;
@@ -60,7 +62,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   }, [node.x, node.y, node.id, onUpdate]);
 
   const handleDeleteClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+    e.stopPropagation(); // Prevent card drag
     onDeleteNode(node.id);
   }, [node.id, onDeleteNode]);
 
@@ -277,8 +279,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           </div>
         );
       default:
-        // Ensure exhaustive check or handle unknown types gracefully
-        // const _exhaustiveCheck: never = node.type;
         return <p className="text-xs text-muted-foreground italic">Nenhuma configuração para este tipo de nó.</p>;
     }
   };
@@ -286,7 +286,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   return (
     <motion.div
       className="w-full cursor-grab bg-card rounded-lg shadow-xl border border-border relative"
-      onMouseDown={handleNodeMouseDown}
+      onMouseDown={handleNodeMouseDown} // This will now be the primary drag handler
       whileHover={{ scale: 1.01, boxShadow: "0px 5px 25px rgba(0,0,0,0.1)" }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
       data-node-id={node.id}

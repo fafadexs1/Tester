@@ -1,4 +1,3 @@
-
 "use client";
 
 import type React from 'react';
@@ -81,23 +80,14 @@ const Canvas: React.FC<CanvasProps> = ({
             initial={{ scale: 0.95, opacity: 0.8 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            drag // This makes the motion.div draggable by itself, conflicts with custom drag
-            dragMomentum={false} // Disable momentum if using custom drag logic for snapping/updates
-            onDrag={(event, info) => { // If using framer-motion's drag
-                // This needs to be reconciled with the existing node drag logic
-                // For now, will rely on NodeCard's internal drag.
-                // onUpdateNode(node.id, { x: node.x + info.delta.x, y: node.y + info.delta.y });
-            }}
-            // To use NodeCard's internal drag logic, remove `drag` prop from here
-            // or integrate framer-motion's drag properly.
-            // For now, NodeCard's mousedown takes precedence for dragging.
+            // Removed drag and onDrag props to defer to NodeCard's internal drag handling
           >
             <NodeCard
               node={node}
               onUpdate={onUpdateNode}
               onStartConnection={onStartConnection}
               onDeleteNode={onDeleteNode}
-              canvasOffset={canvasOffset}
+              // Removed canvasOffset prop as it's not used by NodeCard's drag logic
             />
           </motion.div>
         );
@@ -154,7 +144,7 @@ const Canvas: React.FC<CanvasProps> = ({
           <path
             d={drawBezierPath(
               drawingLine.startX + canvasOffset.x, drawingLine.startY + canvasOffset.y,
-              drawingLine.currentX, drawingLine.currentY // currentX/Y are already relative to canvas + offset
+              drawingLine.currentX, drawingLine.currentY 
             )}
             stroke="hsl(var(--accent))" strokeOpacity="0.7" strokeWidth={2} fill="none" strokeDasharray="5,3"
             markerEnd="url(#arrowhead)"
