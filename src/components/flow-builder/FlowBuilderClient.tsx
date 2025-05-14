@@ -11,6 +11,7 @@ import {
 import FlowSidebar from './FlowSidebar';
 import Canvas from './Canvas';
 import TopBar from './TopBar';
+import TestChatPanel from './TestChatPanel'; // Importar o novo painel
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { v4 as uuidv4 } from 'uuid';
@@ -31,7 +32,7 @@ export default function FlowBuilderClient() {
   const isPanning = useRef(false);
   const panStartMousePosition = useRef({ x: 0, y: 0 });
   const initialCanvasOffsetOnPanStart = useRef({ x: 0, y: 0 });
-  const mainContentRef = useRef<HTMLDivElement>(null);
+  const mainContentRef = useRef<HTMLDivElement>(null); // Ref para o container de Sidebar e Canvas
 
   useEffect(() => {
     console.log('[FlowBuilderClient] Initializing: Attempting to load workspaces from localStorage.');
@@ -483,22 +484,25 @@ export default function FlowBuilderClient() {
           onDiscardChanges={handleDiscardChanges}
           appName="Flowise Lite"
         />
-        <div ref={mainContentRef} className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden"> {/* Container para Sidebar, Canvas e ChatPanel */}
           <FlowSidebar />
-          <Canvas
-            nodes={currentNodes}
-            connections={currentConnections}
-            drawingLine={drawingLine}
-            canvasOffset={canvasOffset}
-            onDropNode={handleDropNode}
-            onUpdateNode={updateNode}
-            onStartConnection={handleStartConnection}
-            onDeleteNode={deleteNode}
-            onDeleteConnection={deleteConnection}
-            onCanvasMouseDown={handleCanvasMouseDownForPanning}
-            highlightedConnectionId={highlightedConnectionId}
-            setHighlightedConnectionId={setHighlightedConnectionId}
-          />
+          <div ref={mainContentRef} className="flex-1 flex flex-col overflow-hidden"> {/* Canvas ocupa o espaço restante */}
+            <Canvas
+              nodes={currentNodes}
+              connections={currentConnections}
+              drawingLine={drawingLine}
+              canvasOffset={canvasOffset}
+              onDropNode={handleDropNode}
+              onUpdateNode={updateNode}
+              onStartConnection={handleStartConnection}
+              onDeleteNode={deleteNode}
+              onDeleteConnection={deleteConnection}
+              onCanvasMouseDown={handleCanvasMouseDownForPanning}
+              highlightedConnectionId={highlightedConnectionId}
+              setHighlightedConnectionId={setHighlightedConnectionId}
+            />
+          </div>
+          <TestChatPanel />
         </div>
       </div>
     </DndProvider>

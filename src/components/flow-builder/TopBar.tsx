@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import type { WorkspaceData } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, Database, ChevronDown, PlugZap, BotMessageSquare } from 'lucide-react';
+import { PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, Database, ChevronDown, PlugZap, BotMessageSquare, Rocket } from 'lucide-react'; // Adicionado Rocket
 import {
   Dialog,
   DialogContent,
@@ -142,6 +142,24 @@ const TopBar: React.FC<TopBarProps> = ({
     setIsSettingsDialogOpen(false);
   };
 
+  const handlePublishFlow = () => {
+    if (!activeWorkspaceId) {
+      toast({
+        title: "Nenhum fluxo ativo",
+        description: "Por favor, selecione um fluxo para publicar.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const currentWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
+    toast({
+      title: "Publicar Fluxo",
+      description: `O fluxo "${currentWorkspace?.name || 'Selecionado'}" seria colocado em produção. (Funcionalidade de placeholder)`,
+      variant: "default",
+    });
+    // Aqui iria a lógica real de publicação
+  };
+
   const settingsCategories: { id: SettingsCategory; label: string; icon: React.ReactNode }[] = [
     { id: 'database', label: 'Banco de Dados', icon: <Database className="w-5 h-5 mr-2" /> },
     { id: 'integrations', label: 'Integrações', icon: <PlugZap className="w-5 h-5 mr-2" /> },
@@ -192,7 +210,7 @@ const TopBar: React.FC<TopBarProps> = ({
                 >
                   <SelectTrigger 
                     id="workspace-select-topbar-mobile" 
-                    className="h-9 w-auto min-w-[calc(100vw-280px)] max-w-[200px] text-sm" 
+                    className="h-9 w-auto min-w-[calc(100vw-350px)] max-w-[180px] text-sm" // Ajustado o min-width
                     aria-label="Selecionar Fluxo de Trabalho"
                   >
                     <SelectValue placeholder="Selecionar Fluxo" />
@@ -211,10 +229,31 @@ const TopBar: React.FC<TopBarProps> = ({
             <PlusCircle className="h-4 w-4" />
             <span className="sr-only">Novo Fluxo</span>
           </Button>
+          
+          <Button 
+            onClick={handlePublishFlow} 
+            variant="default" 
+            size="sm"
+            className="bg-teal-600 hover:bg-teal-700 text-white hidden md:inline-flex"
+            disabled={!activeWorkspaceId}
+          >
+            <Rocket className="mr-2 h-4 w-4" /> Publicar
+          </Button>
+          <Button 
+            onClick={handlePublishFlow} 
+            variant="default" 
+            size="icon"
+            className="bg-teal-600 hover:bg-teal-700 text-white md:hidden"
+            disabled={!activeWorkspaceId}
+            aria-label="Publicar Fluxo"
+          >
+            <Rocket className="h-4 w-4" />
+          </Button>
+
 
           <Button 
             onClick={onSaveWorkspaces} 
-            variant="default" 
+            variant="outline" // Mudado para outline para diferenciar de Publicar
             size="sm"
             disabled={!activeWorkspaceId}
             className="hidden md:inline-flex"
@@ -223,7 +262,7 @@ const TopBar: React.FC<TopBarProps> = ({
           </Button>
            <Button 
             onClick={onSaveWorkspaces} 
-            variant="default" 
+            variant="outline" 
             size="icon"
             disabled={!activeWorkspaceId}
             className="md:hidden"
@@ -273,7 +312,7 @@ const TopBar: React.FC<TopBarProps> = ({
                 <CreditCard className="mr-2 h-4 w-4" />
                 <span>Assinatura</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsSettingsDialogOpen(true); }}>
+              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setActiveSettingsCategory('database'); setIsSettingsDialogOpen(true); }}>
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Configurações</span>
               </DropdownMenuItem>
@@ -317,7 +356,7 @@ const TopBar: React.FC<TopBarProps> = ({
               {activeSettingsCategory === 'database' && (
                 <section>
                   <h3 className="text-lg font-semibold text-card-foreground mb-4">Configurações de Banco de Dados</h3>
-                  <Accordion type="multiple" className="w-full space-y-4">
+                  <Accordion type="multiple" className="w-full space-y-4" defaultValue={['supabase', 'postgresql']}>
                     {/* Configuração Supabase */}
                     <AccordionItem value="supabase" className="border rounded-lg shadow-sm">
                       <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
@@ -423,7 +462,7 @@ const TopBar: React.FC<TopBarProps> = ({
               {activeSettingsCategory === 'integrations' && (
                  <section>
                   <h3 className="text-lg font-semibold text-card-foreground mb-4">Configurações de Integrações</h3>
-                  <Accordion type="multiple" className="w-full space-y-4">
+                  <Accordion type="multiple" className="w-full space-y-4" defaultValue={['evolution-api']}>
                     {/* Configuração API Evolution */}
                     <AccordionItem value="evolution-api" className="border rounded-lg shadow-sm">
                       <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
@@ -480,5 +519,3 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
-
-    
