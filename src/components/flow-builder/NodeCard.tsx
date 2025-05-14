@@ -65,10 +65,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       if (isSupabaseConfigured) {
         setIsLoadingSupabaseTables(true);
         setSupabaseSchemaError(null);
-        setSupabaseTables([]); // Clear previous tables
-        setSupabaseColumns([]); // Clear previous columns as table might change
-        if (node.supabaseTableName) onUpdate(node.id, { supabaseTableName: ''}); // Reset selected table
-        if (node.supabaseIdentifierColumn) onUpdate(node.id, { supabaseIdentifierColumn: '' }); // Reset selected column
+        setSupabaseTables([]); 
+        setSupabaseColumns([]); 
+        // Não resetar node.supabaseTableName aqui, pois ele é o valor salvo.
+        // Apenas limpe as colunas se a tabela selecionada for invalidada ou não existir mais.
+        // A lógica de reset de tabela/coluna deve ser mais granular,
+        // por exemplo, ao carregar ou se a configuração mudar.
 
 
         fetchSupabaseTablesAction(savedSupabaseUrl as string, savedSupabaseServiceKey as string)
@@ -80,8 +82,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             } else if (result.data) {
               setSupabaseTables(result.data);
               console.log(`[NodeCard - ${node.id}] Supabase tables fetched:`, result.data);
+              // Se a tabela salva no nó não existir na lista de tabelas buscadas, limpe-a
+              if (node.supabaseTableName && !result.data.some(t => t.name === node.supabaseTableName)) {
+                onUpdate(node.id, { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseSingleValueColumn: '' });
+              }
             } else {
-              setSupabaseTables([]); // Should not happen if no error
+              setSupabaseTables([]); 
             }
           })
           .catch(err => {
@@ -99,7 +105,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.type, node.id]); // Re-run if node type changes or key supabase props change (like on load)
+  }, [node.type, node.id]); // Re-executar se tipo mudar, não por supabaseTableName aqui
 
 
   // Fetch Supabase columns when table changes
@@ -111,9 +117,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 
       if (isSupabaseConfigured) {
         setIsLoadingSupabaseColumns(true);
-        setSupabaseSchemaError(null); // Clear previous schema errors
-        setSupabaseColumns([]); // Clear previous columns
-        if (node.supabaseIdentifierColumn) onUpdate(node.id, { supabaseIdentifierColumn: '' }); // Reset selected column
+        setSupabaseSchemaError(null); 
+        setSupabaseColumns([]); 
+        // Não resetar node.supabaseIdentifierColumn aqui, pois é o valor salvo.
+        // Apenas limpe as colunas se a coluna salva não existir na nova lista.
 
         fetchSupabaseTableColumnsAction(savedSupabaseUrl as string, savedSupabaseServiceKey as string, node.supabaseTableName)
           .then(result => {
@@ -124,6 +131,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             } else if (result.data) {
               setSupabaseColumns(result.data);
               console.log(`[NodeCard - ${node.id}] Columns for ${node.supabaseTableName} fetched:`, result.data);
+              // Se a coluna identificadora salva não existir na nova lista, limpe-a
+              if (node.supabaseIdentifierColumn && !result.data.some(c => c.name === node.supabaseIdentifierColumn)) {
+                onUpdate(node.id, { supabaseIdentifierColumn: '' });
+              }
+              // Se a coluna de valor único salva não existir na nova lista, limpe-a (para nó de leitura)
+              if (node.type === 'supabase-read-row' && node.supabaseSingleValueColumn && !result.data.some(c => c.name === node.supabaseSingleValueColumn)) {
+                onUpdate(node.id, { supabaseSingleValueColumn: '' });
+              }
             } else {
               setSupabaseColumns([]);
             }
@@ -145,7 +160,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       setSupabaseColumns([]); // Clear columns if no table is selected
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.type, node.id, node.supabaseTableName]);
+  }, [node.id, node.supabaseTableName]); // Dependência em supabaseTableName é crucial aqui
 
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent) => {
@@ -1272,7 +1287,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length > 0 && (
                 <Select 
                     value={node.supabaseTableName || ''} 
-                    onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value, supabaseIdentifierColumn: '', supabaseColumnsToSelect: '*' })}
+                    onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value, supabaseIdentifierColumn: '', supabaseColumnsToSelect: (isReadOp ? '*' : undefined), supabaseSingleValueColumn: '' })}
                 >
                   <SelectTrigger id={`${node.id}-tableName`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
                   <SelectContent>
@@ -1290,8 +1305,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                   {!isLoadingSupabaseColumns && !node.supabaseTableName && <p className="text-xs text-muted-foreground">Selecione uma tabela para ver as colunas.</p>}
                   {!isLoadingSupabaseColumns && node.supabaseTableName && supabaseColumns.length === 0 && !supabaseSchemaError && <p className="text-xs text-muted-foreground">Nenhuma coluna encontrada para a tabela selecionada.</p>}
                   {!isLoadingSupabaseColumns && supabaseColumns.length > 0 && (
-                     <Select value={node.supabaseIdentifierColumn || ''} onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}>
-                        <SelectTrigger id={`${node.id}-identifierCol`} disabled={!node.supabaseTableName || supabaseColumns.length === 0}>
+                     <Select 
+                        value={node.supabaseIdentifierColumn || ''} 
+                        onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}
+                        disabled={!node.supabaseTableName || supabaseColumns.length === 0}
+                    >
+                        <SelectTrigger id={`${node.id}-identifierCol`}>
                             <SelectValue placeholder="Selecione a Coluna para filtrar" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1312,6 +1331,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             )}
             
             {isReadOp && (
+              <>
                  <div>
                     <Label htmlFor={`${node.id}-columnsToSelectRead`}>Colunas a Selecionar (ex: *, nome, email)</Label>
                     <div className="relative">
@@ -1319,6 +1339,37 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                         {renderVariableInserter(node.supabaseColumnsToSelect, (newText) => onUpdate(node.id, { supabaseColumnsToSelect: newText }))}
                     </div>
                 </div>
+                <div className="flex items-center space-x-2 mt-3 pt-3 border-t">
+                    <Switch
+                        id={`${node.id}-returnSingleValue`}
+                        checked={node.supabaseReturnSingleValue || false}
+                        onCheckedChange={(checked) => onUpdate(node.id, { supabaseReturnSingleValue: checked, supabaseSingleValueColumn: '' })}
+                    />
+                    <Label htmlFor={`${node.id}-returnSingleValue`}>Retornar apenas o valor de uma coluna</Label>
+                </div>
+                {node.supabaseReturnSingleValue && (
+                    <div className="mt-2 pl-2 ml-4 border-l-2">
+                        <Label htmlFor={`${node.id}-singleValueCol`}>Coluna para Retornar Valor</Label>
+                        {isLoadingSupabaseColumns && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando colunas...</div>}
+                        {!isLoadingSupabaseColumns && !node.supabaseTableName && <p className="text-xs text-muted-foreground">Selecione uma tabela para ver as colunas.</p>}
+                        {!isLoadingSupabaseColumns && supabaseColumns.length > 0 && (
+                            <Select 
+                                value={node.supabaseSingleValueColumn || ''} 
+                                onValueChange={(value) => onUpdate(node.id, { supabaseSingleValueColumn: value })}
+                                disabled={!node.supabaseTableName || supabaseColumns.length === 0}
+                            >
+                                <SelectTrigger id={`${node.id}-singleValueCol`}>
+                                    <SelectValue placeholder="Selecione a Coluna do Valor" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {supabaseColumns.map(col => <SelectItem key={col.name} value={col.name}>{col.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        )}
+                        {!isLoadingSupabaseColumns && supabaseSchemaError && node.supabaseTableName && <p className="text-xs text-destructive">{supabaseSchemaError}</p>}
+                    </div>
+                )}
+              </>
             )}
 
             {needsDataJson && (
@@ -1334,7 +1385,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             {(isReadOp || isCreateOp) && (
               <div>
                 <Label htmlFor={`${node.id}-resultVar`}>Salvar Resultado na Variável</Label>
-                <Input id={`${node.id}-resultVar`} placeholder={isReadOp ? "dados_lidos_supabase" : (node.supabaseResultVariable || "id_linha_criada_supabase")} value={node.supabaseResultVariable || ''} onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} />
+                <Input id={`${node.id}-resultVar`} placeholder={isReadOp ? (node.supabaseResultVariable || "dados_lidos_supabase") : (node.supabaseResultVariable || "id_linha_criada_supabase")} value={node.supabaseResultVariable || ''} onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} />
               </div>
             )}
             <p className="text-xs text-muted-foreground">Requer Supabase habilitado e configurado nas Configurações Globais, e que as funções SQL `get_public_tables` e `get_table_columns` existam no seu banco.</p>
@@ -1459,3 +1510,4 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+

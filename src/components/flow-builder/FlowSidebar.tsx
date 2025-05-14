@@ -72,7 +72,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
       title: "Supabase",
       blocks: [
         { type: "supabase-create-row", label: "Criar Linha", icon: <Rows {...iconProps} className="text-green-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseDataJson: '{ "coluna": "valor" }', supabaseResultVariable: 'id_linha_criada_supabase' } },
-        { type: "supabase-read-row", label: "Ler Linha(s)", icon: <Search {...iconProps} className="text-blue-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '1', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase' } },
+        { type: "supabase-read-row", label: "Ler Linha(s)", icon: <Search {...iconProps} className="text-blue-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '1', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase', supabaseReturnSingleValue: false, supabaseSingleValueColumn: '' } },
         { type: "supabase-update-row", label: "Atualizar Linha", icon: <Edit3 {...iconProps} className="text-yellow-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '1', supabaseDataJson: '{ "coluna": "novo_valor" }' } },
         { type: "supabase-delete-row", label: "Deletar Linha", icon: <Trash {...iconProps} className="text-red-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '1' } },
       ]
@@ -124,3 +124,4 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
 };
 
 export default FlowSidebar;
+
