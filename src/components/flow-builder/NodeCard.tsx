@@ -2,14 +2,15 @@
 "use client";
 
 import React, { useState, useRef, useCallback } from 'react';
-import type { NodeData } from '@/lib/types';
+import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry } from '@/lib/types';
 import { motion } from 'framer-motion';
+import { v4 as uuidv4 } from 'uuid';
 import {
   MessageSquareText, Type as InputIcon, ListChecks, Trash2, BotMessageSquare,
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
-  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash, // Removido BrainCircuit
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle 
+  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash, 
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +21,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from '@/hooks/use-toast';
 import { START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y, OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y, NODE_HEADER_HEIGHT_APPROX } from '@/lib/constants';
 
 
@@ -31,17 +34,16 @@ interface NodeCardProps {
 }
 
 const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartConnection, onDeleteNode }) => {
+  const { toast } = useToast();
   const isDraggingNode = useRef(false);
   const [newTriggerName, setNewTriggerName] = useState('');
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    // Permitir arrastar se clicar diretamente no cabeçalho (data-drag-handle="true")
-    // Não iniciar arrasto se clicar em conectores, botões de ação ou campos de formulário,
-    // a menos que o clique seja no próprio drag handle dentro de um campo (caso raro).
     if (
         target.dataset.connector === 'true' || 
         target.closest('[data-action="delete-node"]') ||
+        target.closest('[data-no-drag="true"]') || 
         (target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target))
     ) {
       return;
@@ -79,8 +81,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     if (newTriggerName.trim() === '') return;
     const currentTriggers = node.triggers || [];
     if (currentTriggers.includes(newTriggerName.trim())) {
-        console.warn("Nome do gatilho já existe.");
-        // Adicionar um toast aqui seria uma boa melhoria de UX
+        toast({ title: "Erro", description: "Nome do gatilho já existe.", variant: "destructive" });
         return;
     }
     onUpdate(node.id, { triggers: [...currentTriggers, newTriggerName.trim()] });
@@ -96,6 +97,31 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     const currentTriggers = [...(node.triggers || [])];
     currentTriggers[indexToChange] = newName;
     onUpdate(node.id, { triggers: currentTriggers });
+  };
+
+  // API Call Node Specific List Management
+  const handleAddListItem = (listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList') => {
+    const currentList = (node[listName] as any[] || []);
+    onUpdate(node.id, { [listName]: [...currentList, { id: uuidv4(), key: '', value: '' }] });
+  };
+
+  const handleRemoveListItem = (listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList', itemId: string) => {
+    const currentList = (node[listName] as any[] || []);
+    onUpdate(node.id, { [listName]: currentList.filter(item => item.id !== itemId) });
+  };
+
+  const handleListItemChange = (
+    listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList', 
+    itemId: string, 
+    field: 'key' | 'value', 
+    newValue: string
+  ) => {
+    const currentList = (node[listName] as any[] || []);
+    onUpdate(node.id, { 
+      [listName]: currentList.map(item => 
+        item.id === itemId ? { ...item, [field]: newValue } : item
+      ) 
+    });
   };
 
 
@@ -207,7 +233,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         </>
       );
     }
-    // Para todos os outros tipos de nós que não sejam 'start', 'option', ou 'condition'
     return (
       <div className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">
         <div
@@ -268,6 +293,48 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 
   const exampleSupabaseTables = ["clientes", "produtos", "pedidos", "usuarios", "tarefas"];
   const exampleSupabaseColumns = ["id", "uuid", "email", "nome", "created_at", "status", "preco", "user_id", "descricao", "data_limite"];
+
+  const renderKeyValueList = (
+    listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList',
+    list: Array<{ id: string; key: string; value: string }> | undefined,
+    keyPlaceholder: string,
+    valuePlaceholder: string,
+    addButtonLabel: string
+  ) => (
+    <div className="space-y-2" data-no-drag="true">
+      {(list || []).map((item, index) => (
+        <div key={item.id} className="flex items-center space-x-2">
+          <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <Input
+            type="text"
+            placeholder={keyPlaceholder}
+            value={item.key}
+            onChange={(e) => handleListItemChange(listName, item.id, 'key', e.target.value)}
+            className="flex-grow"
+          />
+          <Input
+            type="text"
+            placeholder={valuePlaceholder}
+            value={item.value}
+            onChange={(e) => handleListItemChange(listName, item.id, 'value', e.target.value)}
+            className="flex-grow"
+          />
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => handleRemoveListItem(listName, item.id)}
+            className="text-destructive hover:text-destructive/80 w-8 h-8 flex-shrink-0"
+            aria-label={`Remover ${listName.includes('Header') ? 'Header' : listName.includes('Query') ? 'Parâmetro' : 'Campo'}`}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      ))}
+      <Button variant="outline" size="sm" onClick={() => handleAddListItem(listName)} className="mt-2">
+        <PlusCircle className="w-4 h-4 mr-1" /> {addButtonLabel}
+      </Button>
+    </div>
+  );
 
 
   const renderNodeContent = (): React.ReactNode => {
@@ -401,9 +468,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'api-call':
         return (
-          <div className="space-y-3">
-            <div><Label htmlFor={`${node.id}-apiurl`}>URL (pode usar {"{{variavel}}"})</Label><Input id={`${node.id}-apiurl`} placeholder="https://api.example.com/data" value={node.apiUrl || ''} onChange={(e) => onUpdate(node.id, { apiUrl: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-apimethod`}>Método</Label>
+          <div className="space-y-4" data-no-drag="true">
+            <div>
+              <Label htmlFor={`${node.id}-apiurl`}>URL da Requisição</Label>
+              <Input id={`${node.id}-apiurl`} placeholder="https://api.example.com/data" value={node.apiUrl || ''} onChange={(e) => onUpdate(node.id, { apiUrl: e.target.value })} />
+            </div>
+            <div>
+              <Label htmlFor={`${node.id}-apimethod`}>Método HTTP</Label>
               <Select value={node.apiMethod || 'GET'} onValueChange={(value) => onUpdate(node.id, { apiMethod: value as NodeData['apiMethod']})}>
                 <SelectTrigger id={`${node.id}-apimethod`}><SelectValue placeholder="Selecione o método" /></SelectTrigger>
                 <SelectContent>
@@ -413,9 +484,94 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 </SelectContent>
               </Select>
             </div>
-            <div><Label htmlFor={`${node.id}-apiheaders`}>Cabeçalhos (JSON, pode usar {"{{variavel}}"})</Label><Textarea id={`${node.id}-apiheaders`} placeholder='{ "Authorization": "Bearer {{token}}" }' value={node.apiHeaders || '{ "Content-Type": "application/json" }'} onChange={(e) => onUpdate(node.id, { apiHeaders: e.target.value })} rows={2}/></div>
-            <div><Label htmlFor={`${node.id}-apibody`}>Corpo (JSON, pode usar {"{{variavel}}"})</Label><Textarea id={`${node.id}-apibody`} placeholder='{ "key": "{{valor_variavel}}" }' value={node.apiBody || '{}'} onChange={(e) => onUpdate(node.id, { apiBody: e.target.value })} rows={2}/></div>
-            <div><Label htmlFor={`${node.id}-apioutputvar`}>Salvar Resposta da API na Variável</Label><Input id={`${node.id}-apioutputvar`} placeholder="resposta_api" value={node.apiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { apiOutputVariable: e.target.value })} /></div>
+
+            <Tabs defaultValue="auth" className="w-full">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="auth">Autenticação</TabsTrigger>
+                <TabsTrigger value="headers">Headers</TabsTrigger>
+                <TabsTrigger value="params">Query Params</TabsTrigger>
+                <TabsTrigger value="body">Corpo</TabsTrigger>
+              </TabsList>
+              <TabsContent value="auth" className="mt-4 space-y-3">
+                <div>
+                  <Label htmlFor={`${node.id}-apiauthtype`}>Tipo de Autenticação</Label>
+                  <Select value={node.apiAuthType || 'none'} onValueChange={(value) => onUpdate(node.id, { apiAuthType: value as NodeData['apiAuthType']})}>
+                    <SelectTrigger id={`${node.id}-apiauthtype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      <SelectItem value="bearer">Bearer Token</SelectItem>
+                      <SelectItem value="basic">Básica (Usuário/Senha)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {node.apiAuthType === 'bearer' && (
+                  <div>
+                    <Label htmlFor={`${node.id}-apiauthbearertoken`}>Bearer Token</Label>
+                    <Input id={`${node.id}-apiauthbearertoken`} placeholder="Seu token aqui..." value={node.apiAuthBearerToken || ''} onChange={(e) => onUpdate(node.id, { apiAuthBearerToken: e.target.value })} />
+                  </div>
+                )}
+                {node.apiAuthType === 'basic' && (
+                  <>
+                    <div>
+                      <Label htmlFor={`${node.id}-apiauthbasicuser`}>Usuário</Label>
+                      <Input id={`${node.id}-apiauthbasicuser`} placeholder="Nome de usuário" value={node.apiAuthBasicUser || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicUser: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label htmlFor={`${node.id}-apiauthbasicpassword`}>Senha</Label>
+                      <Input id={`${node.id}-apiauthbasicpassword`} type="password" placeholder="Senha" value={node.apiAuthBasicPassword || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicPassword: e.target.value })} />
+                    </div>
+                  </>
+                )}
+              </TabsContent>
+              <TabsContent value="headers" className="mt-4">
+                <Label>Headers da Requisição</Label>
+                {renderKeyValueList('apiHeadersList', node.apiHeadersList, 'Nome do Header (Ex: Content-Type)', 'Valor do Header (Ex: application/json)', 'Adicionar Header')}
+              </TabsContent>
+              <TabsContent value="params" className="mt-4">
+                <Label>Parâmetros de Query (URL)</Label>
+                 {renderKeyValueList('apiQueryParamsList', node.apiQueryParamsList, 'Nome do Parâmetro', 'Valor do Parâmetro', 'Adicionar Parâmetro')}
+              </TabsContent>
+              <TabsContent value="body" className="mt-4 space-y-3">
+                <div>
+                  <Label htmlFor={`${node.id}-apibodytype`}>Tipo de Corpo da Requisição</Label>
+                  <Select value={node.apiBodyType || 'none'} onValueChange={(value) => onUpdate(node.id, { apiBodyType: value as NodeData['apiBodyType']})}>
+                    <SelectTrigger id={`${node.id}-apibodytype`}><SelectValue placeholder="Selecione o tipo de corpo" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      <SelectItem value="json">JSON</SelectItem>
+                      <SelectItem value="form-data">Form-Data</SelectItem>
+                      <SelectItem value="raw">Raw (Texto)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {node.apiBodyType === 'json' && (
+                  <div>
+                    <Label htmlFor={`${node.id}-apibodyjson`}>Corpo JSON</Label>
+                    <Textarea id={`${node.id}-apibodyjson`} placeholder='{ "chave": "valor" }' value={node.apiBodyJson || ''} onChange={(e) => onUpdate(node.id, { apiBodyJson: e.target.value })} rows={4}/>
+                  </div>
+                )}
+                {node.apiBodyType === 'form-data' && (
+                  <div>
+                    <Label>Campos Form-Data</Label>
+                    {renderKeyValueList('apiBodyFormDataList', node.apiBodyFormDataList, 'Nome do Campo', 'Valor do Campo', 'Adicionar Campo Form-Data')}
+                  </div>
+                )}
+                {node.apiBodyType === 'raw' && (
+                  <div>
+                    <Label htmlFor={`${node.id}-apibodyraw`}>Corpo Raw (Texto)</Label>
+                    <Textarea id={`${node.id}-apibodyraw`} placeholder="Conteúdo do corpo em texto puro..." value={node.apiBodyRaw || ''} onChange={(e) => onUpdate(node.id, { apiBodyRaw: e.target.value })} rows={4}/>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+
+            <div className="mt-4">
+              <Label htmlFor={`${node.id}-apioutputvar`}>Salvar Resposta da API na Variável</Label>
+              <Input id={`${node.id}-apioutputvar`} placeholder="resposta_api" value={node.apiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { apiOutputVariable: e.target.value })} />
+            </div>
+            <Button variant="outline" className="w-full mt-3" onClick={() => toast({title: "Teste API", description:"Funcionalidade de teste ainda não implementada."})}>
+                Testar Requisição (Simulado)
+            </Button>
           </div>
         );
       case 'delay':
@@ -673,27 +829,26 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 
   return (
     <motion.div
-      className="w-full cursor-default bg-card rounded-lg shadow-xl border border-border relative" // cursor-default para não parecer que o card inteiro é arrastável
+      className="w-full cursor-default bg-card rounded-lg shadow-xl border border-border relative"
       whileHover={{ scale: 1.01, boxShadow: "0px 5px 25px rgba(0,0,0,0.1)" }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
       data-node-id={node.id}
       aria-labelledby={`${node.id}-title`}
       onMouseDown={(e) => {
-        // Apenas inicia o arrasto do nó se o clique não for em um conector ou campo de formulário
         const target = e.target as HTMLElement;
-        if (target.dataset.connector === 'true' || target.closest('input, textarea, select, button')) {
+        if (target.dataset.connector === 'true' || target.closest('input, textarea, select, button, [data-no-drag="true"]') || (target.closest('[role="tablist"]') || target.closest('[role="tabpanel"]'))) {
           return;
         }
-        handleNodeMouseDown(e); // Chamar handleNodeMouseDown apenas se não for um elemento interativo
+        handleNodeMouseDown(e);
       }}
     >
       <Card className="shadow-none border-none bg-transparent">
         <CardHeader 
-          onMouseDown={handleNodeMouseDown} // Agora o cabeçalho é a principal área de arrasto
+          onMouseDown={handleNodeMouseDown} 
           data-drag-handle="true"
           className="py-2.5 px-3.5 bg-secondary/50 rounded-t-lg flex items-center justify-between cursor-grab active:cursor-grabbing"
         >
-          <div className="flex items-center min-w-0 pointer-events-none"> {/* pointer-events-none para que o clique passe para o CardHeader */}
+          <div className="flex items-center min-w-0 pointer-events-none"> 
             {renderNodeIcon()}
             <CardTitle id={`${node.id}-title`} className="ml-2 text-sm font-medium text-secondary-foreground truncate" title={node.title}>
               {node.title}
@@ -714,7 +869,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         </CardContent>
       </Card>
       
-      {node.type !== 'start' && ( // Nó de início não tem conector de entrada
+      {node.type !== 'start' && (
         <div className="absolute -left-2.5 top-1/2 -translate-y-1/2 z-10">
           <div
               title="Conecte aqui"

@@ -6,7 +6,7 @@ export interface DraggableBlockItemData {
 }
 
 export type NodeType = 
-  | 'start' // Novo tipo de nó de início
+  | 'start' 
   | 'message' 
   | 'input' 
   | 'option' 
@@ -35,111 +35,118 @@ export type NodeType =
   | 'supabase-update-row'
   | 'supabase-delete-row';
 
+export interface ApiHeader {
+  id: string;
+  key: string;
+  value: string;
+}
+
+export interface ApiQueryParam {
+  id: string;
+  key: string;
+  value: string;
+}
+
+export interface ApiFormDataEntry {
+  id: string;
+  key: string;
+  value: string;
+}
+
 export interface NodeData {
   id: string;
   type: NodeType;
   title: string;
   x: number;
   y: number;
-  dataAiHint?: string; // Para placeholder de imagens
+  dataAiHint?: string; 
   
-  // Propriedades específicas dos tipos de nó
-  text?: string; // Para 'message'
+  text?: string; 
   
-  // Para 'input'
   promptText?: string; 
   inputType?: 'text' | 'email' | 'phone' | 'number';
   variableToSaveResponse?: string;
 
-  // Para 'option'
   questionText?: string;
-  optionsList?: string; // string, uma opção por linha
+  optionsList?: string; 
   variableToSaveChoice?: string;
 
-  // Para 'whatsapp-*' e envio via WhatsApp em nós genéricos
   instanceName?: string; 
-  phoneNumber?: string; // Usado por blocos específicos de WhatsApp
-  textMessage?: string; // Usado por blocos específicos de WhatsApp
-  mediaUrl?: string; // Usado por blocos específicos de WhatsApp
-  mediaType?: 'image' | 'video' | 'document' | 'audio'; // Usado por blocos específicos de WhatsApp
-  caption?: string; // Usado por blocos específicos de WhatsApp
-  groupName?: string; // Usado por blocos específicos de WhatsApp
-  participants?: string; // Usado por blocos específicos de WhatsApp
+  phoneNumber?: string; 
+  textMessage?: string; 
+  mediaUrl?: string; 
+  mediaType?: 'image' | 'video' | 'document' | 'audio'; 
+  caption?: string; 
+  groupName?: string; 
+  participants?: string; 
   
-  // Para 'condition'
   conditionVariable?: string; 
-  conditionOperator?: '==' | '!=' | '>' | '<' | 'contains' | 'startsWith' | 'endsWith'; 
+  conditionOperator?: '==' | '!=' | '>' | '<' | 'contains' | 'startsWith' | 'endsWith' | 'isEmpty' | 'isNotEmpty'; 
   conditionValue?: string; 
   
-  // Para 'set-variable'
   variableName?: string; 
   variableValue?: string; 
   
-  // Para 'api-call'
+  // Para 'api-call' - Campos Reformulados
   apiUrl?: string; 
-  apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE'; 
-  apiHeaders?: string; // JSON string
-  apiBody?: string; // JSON string
+  apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'; 
+  apiAuthType?: 'none' | 'bearer' | 'basic';
+  apiAuthBearerToken?: string;
+  apiAuthBasicUser?: string;
+  apiAuthBasicPassword?: string;
+  apiHeadersList?: ApiHeader[];
+  apiQueryParamsList?: ApiQueryParam[];
+  apiBodyType?: 'none' | 'json' | 'form-data' | 'raw';
+  apiBodyJson?: string; // Usado se apiBodyType for 'json'
+  apiBodyFormDataList?: ApiFormDataEntry[]; // Usado se apiBodyType for 'form-data'
+  apiBodyRaw?: string; // Usado se apiBodyType for 'raw'
+  apiOutputVariable?: string;
   
-  // Para 'delay'
-  delayDuration?: number; // em ms
+  delayDuration?: number; 
 
-  // Para 'date-input'
   dateInputLabel?: string;
   variableToSaveDate?: string;
 
-  // Para 'redirect'
   redirectUrl?: string;
 
-  // Para 'typing-emulation'
-  typingDuration?: number; // em ms
+  typingDuration?: number; 
 
-  // Para 'media-display'
   mediaDisplayType?: 'image' | 'video' | 'audio';
   mediaDisplayUrl?: string;
-  mediaDisplayText?: string; // alt text ou legenda
+  mediaDisplayText?: string; 
 
-  // Para 'log-console'
   logMessage?: string;
 
-  // Para 'code-execution'
   codeSnippet?: string;
   codeOutputVariable?: string;
 
-  // Para 'json-transform'
   inputJson?: string;
   jsonataExpression?: string;
   jsonOutputVariable?: string;
 
-  // Para 'file-upload'
   uploadPromptText?: string;
   fileTypeFilter?: string;
   maxFileSizeMB?: number;
   fileUrlVariable?: string;
 
-  // Para 'rating-input'
   ratingQuestionText?: string;
   maxRatingValue?: number;
   ratingIconType?: 'star' | 'heart' | 'number';
   ratingOutputVariable?: string;
 
-  // Para 'ai-text-generation'
   aiPromptText?: string;
   aiModelName?: string;
   aiOutputVariable?: string;
   
-  // Para 'send-email'
   emailTo?: string;
   emailSubject?: string;
   emailBody?: string;
   emailFrom?: string;
 
-  // Para 'google-sheets-append'
   googleSheetId?: string;
   googleSheetName?: string;
   googleSheetRowData?: string;
 
-  // Para 'intelligent-agent'
   agentName?: string;
   agentSystemPrompt?: string;
   userInputVariable?: string; 
@@ -147,27 +154,24 @@ export interface NodeData {
   maxConversationTurns?: number;
   temperature?: number; 
 
-  // Campos para ativar WhatsApp em nós genéricos
   sendViaWhatsApp?: boolean;
-  whatsappTargetPhoneNumber?: string; // Telefone de destino para mensagens via WhatsApp de nós genéricos
+  whatsappTargetPhoneNumber?: string; 
 
-  // Para Supabase
   supabaseTableName?: string;
-  supabaseIdentifierColumn?: string; // Ex: 'id', 'email'
-  supabaseIdentifierValue?: string; // Ex: '{{input.user_id}}', 'user@example.com'
-  supabaseDataJson?: string; // Para create/update, ex: '{ "name": "{{input.user_name}}", "age": 30 }'
-  supabaseColumnsToSelect?: string; // Para read, ex: '*', 'name, email, age'
-  supabaseResultVariable?: string; // Para read, nome da variável para salvar os dados lidos
+  supabaseIdentifierColumn?: string; 
+  supabaseIdentifierValue?: string; 
+  supabaseDataJson?: string; 
+  supabaseColumnsToSelect?: string; 
+  supabaseResultVariable?: string; 
 
-  // Para 'start' node
   triggers?: string[];
 }
 
 export interface Connection {
   id: string;
-  from: string; // ID do nó de origem
-  to: string;   // ID do nó de destino
-  sourceHandle?: string; // ex: 'true', 'false' para condição, 'default' para outros, nome do gatilho para 'start'
+  from: string; 
+  to: string;   
+  sourceHandle?: string; 
 }
 
 export interface DrawingLineData {

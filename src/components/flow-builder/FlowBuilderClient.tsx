@@ -43,7 +43,7 @@ export default function FlowBuilderClient() {
   }, []);
 
   useEffect(() => {
-    if (!hasMounted) return; // Não interagir com localStorage até o cliente montar
+    if (!hasMounted) return; 
 
     const savedIsChatPanelOpen = localStorage.getItem(LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN);
     if (savedIsChatPanelOpen !== null) {
@@ -51,7 +51,6 @@ export default function FlowBuilderClient() {
         setIsChatPanelOpen(JSON.parse(savedIsChatPanelOpen));
       } catch (e) {
         console.warn("[FlowBuilderClient] Failed to parse chat panel state from localStorage.", e);
-        // Mantenha o padrão ou defina um padrão seguro
         setIsChatPanelOpen(true); 
       }
     }
@@ -60,7 +59,7 @@ export default function FlowBuilderClient() {
   const toggleChatPanel = useCallback(() => {
     setIsChatPanelOpen(prev => {
       const newState = !prev;
-      if (hasMounted) { // Só salvar no localStorage se estiver montado no cliente
+      if (hasMounted) { 
         localStorage.setItem(LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN, JSON.stringify(newState));
       }
       return newState;
@@ -239,7 +238,7 @@ export default function FlowBuilderClient() {
     setActiveWorkspaceId(newWorkspaceId);
     console.log('[FlowBuilderClient] Workspace added. New ID:', newWorkspaceId);
     
-    if (hasMounted) { // Só salvar se estiver montado
+    if (hasMounted) { 
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify(updatedWorkspaces));
         localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, newWorkspaceId);
@@ -292,7 +291,22 @@ export default function FlowBuilderClient() {
       logMessage: '', codeSnippet: '', codeOutputVariable: '', inputJson: '', jsonataExpression: '', jsonOutputVariable: '',
       uploadPromptText: '', fileTypeFilter: '', maxFileSizeMB: 5, fileUrlVariable: '',
       ratingQuestionText: '', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: '',
-      apiUrl: '', apiMethod: 'GET', apiHeaders: '{ "Content-Type": "application/json" }', apiBody: '{}',
+      
+      // API Call Node Defaults
+      apiUrl: '', 
+      apiMethod: 'GET', 
+      apiAuthType: 'none',
+      apiAuthBearerToken: '',
+      apiAuthBasicUser: '',
+      apiAuthBasicPassword: '',
+      apiHeadersList: [],
+      apiQueryParamsList: [],
+      apiBodyType: 'none',
+      apiBodyJson: '{}',
+      apiBodyFormDataList: [],
+      apiBodyRaw: '',
+      apiOutputVariable: '',
+
       redirectUrl: '', dateInputLabel: '', variableToSaveDate: '',
       emailTo: '', emailSubject: '', emailBody: '', emailFrom: '',
       googleSheetId: '', googleSheetName: '', googleSheetRowData: '',
@@ -527,7 +541,7 @@ export default function FlowBuilderClient() {
         />
         <div className="flex flex-1 overflow-hidden">
           <FlowSidebar />
-          <div ref={mainContentRef} className="flex-1 flex flex-col overflow-hidden relative"> {/* Adicionado relative para posicionar o canvas corretamente */}
+          <div ref={mainContentRef} className="flex-1 flex flex-col overflow-hidden relative">
             <Canvas
               nodes={currentNodes}
               connections={currentConnections}
