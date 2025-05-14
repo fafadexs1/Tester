@@ -9,7 +9,7 @@ import {
   MessageSquareText, Type as InputIcon, ListChecks, Trash2, BotMessageSquare,
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
-  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset
+  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, Hash
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,8 +18,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Hash } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
 
 
 interface NodeCardProps {
@@ -138,10 +138,56 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     );
   };
 
+  const renderWhatsAppToggle = () => {
+    return (
+      <div className="mt-3 pt-3 border-t border-border">
+        <div className="flex items-center space-x-2 mb-2">
+          <Switch
+            id={`${node.id}-sendViaWhatsApp`}
+            checked={node.sendViaWhatsApp || false}
+            onCheckedChange={(checked) => onUpdate(node.id, { sendViaWhatsApp: checked })}
+            aria-label="Enviar via WhatsApp"
+          />
+          <Label htmlFor={`${node.id}-sendViaWhatsApp`} className="flex items-center cursor-pointer">
+            <BotMessageSquare className="w-4 h-4 mr-2 text-green-600" />
+            Enviar via WhatsApp
+          </Label>
+        </div>
+        {node.sendViaWhatsApp && (
+          <div className="space-y-2 pl-2 ml-4 border-l-2 border-green-500 animate-in fade-in-0 slide-in-from-top-2 duration-200">
+            <div className="mt-2">
+              <Label htmlFor={`${node.id}-whatsappInstanceName`}>Nome da Instância WhatsApp</Label>
+              <Input 
+                id={`${node.id}-whatsappInstanceName`} 
+                placeholder="evolution_instance" 
+                value={node.instanceName || ''} 
+                onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} 
+              />
+            </div>
+            <div>
+              <Label htmlFor={`${node.id}-whatsappTargetPhone`}>Telefone Destino (WhatsApp)</Label>
+              <Input 
+                id={`${node.id}-whatsappTargetPhone`} 
+                placeholder="55119xxxxxxxx" 
+                value={node.whatsappTargetPhoneNumber || ''} 
+                onChange={(e) => onUpdate(node.id, { whatsappTargetPhoneNumber: e.target.value })} 
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderNodeContent = () => {
     switch (node.type) {
       case 'message':
-        return <Textarea placeholder="Mensagem do bot..." value={node.text || ''} onChange={(e) => onUpdate(node.id, { text: e.target.value })} className="resize-none text-sm" rows={3} />;
+        return (
+          <>
+            <Textarea placeholder="Mensagem do bot..." value={node.text || ''} onChange={(e) => onUpdate(node.id, { text: e.target.value })} className="resize-none text-sm" rows={3} />
+            {renderWhatsAppToggle()}
+          </>
+        );
       case 'input':
         return (
           <div className="space-y-3">
@@ -272,20 +318,23 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'media-display':
         return (
-          <div className="space-y-3">
-            <div><Label htmlFor={`${node.id}-mediadisplaytype`}>Tipo de Mídia</Label>
-              <Select value={node.mediaDisplayType || 'image'} onValueChange={(value) => onUpdate(node.id, { mediaDisplayType: value as NodeData['mediaDisplayType'] })}>
-                <SelectTrigger id={`${node.id}-mediadisplaytype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="image">Imagem</SelectItem>
-                  <SelectItem value="video">Vídeo</SelectItem>
-                  <SelectItem value="audio">Áudio</SelectItem>
-                </SelectContent>
-              </Select>
+          <>
+            <div className="space-y-3">
+              <div><Label htmlFor={`${node.id}-mediadisplaytype`}>Tipo de Mídia</Label>
+                <Select value={node.mediaDisplayType || 'image'} onValueChange={(value) => onUpdate(node.id, { mediaDisplayType: value as NodeData['mediaDisplayType'] })}>
+                  <SelectTrigger id={`${node.id}-mediadisplaytype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="image">Imagem</SelectItem>
+                    <SelectItem value="video">Vídeo</SelectItem>
+                    <SelectItem value="audio">Áudio</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label htmlFor={`${node.id}-mediadisplayurl`}>URL da Mídia</Label><Input id={`${node.id}-mediadisplayurl`} placeholder="https://..." value={node.mediaDisplayUrl || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayUrl: e.target.value })} /></div>
+              <div><Label htmlFor={`${node.id}-mediadisplaytext`}>Texto Alternativo/Legenda</Label><Input id={`${node.id}-mediadisplaytext`} placeholder="Descrição da mídia" value={node.mediaDisplayText || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayText: e.target.value })} /></div>
             </div>
-            <div><Label htmlFor={`${node.id}-mediadisplayurl`}>URL da Mídia</Label><Input id={`${node.id}-mediadisplayurl`} placeholder="https://..." value={node.mediaDisplayUrl || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayUrl: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-mediadisplaytext`}>Texto Alternativo/Legenda</Label><Input id={`${node.id}-mediadisplaytext`} placeholder="Descrição da mídia" value={node.mediaDisplayText || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayText: e.target.value })} /></div>
-          </div>
+            {renderWhatsAppToggle()}
+          </>
         );
       case 'log-console':
         return (

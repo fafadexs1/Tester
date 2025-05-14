@@ -28,7 +28,7 @@ export type NodeType =
   | 'ai-text-generation'
   | 'send-email'
   | 'google-sheets-append'
-  | 'intelligent-agent'; // Novo tipo de nó
+  | 'intelligent-agent';
 
 export interface NodeData {
   id: string;
@@ -50,15 +50,15 @@ export interface NodeData {
   optionsList?: string; // string, uma opção por linha
   variableToSaveChoice?: string;
 
-  // Para 'whatsapp-*'
+  // Para 'whatsapp-*' e envio via WhatsApp em nós genéricos
   instanceName?: string; 
-  phoneNumber?: string; 
-  textMessage?: string; 
-  mediaUrl?: string; 
-  mediaType?: 'image' | 'video' | 'document' | 'audio'; 
-  caption?: string; 
-  groupName?: string; 
-  participants?: string; 
+  phoneNumber?: string; // Usado por blocos específicos de WhatsApp
+  textMessage?: string; // Usado por blocos específicos de WhatsApp
+  mediaUrl?: string; // Usado por blocos específicos de WhatsApp
+  mediaType?: 'image' | 'video' | 'document' | 'audio'; // Usado por blocos específicos de WhatsApp
+  caption?: string; // Usado por blocos específicos de WhatsApp
+  groupName?: string; // Usado por blocos específicos de WhatsApp
+  participants?: string; // Usado por blocos específicos de WhatsApp
   
   // Para 'condition'
   conditionVariable?: string; 
@@ -136,11 +136,14 @@ export interface NodeData {
   // Para 'intelligent-agent'
   agentName?: string;
   agentSystemPrompt?: string;
-  userInputVariable?: string; // Variável contendo a pergunta do usuário para o agente
-  agentResponseVariable?: string; // Variável para salvar a resposta do agente
-  // aiModelName já existe em ai-text-generation, pode ser reutilizado ou ter um específico.
+  userInputVariable?: string; 
+  agentResponseVariable?: string; 
   maxConversationTurns?: number;
-  temperature?: number; // 0.0 to 1.0
+  temperature?: number; 
+
+  // Campos para ativar WhatsApp em nós genéricos
+  sendViaWhatsApp?: boolean;
+  whatsappTargetPhoneNumber?: string; // Telefone de destino para mensagens via WhatsApp de nós genéricos
 }
 
 export interface Connection {

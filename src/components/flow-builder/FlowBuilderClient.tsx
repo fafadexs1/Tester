@@ -50,10 +50,17 @@ export default function FlowBuilderClient() {
       emailTo: '', emailSubject: '', emailBody: '', emailFrom: '',
       googleSheetId: '', googleSheetName: '', googleSheetRowData: '',
 
-      // WhatsApp specific (Evolution API)
-      instanceName: 'evolution_instance',
-      phoneNumber: '', textMessage: '', mediaUrl: '', mediaType: 'image', caption: '',
-      groupName: '', participants: '',
+      // WhatsApp specific (Evolution API and generic node integration)
+      instanceName: 'evolution_instance', // Default for all WA interactions
+      phoneNumber: '', // For WA specific blocks
+      textMessage: '', // For WA specific blocks
+      mediaUrl: '',    // For WA specific blocks
+      mediaType: 'image', // For WA specific blocks
+      caption: '',      // For WA specific blocks
+      groupName: '',    // For WA specific blocks
+      participants: '', // For WA specific blocks
+      sendViaWhatsApp: false, // For generic nodes to enable WA sending
+      whatsappTargetPhoneNumber: '', // For generic nodes, the target phone
       
       // AI
       aiPromptText: '', aiModelName: '', aiOutputVariable: '',
@@ -63,7 +70,6 @@ export default function FlowBuilderClient() {
       agentSystemPrompt: 'Você é um assistente IA. Responda às perguntas do usuário de forma concisa e prestativa.',
       userInputVariable: '{{entrada_usuario}}',
       agentResponseVariable: 'resposta_do_agente',
-      // aiModelName is already defined for ai-text-generation, we can reuse or specify here if needed for agent context
       maxConversationTurns: 5,
       temperature: 0.7,
     };
@@ -122,7 +128,7 @@ export default function FlowBuilderClient() {
       currentX: lineCurrentX, 
       currentY: lineCurrentY, 
     });
-  }, [nodes, canvasOffset]); 
+  }, [nodes]); 
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) { 
@@ -155,7 +161,7 @@ export default function FlowBuilderClient() {
         };
       });
     }
-  }, [drawingLine]); 
+  }, [drawingLine, canvasOffset]); // Added canvasOffset to dependency array
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
