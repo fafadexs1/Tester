@@ -24,14 +24,18 @@ const LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN = 'flowiseLiteChatPanelOpen';
 // Helper function to generate unique variable names
 function generateUniqueVariableName(baseName: string, existingNames: string[]): string {
   if (!baseName || baseName.trim() === '') return ''; // Do not process empty base names
-  if (!existingNames.includes(baseName)) {
-    return baseName;
+  // Remove {{ }} if present
+  const cleanedBaseName = baseName.replace(/\{\{/g, '').replace(/\}\}/g, '').trim();
+  if (cleanedBaseName === '') return '';
+
+  if (!existingNames.includes(cleanedBaseName)) {
+    return cleanedBaseName;
   }
   let counter = 1;
-  let newName = `${baseName}_${counter}`;
+  let newName = `${cleanedBaseName}_${counter}`;
   while (existingNames.includes(newName)) {
     counter++;
-    newName = `${baseName}_${counter}`;
+    newName = `${cleanedBaseName}_${counter}`;
   }
   return newName;
 }
@@ -86,13 +90,25 @@ export default function FlowBuilderClient() {
         VARIABLE_DEFINING_FIELDS.forEach(field => {
           const varName = n[field] as string | undefined;
           if (varName && varName.trim() !== '') {
-            variables.add(varName.trim());
+            variables.add(varName.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
           }
         });
       });
-      setDefinedVariablesInFlow(Array.from(variables).sort());
+      
+      setDefinedVariablesInFlow(prevDefinedVars => {
+        const newVarsArray = Array.from(variables).sort();
+        // Compare stringified versions to check for content equality
+        if (JSON.stringify(prevDefinedVars) === JSON.stringify(newVarsArray)) {
+          return prevDefinedVars; // Keep the same array reference if content is the same
+        }
+        return newVarsArray; // Update with new array reference if content changed
+      });
+
     } else {
-      setDefinedVariablesInFlow([]);
+       setDefinedVariablesInFlow(prevDefinedVars => {
+        if (prevDefinedVars.length === 0) return prevDefinedVars;
+        return [];
+      });
     }
   }, [activeWorkspace?.nodes]);
 
@@ -334,7 +350,6 @@ export default function FlowBuilderClient() {
       return;
     }
 
-    // Collect existing variable names from the current workspace
     const currentWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
     const existingVariableNames: string[] = [];
     if (currentWorkspace) {
@@ -342,7 +357,7 @@ export default function FlowBuilderClient() {
         VARIABLE_DEFINING_FIELDS.forEach(field => {
           const varName = node[field] as string | undefined;
           if (varName && varName.trim() !== '') {
-            existingVariableNames.push(varName.trim());
+            existingVariableNames.push(varName.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
           }
         });
       });
@@ -350,15 +365,14 @@ export default function FlowBuilderClient() {
     
     const itemDefaultDataCopy = item.defaultData ? { ...item.defaultData } : {};
 
-    // Make variable names in defaultData unique
     VARIABLE_DEFINING_FIELDS.forEach(field => {
       if (itemDefaultDataCopy.hasOwnProperty(field)) {
         const baseVarName = itemDefaultDataCopy[field] as string | undefined;
         if (baseVarName && baseVarName.trim() !== '') {
-          (itemDefaultDataCopy as any)[field] = generateUniqueVariableName(baseVarName.trim(), existingVariableNames);
-           // Add to existingVariableNames immediately to handle multiple vars in the same defaultData
-          if (itemDefaultDataCopy[field] !== baseVarName) { // if it was changed
-            existingVariableNames.push(itemDefaultDataCopy[field] as string);
+          const uniqueName = generateUniqueVariableName(baseVarName, existingVariableNames);
+          (itemDefaultDataCopy as any)[field] = uniqueName;
+          if (uniqueName !== baseVarName.replace(/\{\{/g, '').replace(/\}\}/g, '').trim()) { 
+            existingVariableNames.push(uniqueName);
           }
         }
       }
@@ -650,3 +664,4 @@ export default function FlowBuilderClient() {
     </DndProvider>
   );
 }
+
