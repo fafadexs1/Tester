@@ -40,15 +40,21 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     return connection ? connection.to : null;
   };
 
-  const substituteVariables = (text: string): string => {
-    if (typeof text !== 'string') {
-      console.warn('[TestChatPanel] substituteVariables received non-string input:', text);
-      return String(text); // Tenta converter para string
+  const substituteVariables = (text: string | undefined | null): string => {
+    if (text === undefined || text === null) {
+      // console.warn('[TestChatPanel] substituteVariables received undefined/null input. Returning empty string.');
+      return '';
     }
-    let substitutedText = text;
+    let mutableText = text; // Ensure we are working with a mutable variable if text is a string
+    if (typeof mutableText !== 'string') {
+      console.warn('[TestChatPanel] substituteVariables received non-string input (but not undefined/null):', mutableText, 'Type:', typeof mutableText, '. Converting to string.');
+      mutableText = String(mutableText);
+    }
+    
+    let substitutedText = mutableText;
     for (const key in flowVariables) {
       const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
-      substitutedText = substitutedText.replace(regex, String(flowVariables[key])); // Garante que flowVariables[key] seja string
+      substitutedText = substitutedText.replace(regex, String(flowVariables[key] ?? '')); 
     }
     // Remove placeholders não substituídos
     substitutedText = substitutedText.replace(/\{\{[^}]+\}\}/g, ''); 
@@ -75,7 +81,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     const node = getNodeById(nodeId);
     if (!node) {
       console.error(`[TestChatPanel] processNode: Node with ID ${nodeId} not found.`);
-      setMessages(prev => [...prev, { id: Date.now().toString(), text: `Erro: Nó com ID ${nodeId} não encontrado.`, sender: 'bot' }]);
+      setMessages(prev => [...prev, { id: Date.now().toString(), text: `Erro: Nó com ID ${nodeId} não encontrado. Fim da simulação.`, sender: 'bot' }]);
       setIsTesting(false);
       setAwaitingInputFor(null);
       setCurrentNodeId(null);
@@ -88,10 +94,11 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     let autoAdvance = true;
 
     // Simulação de 'typing'
-    if (node.type !== 'start' && node.type !== 'delay') { // Não simular para start ou delay já que eles têm suas próprias mensagens/lógica
-        setMessages(prev => [...prev, { id: `${Date.now()}-typing`, text: "Bot está digitando...", sender: 'bot' }]);
-        await new Promise(resolve => setTimeout(resolve, 800)); // Simula digitação
-        setMessages(prev => prev.filter(m => m.id !== `${Date.now()}-typing`)); // Remove a mensagem de "digitando"
+    if (node.type !== 'start' && node.type !== 'delay') { 
+        const typingMessageId = `${Date.now()}-typing`;
+        setMessages(prev => [...prev, { id: typingMessageId, text: "Bot está digitando...", sender: 'bot' }]);
+        await new Promise(resolve => setTimeout(resolve, 600)); 
+        setMessages(prev => prev.filter(m => m.id !== typingMessageId)); 
     }
 
 
@@ -136,34 +143,75 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
           }]);
         } else {
             setMessages(prev => [...prev, { id: Date.now().toString(), text: "(Nó de opções mal configurado)", sender: 'bot' }]);
+             autoAdvance = false; // Parar se mal configurado
         }
         setAwaitingInputFor(node); 
         autoAdvance = false;
         break;
       
       case 'condition':
-        const varName = node.conditionVariable ? substituteVariables(node.conditionVariable) : undefined;
-        const valueToCompare = node.conditionValue ? substituteVariables(node.conditionValue) : undefined;
-        const operator = node.conditionOperator;
         let conditionMet = false;
+        const conditionVarField = node.conditionVariable; // Nome da variável ou string com {{vars}}, ex: "userInput" ou "{{data.user.age}}"
+        const conditionOperator = node.conditionOperator;
+        const conditionCompareValueField = node.conditionValue; // Valor literal ou string com {{vars}}
 
-        // Simples placeholder para a lógica de condição. Uma implementação real seria mais robusta.
-        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Avaliando condição: ${varName || 'Variável não definida'} ${operator} ${valueToCompare || 'Valor não definido'}`, sender: 'bot' }]);
-        if (varName !== undefined && valueToCompare !== undefined) {
-            const actualValue = flowVariables[varName] ?? varName; // Tenta pegar da variável, senão usa o próprio nome (se for um valor literal)
-             switch (operator) {
-                case '==': conditionMet = String(actualValue) === String(valueToCompare); break;
-                case '!=': conditionMet = String(actualValue) !== String(valueToCompare); break;
-                // Adicionar mais operadores conforme necessário
-                default: conditionMet = false;
+        let actualValue: any;
+        let displayVarName = conditionVarField;
+
+        if (conditionVarField) {
+            // Primeiro, tentamos interpretar como uma referência de variável direta (sem chaves)
+            if (!conditionVarField.startsWith("{{") && !conditionVarField.endsWith("}}") && flowVariables.hasOwnProperty(conditionVarField)) {
+                actualValue = flowVariables[conditionVarField];
+                displayVarName = conditionVarField;
+            } else {
+                // Se não for uma chave direta ou tiver chaves, substituímos as variáveis
+                const substitutedValue = substituteVariables(conditionVarField);
+                // Se o campo original era uma referência {{var}}, tentamos buscar o valor da variável substituída se ela existir
+                // Caso contrário, usamos o valor substituído diretamente (pode ser um valor literal após substituição)
+                if (conditionVarField.startsWith("{{") && conditionVarField.endsWith("}}")) {
+                    const cleanVarName = conditionVarField.substring(2, conditionVarField.length - 2).trim();
+                    actualValue = flowVariables[cleanVarName]; // Busca o valor da variável
+                    displayVarName = cleanVarName;
+                } else {
+                     actualValue = substitutedValue; // Usa o resultado da substituição como valor
+                     displayVarName = substitutedValue; // Mostra o valor substituído
+                }
             }
         }
-        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Condição ${conditionMet ? 'satisfeita' : 'não satisfeita'}.`, sender: 'bot' }]);
+
+        const valueToCompare = conditionCompareValueField
+            ? substituteVariables(conditionCompareValueField)
+            : undefined;
+
+        console.log(`[TestChatPanel] Condition Node: Variable Field: "${conditionVarField}", Operator: "${conditionOperator}", Compare Value Field: "${conditionCompareValueField}"`);
+        console.log(`[TestChatPanel] Condition Evaluation: Display Var Name: "${displayVarName}", Actual Value:`, actualValue, `Operator: "${conditionOperator}", Value to Compare:`, valueToCompare);
+        
+        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Avaliando condição: '${displayVarName}' (valor: ${JSON.stringify(actualValue)}) ${conditionOperator} '${valueToCompare === undefined ? 'N/A' : valueToCompare}'`, sender: 'bot' }]);
+        
+        switch (conditionOperator) {
+            case '==': conditionMet = String(actualValue ?? '') === String(valueToCompare ?? ''); break;
+            case '!=': conditionMet = String(actualValue ?? '') !== String(valueToCompare ?? ''); break;
+            case '>': conditionMet = Number(actualValue) > Number(valueToCompare); break;
+            case '<': conditionMet = Number(actualValue) < Number(valueToCompare); break;
+            case 'contains': conditionMet = String(actualValue ?? '').includes(String(valueToCompare ?? '')); break;
+            case 'startsWith': conditionMet = String(actualValue ?? '').startsWith(String(valueToCompare ?? '')); break;
+            case 'endsWith': conditionMet = String(actualValue ?? '').endsWith(String(valueToCompare ?? '')); break;
+            case 'isEmpty': 
+                conditionMet = actualValue === undefined || actualValue === null || String(actualValue).trim() === '';
+                break;
+            case 'isNotEmpty': 
+                conditionMet = actualValue !== undefined && actualValue !== null && String(actualValue).trim() !== '';
+                break;
+            default:
+                setMessages(prev => [...prev, { id: Date.now().toString(), text: `Operador de condição '${conditionOperator}' desconhecido. Assumindo falso.`, sender: 'bot' }]);
+                conditionMet = false;
+        }
+
+        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Resultado da condição: ${conditionMet ? 'Verdadeiro' : 'Falso'}.`, sender: 'bot' }]);
         nextNodeId = findNextNodeId(node.id, conditionMet ? 'true' : 'false');
         if (!nextNodeId) {
-            // Fallback se o caminho true/false não estiver conectado
-            setMessages(prev => [...prev, { id: Date.now().toString(), text: `Caminho para '${conditionMet ? 'true' : 'false'}' não conectado. Tentando 'default'.`, sender: 'bot' }]);
-            nextNodeId = findNextNodeId(node.id, 'default');
+            setMessages(prev => [...prev, { id: Date.now().toString(), text: `Caminho para '${conditionMet ? 'true' : 'false'}' não conectado. Tentando 'default' se existir.`, sender: 'bot' }]);
+            nextNodeId = findNextNodeId(node.id, 'default'); // Fallback
         }
         break;
       
@@ -179,20 +227,26 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             const valueToSet = node.variableValue ? substituteVariables(node.variableValue) : '';
             setFlowVariables(prev => ({...prev, [node.variableName as string]: valueToSet}));
             setMessages(prev => [...prev, { id: Date.now().toString(), text: `Variável "${node.variableName}" definida como "${valueToSet}".`, sender: 'bot' }]);
+            console.log(`[TestChatPanel] Variable Set: ${node.variableName} = ${valueToSet}. Current flowVariables:`, flowVariables);
+        } else {
+            setMessages(prev => [...prev, { id: Date.now().toString(), text: `Nó "Definir Variável" sem nome de variável configurado.`, sender: 'bot' }]);
         }
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
 
       default:
-        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Tipo de nó "${node.type}" (${node.title || 'Sem título'}) não implementado no chat de teste. Tentando avançar...`, sender: 'bot' }]);
-        nextNodeId = findNextNodeId(node.id, 'default');
+        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Tipo de nó "${node.type}" (${node.title || 'Sem título'}) não implementado no chat de teste. Fim da simulação.`, sender: 'bot' }]);
+        autoAdvance = false; // Para o fluxo
+        setIsTesting(false);
+        setAwaitingInputFor(null);
+        setCurrentNodeId(null);
         break;
     }
 
     if (autoAdvance && nextNodeId) {
       processNode(nextNodeId);
     } else if (autoAdvance && !nextNodeId && node.type !== 'start' && node.type !== 'input' && node.type !== 'option') { 
-       processNode(null); // Fim do fluxo se autoAdvance e não há próximo nó, e não está esperando entrada.
+       processNode(null); 
     }
   };
 
@@ -204,11 +258,13 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       return;
     }
     console.log('[TestChatPanel] handleStartTest iniciado. ID do Workspace:', activeWorkspace.id, 'Qtd. de Nós:', activeWorkspace.nodes.length);
+    console.log('[TestChatPanel] Workspace nodes:', JSON.stringify(activeWorkspace.nodes, null, 2));
+    console.log('[TestChatPanel] Workspace connections:', JSON.stringify(activeWorkspace.connections, null, 2));
     setMessages([]);
     setFlowVariables({});
     setAwaitingInputFor(null);
     setIsTesting(true);
-    setCurrentNodeId(null); // Reseta o nó atual
+    setCurrentNodeId(null); 
     
     const startNode = activeWorkspace.nodes.find(n => n.type === 'start');
     if (startNode) {
@@ -231,37 +287,58 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
   };
   
   const handleSendMessage = () => {
-    if (inputValue.trim() === '' || !awaitingInputFor || awaitingInputFor.type !== 'input') return;
+    console.log('[TestChatPanel] handleSendMessage triggered.');
+    if (inputValue.trim() === '' || !awaitingInputFor || awaitingInputFor.type !== 'input') {
+        console.warn('[TestChatPanel] handleSendMessage: Condition not met.', {inputValue, awaitingInputFor});
+        return;
+    }
+    console.log('[TestChatPanel] awaitingInputFor (input node):', JSON.parse(JSON.stringify(awaitingInputFor)));
+    console.log('[TestChatPanel] Current flowVariables before update:', JSON.parse(JSON.stringify(flowVariables)));
 
     const userMessageText = inputValue;
     setMessages(prev => [...prev, { id: Date.now().toString(), text: userMessageText, sender: 'user' }]);
     
     if (awaitingInputFor.variableToSaveResponse) {
-      setFlowVariables(prevVars => ({
-        ...prevVars,
-        [awaitingInputFor.variableToSaveResponse as string]: userMessageText
-      }));
+      console.log(`[TestChatPanel] Saving input to variable: ${awaitingInputFor.variableToSaveResponse} = ${userMessageText}`);
+      setFlowVariables(prevVars => {
+          const newVars = {...prevVars, [awaitingInputFor.variableToSaveResponse as string]: userMessageText };
+          console.log('[TestChatPanel] flowVariables after input save:', JSON.parse(JSON.stringify(newVars)));
+          return newVars;
+      });
     }
-    setInputValue(''); // Limpa o input aqui, após usar o valor
+    setInputValue(''); 
     
     const nextNodeIdAfterInput = findNextNodeId(awaitingInputFor.id, 'default');
+    console.log('[TestChatPanel] nextNodeIdAfterInput found:', nextNodeIdAfterInput);
     setAwaitingInputFor(null);
     processNode(nextNodeIdAfterInput);
   };
 
   const handleOptionClick = (optionText: string) => {
-    if (!awaitingInputFor || awaitingInputFor.type !== 'option') return;
+    console.log('[TestChatPanel] handleOptionClick triggered. Option chosen:', optionText);
+    if (!awaitingInputFor || awaitingInputFor.type !== 'option') {
+      console.error('[TestChatPanel] handleOptionClick: No awaitingInputFor or not an option node.', { awaitingInputFor });
+      return;
+    }
+    console.log('[TestChatPanel] awaitingInputFor (option node):', JSON.parse(JSON.stringify(awaitingInputFor)));
+    console.log('[TestChatPanel] Current flowVariables before update:', JSON.parse(JSON.stringify(flowVariables)));
 
     setMessages(prev => [...prev, { id: Date.now().toString(), text: `Você escolheu: ${optionText}`, sender: 'user' }]);
     
     if (awaitingInputFor.variableToSaveChoice) {
-      setFlowVariables(prevVars => ({
-        ...prevVars,
-        [awaitingInputFor.variableToSaveChoice as string]: optionText
-      }));
+      console.log(`[TestChatPanel] Saving choice to variable: ${awaitingInputFor.variableToSaveChoice} = ${optionText}`);
+      setFlowVariables(prevVars => {
+        const newVars = {...prevVars, [awaitingInputFor.variableToSaveChoice as string]: optionText };
+        console.log('[TestChatPanel] flowVariables after option save:', JSON.parse(JSON.stringify(newVars)));
+        return newVars;
+      });
     }
 
+    console.log(`[TestChatPanel] Finding next node from: ${awaitingInputFor.id} with sourceHandle (optionText): "${optionText}"`);
+    console.log('[TestChatPanel] Available connections for active workspace:', JSON.parse(JSON.stringify(activeWorkspace?.connections || [])));
     const nextNodeIdAfterOption = findNextNodeId(awaitingInputFor.id, optionText);
+    console.log('[TestChatPanel] nextNodeIdAfterOption found:', nextNodeIdAfterOption);
+    
     setAwaitingInputFor(null);
     processNode(nextNodeIdAfterOption);
   };
@@ -269,6 +346,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
   useEffect(() => { 
     handleRestartTest();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id]);
 
 
@@ -292,7 +370,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             <div className="flex flex-col items-center justify-center h-full text-center">
               <MessageSquare className="w-12 h-12 text-muted-foreground mb-4" />
               <p className="text-muted-foreground">Clique em "Iniciar" para simular este fluxo.</p>
-              {!activeWorkspace || activeWorkspace.nodes.length === 0 && (
+              {(!activeWorkspace || activeWorkspace.nodes.length === 0) && (
                 <p className="text-sm text-destructive mt-2">Nenhum fluxo ativo ou o fluxo está vazio.</p>
               )}
             </div>
