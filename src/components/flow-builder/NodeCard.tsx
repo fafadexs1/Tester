@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash, 
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +27,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
 import { START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y, OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y, NODE_HEADER_HEIGHT_APPROX } from '@/lib/constants';
+import { fetchSupabaseTablesAction, fetchSupabaseTableColumnsAction } from '@/lib/supabase/actions';
 
 
 interface NodeCardProps {
@@ -47,78 +48,103 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   const [testResponseError, setTestResponseError] = useState<string | null>(null);
   const [isTestingApi, setIsTestingApi] = useState(false);
 
-  // State for Supabase schema simulation
-  const [supabaseTables, setSupabaseTables] = useState<string[]>([]);
-  const [supabaseColumns, setSupabaseColumns] = useState<string[]>([]);
+  // State for Supabase schema
+  const [supabaseTables, setSupabaseTables] = useState<{name: string}[]>([]);
+  const [supabaseColumns, setSupabaseColumns] = useState<{name: string}[]>([]);
   const [isLoadingSupabaseTables, setIsLoadingSupabaseTables] = useState(false);
   const [isLoadingSupabaseColumns, setIsLoadingSupabaseColumns] = useState(false);
   const [supabaseSchemaError, setSupabaseSchemaError] = useState<string | null>(null);
 
-  // Simulate fetching Supabase tables
+  // Fetch Supabase tables
   useEffect(() => {
     if (node.type.startsWith('supabase-')) {
       const savedSupabaseUrl = localStorage.getItem('supabaseUrl');
-      const savedSupabaseAnonKey = localStorage.getItem('supabaseAnonKey');
-      const isSupabaseConfigured = localStorage.getItem('isSupabaseEnabled') === 'true' && savedSupabaseUrl && savedSupabaseAnonKey;
+      const savedSupabaseServiceKey = localStorage.getItem('supabaseServiceKey');
+      const isSupabaseConfigured = localStorage.getItem('isSupabaseEnabled') === 'true' && savedSupabaseUrl && savedSupabaseServiceKey;
 
       if (isSupabaseConfigured) {
         setIsLoadingSupabaseTables(true);
         setSupabaseSchemaError(null);
-        console.log(`[NodeCard - ${node.id}] Simulating fetch for Supabase tables...`);
-        // TODO: Replace with actual Server Action call: const tables = await fetchSupabaseTablesAction(savedSupabaseUrl, savedSupabaseAnonKey);
-        setTimeout(() => {
-          // Simulate success/failure
-          if (Math.random() > 0.1) { // 90% success rate for simulation
-            setSupabaseTables(['sim_clientes', 'sim_produtos', 'sim_pedidos_faturamento', 'sim_usuarios_ativos']);
-            console.log(`[NodeCard - ${node.id}] Simulated tables fetched:`, ['sim_clientes', 'sim_produtos', 'sim_pedidos_faturamento', 'sim_usuarios_ativos']);
-          } else {
-            setSupabaseSchemaError('Falha simulada ao buscar tabelas do Supabase.');
-            console.error(`[NodeCard - ${node.id}] Simulated error fetching Supabase tables.`);
-            setSupabaseTables([]);
-          }
-          setIsLoadingSupabaseTables(false);
-        }, 1500);
+        setSupabaseTables([]); // Clear previous tables
+        setSupabaseColumns([]); // Clear previous columns as table might change
+        if (node.supabaseTableName) onUpdate(node.id, { supabaseTableName: ''}); // Reset selected table
+        if (node.supabaseIdentifierColumn) onUpdate(node.id, { supabaseIdentifierColumn: '' }); // Reset selected column
+
+
+        fetchSupabaseTablesAction(savedSupabaseUrl as string, savedSupabaseServiceKey as string)
+          .then(result => {
+            if (result.error) {
+              setSupabaseSchemaError(result.error);
+              console.error(`[NodeCard - ${node.id}] Error fetching Supabase tables:`, result.error);
+              setSupabaseTables([]);
+            } else if (result.data) {
+              setSupabaseTables(result.data);
+              console.log(`[NodeCard - ${node.id}] Supabase tables fetched:`, result.data);
+            } else {
+              setSupabaseTables([]); // Should not happen if no error
+            }
+          })
+          .catch(err => {
+            setSupabaseSchemaError('Falha ao comunicar com o servidor para buscar tabelas.');
+            console.error(`[NodeCard - ${node.id}] Network/exception fetching Supabase tables:`, err);
+             setSupabaseTables([]);
+          })
+          .finally(() => {
+            setIsLoadingSupabaseTables(false);
+          });
       } else {
         setSupabaseSchemaError('Supabase não configurado ou desabilitado. Verifique as Configurações Globais.');
         setSupabaseTables([]);
         setSupabaseColumns([]);
       }
     }
-  }, [node.type, node.id]); // Re-run if node type changes (though unlikely for an existing node)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.type, node.id]); // Re-run if node type changes or key supabase props change (like on load)
 
-  // Simulate fetching Supabase columns when table changes
+
+  // Fetch Supabase columns when table changes
   useEffect(() => {
     if (node.type.startsWith('supabase-') && node.supabaseTableName) {
       const savedSupabaseUrl = localStorage.getItem('supabaseUrl');
-      const savedSupabaseAnonKey = localStorage.getItem('supabaseAnonKey');
-       const isSupabaseConfigured = localStorage.getItem('isSupabaseEnabled') === 'true' && savedSupabaseUrl && savedSupabaseAnonKey;
+      const savedSupabaseServiceKey = localStorage.getItem('supabaseServiceKey');
+      const isSupabaseConfigured = localStorage.getItem('isSupabaseEnabled') === 'true' && savedSupabaseUrl && savedSupabaseServiceKey;
 
       if (isSupabaseConfigured) {
         setIsLoadingSupabaseColumns(true);
-        setSupabaseSchemaError(null);
-        console.log(`[NodeCard - ${node.id}] Simulating fetch for columns of table: ${node.supabaseTableName}`);
-        // TODO: Replace with actual Server Action call: const columns = await fetchSupabaseTableColumnsAction(savedSupabaseUrl, savedSupabaseAnonKey, node.supabaseTableName);
-        setTimeout(() => {
-          let newColumns: string[] = [];
-          if (node.supabaseTableName === 'sim_clientes') {
-            newColumns = ['id', 'nome_completo', 'email_principal', 'telefone_contato', 'data_cadastro', 'status_cliente'];
-          } else if (node.supabaseTableName === 'sim_produtos') {
-            newColumns = ['product_id', 'sku', 'nome_produto', 'descricao_detalhada', 'preco_unitario', 'estoque_disponivel'];
-          } else if (node.supabaseTableName === 'sim_pedidos_faturamento') {
-            newColumns = ['pedido_uuid', 'cliente_id_fk', 'data_pedido', 'valor_total_pedido', 'status_pagamento', 'nota_fiscal_id'];
-          } else if (node.supabaseTableName === 'sim_usuarios_ativos') {
-            newColumns = ['user_internal_id', 'username', 'last_login_timestamp', 'role_assigned', 'is_active_flag'];
-          }
-          setSupabaseColumns(newColumns);
-          console.log(`[NodeCard - ${node.id}] Simulated columns for ${node.supabaseTableName}:`, newColumns);
-          setIsLoadingSupabaseColumns(false);
-        }, 1200);
+        setSupabaseSchemaError(null); // Clear previous schema errors
+        setSupabaseColumns([]); // Clear previous columns
+        if (node.supabaseIdentifierColumn) onUpdate(node.id, { supabaseIdentifierColumn: '' }); // Reset selected column
+
+        fetchSupabaseTableColumnsAction(savedSupabaseUrl as string, savedSupabaseServiceKey as string, node.supabaseTableName)
+          .then(result => {
+            if (result.error) {
+              setSupabaseSchemaError(result.error);
+              console.error(`[NodeCard - ${node.id}] Error fetching columns for ${node.supabaseTableName}:`, result.error);
+              setSupabaseColumns([]);
+            } else if (result.data) {
+              setSupabaseColumns(result.data);
+              console.log(`[NodeCard - ${node.id}] Columns for ${node.supabaseTableName} fetched:`, result.data);
+            } else {
+              setSupabaseColumns([]);
+            }
+          })
+           .catch(err => {
+            setSupabaseSchemaError(`Falha ao comunicar com o servidor para buscar colunas da tabela ${node.supabaseTableName}.`);
+            console.error(`[NodeCard - ${node.id}] Network/exception fetching columns for ${node.supabaseTableName}:`, err);
+            setSupabaseColumns([]);
+          })
+          .finally(() => {
+            setIsLoadingSupabaseColumns(false);
+          });
+
       } else {
-         setSupabaseColumns([]); // Clear columns if supabase is not configured
+         setSupabaseColumns([]); 
+         setSupabaseSchemaError('Supabase não configurado para buscar colunas.');
       }
     } else if (node.type.startsWith('supabase-')) {
       setSupabaseColumns([]); // Clear columns if no table is selected
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.type, node.id, node.supabaseTableName]);
 
 
@@ -1242,7 +1268,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               <Label htmlFor={`${node.id}-tableName`}>Nome da Tabela Supabase</Label>
               {isLoadingSupabaseTables && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando tabelas...</div>}
               {!isLoadingSupabaseTables && supabaseSchemaError && <p className="text-xs text-destructive">{supabaseSchemaError}</p>}
-              {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tabela encontrada ou Supabase não configurado.</p>}
+              {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tabela encontrada ou Supabase não configurado/habilitado.</p>}
               {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length > 0 && (
                 <Select 
                     value={node.supabaseTableName || ''} 
@@ -1250,7 +1276,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 >
                   <SelectTrigger id={`${node.id}-tableName`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
                   <SelectContent>
-                    {supabaseTables.map(table => <SelectItem key={table} value={table}>{table}</SelectItem>)}
+                    {supabaseTables.map(table => <SelectItem key={table.name} value={table.name}>{table.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               )}
@@ -1262,17 +1288,18 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                   <Label htmlFor={`${node.id}-identifierCol`}>Coluna Identificadora (Filtro)</Label>
                   {isLoadingSupabaseColumns && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando colunas...</div>}
                   {!isLoadingSupabaseColumns && !node.supabaseTableName && <p className="text-xs text-muted-foreground">Selecione uma tabela para ver as colunas.</p>}
-                  {!isLoadingSupabaseColumns && node.supabaseTableName && supabaseColumns.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma coluna encontrada para a tabela selecionada.</p>}
+                  {!isLoadingSupabaseColumns && node.supabaseTableName && supabaseColumns.length === 0 && !supabaseSchemaError && <p className="text-xs text-muted-foreground">Nenhuma coluna encontrada para a tabela selecionada.</p>}
                   {!isLoadingSupabaseColumns && supabaseColumns.length > 0 && (
                      <Select value={node.supabaseIdentifierColumn || ''} onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}>
                         <SelectTrigger id={`${node.id}-identifierCol`} disabled={!node.supabaseTableName || supabaseColumns.length === 0}>
                             <SelectValue placeholder="Selecione a Coluna para filtrar" />
                         </SelectTrigger>
                         <SelectContent>
-                            {supabaseColumns.map(col => <SelectItem key={col} value={col}>{col}</SelectItem>)}
+                            {supabaseColumns.map(col => <SelectItem key={col.name} value={col.name}>{col.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
                   )}
+                   {!isLoadingSupabaseColumns && supabaseSchemaError && node.supabaseTableName && <p className="text-xs text-destructive">{supabaseSchemaError}</p>}
                 </div>
                 <div>
                     <Label htmlFor={`${node.id}-identifierVal`}>Valor do Identificador (Filtro)</Label>
@@ -1307,10 +1334,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             {(isReadOp || isCreateOp) && (
               <div>
                 <Label htmlFor={`${node.id}-resultVar`}>Salvar Resultado na Variável</Label>
-                <Input id={`${node.id}-resultVar`} placeholder={isReadOp ? "dados_lidos_supabase" : "id_linha_criada_supabase"} value={node.supabaseResultVariable || ''} onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} />
+                <Input id={`${node.id}-resultVar`} placeholder={isReadOp ? "dados_lidos_supabase" : (node.supabaseResultVariable || "id_linha_criada_supabase")} value={node.supabaseResultVariable || ''} onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} />
               </div>
             )}
-            <p className="text-xs text-muted-foreground">Requer configuração do Supabase nas Configurações Globais e que a tabela e colunas existam.</p>
+            <p className="text-xs text-muted-foreground">Requer Supabase habilitado e configurado nas Configurações Globais, e que as funções SQL `get_public_tables` e `get_table_columns` existam no seu banco.</p>
           </div>
         );
       default:
