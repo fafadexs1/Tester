@@ -23,7 +23,7 @@ const DraggableBlock: React.FC<DraggableBlockProps> = React.memo(({ type, label,
   return (
     <motion.div
       ref={drag}
-      className="flex items-center p-2.5 mb-2 bg-card border border-border rounded-lg shadow-sm cursor-move hover:shadow-md transition-shadow"
+      className="flex items-center p-2.5 bg-card border border-border rounded-lg shadow-sm cursor-move hover:shadow-md transition-shadow" // Removido mb-2
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
       role="button"
@@ -31,7 +31,7 @@ const DraggableBlock: React.FC<DraggableBlockProps> = React.memo(({ type, label,
       {...(dataAiHint && { 'data-ai-hint': dataAiHint })} // Adiciona condicionalmente
     >
       {icon}
-      <span className="ml-2.5 text-xs font-medium text-card-foreground">{label}</span>
+      <span className="ml-2.5 text-xs font-medium text-card-foreground truncate min-w-0">{label}</span> {/* Adicionado truncate e min-w-0 */}
     </motion.div>
   );
 });

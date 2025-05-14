@@ -90,16 +90,18 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
               <AccordionTrigger className="text-sm font-medium text-sidebar-foreground/90 hover:text-sidebar-foreground">
                 {category.title}
               </AccordionTrigger>
-              <AccordionContent className="pt-2 pb-0 space-y-2">
-                {category.blocks.map(block => (
-                  <DraggableBlock 
-                    key={block.type}
-                    type={block.type}
-                    label={block.label}
-                    icon={block.icon}
-                    defaultData={block.defaultData}
-                  />
-                ))}
+              <AccordionContent className="pt-2 pb-4"> {/* Ajustado padding bottom */}
+                <div className="grid grid-cols-2 gap-2"> {/* Adicionado grid layout */}
+                  {category.blocks.map(block => (
+                    <DraggableBlock 
+                      key={block.type}
+                      type={block.type}
+                      label={block.label}
+                      icon={block.icon}
+                      defaultData={block.defaultData}
+                    />
+                  ))}
+                </div>
               </AccordionContent>
             </AccordionItem>
           ))}
