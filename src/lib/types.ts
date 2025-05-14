@@ -6,6 +6,7 @@ export interface DraggableBlockItemData {
 }
 
 export type NodeType = 
+  | 'start' // Novo tipo de nó de início
   | 'message' 
   | 'input' 
   | 'option' 

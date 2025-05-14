@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, Hash,
-  Database, Rows, Search, Edit3 // Trash já existe
+  Database, Rows, Search, Edit3, PlayCircle // Adicionado PlayCircle
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -77,6 +77,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   const renderNodeIcon = () => {
     const iconProps = { className: "w-5 h-5" };
     const icons: Record<NodeData['type'] | 'default', React.ReactNode> = {
+      'start': <PlayCircle {...iconProps} color="hsl(var(--primary))" />,
       'message': <MessageSquareText {...iconProps} color="hsl(var(--accent))" />,
       'input': <InputIcon {...iconProps} className="text-green-500" />,
       'option': <ListChecks {...iconProps} className="text-purple-500" />,
@@ -136,6 +137,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         </>
       );
     }
+    // O nó 'start' também não deve ter conector de entrada, mas só de saída.
+    // No entanto, o conector de entrada é adicionado por padrão a todos.
+    // O conector de saída é comum a todos os outros nós (exceto 'condition').
     return (
       <div className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">
         <div
@@ -203,6 +207,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 
   const renderNodeContent = () => {
     switch (node.type) {
+      case 'start':
+        return <p className="text-sm text-muted-foreground italic text-center py-2">O fluxo começa aqui.</p>;
       case 'message':
         return (
           <>
@@ -598,14 +604,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           {renderNodeContent()}
         </CardContent>
       </Card>
-      {/* Input Connector */}
-      <div className="absolute -left-2.5 top-1/2 -translate-y-1/2 z-10">
-        <div
-            title="Conecte aqui"
-            className="w-5 h-5 bg-muted hover:bg-muted-foreground/50 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-            data-connector="true" data-handle-type="target"
-        />
-      </div>
+      {/* Input Connector - não renderizar para o nó 'start' */}
+      {node.type !== 'start' && (
+        <div className="absolute -left-2.5 top-1/2 -translate-y-1/2 z-10">
+          <div
+              title="Conecte aqui"
+              className="w-5 h-5 bg-muted hover:bg-muted-foreground/50 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+              data-connector="true" data-handle-type="target"
+          />
+        </div>
+      )}
       {/* Output Connector(s) */}
       {renderOutputConnectors()}
     </motion.div>

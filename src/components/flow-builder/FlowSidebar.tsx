@@ -8,7 +8,7 @@ import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, 
-  Database, DatabaseZap, Rows, Search, Edit3, Trash
+  Database, DatabaseZap, Rows, Search, Edit3, Trash, PlayCircle // Adicionado PlayCircle para o nó de início
   // Removidos PlusCircle, Save, Undo2, LayoutGrid
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -26,6 +26,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
       value: "basic",
       title: "Básicos",
       blocks: [
+        { type: "start", label: "Início do Fluxo", icon: <PlayCircle {...iconProps} color="hsl(var(--primary))" />, defaultData: {} },
         { type: "message", label: "Exibir Texto", icon: <MessageSquareText {...iconProps} color="hsl(var(--accent))" />, defaultData: { text: 'Olá!'} },
         { type: "input", label: "Entrada do Usuário", icon: <Type {...iconProps} className="text-green-600" />, defaultData: { inputType: 'text', promptText: 'Qual é o seu nome?', variableToSaveResponse: 'nome_usuario' } },
         { type: "option", label: "Múltiplas Escolhas", icon: <ListChecks {...iconProps} className="text-purple-600" />, defaultData: { questionText: 'Escolha uma opção:', optionsList: 'Opção A\nOpção B', variableToSaveChoice: 'escolha_usuario' }},
