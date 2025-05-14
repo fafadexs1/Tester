@@ -41,10 +41,14 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
   };
 
   const substituteVariables = (text: string): string => {
+    if (typeof text !== 'string') {
+      console.warn('[TestChatPanel] substituteVariables received non-string input:', text);
+      return String(text); // Tenta converter para string
+    }
     let substitutedText = text;
     for (const key in flowVariables) {
       const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
-      substitutedText = substitutedText.replace(regex, flowVariables[key]);
+      substitutedText = substitutedText.replace(regex, String(flowVariables[key])); // Garante que flowVariables[key] seja string
     }
     // Remove placeholders não substituídos
     substitutedText = substitutedText.replace(/\{\{[^}]+\}\}/g, ''); 
@@ -52,30 +56,49 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
   };
 
   const processNode = async (nodeId: string | null) => {
+    console.log('[TestChatPanel] processNode called with nodeId:', nodeId);
+    if (!activeWorkspace) {
+        console.error('[TestChatPanel] processNode: activeWorkspace is null or undefined.');
+        setMessages(prev => [...prev, { id: Date.now().toString(), text: "Erro crítico: Fluxo ativo não encontrado.", sender: 'bot' }]);
+        setIsTesting(false);
+        return;
+    }
+
     if (!nodeId) {
       setMessages(prev => [...prev, { id: Date.now().toString(), text: "Fim do fluxo.", sender: 'bot' }]);
       setIsTesting(false);
       setAwaitingInputFor(null);
+      setCurrentNodeId(null);
       return;
     }
 
     const node = getNodeById(nodeId);
     if (!node) {
+      console.error(`[TestChatPanel] processNode: Node with ID ${nodeId} not found.`);
       setMessages(prev => [...prev, { id: Date.now().toString(), text: `Erro: Nó com ID ${nodeId} não encontrado.`, sender: 'bot' }]);
       setIsTesting(false);
       setAwaitingInputFor(null);
+      setCurrentNodeId(null);
       return;
     }
-
+    
+    console.log('[TestChatPanel] Processing node:', JSON.parse(JSON.stringify(node)));
     setCurrentNodeId(node.id);
     let nextNodeId: string | null = null;
     let autoAdvance = true;
 
+    // Simulação de 'typing'
+    if (node.type !== 'start' && node.type !== 'delay') { // Não simular para start ou delay já que eles têm suas próprias mensagens/lógica
+        setMessages(prev => [...prev, { id: `${Date.now()}-typing`, text: "Bot está digitando...", sender: 'bot' }]);
+        await new Promise(resolve => setTimeout(resolve, 800)); // Simula digitação
+        setMessages(prev => prev.filter(m => m.id !== `${Date.now()}-typing`)); // Remove a mensagem de "digitando"
+    }
+
+
     switch (node.type) {
       case 'start':
-        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Iniciando fluxo a partir de: ${node.title}`, sender: 'bot' }]);
-        if (node.triggers && node.triggers.length > 0) {
-          // Por simplicidade, pega a primeira conexão do primeiro gatilho
+        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Iniciando fluxo a partir de: ${node.title || 'Nó de Início'}`, sender: 'bot' }]);
+        if (node.triggers && node.triggers.length > 0 && node.triggers[0]) {
           nextNodeId = findNextNodeId(node.id, node.triggers[0]);
         } else {
           setMessages(prev => [...prev, { id: Date.now().toString(), text: "Nó de início não tem gatilhos configurados ou conectados.", sender: 'bot' }]);
@@ -86,6 +109,8 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       case 'message':
         if (node.text) {
           setMessages(prev => [...prev, { id: Date.now().toString(), text: substituteVariables(node.text), sender: 'bot' }]);
+        } else {
+            setMessages(prev => [...prev, { id: Date.now().toString(), text: "(Nó de mensagem vazio)", sender: 'bot' }]);
         }
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
@@ -93,8 +118,10 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       case 'input':
         if (node.promptText) {
           setMessages(prev => [...prev, { id: Date.now().toString(), text: substituteVariables(node.promptText), sender: 'bot' }]);
+        } else {
+            setMessages(prev => [...prev, { id: Date.now().toString(), text: "(Nó de entrada sem pergunta)", sender: 'bot' }]);
         }
-        setAwaitingInputFor(node); // Aguarda entrada do usuário
+        setAwaitingInputFor(node); 
         autoAdvance = false;
         break;
       
@@ -107,16 +134,37 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             sender: 'bot',
             options: options 
           }]);
+        } else {
+            setMessages(prev => [...prev, { id: Date.now().toString(), text: "(Nó de opções mal configurado)", sender: 'bot' }]);
         }
-        setAwaitingInputFor(node); // Aguarda escolha de opção
+        setAwaitingInputFor(node); 
         autoAdvance = false;
         break;
-
-      // TODO: Implementar lógica para outros tipos de nós
+      
       case 'condition':
-        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Nó de Condição "${node.title}" encontrado. Lógica de avaliação pendente. Assumindo caminho 'default' ou 'true' se existir.`, sender: 'bot' }]);
-        // Tenta o caminho 'true', depois 'default', depois o primeiro conectado
-        nextNodeId = findNextNodeId(node.id, 'true') || findNextNodeId(node.id, 'default') || findNextNodeId(node.id, activeWorkspace?.connections.find(c => c.from === node.id)?.sourceHandle);
+        const varName = node.conditionVariable ? substituteVariables(node.conditionVariable) : undefined;
+        const valueToCompare = node.conditionValue ? substituteVariables(node.conditionValue) : undefined;
+        const operator = node.conditionOperator;
+        let conditionMet = false;
+
+        // Simples placeholder para a lógica de condição. Uma implementação real seria mais robusta.
+        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Avaliando condição: ${varName || 'Variável não definida'} ${operator} ${valueToCompare || 'Valor não definido'}`, sender: 'bot' }]);
+        if (varName !== undefined && valueToCompare !== undefined) {
+            const actualValue = flowVariables[varName] ?? varName; // Tenta pegar da variável, senão usa o próprio nome (se for um valor literal)
+             switch (operator) {
+                case '==': conditionMet = String(actualValue) === String(valueToCompare); break;
+                case '!=': conditionMet = String(actualValue) !== String(valueToCompare); break;
+                // Adicionar mais operadores conforme necessário
+                default: conditionMet = false;
+            }
+        }
+        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Condição ${conditionMet ? 'satisfeita' : 'não satisfeita'}.`, sender: 'bot' }]);
+        nextNodeId = findNextNodeId(node.id, conditionMet ? 'true' : 'false');
+        if (!nextNodeId) {
+            // Fallback se o caminho true/false não estiver conectado
+            setMessages(prev => [...prev, { id: Date.now().toString(), text: `Caminho para '${conditionMet ? 'true' : 'false'}' não conectado. Tentando 'default'.`, sender: 'bot' }]);
+            nextNodeId = findNextNodeId(node.id, 'default');
+        }
         break;
       
       case 'delay':
@@ -125,36 +173,50 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         await new Promise(resolve => setTimeout(resolve, duration));
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
+      
+      case 'set-variable':
+        if (node.variableName) {
+            const valueToSet = node.variableValue ? substituteVariables(node.variableValue) : '';
+            setFlowVariables(prev => ({...prev, [node.variableName as string]: valueToSet}));
+            setMessages(prev => [...prev, { id: Date.now().toString(), text: `Variável "${node.variableName}" definida como "${valueToSet}".`, sender: 'bot' }]);
+        }
+        nextNodeId = findNextNodeId(node.id, 'default');
+        break;
 
       default:
-        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Tipo de nó "${node.type}" (${node.title}) não implementado no chat de teste. Tentando avançar...`, sender: 'bot' }]);
+        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Tipo de nó "${node.type}" (${node.title || 'Sem título'}) não implementado no chat de teste. Tentando avançar...`, sender: 'bot' }]);
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
     }
 
     if (autoAdvance && nextNodeId) {
       processNode(nextNodeId);
-    } else if (autoAdvance && !nextNodeId && node.type !== 'start') { // Se não for nó de início e não houver próximo nó
-       processNode(null); // Fim do fluxo
+    } else if (autoAdvance && !nextNodeId && node.type !== 'start' && node.type !== 'input' && node.type !== 'option') { 
+       processNode(null); // Fim do fluxo se autoAdvance e não há próximo nó, e não está esperando entrada.
     }
   };
 
   const handleStartTest = () => {
     if (!activeWorkspace || activeWorkspace.nodes.length === 0) {
-      setMessages([{ id: 'error', text: "Nenhum fluxo ativo ou o fluxo está vazio.", sender: 'bot' }]);
+      console.error('[TestChatPanel] Tentativa de iniciar teste sem fluxo ativo ou com fluxo vazio.');
+      setMessages([{ id: 'error-no-workspace', text: "Nenhum fluxo ativo ou o fluxo está vazio.", sender: 'bot' }]);
       setIsTesting(false);
       return;
     }
+    console.log('[TestChatPanel] handleStartTest iniciado. ID do Workspace:', activeWorkspace.id, 'Qtd. de Nós:', activeWorkspace.nodes.length);
     setMessages([]);
     setFlowVariables({});
     setAwaitingInputFor(null);
     setIsTesting(true);
+    setCurrentNodeId(null); // Reseta o nó atual
     
     const startNode = activeWorkspace.nodes.find(n => n.type === 'start');
     if (startNode) {
+      console.log('[TestChatPanel] Nó de início encontrado:', JSON.parse(JSON.stringify(startNode)));
       processNode(startNode.id);
     } else {
-      setMessages([{ id: 'error', text: "Nenhum nó de 'Início do Fluxo' encontrado.", sender: 'bot' }]);
+      console.error('[TestChatPanel] Nenhum nó de início encontrado no fluxo ativo.');
+      setMessages([{ id: 'error-no-start-node', text: "Nenhum nó de 'Início do Fluxo' encontrado.", sender: 'bot' }]);
       setIsTesting(false);
     }
   };
@@ -166,7 +228,6 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     setMessages([]);
     setInputValue('');
     setFlowVariables({});
-    // Não inicia automaticamente, usuário deve clicar em "Iniciar Teste"
   };
   
   const handleSendMessage = () => {
@@ -174,14 +235,14 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
     const userMessageText = inputValue;
     setMessages(prev => [...prev, { id: Date.now().toString(), text: userMessageText, sender: 'user' }]);
-    setInputValue('');
-
+    
     if (awaitingInputFor.variableToSaveResponse) {
       setFlowVariables(prevVars => ({
         ...prevVars,
         [awaitingInputFor.variableToSaveResponse as string]: userMessageText
       }));
     }
+    setInputValue(''); // Limpa o input aqui, após usar o valor
     
     const nextNodeIdAfterInput = findNextNodeId(awaitingInputFor.id, 'default');
     setAwaitingInputFor(null);
@@ -206,7 +267,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
   };
 
 
-  useEffect(() => { // Reinicia o estado do chat se o workspace mudar
+  useEffect(() => { 
     handleRestartTest();
   }, [activeWorkspace?.id]);
 
@@ -216,7 +277,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       <CardHeader className="p-4 border-b flex flex-row items-center justify-between">
         <CardTitle className="text-lg">Teste do Fluxo</CardTitle>
         {!isTesting ? (
-          <Button onClick={handleStartTest} size="sm">
+          <Button onClick={handleStartTest} size="sm" disabled={!activeWorkspace || activeWorkspace.nodes.length === 0}>
             <Play className="mr-2 h-4 w-4" /> Iniciar
           </Button>
         ) : (
@@ -231,6 +292,9 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             <div className="flex flex-col items-center justify-center h-full text-center">
               <MessageSquare className="w-12 h-12 text-muted-foreground mb-4" />
               <p className="text-muted-foreground">Clique em "Iniciar" para simular este fluxo.</p>
+              {!activeWorkspace || activeWorkspace.nodes.length === 0 && (
+                <p className="text-sm text-destructive mt-2">Nenhum fluxo ativo ou o fluxo está vazio.</p>
+              )}
             </div>
           )}
            {messages.length === 0 && isTesting && currentNodeId && (
@@ -245,7 +309,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                 className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
               >
                 <div
-                  className={`max-w-[85%] p-2.5 rounded-lg text-sm shadow-sm ${
+                  className={`max-w-[85%] p-2.5 rounded-lg text-sm shadow-sm break-words ${
                     msg.sender === 'user'
                       ? 'bg-primary text-primary-foreground rounded-br-none'
                       : 'bg-muted text-muted-foreground rounded-bl-none'
@@ -281,7 +345,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
               placeholder={awaitingInputFor && awaitingInputFor.type === 'input' ? "Digite sua resposta..." : (awaitingInputFor && awaitingInputFor.type === 'option' ? "Escolha uma opção acima..." : "Aguardando...")}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={(e) => { if (e.key === 'Enter' && awaitingInputFor && awaitingInputFor.type === 'input') handleSendMessage(); }}
+              onKeyPress={(e) => { if (e.key === 'Enter' && awaitingInputFor && awaitingInputFor.type === 'input' && inputValue.trim() !== '') handleSendMessage(); }}
               className="flex-1"
               disabled={!isTesting || (awaitingInputFor?.type !== 'input')}
             />
@@ -305,3 +369,4 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 };
 
 export default TestChatPanel;
+
