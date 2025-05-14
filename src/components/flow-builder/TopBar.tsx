@@ -6,7 +6,10 @@ import { useState, useEffect } from 'react';
 import type { WorkspaceData } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, Database, ChevronDown, PlugZap, BotMessageSquare, Rocket } from 'lucide-react'; // Adicionado Rocket
+import { 
+  PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, 
+  Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose 
+} from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -26,19 +29,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from '@/hooks/use-toast';
-import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 
-// Ícone SVG simples para Supabase (um 'S' estilizado)
 const SupabaseIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
     <path d="M12.1721 2.00244C12.8801 1.98791 13.576 2.21863 14.1116 2.64953C14.6472 3.08043 14.9816 3.68122 15.0491 4.32663L15.0536 4.43311L15.2402 13.4907C15.2811 14.5963 14.4145 15.5223 13.3045 15.5629C12.9977 15.5745 12.6978 15.5302 12.4233 15.4326L12.1933 15.3496C11.2835 14.9872 10.7389 13.9861 10.9305 13.005L11.9976 7.54346C11.7963 7.44211 11.5823 7.36858 11.3608 7.32471L8.75981 8.00806C7.7488 8.25358 6.85304 7.43087 6.85179 6.39187C6.85091 5.69923 7.32011 5.09048 7.97152 4.89367L8.08993 4.85168L12.0001 3.56348V2.09302C12.0001 2.06352 12.0025 2.03488 12.007 2.00767L12.1721 2.00244ZM12.0001 16.8091L11.9425 16.8323C10.3604 17.5281 8.97375 18.6318 8.06805 20.0061C7.51501 20.8504 7.84881 22.0024 8.78293 22.0024H15.2172C16.1513 22.0024 16.4851 20.8504 15.9321 20.0061C15.0264 18.6318 13.6397 17.5281 12.0577 16.8323L12.0001 16.8091Z"/>
   </svg>
 );
 
-// Ícone SVG simples para PostgreSQL (um elefante estilizado ou 'Pg')
 const PostgresIcon = () => (
  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
     <path d="M5.10526 2H18.8947C19.9381 2 20.7895 2.82911 20.7895 3.8421V7.52631H16.6316V14.0526C16.6316 15.3461 15.5772 16.3684 14.2632 16.3684H9.73684C8.42283 16.3684 7.36842 15.3461 7.36842 14.0526V7.52631H3.21053V3.8421C3.21053 2.82911 4.06193 2 5.10526 2ZM12.5789 7.52631H16.6316V3.8421H12.5789V7.52631ZM7.36842 7.52631H11.4211V3.8421H7.36842V7.52631ZM9.73684 17.6316H14.2632C16.3051 17.6316 17.9474 19.2293 17.9474 21.2105C17.9474 21.6453 17.6047 22 17.1579 22H6.84211C6.39526 22 6.05263 21.6453 6.05263 21.2105C6.05263 19.2293 7.69491 17.6316 9.73684 17.6316ZM13.7368 11.2105H10.2632C9.91571 11.2105 9.73684 11.0373 9.73684 10.7895C9.73684 10.5416 9.91571 10.3684 10.2632 10.3684H13.7368C14.0843 10.3684 14.2632 10.5416 14.2632 10.7895C14.2632 11.0373 14.0843 11.2105 13.7368 11.2105Z" />
@@ -55,6 +55,8 @@ interface TopBarProps {
   onSaveWorkspaces: () => void;
   onDiscardChanges: () => void;
   appName?: string;
+  isChatPanelOpen: boolean;
+  onToggleChatPanel: () => void;
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -64,7 +66,9 @@ const TopBar: React.FC<TopBarProps> = ({
   onSwitchWorkspace,
   onSaveWorkspaces,
   onDiscardChanges,
-  appName = "Flowise Lite"
+  appName = "Flowise Lite",
+  isChatPanelOpen,
+  onToggleChatPanel,
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -157,7 +161,6 @@ const TopBar: React.FC<TopBarProps> = ({
       description: `O fluxo "${currentWorkspace?.name || 'Selecionado'}" seria colocado em produção. (Funcionalidade de placeholder)`,
       variant: "default",
     });
-    // Aqui iria a lógica real de publicação
   };
 
   const settingsCategories: { id: SettingsCategory; label: string; icon: React.ReactNode }[] = [
@@ -210,7 +213,7 @@ const TopBar: React.FC<TopBarProps> = ({
                 >
                   <SelectTrigger 
                     id="workspace-select-topbar-mobile" 
-                    className="h-9 w-auto min-w-[calc(100vw-350px)] max-w-[180px] text-sm" // Ajustado o min-width
+                    className="h-9 w-auto min-w-[calc(100vw-400px)] max-w-[180px] text-sm" 
                     aria-label="Selecionar Fluxo de Trabalho"
                   >
                     <SelectValue placeholder="Selecionar Fluxo" />
@@ -250,10 +253,9 @@ const TopBar: React.FC<TopBarProps> = ({
             <Rocket className="h-4 w-4" />
           </Button>
 
-
           <Button 
             onClick={onSaveWorkspaces} 
-            variant="outline" // Mudado para outline para diferenciar de Publicar
+            variant="outline"
             size="sm"
             disabled={!activeWorkspaceId}
             className="hidden md:inline-flex"
@@ -289,6 +291,15 @@ const TopBar: React.FC<TopBarProps> = ({
             aria-label="Descartar Alterações"
           >
             <Undo2 className="h-4 w-4" />
+          </Button>
+
+          <Button
+            onClick={onToggleChatPanel}
+            variant="outline"
+            size="icon"
+            aria-label={isChatPanelOpen ? "Fechar painel de chat" : "Abrir painel de chat"}
+          >
+            {isChatPanelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
           </Button>
 
           <DropdownMenu>
@@ -333,7 +344,6 @@ const TopBar: React.FC<TopBarProps> = ({
           </DialogHeader>
           
           <div className="flex flex-1 overflow-hidden">
-            {/* Menu Lateral de Categorias */}
             <aside className="w-1/4 min-w-[200px] border-r bg-muted/40 p-4 space-y-2 overflow-y-auto">
               {settingsCategories.map(category => (
                 <Button
@@ -351,13 +361,11 @@ const TopBar: React.FC<TopBarProps> = ({
               ))}
             </aside>
 
-            {/* Conteúdo da Categoria Selecionada */}
             <main className="flex-1 p-6 overflow-y-auto space-y-6">
               {activeSettingsCategory === 'database' && (
                 <section>
                   <h3 className="text-lg font-semibold text-card-foreground mb-4">Configurações de Banco de Dados</h3>
                   <Accordion type="multiple" className="w-full space-y-4" defaultValue={['supabase', 'postgresql']}>
-                    {/* Configuração Supabase */}
                     <AccordionItem value="supabase" className="border rounded-lg shadow-sm">
                       <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
                         <div className="flex items-center space-x-3">
@@ -406,7 +414,6 @@ const TopBar: React.FC<TopBarProps> = ({
                       </AccordionContent>
                     </AccordionItem>
 
-                    {/* Configuração PostgreSQL */}
                     <AccordionItem value="postgresql" className="border rounded-lg shadow-sm">
                       <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
                         <div className="flex items-center space-x-3">
@@ -463,7 +470,6 @@ const TopBar: React.FC<TopBarProps> = ({
                  <section>
                   <h3 className="text-lg font-semibold text-card-foreground mb-4">Configurações de Integrações</h3>
                   <Accordion type="multiple" className="w-full space-y-4" defaultValue={['evolution-api']}>
-                    {/* Configuração API Evolution */}
                     <AccordionItem value="evolution-api" className="border rounded-lg shadow-sm">
                       <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
                         <div className="flex items-center space-x-3">
@@ -496,12 +502,10 @@ const TopBar: React.FC<TopBarProps> = ({
                                 Exemplo: ws://localhost:8080 ou wss://sua-api.com
                               </p>
                             </div>
-                            {/* Outros campos para Evolution API podem ser adicionados aqui, como API Key, etc. */}
                           </div>
                         )}
                       </AccordionContent>
                     </AccordionItem>
-                    {/* Outras integrações podem ser adicionadas aqui */}
                   </Accordion>
                 </section>
               )}

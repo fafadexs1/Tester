@@ -11,7 +11,7 @@ import {
 import FlowSidebar from './FlowSidebar';
 import Canvas from './Canvas';
 import TopBar from './TopBar';
-import TestChatPanel from './TestChatPanel'; // Importar o novo painel
+import TestChatPanel from './TestChatPanel';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { v4 as uuidv4 } from 'uuid';
@@ -19,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 
 const LOCAL_STORAGE_KEY_WORKSPACES = 'flowiseLiteWorkspaces';
 const LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE = 'flowiseLiteActiveWorkspace';
+const LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN = 'flowiseLiteChatPanelOpen';
 
 export default function FlowBuilderClient() {
   const { toast } = useToast();
@@ -32,7 +33,25 @@ export default function FlowBuilderClient() {
   const isPanning = useRef(false);
   const panStartMousePosition = useRef({ x: 0, y: 0 });
   const initialCanvasOffsetOnPanStart = useRef({ x: 0, y: 0 });
-  const mainContentRef = useRef<HTMLDivElement>(null); // Ref para o container de Sidebar e Canvas
+  const mainContentRef = useRef<HTMLDivElement>(null);
+
+  const [isChatPanelOpen, setIsChatPanelOpen] = useState(true);
+
+  useEffect(() => {
+    const savedIsChatPanelOpen = localStorage.getItem(LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN);
+    if (savedIsChatPanelOpen !== null) {
+      setIsChatPanelOpen(JSON.parse(savedIsChatPanelOpen));
+    }
+  }, []);
+
+  const toggleChatPanel = useCallback(() => {
+    setIsChatPanelOpen(prev => {
+      const newState = !prev;
+      localStorage.setItem(LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN, JSON.stringify(newState));
+      return newState;
+    });
+  }, []);
+
 
   useEffect(() => {
     console.log('[FlowBuilderClient] Initializing: Attempting to load workspaces from localStorage.');
@@ -483,10 +502,12 @@ export default function FlowBuilderClient() {
           onSaveWorkspaces={handleSaveWorkspaces}
           onDiscardChanges={handleDiscardChanges}
           appName="Flowise Lite"
+          isChatPanelOpen={isChatPanelOpen}
+          onToggleChatPanel={toggleChatPanel}
         />
-        <div className="flex flex-1 overflow-hidden"> {/* Container para Sidebar, Canvas e ChatPanel */}
+        <div className="flex flex-1 overflow-hidden">
           <FlowSidebar />
-          <div ref={mainContentRef} className="flex-1 flex flex-col overflow-hidden"> {/* Canvas ocupa o espaço restante */}
+          <div ref={mainContentRef} className="flex-1 flex flex-col overflow-hidden relative"> {/* Adicionado relative para posicionar o canvas corretamente */}
             <Canvas
               nodes={currentNodes}
               connections={currentConnections}
@@ -502,7 +523,11 @@ export default function FlowBuilderClient() {
               setHighlightedConnectionId={setHighlightedConnectionId}
             />
           </div>
-          <TestChatPanel />
+          {isChatPanelOpen && (
+            <TestChatPanel
+              activeWorkspace={activeWorkspace}
+            />
+          )}
         </div>
       </div>
     </DndProvider>
