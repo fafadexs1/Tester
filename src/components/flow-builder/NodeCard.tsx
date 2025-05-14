@@ -1,7 +1,7 @@
 
 "use client";
 
-import type React from 'react';
+import React from 'react'; // Changed from "import type React"
 import { useRef, useCallback } from 'react';
 import type { NodeData } from '@/lib/types';
 import { motion } from 'framer-motion';
@@ -260,3 +260,4 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+

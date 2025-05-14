@@ -1,11 +1,11 @@
 
 "use client";
 
+import React from 'react'; // Added React import
 import type { DraggableBlockItemData } from '@/lib/types';
 import { ITEM_TYPE_BLOCK } from '@/lib/constants';
 import { useDrag } from 'react-dnd';
 import { motion } from 'framer-motion';
-import type React from 'react';
 
 interface DraggableBlockProps extends DraggableBlockItemData {
   icon: React.ReactNode;
