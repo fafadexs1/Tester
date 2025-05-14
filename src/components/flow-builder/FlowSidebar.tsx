@@ -73,7 +73,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = ({
           <DraggableBlock type="option" label="Múltiplas Escolhas" icon={<ListChecks {...iconProps} className="text-purple-600" />} 
             defaultData={{ questionText: 'Escolha uma opção:', optionsList: 'Opção A\nOpção B', variableToSaveChoice: 'escolha_usuario' }}/>
           <DraggableBlock type="media-display" label="Exibir Mídia" icon={<FileImage {...iconProps} className="text-blue-500" />}
-            defaultData={{ mediaDisplayType: 'image', mediaDisplayUrl: 'https://placehold.co/300x200.png', mediaDisplayUrlHint: 'placeholder example', mediaDisplayText: 'Imagem de exemplo' }} />
+            defaultData={{ mediaDisplayType: 'image', mediaDisplayUrl: 'https://placehold.co/300x200.png', mediaDisplayText: 'Imagem de exemplo' }} />
           <DraggableBlock type="rating-input" label="Entrada de Avaliação" icon={<Star {...iconProps} className="text-yellow-400" />}
             defaultData={{ ratingQuestionText: 'Como você avalia nosso serviço?', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: 'avaliacao_servico' }} />
           <DraggableBlock type="file-upload" label="Upload de Arquivo" icon={<UploadCloud {...iconProps} className="text-fuchsia-500" />}
@@ -137,7 +137,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = ({
           <DraggableBlock type="whatsapp-text" label="Enviar Texto (WA)" icon={<BotMessageSquare {...iconProps} className="text-teal-600" />} 
             defaultData={{ textMessage: 'Olá!', instanceName: 'evolution_instance' }} />
           <DraggableBlock type="whatsapp-media" label="Enviar Mídia (WA)" icon={<ImageUp {...iconProps} className="text-indigo-600" />} 
-            defaultData={{ mediaType: 'image', instanceName: 'evolution_instance', mediaUrl: 'https://placehold.co/300x200.png', mediaUrlHint: 'animal cat' }} />
+            defaultData={{ mediaType: 'image', instanceName: 'evolution_instance', mediaUrl: 'https://placehold.co/300x200.png' }} />
           <DraggableBlock type="whatsapp-group" label="Criar Grupo (WA)" icon={<UserPlus2 {...iconProps} className="text-pink-600" />} 
             defaultData={{ groupName: 'Novo Grupo', instanceName: 'evolution_instance' }} />
         </div>
