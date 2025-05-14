@@ -28,7 +28,11 @@ export type NodeType =
   | 'ai-text-generation'
   | 'send-email'
   | 'google-sheets-append'
-  | 'intelligent-agent';
+  | 'intelligent-agent'
+  | 'supabase-create-row'
+  | 'supabase-read-row'
+  | 'supabase-update-row'
+  | 'supabase-delete-row';
 
 export interface NodeData {
   id: string;
@@ -145,6 +149,14 @@ export interface NodeData {
   // Campos para ativar WhatsApp em nós genéricos
   sendViaWhatsApp?: boolean;
   whatsappTargetPhoneNumber?: string; // Telefone de destino para mensagens via WhatsApp de nós genéricos
+
+  // Para Supabase
+  supabaseTableName?: string;
+  supabaseIdentifierColumn?: string; // Ex: 'id', 'email'
+  supabaseIdentifierValue?: string; // Ex: '{{input.user_id}}', 'user@example.com'
+  supabaseDataJson?: string; // Para create/update, ex: '{ "name": "{{input.user_name}}", "age": 30 }'
+  supabaseColumnsToSelect?: string; // Para read, ex: '*', 'name, email, age'
+  supabaseResultVariable?: string; // Para read, nome da variável para salvar os dados lidos
 }
 
 export interface Connection {
@@ -174,5 +186,3 @@ export interface WorkspaceData {
   nodes: NodeData[];
   connections: Connection[];
 }
-
-    

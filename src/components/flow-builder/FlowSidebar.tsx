@@ -8,6 +8,7 @@ import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, 
+  Database, DatabaseZap, Rows, Search, Edit3, Trash
   // Removidos PlusCircle, Save, Undo2, LayoutGrid
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -63,6 +64,16 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
         { type: "date-input", label: "Entrada de Data", icon: <CalendarDays {...iconProps} className="text-sky-600" />, defaultData: { dateInputLabel: 'Qual sua data de nascimento?', variableToSaveDate: 'data_nascimento' } },
         { type: "send-email", label: "Enviar E-mail", icon: <Mail {...iconProps} className="text-blue-600" />, defaultData: { emailTo: 'destinatario@exemplo.com', emailSubject: 'Assunto do E-mail', emailBody: 'Olá, {{input.nome}}!' } },
         { type: "google-sheets-append", label: "Adicionar Linha Planilha Google", icon: <Sheet {...iconProps} className="text-emerald-500" />, defaultData: { googleSheetId: 'SEU_SPREADSHEET_ID', sheetName: 'Página1', googleSheetRowData: '["{{input.campo1}}", "{{input.campo2}}"]' } },
+      ]
+    },
+    {
+      value: "supabase",
+      title: "Supabase",
+      blocks: [
+        { type: "supabase-create-row", label: "Criar Linha", icon: <Rows {...iconProps} className="text-green-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseDataJson: '{ "coluna": "valor" }' } },
+        { type: "supabase-read-row", label: "Ler Linha(s)", icon: <Search {...iconProps} className="text-blue-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '1', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase' } },
+        { type: "supabase-update-row", label: "Atualizar Linha", icon: <Edit3 {...iconProps} className="text-yellow-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '1', supabaseDataJson: '{ "coluna": "novo_valor" }' } },
+        { type: "supabase-delete-row", label: "Deletar Linha", icon: <Trash {...iconProps} className="text-red-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '1' } },
       ]
     },
     {

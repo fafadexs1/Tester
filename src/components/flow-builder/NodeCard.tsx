@@ -9,7 +9,8 @@ import {
   MessageSquareText, Type as InputIcon, ListChecks, Trash2, BotMessageSquare,
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
-  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, Hash
+  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, Hash,
+  Database, Rows, Search, Edit3 // Trash já existe
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -99,6 +100,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       'send-email': <Mail {...iconProps} className="text-blue-600" />,
       'google-sheets-append': <Sheet {...iconProps} className="text-emerald-500" />,
       'intelligent-agent': <Headset {...iconProps} className="text-sky-500" />,
+      'supabase-create-row': <Rows {...iconProps} className="text-green-500" />,
+      'supabase-read-row': <Search {...iconProps} className="text-blue-500" />,
+      'supabase-update-row': <Edit3 {...iconProps} className="text-yellow-500" />,
+      'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />, // Reutilizando Trash2
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
     return icons[node.type] || icons.default;
@@ -448,6 +453,44 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 />
               </div>
             </div>
+          </div>
+        );
+      case 'supabase-create-row':
+        return (
+          <div className="space-y-3">
+            <div><Label htmlFor={`${node.id}-tableName`}>Nome da Tabela</Label><Input id={`${node.id}-tableName`} placeholder="minha_tabela" value={node.supabaseTableName || ''} onChange={(e) => onUpdate(node.id, { supabaseTableName: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-dataJson`}>Dados da Linha (JSON)</Label><Textarea id={`${node.id}-dataJson`} placeholder='{ "coluna1": "valor1", "coluna2": "{{variavel}}" }' value={node.supabaseDataJson || ''} onChange={(e) => onUpdate(node.id, { supabaseDataJson: e.target.value })} rows={3}/></div>
+            <p className="text-xs text-muted-foreground">A lógica de interação com Supabase (chamada à API/Server Action) deve ser implementada.</p>
+          </div>
+        );
+      case 'supabase-read-row':
+        return (
+          <div className="space-y-3">
+            <div><Label htmlFor={`${node.id}-tableName`}>Nome da Tabela</Label><Input id={`${node.id}-tableName`} placeholder="minha_tabela" value={node.supabaseTableName || ''} onChange={(e) => onUpdate(node.id, { supabaseTableName: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-identifierCol`}>Coluna Identificadora</Label><Input id={`${node.id}-identifierCol`} placeholder="id" value={node.supabaseIdentifierColumn || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierColumn: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-identifierVal`}>Valor do Identificador</Label><Input id={`${node.id}-identifierVal`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-columnsToSelect`}>Colunas a Selecionar</Label><Input id={`${node.id}-columnsToSelect`} placeholder="*, nome, email" value={node.supabaseColumnsToSelect || '*'} onChange={(e) => onUpdate(node.id, { supabaseColumnsToSelect: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-resultVar`}>Salvar Resultado na Variável</Label><Input id={`${node.id}-resultVar`} placeholder="dados_lidos" value={node.supabaseResultVariable || ''} onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} /></div>
+            <p className="text-xs text-muted-foreground">Implementar lógica de leitura do Supabase.</p>
+          </div>
+        );
+      case 'supabase-update-row':
+        return (
+          <div className="space-y-3">
+            <div><Label htmlFor={`${node.id}-tableName`}>Nome da Tabela</Label><Input id={`${node.id}-tableName`} placeholder="minha_tabela" value={node.supabaseTableName || ''} onChange={(e) => onUpdate(node.id, { supabaseTableName: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-identifierCol`}>Coluna Identificadora</Label><Input id={`${node.id}-identifierCol`} placeholder="id" value={node.supabaseIdentifierColumn || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierColumn: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-identifierVal`}>Valor do Identificador</Label><Input id={`${node.id}-identifierVal`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-dataJson`}>Dados para Atualizar (JSON)</Label><Textarea id={`${node.id}-dataJson`} placeholder='{ "coluna1": "novo_valor" }' value={node.supabaseDataJson || ''} onChange={(e) => onUpdate(node.id, { supabaseDataJson: e.target.value })} rows={3}/></div>
+            <p className="text-xs text-muted-foreground">Implementar lógica de atualização do Supabase.</p>
+          </div>
+        );
+      case 'supabase-delete-row':
+        return (
+          <div className="space-y-3">
+            <div><Label htmlFor={`${node.id}-tableName`}>Nome da Tabela</Label><Input id={`${node.id}-tableName`} placeholder="minha_tabela" value={node.supabaseTableName || ''} onChange={(e) => onUpdate(node.id, { supabaseTableName: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-identifierCol`}>Coluna Identificadora</Label><Input id={`${node.id}-identifierCol`} placeholder="id" value={node.supabaseIdentifierColumn || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierColumn: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-identifierVal`}>Valor do Identificador</Label><Input id={`${node.id}-identifierVal`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} /></div>
+            <p className="text-xs text-muted-foreground">Implementar lógica de deleção do Supabase.</p>
           </div>
         );
       default:
