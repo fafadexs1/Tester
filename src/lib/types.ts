@@ -163,8 +163,8 @@ export interface NodeData {
   supabaseDataJson?: string; 
   supabaseColumnsToSelect?: string; 
   supabaseResultVariable?: string; 
-  supabaseReturnSingleValue?: boolean; // Novo campo para nó de leitura
-  supabaseSingleValueColumn?: string; // Novo campo para nó de leitura
+  // supabaseReturnSingleValue?: boolean; // Removido
+  // supabaseSingleValueColumn?: string; // Removido
 
   triggers?: string[];
 }
@@ -196,4 +196,3 @@ export interface WorkspaceData {
   nodes: NodeData[];
   connections: Connection[];
 }
-

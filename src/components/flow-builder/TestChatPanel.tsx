@@ -59,14 +59,24 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     if (typeof mutableText !== 'string') {
       mutableText = String(mutableText);
     }
-
+  
     const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
-
+  
     const substitutedText = mutableText.replace(variableRegex, (match, variableName) => {
-      const value = currentActiveFlowVariables[variableName];
-
+      // Acessar valor da variável
+      let value = currentActiveFlowVariables;
+      const parts = variableName.split('.');
+      for (const part of parts) {
+        if (value && typeof value === 'object' && part in value) {
+          value = value[part];
+        } else {
+          console.log(`[TestChatPanel] substituteVariables: Part "${part}" of variable "{{${variableName}}}" not found or value is not an object.`);
+          return ''; // Retorna string vazia se o caminho não for encontrado
+        }
+      }
+  
       if (value === undefined || value === null) {
-        console.log(`[TestChatPanel] substituteVariables: Variable "{{${variableName}}}" is undefined/null.`);
+        console.log(`[TestChatPanel] substituteVariables: Variable "{{${variableName}}}" resolved to undefined/null.`);
         return ''; 
       }
       if (typeof value === 'object' || Array.isArray(value)) {
@@ -76,9 +86,10 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       console.log(`[TestChatPanel] substituteVariables: Variable "{{${variableName}}}" replaced with "${String(value)}".`);
       return String(value);
     });
-
+  
     return substitutedText;
   };
+  
 
   const getSupabaseClient = (): SupabaseClient | null => {
     const supabaseUrl = localStorage.getItem('supabaseUrl');
@@ -166,7 +177,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
       case 'message':
         if (node.text) {
-          setMessages(prev => [...prev, { id: uuidv4(), text: substituteVariables(node.text, activeVars), sender: 'bot' }]);
+          setMessages(prev => [...prev, { id: uuidv4(), text: substituteVariables(node.text, updatedVarsForNextNode), sender: 'bot' }]);
         } else {
             setMessages(prev => [...prev, { id: uuidv4(), text: "(Nó de mensagem vazio)", sender: 'bot' }]);
         }
@@ -175,7 +186,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
       case 'input':
         if (node.promptText) {
-          setMessages(prev => [...prev, { id: uuidv4(), text: substituteVariables(node.promptText, activeVars), sender: 'bot' }]);
+          setMessages(prev => [...prev, { id: uuidv4(), text: substituteVariables(node.promptText, updatedVarsForNextNode), sender: 'bot' }]);
         } else {
             setMessages(prev => [...prev, { id: uuidv4(), text: "(Nó de entrada sem pergunta)", sender: 'bot' }]);
         }
@@ -188,7 +199,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
           const options = node.optionsList.split('\n').map(opt => opt.trim()).filter(opt => opt);
           setMessages(prev => [...prev, {
             id: uuidv4(),
-            text: substituteVariables(node.questionText, activeVars),
+            text: substituteVariables(node.questionText, updatedVarsForNextNode),
             sender: 'bot',
             options: options
           }]);
@@ -210,19 +221,19 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         let displayVarName = conditionVarField;
 
         if (conditionVarField) {
-            const substitutedVarField = substituteVariables(conditionVarField, activeVars);
+            const substitutedVarField = substituteVariables(conditionVarField, updatedVarsForNextNode);
             if (conditionVarField.startsWith("{{") && conditionVarField.endsWith("}}")) {
                 const cleanVarName = conditionVarField.substring(2, conditionVarField.length - 2).trim();
-                actualValue = activeVars[cleanVarName];
+                actualValue = updatedVarsForNextNode[cleanVarName];
                 displayVarName = cleanVarName;
             } else {
-                 actualValue = activeVars[conditionVarField] ?? substitutedVarField;
+                 actualValue = updatedVarsForNextNode[conditionVarField] ?? substitutedVarField;
                  displayVarName = conditionVarField;
             }
         }
 
         const valueToCompare = conditionCompareValueField
-            ? substituteVariables(conditionCompareValueField, activeVars)
+            ? substituteVariables(conditionCompareValueField, updatedVarsForNextNode)
             : undefined;
         
         console.log(`[TestChatPanel] Condition Evaluation: Display Var Name: "${displayVarName}", Actual Value:`, actualValue, `Operator: "${conditionOperator}", Value to Compare:`, valueToCompare);
@@ -264,7 +275,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
       case 'set-variable':
         if (node.variableName && node.variableName.trim() !== '') {
-            const valueToSet = node.variableValue ? substituteVariables(node.variableValue, activeVars) : '';
+            const valueToSet = node.variableValue ? substituteVariables(node.variableValue, updatedVarsForNextNode) : '';
             updatedVarsForNextNode = {...updatedVarsForNextNode, [node.variableName as string]: valueToSet};
             setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${node.variableName}" definida como "${valueToSet}".`, sender: 'bot' }]);
             console.log(`[TestChatPanel] Variable Set: ${node.variableName} = ${valueToSet}. Current vars for next step:`, JSON.parse(JSON.stringify(updatedVarsForNextNode)));
@@ -284,11 +295,12 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
           autoAdvance = false; break;
         }
 
-        const tableName = substituteVariables(node.supabaseTableName, activeVars);
-        const idColumn = substituteVariables(node.supabaseIdentifierColumn, activeVars);
-        const idValue = substituteVariables(node.supabaseIdentifierValue, activeVars);
-        const dataJsonString = substituteVariables(node.supabaseDataJson, activeVars);
-        let columnsToSelect = substituteVariables(node.supabaseColumnsToSelect, activeVars).trim();
+        const tableName = substituteVariables(node.supabaseTableName, updatedVarsForNextNode);
+        const idColumn = substituteVariables(node.supabaseIdentifierColumn, updatedVarsForNextNode);
+        const idValue = substituteVariables(node.supabaseIdentifierValue, updatedVarsForNextNode);
+        let dataJsonString = substituteVariables(node.supabaseDataJson, updatedVarsForNextNode);
+        
+        let columnsToSelect = substituteVariables(node.supabaseColumnsToSelect, updatedVarsForNextNode).trim();
         if (!columnsToSelect && (node.type === 'supabase-read-row' || node.type === 'supabase-create-row' || node.type === 'supabase-update-row')) {
             columnsToSelect = '*';
         }
@@ -306,28 +318,36 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             let dataToInsert = JSON.parse(dataJsonString);
             const { data, error } = await supabase.from(tableName).insert(dataToInsert).select(columnsToSelect);
             if (error) throw error;
-            resultDataToSave = data && data.length > 0 ? data[0] : data; // Retorna primeiro item ou array
+            resultDataToSave = data && data.length > 0 ? data[0] : data; 
             operationSucceeded = true;
             setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Linha criada na tabela '${tableName}'. Resultado: ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
           } else if (node.type === 'supabase-read-row') {
             if (!idColumn || (idValue === undefined || idValue === null || String(idValue).trim() === '')) { throw new Error("Coluna identificadora ou valor não fornecidos para leitura."); }
             const { data, error } = await supabase.from(tableName).select(columnsToSelect).eq(idColumn, String(idValue));
+            console.log(`[TestChatPanel] Supabase read RAW data for node ${node.id}:`, data);
             if (error) throw error;
             
             if (data && data.length > 0) {
-              let rowData = data.length === 1 ? data[0] : data;
-              if (node.supabaseReturnSingleValue && node.supabaseSingleValueColumn && typeof rowData === 'object' && rowData !== null && node.supabaseSingleValueColumn in rowData) {
-                resultDataToSave = rowData[node.supabaseSingleValueColumn];
-                setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Valor da coluna '${node.supabaseSingleValueColumn}' lido da tabela '${tableName}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
-              } else {
-                resultDataToSave = rowData;
-                setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Dados lidos da tabela '${tableName}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
-              }
+                if (data.length === 1) {
+                    const singleRow = data[0];
+                    const keys = Object.keys(singleRow);
+                    if (keys.length === 1) { // Se apenas uma coluna foi retornada
+                        resultDataToSave = singleRow[keys[0]];
+                        setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Valor único lido da tabela '${tableName}', coluna '${keys[0]}': ${resultDataToSave}`, sender: 'bot' }]);
+                    } else { // Múltiplas colunas, retorna o objeto da linha
+                        resultDataToSave = singleRow;
+                        setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Dados lidos da tabela '${tableName}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
+                    }
+                } else { // Múltiplas linhas retornadas
+                    resultDataToSave = data;
+                    setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Múltiplas linhas lidas da tabela '${tableName}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
+                }
             } else {
                 setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Nenhum registro encontrado na tabela '${tableName}' com ${idColumn} = '${idValue}'.`, sender: 'bot' }]);
                 resultDataToSave = null;
             }
             operationSucceeded = true;
+
           } else if (node.type === 'supabase-update-row') {
             if (!idColumn || (idValue === undefined || idValue === null || String(idValue).trim() === '') || !dataJsonString) { throw new Error("Informações incompletas para atualização."); }
             let dataToUpdate = JSON.parse(dataJsonString);
@@ -338,7 +358,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Linha atualizada na tabela '${tableName}'. Resultado: ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
           } else if (node.type === 'supabase-delete-row') {
             if (!idColumn || (idValue === undefined || idValue === null || String(idValue).trim() === '')) { throw new Error("Informações incompletas para deleção."); }
-            const { error, data } = await supabase.from(tableName).delete().eq(idColumn, String(idValue)).select(); // .select() pode não ser necessário ou útil aqui.
+            const { error, data } = await supabase.from(tableName).delete().eq(idColumn, String(idValue)).select(); 
             if (error) throw error;
             operationSucceeded = true;
             setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Linha(s) deletada(s) da tabela '${tableName}'. Dados afetados: ${JSON.stringify(data, null, 2)}`, sender: 'bot' }]);
@@ -348,7 +368,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             const varName = node.supabaseResultVariable as string;
             console.log(`[TestChatPanel] ${node.type.toUpperCase()}: Attempting to set variable "${varName}" with data:`, JSON.parse(JSON.stringify(resultDataToSave)));
             updatedVarsForNextNode = { ...updatedVarsForNextNode, [varName]: resultDataToSave };
-            setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${varName}" definida.`, sender: 'bot' }]);
+             setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${varName}" definida com o resultado.`, sender: 'bot' }]);
           }
 
         } catch (e: any) {
@@ -396,14 +416,14 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
          break;
 
       case 'log-console':
-        const logMsg = substituteVariables(node.logMessage, activeVars);
+        const logMsg = substituteVariables(node.logMessage, updatedVarsForNextNode);
         console.log(`[Fluxo de Teste Log]: ${logMsg}`);
         setMessages(prev => [...prev, {id: uuidv4(), text: `(Log no console: ${logMsg})`, sender: 'bot'}]);
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
 
       case 'redirect':
-        setMessages(prev => [...prev, { id: uuidv4(), text: `Simulando redirecionamento para: ${substituteVariables(node.redirectUrl, activeVars)}`, sender: 'bot' }]);
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Simulando redirecionamento para: ${substituteVariables(node.redirectUrl, updatedVarsForNextNode)}`, sender: 'bot' }]);
         autoAdvance = false;
         setIsTesting(false);
         setCurrentNodeId(null);
