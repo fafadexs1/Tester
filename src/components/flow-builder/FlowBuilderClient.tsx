@@ -9,11 +9,13 @@ import Canvas from './Canvas';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { v4 as uuidv4 } from 'uuid';
+import { useToast } from '@/hooks/use-toast';
 
 const LOCAL_STORAGE_KEY_WORKSPACES = 'flowiseLiteWorkspaces';
 const LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE = 'flowiseLiteActiveWorkspace';
 
 export default function FlowBuilderClient() {
+  const { toast } = useToast();
   const [workspaces, setWorkspaces] = useState<WorkspaceData[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   
@@ -35,14 +37,13 @@ export default function FlowBuilderClient() {
     if (savedWorkspacesStr) {
       try {
         const parsedData = JSON.parse(savedWorkspacesStr);
-        // Robust validation
         if (Array.isArray(parsedData) && 
             parsedData.every(ws => 
               typeof ws === 'object' && ws !== null &&
               typeof ws.id === 'string' &&
               typeof ws.name === 'string' &&
-              Array.isArray(ws.nodes) && // Basic check, could be deeper
-              Array.isArray(ws.connections) // Basic check
+              Array.isArray(ws.nodes) && 
+              Array.isArray(ws.connections)
             )
         ) {
           loadedWorkspaces = parsedData;
@@ -84,25 +85,104 @@ export default function FlowBuilderClient() {
       };
       setWorkspaces([initialWorkspace]);
       setActiveWorkspaceId(initialId);
-      console.log('[FlowBuilderClient] Initial workspace created with ID:', initialId);
+      // Save the initial workspace immediately
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify([initialWorkspace]));
+        localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, initialId);
+        console.log('[FlowBuilderClient] Initial workspace created and saved to localStorage. ID:', initialId);
+      } catch (e) {
+        console.error("[FlowBuilderClient] Failed to save initial workspace to localStorage", e);
+      }
     }
-  }, []);
+  }, []); // Removed toast dependency
 
-  // Save workspaces to localStorage whenever they change
+  // Save active workspace ID to localStorage when it changes
   useEffect(() => {
-    if (workspaces.length > 0) {
+    if (activeWorkspaceId) {
         try {
-            localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify(workspaces));
-            console.log('[FlowBuilderClient] Workspaces saved to localStorage. Count:', workspaces.length);
+            localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, activeWorkspaceId);
+            console.log('[FlowBuilderClient] Active workspace ID saved to localStorage:', activeWorkspaceId);
         } catch (e) {
-            console.error("[FlowBuilderClient] Failed to save workspaces to localStorage during update", e);
+            console.error("[FlowBuilderClient] Failed to save active workspace ID to localStorage", e);
         }
     }
-    if (activeWorkspaceId) {
-        localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, activeWorkspaceId);
-        console.log('[FlowBuilderClient] Active workspace ID saved to localStorage:', activeWorkspaceId);
+  }, [activeWorkspaceId]);
+
+  const handleSaveWorkspaces = useCallback(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify(workspaces));
+      console.log('[FlowBuilderClient] Workspaces explicitly saved to localStorage. Count:', workspaces.length);
+      toast({
+        title: "Sucesso!",
+        description: "Todos os fluxos foram salvos.",
+        variant: "default",
+      });
+    } catch (e) {
+      console.error("[FlowBuilderClient] Failed to save workspaces to localStorage during explicit save", e);
+      toast({
+        title: "Erro ao Salvar!",
+        description: "Não foi possível salvar os fluxos. Verifique o console para mais detalhes.",
+        variant: "destructive",
+      });
     }
-  }, [workspaces, activeWorkspaceId]);
+  }, [workspaces, toast]);
+
+  const handleDiscardChanges = useCallback(() => {
+    console.log('[FlowBuilderClient] Discarding changes: Attempting to load workspaces from localStorage.');
+    const savedWorkspacesStr = localStorage.getItem(LOCAL_STORAGE_KEY_WORKSPACES);
+    if (savedWorkspacesStr) {
+      try {
+        const parsedData = JSON.parse(savedWorkspacesStr);
+        if (Array.isArray(parsedData) && 
+            parsedData.every(ws => 
+              typeof ws === 'object' && ws !== null &&
+              typeof ws.id === 'string' &&
+              typeof ws.name === 'string' &&
+              Array.isArray(ws.nodes) && 
+              Array.isArray(ws.connections)
+            )
+        ) {
+          setWorkspaces(parsedData);
+          console.log('[FlowBuilderClient] Workspaces reloaded from localStorage. Count:', parsedData.length);
+          toast({
+            title: "Alterações Descartadas",
+            description: "Fluxos recarregados a partir do último salvamento.",
+            variant: "default",
+          });
+          // Ensure activeWorkspaceId is still valid, or reset if needed
+          const currentActiveId = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE);
+          if (currentActiveId && parsedData.some(ws => ws.id === currentActiveId)) {
+            setActiveWorkspaceId(currentActiveId);
+          } else if (parsedData.length > 0) {
+            setActiveWorkspaceId(parsedData[0].id);
+          } else {
+            setActiveWorkspaceId(null); // No workspaces left
+          }
+        } else {
+          console.warn("[FlowBuilderClient] (Discard) Loaded workspaces from localStorage is not valid. No changes made.");
+          toast({
+            title: "Atenção",
+            description: "Não foi possível recarregar os fluxos do localStorage (dados inválidos).",
+            variant: "destructive",
+          });
+        }
+      } catch (e) {
+        console.error("[FlowBuilderClient] (Discard) Failed to parse workspaces from localStorage.", e);
+        toast({
+          title: "Erro ao Descartar",
+          description: "Não foi possível recarregar os fluxos. Verifique o console.",
+          variant: "destructive",
+        });
+      }
+    } else {
+      console.log('[FlowBuilderClient] (Discard) No workspaces found in localStorage to revert to.');
+      toast({
+        title: "Nenhum Dado Salvo",
+        description: "Não há dados salvos no localStorage para reverter.",
+        variant: "default", // Or "destructive" depending on desired UX
+      });
+    }
+  }, [toast]);
 
 
   const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
@@ -117,10 +197,28 @@ export default function FlowBuilderClient() {
       nodes: [],
       connections: [],
     };
-    setWorkspaces(prev => [...prev, newWorkspace]);
+    const updatedWorkspaces = [...workspaces, newWorkspace];
+    setWorkspaces(updatedWorkspaces);
     setActiveWorkspaceId(newWorkspaceId);
     console.log('[FlowBuilderClient] Workspace added. New ID:', newWorkspaceId);
-  }, [workspaces.length]);
+    // Save immediately after adding a new workspace
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify(updatedWorkspaces));
+      localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, newWorkspaceId); // Ensure active ID is also saved
+      console.log('[FlowBuilderClient] New workspace and active ID saved to localStorage.');
+      toast({
+        title: "Novo Fluxo Criado",
+        description: `${newWorkspace.name} foi criado e salvo.`,
+      });
+    } catch (e) {
+        console.error("[FlowBuilderClient] Failed to save new workspace to localStorage", e);
+        toast({
+          title: "Erro ao Salvar Novo Fluxo",
+          description: "Não foi possível salvar o novo fluxo. Verifique o console.",
+          variant: "destructive",
+        });
+    }
+  }, [workspaces, toast]);
 
   const switchWorkspace = useCallback((workspaceId: string) => {
     setActiveWorkspaceId(workspaceId);
@@ -264,7 +362,7 @@ export default function FlowBuilderClient() {
         };
       });
     }
-  }, [drawingLine, canvasOffset]); // Removido canvasOffset das dependências para evitar loop com setCanvasOffset
+  }, [drawingLine]); 
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -381,6 +479,8 @@ export default function FlowBuilderClient() {
           activeWorkspaceId={activeWorkspaceId}
           onAddWorkspace={addWorkspace}
           onSwitchWorkspace={switchWorkspace}
+          onSaveWorkspaces={handleSaveWorkspaces}
+          onDiscardChanges={handleDiscardChanges}
         />
         <Canvas
           nodes={currentNodes}
@@ -401,3 +501,4 @@ export default function FlowBuilderClient() {
   );
 }
 
+    

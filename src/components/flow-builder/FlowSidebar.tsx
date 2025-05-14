@@ -7,7 +7,8 @@ import DraggableBlock from './DraggableBlock';
 import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
-  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, PlusCircle
+  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, PlusCircle,
+  Save, Undo2
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
@@ -21,13 +22,16 @@ interface FlowSidebarProps {
   activeWorkspaceId: string | null;
   onAddWorkspace: () => void;
   onSwitchWorkspace: (id: string) => void;
+  onSaveWorkspaces: () => void;
+  onDiscardChanges: () => void;
   // onDeleteWorkspace?: (id: string) => void; // Futuro
   // onRenameWorkspace?: (id: string, newName: string) => void; // Futuro
 }
 
 
 const FlowSidebar: React.FC<FlowSidebarProps> = ({
-  workspaces, activeWorkspaceId, onAddWorkspace, onSwitchWorkspace
+  workspaces, activeWorkspaceId, onAddWorkspace, onSwitchWorkspace,
+  onSaveWorkspaces, onDiscardChanges
 }) => {
   const iconProps = { className: "w-4 h-4" };
 
@@ -58,6 +62,25 @@ const FlowSidebar: React.FC<FlowSidebarProps> = ({
             </Select>
           </div>
         )}
+        <Separator className="my-4 bg-sidebar-border" />
+        <div className="space-y-2">
+          <Button 
+            onClick={onSaveWorkspaces} 
+            className="w-full" 
+            variant="default"
+            disabled={!activeWorkspaceId}
+          >
+            <Save className="mr-2 h-4 w-4" /> Salvar Fluxos
+          </Button>
+          <Button 
+            onClick={onDiscardChanges} 
+            className="w-full" 
+            variant="destructive"
+            disabled={!activeWorkspaceId}
+          >
+            <Undo2 className="mr-2 h-4 w-4" /> Descartar Alterações
+          </Button>
+        </div>
       </div>
       
       <div className="p-4 border-b border-sidebar-border">
@@ -147,3 +170,5 @@ const FlowSidebar: React.FC<FlowSidebarProps> = ({
 };
 
 export default FlowSidebar;
+
+    
