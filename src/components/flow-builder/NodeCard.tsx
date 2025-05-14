@@ -195,6 +195,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     );
   };
 
+  // Exemplo de dados para simulação de dropdowns do Supabase
+  // Em uma aplicação real, estes dados viriam de uma API que consulta o schema do Supabase
+  const exampleSupabaseTables = ["clientes", "produtos", "pedidos", "usuarios"];
+  const exampleSupabaseColumns = ["id", "uuid", "email", "nome", "created_at", "status", "preco", "user_id"];
+
+
   const renderNodeContent = () => {
     switch (node.type) {
       case 'message':
@@ -458,7 +464,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       case 'supabase-create-row':
         return (
           <div className="space-y-3">
-            <div><Label htmlFor={`${node.id}-tableName`}>Nome da Tabela</Label><Input id={`${node.id}-tableName`} placeholder="minha_tabela" value={node.supabaseTableName || ''} onChange={(e) => onUpdate(node.id, { supabaseTableName: e.target.value })} /></div>
+            <div>
+              <Label htmlFor={`${node.id}-tableName`}>Nome da Tabela</Label>
+              {/* Em uma aplicação real, este Select seria populado dinamicamente com tabelas do Supabase. */}
+              <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
+                <SelectTrigger id={`${node.id}-tableName`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
+                <SelectContent>
+                  {exampleSupabaseTables.map(table => <SelectItem key={table} value={table}>{table}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div><Label htmlFor={`${node.id}-dataJson`}>Dados da Linha (JSON)</Label><Textarea id={`${node.id}-dataJson`} placeholder='{ "coluna1": "valor1", "coluna2": "{{variavel}}" }' value={node.supabaseDataJson || ''} onChange={(e) => onUpdate(node.id, { supabaseDataJson: e.target.value })} rows={3}/></div>
             <p className="text-xs text-muted-foreground">A lógica de interação com Supabase (chamada à API/Server Action) deve ser implementada.</p>
           </div>
@@ -466,30 +481,80 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       case 'supabase-read-row':
         return (
           <div className="space-y-3">
-            <div><Label htmlFor={`${node.id}-tableName`}>Nome da Tabela</Label><Input id={`${node.id}-tableName`} placeholder="minha_tabela" value={node.supabaseTableName || ''} onChange={(e) => onUpdate(node.id, { supabaseTableName: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-identifierCol`}>Coluna Identificadora</Label><Input id={`${node.id}-identifierCol`} placeholder="id" value={node.supabaseIdentifierColumn || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierColumn: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-identifierVal`}>Valor do Identificador</Label><Input id={`${node.id}-identifierVal`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-columnsToSelect`}>Colunas a Selecionar</Label><Input id={`${node.id}-columnsToSelect`} placeholder="*, nome, email" value={node.supabaseColumnsToSelect || '*'} onChange={(e) => onUpdate(node.id, { supabaseColumnsToSelect: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-resultVar`}>Salvar Resultado na Variável</Label><Input id={`${node.id}-resultVar`} placeholder="dados_lidos" value={node.supabaseResultVariable || ''} onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} /></div>
+             <div>
+              <Label htmlFor={`${node.id}-tableNameRead`}>Nome da Tabela</Label>
+              {/* Em uma aplicação real, este Select seria populado dinamicamente com tabelas do Supabase. */}
+              <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
+                <SelectTrigger id={`${node.id}-tableNameRead`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
+                <SelectContent>
+                  {exampleSupabaseTables.map(table => <SelectItem key={table} value={table}>{table}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor={`${node.id}-identifierColRead`}>Coluna Identificadora</Label>
+              {/* Em uma aplicação real, as opções deste Select dependeriam da tabela selecionada acima. */}
+              <Select value={node.supabaseIdentifierColumn || ''} onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}>
+                <SelectTrigger id={`${node.id}-identifierColRead`}><SelectValue placeholder="Selecione a Coluna" /></SelectTrigger>
+                <SelectContent>
+                  {exampleSupabaseColumns.map(col => <SelectItem key={col} value={col}>{col}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div><Label htmlFor={`${node.id}-identifierValRead`}>Valor do Identificador</Label><Input id={`${node.id}-identifierValRead`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-columnsToSelectRead`}>Colunas a Selecionar</Label><Input id={`${node.id}-columnsToSelectRead`} placeholder="*, nome, email" value={node.supabaseColumnsToSelect || '*'} onChange={(e) => onUpdate(node.id, { supabaseColumnsToSelect: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-resultVarRead`}>Salvar Resultado na Variável</Label><Input id={`${node.id}-resultVarRead`} placeholder="dados_lidos" value={node.supabaseResultVariable || ''} onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} /></div>
             <p className="text-xs text-muted-foreground">Implementar lógica de leitura do Supabase.</p>
           </div>
         );
       case 'supabase-update-row':
         return (
           <div className="space-y-3">
-            <div><Label htmlFor={`${node.id}-tableName`}>Nome da Tabela</Label><Input id={`${node.id}-tableName`} placeholder="minha_tabela" value={node.supabaseTableName || ''} onChange={(e) => onUpdate(node.id, { supabaseTableName: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-identifierCol`}>Coluna Identificadora</Label><Input id={`${node.id}-identifierCol`} placeholder="id" value={node.supabaseIdentifierColumn || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierColumn: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-identifierVal`}>Valor do Identificador</Label><Input id={`${node.id}-identifierVal`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-dataJson`}>Dados para Atualizar (JSON)</Label><Textarea id={`${node.id}-dataJson`} placeholder='{ "coluna1": "novo_valor" }' value={node.supabaseDataJson || ''} onChange={(e) => onUpdate(node.id, { supabaseDataJson: e.target.value })} rows={3}/></div>
+            <div>
+              <Label htmlFor={`${node.id}-tableNameUpdate`}>Nome da Tabela</Label>
+              <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
+                <SelectTrigger id={`${node.id}-tableNameUpdate`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
+                <SelectContent>
+                  {exampleSupabaseTables.map(table => <SelectItem key={table} value={table}>{table}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor={`${node.id}-identifierColUpdate`}>Coluna Identificadora</Label>
+              <Select value={node.supabaseIdentifierColumn || ''} onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}>
+                <SelectTrigger id={`${node.id}-identifierColUpdate`}><SelectValue placeholder="Selecione a Coluna" /></SelectTrigger>
+                <SelectContent>
+                  {exampleSupabaseColumns.map(col => <SelectItem key={col} value={col}>{col}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div><Label htmlFor={`${node.id}-identifierValUpdate`}>Valor do Identificador</Label><Input id={`${node.id}-identifierValUpdate`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-dataJsonUpdate`}>Dados para Atualizar (JSON)</Label><Textarea id={`${node.id}-dataJsonUpdate`} placeholder='{ "coluna1": "novo_valor" }' value={node.supabaseDataJson || ''} onChange={(e) => onUpdate(node.id, { supabaseDataJson: e.target.value })} rows={3}/></div>
             <p className="text-xs text-muted-foreground">Implementar lógica de atualização do Supabase.</p>
           </div>
         );
       case 'supabase-delete-row':
         return (
           <div className="space-y-3">
-            <div><Label htmlFor={`${node.id}-tableName`}>Nome da Tabela</Label><Input id={`${node.id}-tableName`} placeholder="minha_tabela" value={node.supabaseTableName || ''} onChange={(e) => onUpdate(node.id, { supabaseTableName: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-identifierCol`}>Coluna Identificadora</Label><Input id={`${node.id}-identifierCol`} placeholder="id" value={node.supabaseIdentifierColumn || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierColumn: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-identifierVal`}>Valor do Identificador</Label><Input id={`${node.id}-identifierVal`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} /></div>
+            <div>
+              <Label htmlFor={`${node.id}-tableNameDelete`}>Nome da Tabela</Label>
+              <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
+                <SelectTrigger id={`${node.id}-tableNameDelete`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
+                <SelectContent>
+                  {exampleSupabaseTables.map(table => <SelectItem key={table} value={table}>{table}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor={`${node.id}-identifierColDelete`}>Coluna Identificadora</Label>
+              <Select value={node.supabaseIdentifierColumn || ''} onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}>
+                <SelectTrigger id={`${node.id}-identifierColDelete`}><SelectValue placeholder="Selecione a Coluna" /></SelectTrigger>
+                <SelectContent>
+                  {exampleSupabaseColumns.map(col => <SelectItem key={col} value={col}>{col}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div><Label htmlFor={`${node.id}-identifierValDelete`}>Valor do Identificador</Label><Input id={`${node.id}-identifierValDelete`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} /></div>
             <p className="text-xs text-muted-foreground">Implementar lógica de deleção do Supabase.</p>
           </div>
         );
