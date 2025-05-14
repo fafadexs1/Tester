@@ -34,15 +34,35 @@ const Canvas: React.FC<CanvasProps> = ({
   const [, drop] = useDrop(() => ({
     accept: ITEM_TYPE_BLOCK,
     drop: (item: DraggableBlockItemData, monitor) => {
-      const offset = monitor.getClientOffset();
-      if (offset && canvasRef.current) {
+      const clientOffset = monitor.getClientOffset();
+      if (clientOffset && canvasRef.current) {
         const canvasRect = canvasRef.current.getBoundingClientRect();
-        const droppedX = offset.x - canvasRect.left - canvasOffset.x - NODE_DRAG_HANDLE_OFFSET_X;
-        const droppedY = offset.y - canvasRect.top - canvasOffset.y - NODE_CENTER_Y_OFFSET;
-        onDropNode(item, { x: droppedX + NODE_DRAG_HANDLE_OFFSET_X , y: droppedY + NODE_CENTER_Y_OFFSET});
+        // Estas são as coordenadas relativas ao canto superior esquerdo do elemento canvas DOM
+        const xRelativeToCanvasElement = clientOffset.x - canvasRect.left;
+        const yRelativeToCanvasElement = clientOffset.y - canvasRect.top;
+
+        // Para obter as coordenadas lógicas dentro do conteúdo do canvas (desconsiderando o pan/zoom do canvasOffset)
+        // e já centralizando o nó no cursor.
+        const logicalX = xRelativeToCanvasElement - canvasOffset.x;
+        const logicalY = yRelativeToCanvasElement - canvasOffset.y;
+        
+        console.log('[Canvas] Drop event:', { 
+            item, 
+            clientOffset, 
+            canvasRect, 
+            canvasOffset: JSON.parse(JSON.stringify(canvasOffset)), // Para log seguro
+            xRelativeToCanvasElement,
+            yRelativeToCanvasElement,
+            logicalX, 
+            logicalY 
+        });
+        // onDropNode espera as coordenadas do mouse relativas ao conteúdo lógico do canvas
+        onDropNode(item, { x: logicalX, y: logicalY });
+      } else {
+        console.warn('[Canvas] Drop failed: clientOffset or canvasRef.current is null', {clientOffset, canvasRefCurrent: canvasRef.current});
       }
     },
-  }));
+  }), [onDropNode, canvasOffset]); // canvasOffset é uma dependência
 
   // Attach drop target to the canvasRef
   useEffect(() => {
