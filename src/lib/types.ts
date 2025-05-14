@@ -166,3 +166,10 @@ export interface CanvasOffset {
   x: number;
   y: number;
 }
+
+export interface WorkspaceData {
+  id: string;
+  name: string;
+  nodes: NodeData[];
+  connections: Connection[];
+}

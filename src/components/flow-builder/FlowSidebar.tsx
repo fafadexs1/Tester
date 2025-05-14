@@ -2,19 +2,64 @@
 "use client";
 
 import type React from 'react';
+import type { WorkspaceData } from '@/lib/types';
 import DraggableBlock from './DraggableBlock';
 import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
-  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset
+  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, PlusCircle
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 
-const FlowSidebar: React.FC = () => {
+
+interface FlowSidebarProps {
+  workspaces: WorkspaceData[];
+  activeWorkspaceId: string | null;
+  onAddWorkspace: () => void;
+  onSwitchWorkspace: (id: string) => void;
+  // onDeleteWorkspace?: (id: string) => void; // Futuro
+  // onRenameWorkspace?: (id: string, newName: string) => void; // Futuro
+}
+
+
+const FlowSidebar: React.FC<FlowSidebarProps> = ({
+  workspaces, activeWorkspaceId, onAddWorkspace, onSwitchWorkspace
+}) => {
   const iconProps = { className: "w-4 h-4" };
 
   return (
     <aside className="w-80 bg-sidebar border-r border-sidebar-border shadow-lg flex flex-col">
+      <div className="p-4 border-b border-sidebar-border">
+        <h2 className="text-lg font-semibold text-sidebar-foreground">Workspaces</h2>
+        <Button onClick={onAddWorkspace} className="w-full mt-2" variant="outline">
+          <PlusCircle className="mr-2 h-4 w-4" /> Novo Fluxo
+        </Button>
+        {workspaces.length > 0 && activeWorkspaceId && (
+          <div className="mt-4">
+            <Label htmlFor="workspace-select" className="text-sidebar-foreground/80">Fluxo Ativo</Label>
+            <Select
+              value={activeWorkspaceId}
+              onValueChange={onSwitchWorkspace}
+            >
+              <SelectTrigger id="workspace-select" className="mt-1 bg-card text-card-foreground">
+                <SelectValue placeholder="Selecione um fluxo" />
+              </SelectTrigger>
+              <SelectContent>
+                {workspaces.map(ws => (
+                  <SelectItem key={ws.id} value={ws.id}>
+                    {ws.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+      
       <div className="p-4 border-b border-sidebar-border">
         <h2 className="text-lg font-semibold text-sidebar-foreground">Blocos de Fluxo</h2>
       </div>
@@ -28,7 +73,7 @@ const FlowSidebar: React.FC = () => {
           <DraggableBlock type="option" label="Múltiplas Escolhas" icon={<ListChecks {...iconProps} className="text-purple-600" />} 
             defaultData={{ questionText: 'Escolha uma opção:', optionsList: 'Opção A\nOpção B', variableToSaveChoice: 'escolha_usuario' }}/>
           <DraggableBlock type="media-display" label="Exibir Mídia" icon={<FileImage {...iconProps} className="text-blue-500" />}
-            defaultData={{ mediaDisplayType: 'image', mediaDisplayUrl: 'https://picsum.photos/200/300', mediaDisplayText: 'Imagem de exemplo' }} />
+            defaultData={{ mediaDisplayType: 'image', mediaDisplayUrl: 'https://placehold.co/300x200.png', mediaDisplayUrlHint: 'placeholder example', mediaDisplayText: 'Imagem de exemplo' }} />
           <DraggableBlock type="rating-input" label="Entrada de Avaliação" icon={<Star {...iconProps} className="text-yellow-400" />}
             defaultData={{ ratingQuestionText: 'Como você avalia nosso serviço?', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: 'avaliacao_servico' }} />
           <DraggableBlock type="file-upload" label="Upload de Arquivo" icon={<UploadCloud {...iconProps} className="text-fuchsia-500" />}
@@ -92,7 +137,7 @@ const FlowSidebar: React.FC = () => {
           <DraggableBlock type="whatsapp-text" label="Enviar Texto (WA)" icon={<BotMessageSquare {...iconProps} className="text-teal-600" />} 
             defaultData={{ textMessage: 'Olá!', instanceName: 'evolution_instance' }} />
           <DraggableBlock type="whatsapp-media" label="Enviar Mídia (WA)" icon={<ImageUp {...iconProps} className="text-indigo-600" />} 
-            defaultData={{ mediaType: 'image', instanceName: 'evolution_instance' }} />
+            defaultData={{ mediaType: 'image', instanceName: 'evolution_instance', mediaUrl: 'https://placehold.co/300x200.png', mediaUrlHint: 'animal cat' }} />
           <DraggableBlock type="whatsapp-group" label="Criar Grupo (WA)" icon={<UserPlus2 {...iconProps} className="text-pink-600" />} 
             defaultData={{ groupName: 'Novo Grupo', instanceName: 'evolution_instance' }} />
         </div>

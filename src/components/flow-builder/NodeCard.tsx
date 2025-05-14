@@ -34,7 +34,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    if (target.dataset.connector === 'true' || target.closest('[data-action="delete-node"]')) {
+    // Permitir arrastar se o clique for no header, mas não em inputs, textareas, selects, botões ou conectores dentro do CardContent ou CardHeader (exceto o próprio header)
+    if (
+        target.dataset.connector === 'true' || 
+        target.closest('[data-action="delete-node"]') ||
+        target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target)
+    ) {
+      // Se o clique foi num conector, botão de deletar, ou elemento de formulário (exceto se for no drag handle)
+      // não iniciar o drag do nó.
       return;
     }
     
@@ -139,6 +146,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   };
 
   const renderWhatsAppToggle = () => {
+    // Only show toggle for specific node types that can send messages
+    if (node.type !== 'message' && node.type !== 'media-display') {
+      return null;
+    }
     return (
       <div className="mt-3 pt-3 border-t border-border">
         <div className="flex items-center space-x-2 mb-2">
@@ -160,7 +171,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               <Input 
                 id={`${node.id}-whatsappInstanceName`} 
                 placeholder="evolution_instance" 
-                value={node.instanceName || ''} 
+                value={node.instanceName || 'evolution_instance'} 
                 onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} 
               />
             </div>
@@ -215,7 +226,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       case 'whatsapp-text':
         return (
           <div className="space-y-3">
-            <div><Label htmlFor={`${node.id}-instance`}>Instância</Label><Input id={`${node.id}-instance`} placeholder="minhaInstancia" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-instance`}>Instância</Label><Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || 'evolution_instance'} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-phone`}>Telefone</Label><Input id={`${node.id}-phone`} placeholder="55119..." value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })}/></div>
             <div><Label htmlFor={`${node.id}-watext`}>Mensagem</Label><Textarea id={`${node.id}-watext`} value={node.textMessage || ''} onChange={(e) => onUpdate(node.id, { textMessage: e.target.value })} rows={2}/></div>
           </div>
@@ -223,7 +234,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       case 'whatsapp-media':
         return (
           <div className="space-y-3">
-            <div><Label htmlFor={`${node.id}-instance`}>Instância</Label><Input id={`${node.id}-instance`} placeholder="minhaInstancia" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-instance`}>Instância</Label><Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || 'evolution_instance'} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-phone`}>Telefone</Label><Input id={`${node.id}-phone`} placeholder="55119..." value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })}/></div>
             <div><Label htmlFor={`${node.id}-mediaurl`}>URL da Mídia</Label><Input id={`${node.id}-mediaurl`} placeholder="https://..." value={node.mediaUrl || ''} onChange={(e) => onUpdate(node.id, { mediaUrl: e.target.value })}/></div>
             <div><Label htmlFor={`${node.id}-mediatype`}>Tipo</Label>
@@ -241,7 +252,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       case 'whatsapp-group':
          return (
           <div className="space-y-3">
-            <div><Label htmlFor={`${node.id}-instance`}>Instância</Label><Input id={`${node.id}-instance`} placeholder="minhaInstancia" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-instance`}>Instância</Label><Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || 'evolution_instance'} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-groupname`}>Nome do Grupo</Label><Input id={`${node.id}-groupname`} value={node.groupName || ''} onChange={(e) => onUpdate(node.id, { groupName: e.target.value })}/></div>
             <div><Label htmlFor={`${node.id}-participants`}>Participantes (separados por vírgula)</Label><Textarea id={`${node.id}-participants`} value={node.participants || ''} onChange={(e) => onUpdate(node.id, { participants: e.target.value })} rows={2}/></div>
           </div>
@@ -292,7 +303,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         return (
           <div>
             <Label htmlFor={`${node.id}-delay`}>Duração (ms)</Label>
-            <Input id={`${node.id}-delay`} type="number" placeholder="1000" value={node.delayDuration || ''} onChange={(e) => onUpdate(node.id, { delayDuration: parseInt(e.target.value, 10) || 0 })} />
+            <Input id={`${node.id}-delay`} type="number" placeholder="1000" value={node.delayDuration ?? ''} onChange={(e) => onUpdate(node.id, { delayDuration: parseInt(e.target.value, 10) || 0 })} />
           </div>
         );
       case 'date-input':
@@ -313,7 +324,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         return (
           <div>
             <Label htmlFor={`${node.id}-typingduration`}>Duração da Simulação (ms)</Label>
-            <Input id={`${node.id}-typingduration`} type="number" placeholder="1500" value={node.typingDuration || ''} onChange={(e) => onUpdate(node.id, { typingDuration: parseInt(e.target.value, 10) || 0 })} />
+            <Input id={`${node.id}-typingduration`} type="number" placeholder="1500" value={node.typingDuration ?? ''} onChange={(e) => onUpdate(node.id, { typingDuration: parseInt(e.target.value, 10) || 0 })} />
           </div>
         );
       case 'media-display':
@@ -364,7 +375,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           <div className="space-y-3">
             <div><Label htmlFor={`${node.id}-uploadprompt`}>Texto do Prompt de Upload</Label><Input id={`${node.id}-uploadprompt`} placeholder="Por favor, envie seu documento." value={node.uploadPromptText || ''} onChange={(e) => onUpdate(node.id, { uploadPromptText: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-filefilter`}>Filtro de Tipo de Arquivo</Label><Input id={`${node.id}-filefilter`} placeholder="image/*, .pdf, .docx" value={node.fileTypeFilter || ''} onChange={(e) => onUpdate(node.id, { fileTypeFilter: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-maxsize`}>Tam. Máx. Arquivo (MB)</Label><Input id={`${node.id}-maxsize`} type="number" placeholder="5" value={node.maxFileSizeMB || ''} onChange={(e) => onUpdate(node.id, { maxFileSizeMB: parseInt(e.target.value, 10) || undefined })} /></div>
+            <div><Label htmlFor={`${node.id}-maxsize`}>Tam. Máx. Arquivo (MB)</Label><Input id={`${node.id}-maxsize`} type="number" placeholder="5" value={node.maxFileSizeMB ?? ''} onChange={(e) => onUpdate(node.id, { maxFileSizeMB: parseInt(e.target.value, 10) || undefined })} /></div>
             <div><Label htmlFor={`${node.id}-fileurlvar`}>Salvar URL do Arquivo na Variável</Label><Input id={`${node.id}-fileurlvar`} placeholder="url_do_arquivo" value={node.fileUrlVariable || ''} onChange={(e) => onUpdate(node.id, { fileUrlVariable: e.target.value })} /></div>
           </div>
         );
@@ -372,7 +383,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         return (
           <div className="space-y-3">
             <div><Label htmlFor={`${node.id}-ratingq`}>Pergunta da Avaliação</Label><Input id={`${node.id}-ratingq`} placeholder="Como você nos avalia?" value={node.ratingQuestionText || ''} onChange={(e) => onUpdate(node.id, { ratingQuestionText: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-maxrating`}>Avaliação Máxima</Label><Input id={`${node.id}-maxrating`} type="number" placeholder="5" value={node.maxRatingValue || ''} onChange={(e) => onUpdate(node.id, { maxRatingValue: parseInt(e.target.value, 10) || 5 })} /></div>
+            <div><Label htmlFor={`${node.id}-maxrating`}>Avaliação Máxima</Label><Input id={`${node.id}-maxrating`} type="number" placeholder="5" value={node.maxRatingValue ?? ''} onChange={(e) => onUpdate(node.id, { maxRatingValue: parseInt(e.target.value, 10) || 5 })} /></div>
             <div><Label htmlFor={`${node.id}-ratingicon`}>Ícone de Avaliação</Label>
               <Select value={node.ratingIconType || 'star'} onValueChange={(value) => onUpdate(node.id, { ratingIconType: value as NodeData['ratingIconType'] })}>
                 <SelectTrigger id={`${node.id}-ratingicon`}><SelectValue placeholder="Selecione o ícone" /></SelectTrigger>
@@ -418,7 +429,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <div><Label htmlFor={`${node.id}-userinputvar`}>Variável com Entrada do Usuário</Label><Input id={`${node.id}-userinputvar`} placeholder="{{pergunta_usuario}}" value={node.userInputVariable || ''} onChange={(e) => onUpdate(node.id, { userInputVariable: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-agentresponsevar`}>Salvar Resposta na Variável</Label><Input id={`${node.id}-agentresponsevar`} placeholder="resposta_agente" value={node.agentResponseVariable || ''} onChange={(e) => onUpdate(node.id, { agentResponseVariable: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional)</Label><Input id={`${node.id}-aimodel`} placeholder="gemini-2.0-flash (padrão)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })}/></div>
-            <div><Label htmlFor={`${node.id}-maxturns`}>Máx. Turnos (opcional)</Label><Input id={`${node.id}-maxturns`} type="number" placeholder="5" value={node.maxConversationTurns || ''} onChange={(e) => onUpdate(node.id, { maxConversationTurns: e.target.value ? parseInt(e.target.value, 10) : undefined })} /></div>
+            <div><Label htmlFor={`${node.id}-maxturns`}>Máx. Turnos (opcional)</Label><Input id={`${node.id}-maxturns`} type="number" placeholder="5" value={node.maxConversationTurns ?? ''} onChange={(e) => onUpdate(node.id, { maxConversationTurns: e.target.value ? parseInt(e.target.value, 10) : undefined })} /></div>
             <div>
               <Label htmlFor={`${node.id}-temperature`}>Temperatura (0-1, opcional)</Label>
               <div className="flex items-center space-x-2">
@@ -447,15 +458,19 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   return (
     <motion.div
       className="w-full cursor-grab bg-card rounded-lg shadow-xl border border-border relative"
-      onMouseDown={handleNodeMouseDown} 
+      // onMouseDown={handleNodeMouseDown}  // Movido para o CardHeader
       whileHover={{ scale: 1.01, boxShadow: "0px 5px 25px rgba(0,0,0,0.1)" }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
       data-node-id={node.id}
       aria-labelledby={`${node.id}-title`}
     >
       <Card className="shadow-none border-none bg-transparent">
-        <CardHeader className="py-2.5 px-3.5 bg-secondary/50 rounded-t-lg flex items-center justify-between">
-          <div className="flex items-center min-w-0">
+        <CardHeader 
+          onMouseDown={handleNodeMouseDown} // Aplicar o onMouseDown aqui
+          data-drag-handle="true" // Identificador para o handle de arrastar
+          className="py-2.5 px-3.5 bg-secondary/50 rounded-t-lg flex items-center justify-between cursor-grab active:cursor-grabbing"
+        >
+          <div className="flex items-center min-w-0 pointer-events-none"> {/* Evitar que ícone/título capturem o mouse down */}
             {renderNodeIcon()}
             <CardTitle id={`${node.id}-title`} className="ml-2 text-sm font-medium text-secondary-foreground truncate" title={node.title}>
               {node.title}

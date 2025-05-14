@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData } from '@/lib/types';
+import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, WorkspaceData } from '@/lib/types';
 import { NODE_WIDTH, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX, GRID_SIZE } from '@/lib/constants';
 import FlowSidebar from './FlowSidebar';
 import Canvas from './Canvas';
@@ -10,9 +10,13 @@ import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { v4 as uuidv4 } from 'uuid';
 
+const LOCAL_STORAGE_KEY_WORKSPACES = 'flowiseLiteWorkspaces';
+const LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE = 'flowiseLiteActiveWorkspace';
+
 export default function FlowBuilderClient() {
-  const [nodes, setNodes] = useState<NodeData[]>([]);
-  const [connections, setConnections] = useState<Connection[]>([]);
+  const [workspaces, setWorkspaces] = useState<WorkspaceData[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  
   const [drawingLine, setDrawingLine] = useState<DrawingLineData | null>(null);
   const [highlightedConnectionId, setHighlightedConnectionId] = useState<string | null>(null);
 
@@ -22,56 +26,104 @@ export default function FlowBuilderClient() {
   const initialCanvasOffsetOnPanStart = useRef({ x: 0, y: 0 });
   const canvasWrapperRef = useRef<HTMLDivElement>(null); 
 
+  // Load workspaces from localStorage on initial mount
+  useEffect(() => {
+    const savedWorkspacesStr = localStorage.getItem(LOCAL_STORAGE_KEY_WORKSPACES);
+    let loadedWorkspaces: WorkspaceData[] = [];
+    if (savedWorkspacesStr) {
+      try {
+        loadedWorkspaces = JSON.parse(savedWorkspacesStr);
+      } catch (e) {
+        console.error("Failed to parse workspaces from localStorage", e);
+        loadedWorkspaces = [];
+      }
+    }
+
+    if (loadedWorkspaces.length > 0) {
+      setWorkspaces(loadedWorkspaces);
+      const savedActiveId = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE);
+      if (savedActiveId && loadedWorkspaces.some(ws => ws.id === savedActiveId)) {
+        setActiveWorkspaceId(savedActiveId);
+      } else {
+        setActiveWorkspaceId(loadedWorkspaces[0].id);
+      }
+    } else {
+      // Create an initial workspace if none are loaded
+      const initialId = uuidv4();
+      const initialWorkspace: WorkspaceData = {
+        id: initialId,
+        name: 'Meu Primeiro Fluxo',
+        nodes: [],
+        connections: [],
+      };
+      setWorkspaces([initialWorkspace]);
+      setActiveWorkspaceId(initialId);
+    }
+  }, []);
+
+  // Save workspaces to localStorage whenever they change
+  useEffect(() => {
+    if (workspaces.length > 0) { // Only save if there's something to save
+        localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify(workspaces));
+    }
+    if (activeWorkspaceId) {
+        localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, activeWorkspaceId);
+    }
+  }, [workspaces, activeWorkspaceId]);
+
+
+  const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
+  const currentNodes = activeWorkspace ? activeWorkspace.nodes : [];
+  const currentConnections = activeWorkspace ? activeWorkspace.connections : [];
+
+  const addWorkspace = useCallback(() => {
+    const newWorkspaceId = uuidv4();
+    const newWorkspace: WorkspaceData = {
+      id: newWorkspaceId,
+      name: `Novo Fluxo ${workspaces.length + 1}`,
+      nodes: [],
+      connections: [],
+    };
+    setWorkspaces(prev => [...prev, newWorkspace]);
+    setActiveWorkspaceId(newWorkspaceId);
+  }, [workspaces.length]);
+
+  const switchWorkspace = useCallback((workspaceId: string) => {
+    setActiveWorkspaceId(workspaceId);
+  }, []);
+  
+  // Helper function to update the active workspace's data
+  const updateActiveWorkspace = useCallback((updater: (workspace: WorkspaceData) => WorkspaceData) => {
+    if (!activeWorkspaceId) return;
+    setWorkspaces(prevWorkspaces =>
+      prevWorkspaces.map(ws =>
+        ws.id === activeWorkspaceId ? updater(ws) : ws
+      )
+    );
+  }, [activeWorkspaceId]);
+
+
   const handleDropNode = useCallback((item: DraggableBlockItemData, viewportOffset: { x: number, y: number }) => {
+    if (!activeWorkspaceId) return;
+
     const baseNodeData: Omit<NodeData, 'id' | 'type' | 'title' | 'x' | 'y'> = {
-      // Basic types
-      text: '',
-      promptText: '', inputType: 'text', variableToSaveResponse: '',
+      text: '', promptText: '', inputType: 'text', variableToSaveResponse: '',
       questionText: '', optionsList: '', variableToSaveChoice: '',
       mediaDisplayType: 'image', mediaDisplayUrl: '', mediaDisplayText: '',
-      
-      // Logic & Control
       conditionVariable: '', conditionOperator: '==', conditionValue: '',
-      variableName: '', variableValue: '',
-      delayDuration: 1000,
-      typingDuration: 1500,
-      logMessage: '',
-      codeSnippet: '', codeOutputVariable: '',
-      inputJson: '', jsonataExpression: '', jsonOutputVariable: '',
-      
-      // User Interaction Enhancements
+      variableName: '', variableValue: '', delayDuration: 1000, typingDuration: 1500,
+      logMessage: '', codeSnippet: '', codeOutputVariable: '', inputJson: '', jsonataExpression: '', jsonOutputVariable: '',
       uploadPromptText: '', fileTypeFilter: '', maxFileSizeMB: 5, fileUrlVariable: '',
       ratingQuestionText: '', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: '',
-
-      // Integrations
       apiUrl: '', apiMethod: 'GET', apiHeaders: '{ "Content-Type": "application/json" }', apiBody: '{}',
-      redirectUrl: '',
-      dateInputLabel: '', variableToSaveDate: '',
+      redirectUrl: '', dateInputLabel: '', variableToSaveDate: '',
       emailTo: '', emailSubject: '', emailBody: '', emailFrom: '',
       googleSheetId: '', googleSheetName: '', googleSheetRowData: '',
-
-      // WhatsApp specific (Evolution API and generic node integration)
-      instanceName: 'evolution_instance', // Default for all WA interactions
-      phoneNumber: '', // For WA specific blocks
-      textMessage: '', // For WA specific blocks
-      mediaUrl: '',    // For WA specific blocks
-      mediaType: 'image', // For WA specific blocks
-      caption: '',      // For WA specific blocks
-      groupName: '',    // For WA specific blocks
-      participants: '', // For WA specific blocks
-      sendViaWhatsApp: false, // For generic nodes to enable WA sending
-      whatsappTargetPhoneNumber: '', // For generic nodes, the target phone
-      
-      // AI
+      instanceName: 'evolution_instance', phoneNumber: '', textMessage: '', mediaUrl: '', mediaType: 'image', caption: '', groupName: '', participants: '',
+      sendViaWhatsApp: false, whatsappTargetPhoneNumber: '',
       aiPromptText: '', aiModelName: '', aiOutputVariable: '',
-
-      // Intelligent Agent
-      agentName: 'Agente Inteligente Padrão',
-      agentSystemPrompt: 'Você é um assistente IA. Responda às perguntas do usuário de forma concisa e prestativa.',
-      userInputVariable: '{{entrada_usuario}}',
-      agentResponseVariable: 'resposta_do_agente',
-      maxConversationTurns: 5,
-      temperature: 0.7,
+      agentName: 'Agente Inteligente Padrão', agentSystemPrompt: 'Você é um assistente IA. Responda às perguntas do usuário de forma concisa e prestativa.',
+      userInputVariable: '{{entrada_usuario}}', agentResponseVariable: 'resposta_do_agente', maxConversationTurns: 5, temperature: 0.7,
     };
 
     const newNode: NodeData = {
@@ -83,24 +135,27 @@ export default function FlowBuilderClient() {
       x: viewportOffset.x - NODE_WIDTH / 2, 
       y: viewportOffset.y - NODE_HEADER_HEIGHT_APPROX / 2, 
     };
-    setNodes((prevNodes) => [...prevNodes, newNode]);
-  }, []);
+    
+    updateActiveWorkspace(ws => ({ ...ws, nodes: [...ws.nodes, newNode] }));
+  }, [activeWorkspaceId, updateActiveWorkspace]);
 
   const updateNode = useCallback((id: string, changes: Partial<NodeData>) => {
-    setNodes((prevNodes) =>
-      prevNodes.map((n) => (n.id === id ? { ...n, ...changes } : n))
-    );
-  }, []);
+    updateActiveWorkspace(ws => ({
+      ...ws,
+      nodes: ws.nodes.map(n => (n.id === id ? { ...n, ...changes } : n)),
+    }));
+  }, [updateActiveWorkspace]);
 
   const deleteNode = useCallback((nodeIdToDelete: string) => {
-    setNodes((prevNodes) => prevNodes.filter(node => node.id !== nodeIdToDelete));
-    setConnections((prevConnections) =>
-      prevConnections.filter(conn => conn.from !== nodeIdToDelete && conn.to !== nodeIdToDelete)
-    );
-  }, []);
+    updateActiveWorkspace(ws => ({
+      ...ws,
+      nodes: ws.nodes.filter(node => node.id !== nodeIdToDelete),
+      connections: ws.connections.filter(conn => conn.from !== nodeIdToDelete && conn.to !== nodeIdToDelete),
+    }));
+  }, [updateActiveWorkspace]);
 
   const handleStartConnection = useCallback((e: React.MouseEvent, fromId: string, sourceHandleId = 'default') => {
-    const fromNode = nodes.find(n => n.id === fromId);
+    const fromNode = currentNodes.find(n => n.id === fromId); // Use currentNodes from active workspace
     if (!fromNode || !canvasWrapperRef.current) return;
     
     const canvasElement = canvasWrapperRef.current?.querySelector('.relative.flex-1.bg-background'); 
@@ -119,7 +174,6 @@ export default function FlowBuilderClient() {
     const lineCurrentX = (e.clientX - canvasRect.left);
     const lineCurrentY = (e.clientY - canvasRect.top);
 
-
     setDrawingLine({
       fromId,
       sourceHandleId,
@@ -128,7 +182,7 @@ export default function FlowBuilderClient() {
       currentX: lineCurrentX, 
       currentY: lineCurrentY, 
     });
-  }, [nodes]); 
+  }, [currentNodes]); 
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) { 
@@ -161,7 +215,7 @@ export default function FlowBuilderClient() {
         };
       });
     }
-  }, [drawingLine, canvasOffset]); // Added canvasOffset to dependency array
+  }, [drawingLine, canvasOffset]);
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -181,45 +235,59 @@ export default function FlowBuilderClient() {
       }
 
       if (toId && drawingLine.fromId !== toId) {
-        setConnections((prevConnections) => {
-          const newConnection = {
-            id: uuidv4(),
-            from: drawingLine.fromId,
-            to: toId as string,
-            sourceHandle: drawingLine.sourceHandleId,
-          };
-          const isDuplicate = prevConnections.some(
-            c => c.from === newConnection.from && c.to === newConnection.to && c.sourceHandle === newConnection.sourceHandle
-          );
-          if (isDuplicate) return prevConnections;
+        if (!activeWorkspaceId) {
+            setDrawingLine(null);
+            return;
+        }
+        updateActiveWorkspace(ws => {
+            let newConnectionsArray = [...ws.connections];
+            const newConnection: Connection = {
+                id: uuidv4(),
+                from: drawingLine.fromId,
+                to: toId as string,
+                sourceHandle: drawingLine.sourceHandleId,
+            };
 
-          const sourceNode = nodes.find(n => n.id === drawingLine.fromId);
-          if (sourceNode?.type === 'condition') {
-              const existingConnectionFromHandle = prevConnections.find(
-                  c => c.from === drawingLine.fromId && c.sourceHandle === drawingLine.sourceHandleId
-              );
-              if (existingConnectionFromHandle) {
-                  return [...prevConnections.filter(c => c.id !== existingConnectionFromHandle.id), newConnection];
-              }
-          } else { 
-              const existingConnectionFromDefaultHandle = prevConnections.find(
-                  c => c.from === drawingLine.fromId && c.sourceHandle === 'default'
-              );
-              if (existingConnectionFromDefaultHandle) {
-                   return [...prevConnections.filter(c => c.id !== existingConnectionFromDefaultHandle.id), newConnection];
-              }
-          }
-          return [...prevConnections, newConnection];
+            const isDuplicate = newConnectionsArray.some(
+                c => c.from === newConnection.from && c.to === newConnection.to && c.sourceHandle === newConnection.sourceHandle
+            );
+
+            if (!isDuplicate) {
+                const sourceNode = ws.nodes.find(n => n.id === drawingLine.fromId);
+                if (sourceNode?.type === 'condition') {
+                    const existingConnectionFromHandle = newConnectionsArray.find(
+                        c => c.from === drawingLine.fromId && c.sourceHandle === drawingLine.sourceHandleId
+                    );
+                    if (existingConnectionFromHandle) {
+                        newConnectionsArray = [...newConnectionsArray.filter(c => c.id !== existingConnectionFromHandle.id), newConnection];
+                    } else {
+                        newConnectionsArray.push(newConnection);
+                    }
+                } else { 
+                    const existingConnectionFromDefaultHandle = newConnectionsArray.find(
+                        c => c.from === drawingLine.fromId && c.sourceHandle === 'default'
+                    );
+                    if (existingConnectionFromDefaultHandle) {
+                        newConnectionsArray = [...newConnectionsArray.filter(c => c.id !== existingConnectionFromDefaultHandle.id), newConnection];
+                    } else {
+                        newConnectionsArray.push(newConnection);
+                    }
+                }
+            }
+            return { ...ws, connections: newConnectionsArray };
         });
       }
       setDrawingLine(null);
     }
-  }, [drawingLine, nodes]);
+  }, [drawingLine, activeWorkspaceId, updateActiveWorkspace]);
 
   const deleteConnection = useCallback((connectionIdToDelete: string) => {
-    setConnections((prevConnections) => prevConnections.filter(conn => conn.id !== connectionIdToDelete));
+    updateActiveWorkspace(ws => ({
+        ...ws,
+        connections: ws.connections.filter(conn => conn.id !== connectionIdToDelete)
+    }));
     setHighlightedConnectionId(null);
-  }, []);
+  }, [updateActiveWorkspace]);
 
   useEffect(() => {
     document.addEventListener('mousemove', handleGlobalMouseMove);
@@ -240,7 +308,6 @@ export default function FlowBuilderClient() {
     };
     document.body.addEventListener('mouseleave', handleMouseLeaveWindow);
 
-
     return () => {
       document.removeEventListener('mousemove', handleGlobalMouseMove);
       document.removeEventListener('mouseup', handleGlobalMouseUp);
@@ -251,10 +318,15 @@ export default function FlowBuilderClient() {
   return (
     <DndProvider backend={HTML5Backend}>
       <div ref={canvasWrapperRef} className="flex h-screen bg-background font-sans select-none overflow-hidden">
-        <FlowSidebar />
+        <FlowSidebar 
+          workspaces={workspaces}
+          activeWorkspaceId={activeWorkspaceId}
+          onAddWorkspace={addWorkspace}
+          onSwitchWorkspace={switchWorkspace}
+        />
         <Canvas
-          nodes={nodes}
-          connections={connections}
+          nodes={currentNodes}
+          connections={currentConnections}
           drawingLine={drawingLine}
           canvasOffset={canvasOffset}
           onDropNode={handleDropNode}
