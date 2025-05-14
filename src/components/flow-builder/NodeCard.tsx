@@ -132,10 +132,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 
   const handleTestApiCall = async () => {
     console.log('[NodeCard] handleTestApiCall triggered for node:', node.id, 'with URL:', node.apiUrl);
-    if (!node.apiUrl) {
+    if (!node.apiUrl || node.apiUrl.trim() === '' || node.apiUrl.trim() === 'https://') {
       toast({
-        title: "URL da API ausente",
-        description: "Por favor, insira a URL da API para testar.",
+        title: "URL da API ausente ou inválida",
+        description: "Por favor, insira uma URL da API válida para testar.",
         variant: "destructive",
       });
       return;
@@ -167,30 +167,32 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     }
 
     let requestBody: BodyInit | null = null;
-    if (node.apiBodyType === 'json' && node.apiBodyJson) {
-      requestBody = node.apiBodyJson;
-      if (!requestHeaders.has('Content-Type')) {
-        requestHeaders.append('Content-Type', 'application/json');
-      }
-    } else if (node.apiBodyType === 'form-data' && node.apiBodyFormDataList) {
-      const formData = new FormData();
-      node.apiBodyFormDataList.forEach(entry => {
-        if (entry.key) formData.append(entry.key, entry.value);
-      });
-      requestBody = formData;
-      // Content-Type for FormData is set automatically by fetch
-    } else if (node.apiBodyType === 'raw' && node.apiBodyRaw) {
-      requestBody = node.apiBodyRaw;
-      if (!requestHeaders.has('Content-Type')) {
-        requestHeaders.append('Content-Type', 'text/plain');
-      }
+    if (node.apiMethod !== 'GET' && node.apiMethod !== 'DELETE') { // Body should only be sent for relevant methods
+        if (node.apiBodyType === 'json' && node.apiBodyJson) {
+          requestBody = node.apiBodyJson;
+          if (!requestHeaders.has('Content-Type')) {
+            requestHeaders.append('Content-Type', 'application/json');
+          }
+        } else if (node.apiBodyType === 'form-data' && node.apiBodyFormDataList && node.apiBodyFormDataList.length > 0) {
+          const formData = new FormData();
+          node.apiBodyFormDataList.forEach(entry => {
+            if (entry.key) formData.append(entry.key, entry.value);
+          });
+          requestBody = formData;
+          // Content-Type for FormData is set automatically by fetch
+        } else if (node.apiBodyType === 'raw' && node.apiBodyRaw) {
+          requestBody = node.apiBodyRaw;
+          if (!requestHeaders.has('Content-Type')) {
+            requestHeaders.append('Content-Type', 'text/plain');
+          }
+        }
     }
     
     try {
       const response = await fetch(constructedUrl, {
         method: node.apiMethod || 'GET',
         headers: requestHeaders,
-        body: (node.apiMethod === 'GET' || node.apiMethod === 'DELETE') ? null : requestBody, // GET/DELETE should not have body
+        body: requestBody,
       });
 
       const responseHeadersObj: Record<string, string> = {};
@@ -198,21 +200,21 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         responseHeadersObj[key] = value;
       });
 
-      let responseBody: any;
+      let responseBodyContent: any;
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
-        responseBody = await response.json();
+        responseBodyContent = await response.json();
       } else {
-        responseBody = await response.text();
+        responseBodyContent = await response.text();
       }
 
-      setTestResponseData({ status: response.status, headers: responseHeadersObj, body: responseBody });
+      setTestResponseData({ status: response.status, headers: responseHeadersObj, body: responseBodyContent });
       setIsTestResponseModalOpen(true);
 
       if (!response.ok) {
         toast({
           title: `Erro na API: ${response.status}`,
-          description: typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody, null, 2),
+          description: typeof responseBodyContent === 'string' ? responseBodyContent : JSON.stringify(responseBodyContent, null, 2),
           variant: "destructive",
         });
       } else {
@@ -1054,5 +1056,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
+    
 
     
