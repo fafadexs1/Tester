@@ -5,7 +5,8 @@ import type React from 'react';
 import DraggableBlock from './DraggableBlock';
 import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
-  BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage
+  BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
+  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -28,6 +29,10 @@ const FlowSidebar: React.FC = () => {
             defaultData={{ questionText: 'Escolha uma opção:', optionsList: 'Opção A\nOpção B', variableToSaveChoice: 'escolha_usuario' }}/>
           <DraggableBlock type="media-display" label="Exibir Mídia" icon={<FileImage {...iconProps} className="text-blue-500" />}
             defaultData={{ mediaDisplayType: 'image', mediaDisplayUrl: 'https://picsum.photos/200/300', mediaDisplayText: 'Imagem de exemplo' }} />
+          <DraggableBlock type="rating-input" label="Entrada de Avaliação" icon={<Star {...iconProps} className="text-yellow-400" />}
+            defaultData={{ ratingQuestionText: 'Como você avalia nosso serviço?', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: 'avaliacao_servico' }} />
+          <DraggableBlock type="file-upload" label="Upload de Arquivo" icon={<UploadCloud {...iconProps} className="text-fuchsia-500" />}
+            defaultData={{ uploadPromptText: 'Por favor, envie seu arquivo.', maxFileSizeMB: 5, fileUrlVariable: 'url_arquivo_enviado' }} />
         </div>
 
         <div className="mt-3">
@@ -40,8 +45,23 @@ const FlowSidebar: React.FC = () => {
             defaultData={{ delayDuration: 1000 }}/>
           <DraggableBlock type="typing-emulation" label="Simular Digitação" icon={<MoreHorizontal {...iconProps} className="text-gray-500" />}
             defaultData={{ typingDuration: 1500 }} />
+          <DraggableBlock type="log-console" label="Registrar no Console" icon={<TerminalSquare {...iconProps} className="text-slate-500" />}
+            defaultData={{ logMessage: 'Log: {{input.status}}' }} />
+          <DraggableBlock type="code-execution" label="Executar Código (JS)" icon={<Code2 {...iconProps} className="text-amber-500" />}
+            defaultData={{ codeSnippet: "return { resultado: 'sucesso' };", codeOutputVariable: 'resultado_codigo' }} />
+           <DraggableBlock type="json-transform" label="Transformar JSON" icon={<Shuffle {...iconProps} className="text-violet-500" />}
+            defaultData={{ inputJson: '{ "nome": "Exemplo" }', jsonataExpression: '$.nome', jsonOutputVariable: 'nome_transformado' }} />
         </div>
         
+        <div className="mt-3">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Inteligência Artificial</h3>
+          <DraggableBlock type="ai-text-generation" label="Gerar Texto com IA" icon={<Sparkles {...iconProps} className="text-rose-500" />}
+            defaultData={{ aiPromptText: 'Resuma o seguinte texto: {{input.texto_longo}}', aiOutputVariable: 'texto_resumido_ia' }} />
+          {/* Placeholder para outros blocos de IA, como sugerido no histórico */}
+          {/* <DraggableBlock type="ai-image-generation" label="Gerar Imagem com IA" icon={<ImageIcon {...iconProps} className="text-cyan-400" />} defaultData={{}} /> */}
+          {/* <DraggableBlock type="ai-data-extraction" label="Extrair Dados com IA" icon={<DatabaseZap {...iconProps} className="text-lime-500" />} defaultData={{}} /> */}
+        </div>
+
         <div className="mt-3">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Integrações</h3>
           <DraggableBlock type="api-call" label="Chamada API" icon={<Webhook {...iconProps} className="text-red-600" />} 
@@ -50,6 +70,10 @@ const FlowSidebar: React.FC = () => {
             defaultData={{ redirectUrl: 'https://google.com' }} />
           <DraggableBlock type="date-input" label="Entrada de Data" icon={<CalendarDays {...iconProps} className="text-sky-600" />}
             defaultData={{ dateInputLabel: 'Qual sua data de nascimento?', variableToSaveDate: 'data_nascimento' }} />
+          <DraggableBlock type="send-email" label="Enviar E-mail" icon={<Mail {...iconProps} className="text-blue-600" />}
+            defaultData={{ emailTo: 'destinatario@exemplo.com', emailSubject: 'Assunto do E-mail', emailBody: 'Olá, {{input.nome}}!' }} />
+          <DraggableBlock type="google-sheets-append" label="Adicionar Linha Planilha Google" icon={<Sheet {...iconProps} className="text-emerald-500" />}
+            defaultData={{ spreadsheetId: 'SEU_SPREADSHEET_ID', sheetName: 'Página1', googleSheetRowData: '["{{input.campo1}}", "{{input.campo2}}"]' }} />
         </div>
 
         <div className="mt-3">

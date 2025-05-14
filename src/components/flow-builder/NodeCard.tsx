@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -7,7 +8,8 @@ import { motion } from 'framer-motion';
 import {
   MessageSquareText, Type as InputIcon, ListChecks, Trash2, BotMessageSquare,
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
-  CalendarDays, ExternalLink, MoreHorizontal, FileImage
+  CalendarDays, ExternalLink, MoreHorizontal, FileImage,
+  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,7 +25,6 @@ interface NodeCardProps {
   onUpdate: (id: string, changes: Partial<NodeData>) => void;
   onStartConnection: (event: React.MouseEvent, fromId: string, sourceHandleId?: string) => void;
   onDeleteNode: (id: string) => void;
-  // Removed canvasOffset as it's not used for node dragging logic here
 }
 
 const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartConnection, onDeleteNode }) => {
@@ -31,13 +32,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    // If clicking on a connector or delete button, let their specific handlers manage the event (they call stopPropagation)
     if (target.dataset.connector === 'true' || target.closest('[data-action="delete-node"]')) {
-      // Event propagation is stopped by the specific handlers for connectors/delete
       return;
     }
     
-    // If clicking on the card body, initiate node dragging
     isDraggingNode.current = true;
     const startX = e.clientX;
     const startY = e.clientY;
@@ -62,7 +60,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   }, [node.x, node.y, node.id, onUpdate]);
 
   const handleDeleteClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent card drag
+    e.stopPropagation(); 
     onDeleteNode(node.id);
   }, [node.id, onDeleteNode]);
 
@@ -83,6 +81,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       'redirect': <ExternalLink {...iconProps} className="text-lime-500" />,
       'typing-emulation': <MoreHorizontal {...iconProps} className="text-gray-500" />,
       'media-display': <FileImage {...iconProps} className="text-blue-500" />,
+      // Novos ícones
+      'log-console': <TerminalSquare {...iconProps} className="text-slate-500" />,
+      'code-execution': <Code2 {...iconProps} className="text-amber-500" />,
+      'json-transform': <Shuffle {...iconProps} className="text-violet-500" />,
+      'file-upload': <UploadCloud {...iconProps} className="text-fuchsia-500" />,
+      'rating-input': <Star {...iconProps} className="text-yellow-400" />,
+      'ai-text-generation': <Sparkles {...iconProps} className="text-rose-500" />,
+      'send-email': <Mail {...iconProps} className="text-blue-600" />,
+      'google-sheets-append': <Sheet {...iconProps} className="text-emerald-500" />,
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
     return icons[node.type] || icons.default;
@@ -278,6 +285,81 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <div><Label htmlFor={`${node.id}-mediadisplaytext`}>Texto Alternativo/Legenda</Label><Input id={`${node.id}-mediadisplaytext`} placeholder="Descrição da mídia" value={node.mediaDisplayText || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayText: e.target.value })} /></div>
           </div>
         );
+      // Novos nós
+      case 'log-console':
+        return (
+          <div>
+            <Label htmlFor={`${node.id}-logmsg`}>Mensagem para Log (use {"{{variavel}}"} para variáveis)</Label>
+            <Textarea id={`${node.id}-logmsg`} placeholder="Ex: Status: {{input.status}}" value={node.logMessage || ''} onChange={(e) => onUpdate(node.id, { logMessage: e.target.value })} rows={2}/>
+          </div>
+        );
+      case 'code-execution':
+        return (
+          <div className="space-y-3">
+            <div><Label htmlFor={`${node.id}-codesnippet`}>Trecho de Código (JavaScript)</Label><Textarea id={`${node.id}-codesnippet`} placeholder="return { resultado: 1 + 1 };" value={node.codeSnippet || ''} onChange={(e) => onUpdate(node.id, { codeSnippet: e.target.value })} rows={4}/></div>
+            <div><Label htmlFor={`${node.id}-codeoutputvar`}>Salvar Saída na Variável</Label><Input id={`${node.id}-codeoutputvar`} placeholder="resultado_codigo" value={node.codeOutputVariable || ''} onChange={(e) => onUpdate(node.id, { codeOutputVariable: e.target.value })} /></div>
+            <p className="text-xs text-muted-foreground">Nota: O código é executado no servidor.</p>
+          </div>
+        );
+      case 'json-transform':
+        return (
+          <div className="space-y-3">
+            <div><Label htmlFor={`${node.id}-inputjson`}>JSON de Entrada (ou variável {{nome_variavel}})</Label><Textarea id={`${node.id}-inputjson`} placeholder='{ "chave": "valor" } ou {{dados_api}}' value={node.inputJson || ''} onChange={(e) => onUpdate(node.id, { inputJson: e.target.value })} rows={3}/></div>
+            <div><Label htmlFor={`${node.id}-jsonata`}>Expressão JSONata</Label><Input id={`${node.id}-jsonata`} placeholder="$.chave" value={node.jsonataExpression || ''} onChange={(e) => onUpdate(node.id, { jsonataExpression: e.target.value })}/></div>
+            <div><Label htmlFor={`${node.id}-jsonoutputvar`}>Salvar JSON Transformado na Variável</Label><Input id={`${node.id}-jsonoutputvar`} placeholder="json_transformado" value={node.jsonOutputVariable || ''} onChange={(e) => onUpdate(node.id, { jsonOutputVariable: e.target.value })} /></div>
+          </div>
+        );
+      case 'file-upload':
+        return (
+          <div className="space-y-3">
+            <div><Label htmlFor={`${node.id}-uploadprompt`}>Texto do Prompt de Upload</Label><Input id={`${node.id}-uploadprompt`} placeholder="Por favor, envie seu documento." value={node.uploadPromptText || ''} onChange={(e) => onUpdate(node.id, { uploadPromptText: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-filefilter`}>Filtro de Tipo de Arquivo</Label><Input id={`${node.id}-filefilter`} placeholder="image/*, .pdf, .docx" value={node.fileTypeFilter || ''} onChange={(e) => onUpdate(node.id, { fileTypeFilter: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-maxsize`}>Tam. Máx. Arquivo (MB)</Label><Input id={`${node.id}-maxsize`} type="number" placeholder="5" value={node.maxFileSizeMB || ''} onChange={(e) => onUpdate(node.id, { maxFileSizeMB: parseInt(e.target.value, 10) || undefined })} /></div>
+            <div><Label htmlFor={`${node.id}-fileurlvar`}>Salvar URL do Arquivo na Variável</Label><Input id={`${node.id}-fileurlvar`} placeholder="url_do_arquivo" value={node.fileUrlVariable || ''} onChange={(e) => onUpdate(node.id, { fileUrlVariable: e.target.value })} /></div>
+          </div>
+        );
+      case 'rating-input':
+        return (
+          <div className="space-y-3">
+            <div><Label htmlFor={`${node.id}-ratingq`}>Pergunta da Avaliação</Label><Input id={`${node.id}-ratingq`} placeholder="Como você nos avalia?" value={node.ratingQuestionText || ''} onChange={(e) => onUpdate(node.id, { ratingQuestionText: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-maxrating`}>Avaliação Máxima</Label><Input id={`${node.id}-maxrating`} type="number" placeholder="5" value={node.maxRatingValue || ''} onChange={(e) => onUpdate(node.id, { maxRatingValue: parseInt(e.target.value, 10) || 5 })} /></div>
+            <div><Label htmlFor={`${node.id}-ratingicon`}>Ícone de Avaliação</Label>
+              <Select value={node.ratingIconType || 'star'} onValueChange={(value) => onUpdate(node.id, { ratingIconType: value as NodeData['ratingIconType'] })}>
+                <SelectTrigger id={`${node.id}-ratingicon`}><SelectValue placeholder="Selecione o ícone" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="star">Estrela</SelectItem><SelectItem value="heart">Coração</SelectItem><SelectItem value="number">Número</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div><Label htmlFor={`${node.id}-ratingoutputvar`}>Salvar Avaliação na Variável</Label><Input id={`${node.id}-ratingoutputvar`} placeholder="avaliacao_usuario" value={node.ratingOutputVariable || ''} onChange={(e) => onUpdate(node.id, { ratingOutputVariable: e.target.value })} /></div>
+          </div>
+        );
+      case 'ai-text-generation':
+        return (
+          <div className="space-y-3">
+            <div><Label htmlFor={`${node.id}-aiprompt`}>Prompt para IA (use {"{{variavel}}"} para variáveis)</Label><Textarea id={`${node.id}-aiprompt`} placeholder="Gere uma descrição para um produto chamado {{input.nome_produto}}." value={node.aiPromptText || ''} onChange={(e) => onUpdate(node.id, { aiPromptText: e.target.value })} rows={4}/></div>
+            <div><Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional)</Label><Input id={`${node.id}-aimodel`} placeholder="gemini-2.0-flash (padrão)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })}/></div>
+            <div><Label htmlFor={`${node.id}-aioutputvar`}>Salvar Resposta da IA na Variável</Label><Input id={`${node.id}-aioutputvar`} placeholder="resposta_ia" value={node.aiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { aiOutputVariable: e.target.value })} /></div>
+          </div>
+        );
+      case 'send-email':
+        return (
+          <div className="space-y-3">
+            <div><Label htmlFor={`${node.id}-emailto`}>Para (E-mail)</Label><Input id={`${node.id}-emailto`} type="email" placeholder="destinatario@exemplo.com" value={node.emailTo || ''} onChange={(e) => onUpdate(node.id, { emailTo: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-emailsubject`}>Assunto</Label><Input id={`${node.id}-emailsubject`} placeholder="Assunto do seu e-mail" value={node.emailSubject || ''} onChange={(e) => onUpdate(node.id, { emailSubject: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-emailbody`}>Corpo do E-mail (HTML ou Texto Simples)</Label><Textarea id={`${node.id}-emailbody`} placeholder="Olá {{input.nome_cliente}},\n\nSua mensagem aqui." value={node.emailBody || ''} onChange={(e) => onUpdate(node.id, { emailBody: e.target.value })} rows={4}/></div>
+            <div><Label htmlFor={`${node.id}-emailfrom`}>De (E-mail - opcional)</Label><Input id={`${node.id}-emailfrom`} type="email" placeholder="remetente@exemplo.com" value={node.emailFrom || ''} onChange={(e) => onUpdate(node.id, { emailFrom: e.target.value })} /></div>
+          </div>
+        );
+      case 'google-sheets-append':
+        return (
+          <div className="space-y-3">
+            <div><Label htmlFor={`${node.id}-gsheetid`}>ID da Planilha Google</Label><Input id={`${node.id}-gsheetid`} placeholder="abc123xyz789" value={node.googleSheetId || ''} onChange={(e) => onUpdate(node.id, { googleSheetId: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-gsheetname`}>Nome da Aba</Label><Input id={`${node.id}-gsheetname`} placeholder="Página1" value={node.googleSheetName || ''} onChange={(e) => onUpdate(node.id, { googleSheetName: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-gsheetdata`}>Dados da Linha (JSON array ou CSV)</Label><Textarea id={`${node.id}-gsheetdata`} placeholder='["{{input.valor1}}", "{{input.valor2}}"] ou {{input.valor1}},{{input.valor2}}' value={node.googleSheetRowData || ''} onChange={(e) => onUpdate(node.id, { googleSheetRowData: e.target.value })} rows={2}/></div>
+            <p className="text-xs text-muted-foreground">Certifique-se que a API do Google Sheets está habilitada e as credenciais configuradas no servidor.</p>
+          </div>
+        );
       default:
         return <p className="text-xs text-muted-foreground italic">Nenhuma configuração para este tipo de nó.</p>;
     }
@@ -286,7 +368,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   return (
     <motion.div
       className="w-full cursor-grab bg-card rounded-lg shadow-xl border border-border relative"
-      onMouseDown={handleNodeMouseDown} // This will now be the primary drag handler
+      onMouseDown={handleNodeMouseDown} 
       whileHover={{ scale: 1.01, boxShadow: "0px 5px 25px rgba(0,0,0,0.1)" }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
       data-node-id={node.id}

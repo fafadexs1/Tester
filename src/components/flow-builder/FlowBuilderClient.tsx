@@ -24,29 +24,39 @@ export default function FlowBuilderClient() {
 
   const handleDropNode = useCallback((item: DraggableBlockItemData, viewportOffset: { x: number, y: number }) => {
     const baseNodeData: Omit<NodeData, 'id' | 'type' | 'title' | 'x' | 'y'> = {
+      // Basic types
       text: '',
-      promptText: '',
-      inputType: 'text',
-      variableToSaveResponse: '',
-      questionText: '',
-      optionsList: '',
-      variableToSaveChoice: '',
+      promptText: '', inputType: 'text', variableToSaveResponse: '',
+      questionText: '', optionsList: '', variableToSaveChoice: '',
+      mediaDisplayType: 'image', mediaDisplayUrl: '', mediaDisplayText: '',
+      
+      // Logic & Control
+      conditionVariable: '', conditionOperator: '==', conditionValue: '',
+      variableName: '', variableValue: '',
+      delayDuration: 1000,
+      typingDuration: 1500,
+      logMessage: '',
+      codeSnippet: '', codeOutputVariable: '',
+      inputJson: '', jsonataExpression: '', jsonOutputVariable: '',
+      
+      // User Interaction Enhancements
+      uploadPromptText: '', fileTypeFilter: '', maxFileSizeMB: 5, fileUrlVariable: '',
+      ratingQuestionText: '', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: '',
+
+      // Integrations
+      apiUrl: '', apiMethod: 'GET', apiHeaders: '{ "Content-Type": "application/json" }', apiBody: '{}',
+      redirectUrl: '',
+      dateInputLabel: '', variableToSaveDate: '',
+      emailTo: '', emailSubject: '', emailBody: '', emailFrom: '',
+      googleSheetId: '', googleSheetName: '', googleSheetRowData: '',
+
+      // WhatsApp specific (Evolution API)
       instanceName: 'evolution_instance',
       phoneNumber: '', textMessage: '', mediaUrl: '', mediaType: 'image', caption: '',
       groupName: '', participants: '',
-      conditionVariable: '', conditionOperator: '==',
-      conditionValue: '',
-      variableName: '', variableValue: '',
-      apiUrl: '',
-      apiMethod: 'GET', apiHeaders: '{ "Content-Type": "application/json" }', apiBody: '{}',
-      delayDuration: 1000,
-      dateInputLabel: '',
-      variableToSaveDate: '',
-      redirectUrl: '',
-      typingDuration: 1500,
-      mediaDisplayType: 'image',
-      mediaDisplayUrl: '',
-      mediaDisplayText: '',
+      
+      // AI
+      aiPromptText: '', aiModelName: '', aiOutputVariable: '',
     };
 
     const newNode: NodeData = {
@@ -91,8 +101,11 @@ export default function FlowBuilderClient() {
     const lineStartX = fromNode.x + NODE_WIDTH; 
     const lineStartY = fromNode.y + startYOffset; 
     
+    // Calculate initial currentX and currentY relative to the canvas itself, not the viewport
+    // This requires accounting for the current canvasOffset
     const lineCurrentX = (e.clientX - canvasRect.left);
     const lineCurrentY = (e.clientY - canvasRect.top);
+
 
     setDrawingLine({
       fromId,
@@ -102,7 +115,7 @@ export default function FlowBuilderClient() {
       currentX: lineCurrentX, 
       currentY: lineCurrentY, 
     });
-  }, [nodes, canvasOffset]); // Added canvasOffset as it's indirectly used via canvasRect for initial currentX/Y calculations
+  }, [nodes]); 
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) { 
@@ -128,6 +141,8 @@ export default function FlowBuilderClient() {
       const canvasRect = canvasElement.getBoundingClientRect();
       setDrawingLine((prev) => {
         if (!prev) return null;
+        // When updating drawing line, currentX/Y should be relative to the viewport for direct SVG rendering
+        // The canvasOffset is applied within the Canvas component for the final path rendering
         return {
           ...prev,
           currentX: (e.clientX - canvasRect.left),
@@ -198,14 +213,19 @@ export default function FlowBuilderClient() {
   useEffect(() => {
     document.addEventListener('mousemove', handleGlobalMouseMove);
     document.addEventListener('mouseup', handleGlobalMouseUp);
+    
+    // Store the current drawingLine state in a ref for the cleanup function
+    const drawingLineRef = React.createRef<DrawingLineData | null>();
+    drawingLineRef.current = drawingLine;
+
     const handleMouseLeaveWindow = () => {
       if (isPanning.current) {
         isPanning.current = false;
         const canvasElement = canvasWrapperRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null;
         if (canvasElement) canvasElement.style.cursor = 'grab';
       }
-      // Access the current value of drawingLine from the closure of this specific effect setup
-      if (drawingLine) { 
+      // Access the drawingLine value via the ref inside the cleanup
+      if (drawingLineRef.current) { 
         setDrawingLine(null);
       }
     };
@@ -217,8 +237,9 @@ export default function FlowBuilderClient() {
       document.removeEventListener('mouseup', handleGlobalMouseUp);
       document.body.removeEventListener('mouseleave', handleMouseLeaveWindow);
     };
-  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine]); // drawingLine is kept here because handleMouseLeaveWindow's closure depends on it.
-                                                                 // The callbacks handleGlobalMouseMove/Up also depend on drawingLine.
+  // handleGlobalMouseMove and handleGlobalMouseUp have drawingLine in their dependency array.
+  // The effect itself also needs drawingLine because of drawingLineRef.current = drawingLine;
+  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine]); 
   
   return (
     <DndProvider backend={HTML5Backend}>
@@ -242,4 +263,3 @@ export default function FlowBuilderClient() {
     </DndProvider>
   );
 }
-
