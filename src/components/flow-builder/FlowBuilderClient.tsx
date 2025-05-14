@@ -21,6 +21,38 @@ const LOCAL_STORAGE_KEY_WORKSPACES = 'flowiseLiteWorkspaces';
 const LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE = 'flowiseLiteActiveWorkspace';
 const LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN = 'flowiseLiteChatPanelOpen';
 
+// Helper function to generate unique variable names
+function generateUniqueVariableName(baseName: string, existingNames: string[]): string {
+  if (!baseName || baseName.trim() === '') return ''; // Do not process empty base names
+  if (!existingNames.includes(baseName)) {
+    return baseName;
+  }
+  let counter = 1;
+  let newName = `${baseName}_${counter}`;
+  while (existingNames.includes(newName)) {
+    counter++;
+    newName = `${baseName}_${counter}`;
+  }
+  return newName;
+}
+
+// Fields in NodeData.defaultData that define a variable name and should be made unique
+const VARIABLE_DEFINING_FIELDS: (keyof NodeData)[] = [
+  'variableToSaveResponse',
+  'variableToSaveChoice',
+  'variableName',
+  'apiOutputVariable',
+  'variableToSaveDate',
+  'codeOutputVariable',
+  'jsonOutputVariable',
+  'fileUrlVariable',
+  'ratingOutputVariable',
+  'aiOutputVariable',
+  'agentResponseVariable',
+  'supabaseResultVariable',
+];
+
+
 export default function FlowBuilderClient() {
   const { toast } = useToast();
   const [workspaces, setWorkspaces] = useState<WorkspaceData[]>([]);
@@ -51,18 +83,12 @@ export default function FlowBuilderClient() {
     if (activeWorkspace?.nodes) {
       const variables: Set<string> = new Set();
       activeWorkspace.nodes.forEach(n => {
-        if (n.variableToSaveResponse && n.variableToSaveResponse.trim() !== '') variables.add(n.variableToSaveResponse.trim());
-        if (n.variableToSaveChoice && n.variableToSaveChoice.trim() !== '') variables.add(n.variableToSaveChoice.trim());
-        if (n.variableName && n.variableName.trim() !== '') variables.add(n.variableName.trim());
-        if (n.apiOutputVariable && n.apiOutputVariable.trim() !== '') variables.add(n.apiOutputVariable.trim());
-        if (n.variableToSaveDate && n.variableToSaveDate.trim() !== '') variables.add(n.variableToSaveDate.trim());
-        if (n.codeOutputVariable && n.codeOutputVariable.trim() !== '') variables.add(n.codeOutputVariable.trim());
-        if (n.jsonOutputVariable && n.jsonOutputVariable.trim() !== '') variables.add(n.jsonOutputVariable.trim());
-        if (n.fileUrlVariable && n.fileUrlVariable.trim() !== '') variables.add(n.fileUrlVariable.trim());
-        if (n.ratingOutputVariable && n.ratingOutputVariable.trim() !== '') variables.add(n.ratingOutputVariable.trim());
-        if (n.aiOutputVariable && n.aiOutputVariable.trim() !== '') variables.add(n.aiOutputVariable.trim());
-        if (n.agentResponseVariable && n.agentResponseVariable.trim() !== '') variables.add(n.agentResponseVariable.trim());
-        if (n.supabaseResultVariable && n.supabaseResultVariable.trim() !== '') variables.add(n.supabaseResultVariable.trim());
+        VARIABLE_DEFINING_FIELDS.forEach(field => {
+          const varName = n[field] as string | undefined;
+          if (varName && varName.trim() !== '') {
+            variables.add(varName.trim());
+          }
+        });
       });
       setDefinedVariablesInFlow(Array.from(variables).sort());
     } else {
@@ -308,6 +334,37 @@ export default function FlowBuilderClient() {
       return;
     }
 
+    // Collect existing variable names from the current workspace
+    const currentWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
+    const existingVariableNames: string[] = [];
+    if (currentWorkspace) {
+      currentWorkspace.nodes.forEach(node => {
+        VARIABLE_DEFINING_FIELDS.forEach(field => {
+          const varName = node[field] as string | undefined;
+          if (varName && varName.trim() !== '') {
+            existingVariableNames.push(varName.trim());
+          }
+        });
+      });
+    }
+    
+    const itemDefaultDataCopy = item.defaultData ? { ...item.defaultData } : {};
+
+    // Make variable names in defaultData unique
+    VARIABLE_DEFINING_FIELDS.forEach(field => {
+      if (itemDefaultDataCopy.hasOwnProperty(field)) {
+        const baseVarName = itemDefaultDataCopy[field] as string | undefined;
+        if (baseVarName && baseVarName.trim() !== '') {
+          (itemDefaultDataCopy as any)[field] = generateUniqueVariableName(baseVarName.trim(), existingVariableNames);
+           // Add to existingVariableNames immediately to handle multiple vars in the same defaultData
+          if (itemDefaultDataCopy[field] !== baseVarName) { // if it was changed
+            existingVariableNames.push(itemDefaultDataCopy[field] as string);
+          }
+        }
+      }
+    });
+
+
     const baseNodeData: Omit<NodeData, 'id' | 'type' | 'title' | 'x' | 'y'> = {
       text: '', promptText: '', inputType: 'text', variableToSaveResponse: '',
       questionText: '', optionsList: '', variableToSaveChoice: '',
@@ -349,7 +406,7 @@ export default function FlowBuilderClient() {
       type: item.type as NodeData['type'],
       title: item.label,
       ...baseNodeData, 
-      ...(item.defaultData || {}), 
+      ...itemDefaultDataCopy, 
       x: viewportOffset.x - NODE_WIDTH / 2, 
       y: viewportOffset.y - NODE_HEADER_HEIGHT_APPROX / 2, 
     };
@@ -361,7 +418,7 @@ export default function FlowBuilderClient() {
       console.log('[FlowBuilderClient] Nodes after adding new node. New count:', updatedNodes.length, JSON.parse(JSON.stringify(updatedNodes)));
       return { ...ws, nodes: updatedNodes };
     });
-  }, [activeWorkspaceId, updateActiveWorkspace]);
+  }, [activeWorkspaceId, updateActiveWorkspace, workspaces]);
 
   const updateNode = useCallback((id: string, changes: Partial<NodeData>) => {
     updateActiveWorkspace(ws => ({

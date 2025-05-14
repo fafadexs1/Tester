@@ -40,7 +40,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
       title: "Lógica e Controle",
       blocks: [
         { type: "condition", label: "Condição (Se/Então)", icon: <GitFork {...iconProps} className="text-orange-600" />, defaultData: { conditionVariable: '{{input.variavel}}', conditionOperator: '==', conditionValue: 'valor_esperado' }},
-        { type: "set-variable", label: "Definir Variável", icon: <Variable {...iconProps} className="text-cyan-600" />, defaultData: { variableName: 'novaVariavel', variableValue: '123' }},
+        { type: "set-variable", label: "Definir Variável", icon: <Variable {...iconProps} className="text-cyan-600" />, defaultData: { variableName: 'nova_variavel', variableValue: '123' }},
         { type: "delay", label: "Atraso", icon: <Timer {...iconProps} className="text-yellow-500" />, defaultData: { delayDuration: 1000 }},
         { type: "typing-emulation", label: "Simular Digitação", icon: <MoreHorizontal {...iconProps} className="text-gray-500" />, defaultData: { typingDuration: 1500 } },
         { type: "log-console", label: "Registrar no Console", icon: <TerminalSquare {...iconProps} className="text-slate-500" />, defaultData: { logMessage: 'Log: {{input.status}}' } },
@@ -60,7 +60,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
       value: "integrations",
       title: "Integrações",
       blocks: [
-        { type: "api-call", label: "Chamada API", icon: <Webhook {...iconProps} className="text-red-600" />, defaultData: { apiUrl: 'https://', apiMethod: 'GET' }},
+        { type: "api-call", label: "Chamada API", icon: <Webhook {...iconProps} className="text-red-600" />, defaultData: { apiUrl: 'https://', apiMethod: 'GET', apiOutputVariable: 'resposta_api' }},
         { type: "redirect", label: "Redirecionar URL", icon: <ExternalLink {...iconProps} className="text-lime-600" />, defaultData: { redirectUrl: 'https://google.com' } },
         { type: "date-input", label: "Entrada de Data", icon: <CalendarDays {...iconProps} className="text-sky-600" />, defaultData: { dateInputLabel: 'Qual sua data de nascimento?', variableToSaveDate: 'data_nascimento' } },
         { type: "send-email", label: "Enviar E-mail", icon: <Mail {...iconProps} className="text-blue-600" />, defaultData: { emailTo: 'destinatario@exemplo.com', emailSubject: 'Assunto do E-mail', emailBody: 'Olá, {{input.nome}}!' } },
@@ -71,7 +71,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
       value: "supabase",
       title: "Supabase",
       blocks: [
-        { type: "supabase-create-row", label: "Criar Linha", icon: <Rows {...iconProps} className="text-green-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseDataJson: '{ "coluna": "valor" }' } },
+        { type: "supabase-create-row", label: "Criar Linha", icon: <Rows {...iconProps} className="text-green-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseDataJson: '{ "coluna": "valor" }', supabaseResultVariable: 'id_linha_criada_supabase' } },
         { type: "supabase-read-row", label: "Ler Linha(s)", icon: <Search {...iconProps} className="text-blue-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '1', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase' } },
         { type: "supabase-update-row", label: "Atualizar Linha", icon: <Edit3 {...iconProps} className="text-yellow-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '1', supabaseDataJson: '{ "coluna": "novo_valor" }' } },
         { type: "supabase-delete-row", label: "Deletar Linha", icon: <Trash {...iconProps} className="text-red-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '1' } },
