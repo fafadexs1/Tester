@@ -11,3 +11,7 @@ export const GRID_SIZE = 20; // Size of the grid cells for the background patter
 export const START_NODE_TRIGGER_INITIAL_Y_OFFSET = 40; // Offset Y do primeiro gatilho a partir do topo do conteúdo do nó
 export const START_NODE_TRIGGER_SPACING_Y = 35;      // Espaçamento vertical entre os conectores de gatilho
 export const START_NODE_TRIGGER_AREA_MIN_HEIGHT = 50; // Altura mínima da área de conteúdo do nó de início
+
+// Constantes para o nó de Múltipla Escolha com handles dinâmicos
+export const OPTION_NODE_HANDLE_INITIAL_Y_OFFSET = 65; // Offset Y do primeiro handle de opção (considerando o campo de pergunta)
+export const OPTION_NODE_HANDLE_SPACING_Y = 30;      // Espaçamento vertical entre os conectores de opção

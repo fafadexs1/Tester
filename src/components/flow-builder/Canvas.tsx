@@ -7,7 +7,8 @@ import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBloc
 import { 
   ITEM_TYPE_BLOCK, NODE_WIDTH, GRID_SIZE, 
   NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX,
-  START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y
+  START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y,
+  OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y
 } from '@/lib/constants';
 import NodeCard from './NodeCard';
 import { useDrop } from 'react-dnd';
@@ -129,9 +130,12 @@ const Canvas: React.FC<CanvasProps> = ({
             const triggerIndex = sourceNode.triggers.indexOf(conn.sourceHandle);
             if (triggerIndex !== -1) {
               sourceHandleYOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET + (triggerIndex * START_NODE_TRIGGER_SPACING_Y);
-            } else {
-              // Fallback se o handle não for encontrado, embora não devesse acontecer
-              sourceHandleYOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET; 
+            }
+          } else if (sourceNode.type === 'option' && sourceNode.optionsList && conn.sourceHandle) {
+            const options = (sourceNode.optionsList || '').split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
+            const optionIndex = options.indexOf(conn.sourceHandle);
+            if (optionIndex !== -1) {
+              sourceHandleYOffset = OPTION_NODE_HANDLE_INITIAL_Y_OFFSET + (optionIndex * OPTION_NODE_HANDLE_SPACING_Y);
             }
           } else if (sourceNode.type === 'condition') {
             if (conn.sourceHandle === 'true') sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (1/3) + 6;
@@ -142,7 +146,7 @@ const Canvas: React.FC<CanvasProps> = ({
           const y1 = sourceNode.y + sourceHandleYOffset + canvasOffset.y;
           
           const x2 = targetNode.x + canvasOffset.x; 
-          const y2 = targetNode.y + NODE_HEADER_CONNECTOR_Y_OFFSET + canvasOffset.y; // Conector de entrada sempre no meio do header
+          const y2 = targetNode.y + NODE_HEADER_CONNECTOR_Y_OFFSET + canvasOffset.y; 
           
           const isHighlighted = highlightedConnectionId === conn.id;
           const strokeColor = isHighlighted ? 'var(--flow-connection-highlight)' : 'var(--flow-connection)';

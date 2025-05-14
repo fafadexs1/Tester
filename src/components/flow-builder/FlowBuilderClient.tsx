@@ -5,7 +5,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, WorkspaceData } from '@/lib/types';
 import { 
   NODE_WIDTH, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX, GRID_SIZE,
-  START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y
+  START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y,
+  OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y
 } from '@/lib/constants';
 import FlowSidebar from './FlowSidebar';
 import Canvas from './Canvas';
@@ -260,7 +261,8 @@ export default function FlowBuilderClient() {
       aiPromptText: '', aiModelName: '', aiOutputVariable: '',
       agentName: 'Agente Inteligente Padrão', agentSystemPrompt: 'Você é um assistente IA. Responda às perguntas do usuário de forma concisa e prestativa.',
       userInputVariable: '{{entrada_usuario}}', agentResponseVariable: 'resposta_do_agente', maxConversationTurns: 5, temperature: 0.7,
-      triggers: [], // Default para o nó 'start'
+      triggers: [], 
+      supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseDataJson: '', supabaseColumnsToSelect: '*', supabaseResultVariable: '',
     };
 
     const newNode: NodeData = {
@@ -307,11 +309,17 @@ export default function FlowBuilderClient() {
     if (!canvasElement) return;
     const canvasRect = canvasElement.getBoundingClientRect();
 
-    let startYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET; // Padrão
+    let startYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET; 
     if (fromNode.type === 'start' && fromNode.triggers && sourceHandleId) {
         const triggerIndex = fromNode.triggers.indexOf(sourceHandleId);
         if (triggerIndex !== -1) {
             startYOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET + (triggerIndex * START_NODE_TRIGGER_SPACING_Y);
+        }
+    } else if (fromNode.type === 'option' && fromNode.optionsList && sourceHandleId) {
+        const options = (fromNode.optionsList || '').split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
+        const optionIndex = options.indexOf(sourceHandleId);
+        if (optionIndex !== -1) {
+            startYOffset = OPTION_NODE_HANDLE_INITIAL_Y_OFFSET + (optionIndex * OPTION_NODE_HANDLE_SPACING_Y);
         }
     } else if (fromNode.type === 'condition') {
         if (sourceHandleId === 'true') startYOffset = NODE_HEADER_HEIGHT_APPROX * (1/3) + 6;
@@ -396,7 +404,7 @@ export default function FlowBuilderClient() {
                 id: uuidv4(),
                 from: drawingLine.fromId,
                 to: toId as string,
-                sourceHandle: drawingLine.sourceHandleId, // Este é o nome do gatilho para o nó 'start'
+                sourceHandle: drawingLine.sourceHandleId,
             };
             console.log("[FlowBuilderClient] Attempting to add connection:", JSON.parse(JSON.stringify(newConnection)));
 
@@ -413,7 +421,7 @@ export default function FlowBuilderClient() {
             if (isDuplicate) {
                 console.log("[FlowBuilderClient] Duplicate connection prevented (same from, to, and handle).");
             } else if (existingConnectionFromThisSourceHandle) {
-                // Se já existe uma conexão saindo DESTE handle (from + sourceHandle), substitua-a.
+                
                 newConnectionsArray = newConnectionsArray.filter(c => c.id !== existingConnectionFromThisSourceHandle.id);
                 newConnectionsArray.push(newConnection);
                 console.log("[FlowBuilderClient] Replaced existing connection from this specific source handle.");

@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle // Adicionado PlayCircle, PlusCircle
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle 
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import { START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y } from '@/lib/constants';
+import { START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y, OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y } from '@/lib/constants';
 
 
 interface NodeCardProps {
@@ -76,9 +76,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   const handleAddTrigger = () => {
     if (newTriggerName.trim() === '') return;
     const currentTriggers = node.triggers || [];
-    // Evitar nomes duplicados (opcional, mas bom para consistência)
     if (currentTriggers.includes(newTriggerName.trim())) {
-        // Poderia mostrar um toast aqui
         console.warn("Nome do gatilho já existe.");
         return;
     }
@@ -128,7 +126,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       'supabase-create-row': <Rows {...iconProps} className="text-green-500" />,
       'supabase-read-row': <Search {...iconProps} className="text-blue-500" />,
       'supabase-update-row': <Edit3 {...iconProps} className="text-yellow-500" />,
-      'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />, // Reutilizando Trash2
+      'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />, 
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
     return icons[node.type] || icons.default;
@@ -138,9 +136,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     if (node.type === 'start') {
       return (node.triggers || []).map((triggerName, index) => (
         <div
-          key={triggerName} // Idealmente usar um ID único se os nomes puderem se repetir, mas para handles, o nome é o ID.
+          key={`trigger-${node.id}-${triggerName}-${index}`} 
           className="absolute -right-2.5 z-10 flex items-center"
-          style={{ top: `${START_NODE_TRIGGER_INITIAL_Y_OFFSET + index * START_NODE_TRIGGER_SPACING_Y - 10}px` }} // -10 para centralizar o conector de 20px de altura
+          style={{ top: `${START_NODE_TRIGGER_INITIAL_Y_OFFSET + index * START_NODE_TRIGGER_SPACING_Y - 10}px` }} 
           title={`Gatilho: ${triggerName}`}
         >
           <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{triggerName}</span>
@@ -150,6 +148,28 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             data-connector="true"
             data-handle-type="source"
             data-handle-id={triggerName}
+          >
+            <Hash className="w-3 h-3 text-accent-foreground" />
+          </div>
+        </div>
+      ));
+    }
+    if (node.type === 'option') {
+      const options = (node.optionsList || '').split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
+      return options.map((optionText, index) => (
+        <div
+          key={`option-${node.id}-${optionText}-${index}`}
+          className="absolute -right-2.5 z-10 flex items-center"
+          style={{ top: `${OPTION_NODE_HANDLE_INITIAL_Y_OFFSET + index * OPTION_NODE_HANDLE_SPACING_Y - 10}px` }}
+          title={`Opção: ${optionText}`}
+        >
+          <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{optionText}</span>
+          <div
+            className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node.id, optionText); }}
+            data-connector="true"
+            data-handle-type="source"
+            data-handle-id={optionText}
           >
             <Hash className="w-3 h-3 text-accent-foreground" />
           </div>
@@ -182,6 +202,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         </>
       );
     }
+    // Para todos os outros tipos de nós que não sejam 'start', 'option', ou 'condition'
     return (
       <div className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">
         <div
@@ -308,7 +329,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           <div className="space-y-3">
             <div><Label htmlFor={`${node.id}-optionqtext`}>Texto da Pergunta</Label><Textarea id={`${node.id}-optionqtext`} placeholder="Qual sua escolha?" value={node.questionText || ''} onChange={(e) => onUpdate(node.id, { questionText: e.target.value })} rows={2}/></div>
             <div><Label htmlFor={`${node.id}-optionslist`}>Opções (uma por linha)</Label><Textarea id={`${node.id}-optionslist`} placeholder="Opção 1\nOpção 2" value={node.optionsList || ''} onChange={(e) => onUpdate(node.id, { optionsList: e.target.value })} rows={3}/></div>
-            <div><Label htmlFor={`${node.id}-varsavechoice`}>Salvar Escolha na Variável</Label><Input id={`${node.id}-varsavechoice`} placeholder="variavel_escolha" value={node.variableToSaveChoice || ''} onChange={(e) => onUpdate(node.id, { variableToSaveChoice: e.target.value })} /></div>
+            <div><Label htmlFor={`${node.id}-varsavechoice`}>Salvar Escolha na Variável (opcional)</Label><Input id={`${node.id}-varsavechoice`} placeholder="variavel_escolha" value={node.variableToSaveChoice || ''} onChange={(e) => onUpdate(node.id, { variableToSaveChoice: e.target.value })} /></div>
+            <p className="text-xs text-muted-foreground italic pt-1">Cada opção na lista acima terá um conector de saída dedicado.</p>
           </div>
         );
       case 'whatsapp-text':
