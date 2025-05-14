@@ -5,7 +5,17 @@ import type React from 'react';
 import type { WorkspaceData } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Save, Undo2, Zap } from 'lucide-react'; // Usando Zap como ícone da aplicação
+import { PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard } from 'lucide-react'; // Usando Zap como ícone da aplicação
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
 
 interface TopBarProps {
   workspaces: WorkspaceData[];
@@ -64,25 +74,27 @@ const TopBar: React.FC<TopBarProps> = ({
       <div className="flex items-center gap-2">
         {/* Dropdown para telas menores */}
         <div className="md:hidden">
-          <Select
-              value={activeWorkspaceId || ""}
-              onValueChange={onSwitchWorkspace}
-            >
-              <SelectTrigger 
-                id="workspace-select-topbar-mobile" 
-                className="h-9 w-auto min-w-[120px] max-w-[200px] text-sm"
-                aria-label="Selecionar Fluxo de Trabalho"
+          {activeWorkspaceId && workspaces.length > 0 && (
+            <Select
+                value={activeWorkspaceId || ""}
+                onValueChange={onSwitchWorkspace}
               >
-                <SelectValue placeholder="Selecionar Fluxo" />
-              </SelectTrigger>
-              <SelectContent>
-                {workspaces.map(ws => (
-                  <SelectItem key={ws.id} value={ws.id} className="text-sm">
-                    {ws.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-          </Select>
+                <SelectTrigger 
+                  id="workspace-select-topbar-mobile" 
+                  className="h-9 w-auto min-w-[calc(100vw-280px)] max-w-[200px] text-sm" // Ajustado para ocupar espaço
+                  aria-label="Selecionar Fluxo de Trabalho"
+                >
+                  <SelectValue placeholder="Selecionar Fluxo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {workspaces.map(ws => (
+                    <SelectItem key={ws.id} value={ws.id} className="text-sm">
+                      {ws.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+            </Select>
+          )}
         </div>
          <Button onClick={onAddWorkspace} variant="outline" size="icon" className="ml-1 md:hidden">
           <PlusCircle className="h-4 w-4" />
@@ -128,6 +140,39 @@ const TopBar: React.FC<TopBarProps> = ({
         >
           <Undo2 className="h-4 w-4" />
         </Button>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="rounded-full">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src="https://placehold.co/40x40.png?text=UE" alt="@usuarioexemplo" data-ai-hint="user avatar" />
+                <AvatarFallback>UE</AvatarFallback>
+              </Avatar>
+              <span className="sr-only">Abrir menu do usuário</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>
+              <UserCircle className="mr-2 h-4 w-4" />
+              <span>Perfil</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <CreditCard className="mr-2 h-4 w-4" />
+              <span>Assinatura</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Settings className="mr-2 h-4 w-4" />
+              <span>Configurações</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Sair</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
