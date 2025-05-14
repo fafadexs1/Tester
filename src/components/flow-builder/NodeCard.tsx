@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash, 
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,6 +22,8 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from '@/hooks/use-toast';
 import { START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y, OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y, NODE_HEADER_HEIGHT_APPROX } from '@/lib/constants';
 
@@ -37,6 +39,11 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   const { toast } = useToast();
   const isDraggingNode = useRef(false);
   const [newTriggerName, setNewTriggerName] = useState('');
+
+  const [isTestResponseModalOpen, setIsTestResponseModalOpen] = useState(false);
+  const [testResponseData, setTestResponseData] = useState<{ status: number; headers: Record<string, string>; body: any } | null>(null);
+  const [testResponseError, setTestResponseError] = useState<string | null>(null);
+  const [isTestingApi, setIsTestingApi] = useState(false);
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -99,7 +106,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     onUpdate(node.id, { triggers: currentTriggers });
   };
 
-  // API Call Node Specific List Management
   const handleAddListItem = (listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList') => {
     const currentList = (node[listName] as any[] || []);
     onUpdate(node.id, { [listName]: [...currentList, { id: uuidv4(), key: '', value: '' }] });
@@ -122,6 +128,111 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         item.id === itemId ? { ...item, [field]: newValue } : item
       ) 
     });
+  };
+
+  const handleTestApiCall = async () => {
+    console.log('[NodeCard] handleTestApiCall triggered for node:', node.id, 'with URL:', node.apiUrl);
+    if (!node.apiUrl) {
+      toast({
+        title: "URL da API ausente",
+        description: "Por favor, insira a URL da API para testar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsTestingApi(true);
+    setTestResponseData(null);
+    setTestResponseError(null);
+
+    let constructedUrl = node.apiUrl;
+    const queryParams = new URLSearchParams();
+    (node.apiQueryParamsList || []).forEach(param => {
+      if (param.key) queryParams.append(param.key, param.value);
+    });
+    const queryString = queryParams.toString();
+    if (queryString) {
+      constructedUrl += (constructedUrl.includes('?') ? '&' : '?') + queryString;
+    }
+
+    const requestHeaders = new Headers();
+    (node.apiHeadersList || []).forEach(header => {
+      if (header.key) requestHeaders.append(header.key, header.value);
+    });
+
+    if (node.apiAuthType === 'bearer' && node.apiAuthBearerToken) {
+      requestHeaders.append('Authorization', `Bearer ${node.apiAuthBearerToken}`);
+    } else if (node.apiAuthType === 'basic' && node.apiAuthBasicUser && node.apiAuthBasicPassword) {
+      requestHeaders.append('Authorization', `Basic ${btoa(`${node.apiAuthBasicUser}:${node.apiAuthBasicPassword}`)}`);
+    }
+
+    let requestBody: BodyInit | null = null;
+    if (node.apiBodyType === 'json' && node.apiBodyJson) {
+      requestBody = node.apiBodyJson;
+      if (!requestHeaders.has('Content-Type')) {
+        requestHeaders.append('Content-Type', 'application/json');
+      }
+    } else if (node.apiBodyType === 'form-data' && node.apiBodyFormDataList) {
+      const formData = new FormData();
+      node.apiBodyFormDataList.forEach(entry => {
+        if (entry.key) formData.append(entry.key, entry.value);
+      });
+      requestBody = formData;
+      // Content-Type for FormData is set automatically by fetch
+    } else if (node.apiBodyType === 'raw' && node.apiBodyRaw) {
+      requestBody = node.apiBodyRaw;
+      if (!requestHeaders.has('Content-Type')) {
+        requestHeaders.append('Content-Type', 'text/plain');
+      }
+    }
+    
+    try {
+      const response = await fetch(constructedUrl, {
+        method: node.apiMethod || 'GET',
+        headers: requestHeaders,
+        body: (node.apiMethod === 'GET' || node.apiMethod === 'DELETE') ? null : requestBody, // GET/DELETE should not have body
+      });
+
+      const responseHeadersObj: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        responseHeadersObj[key] = value;
+      });
+
+      let responseBody: any;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        responseBody = await response.json();
+      } else {
+        responseBody = await response.text();
+      }
+
+      setTestResponseData({ status: response.status, headers: responseHeadersObj, body: responseBody });
+      setIsTestResponseModalOpen(true);
+
+      if (!response.ok) {
+        toast({
+          title: `Erro na API: ${response.status}`,
+          description: typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody, null, 2),
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "API Testada com Sucesso!",
+          description: `Status: ${response.status}`,
+        });
+      }
+    } catch (error: any) {
+      console.error("Erro ao testar API:", error);
+      setTestResponseError(`Erro ao conectar à API: ${error.message}`);
+      setIsTestResponseModalOpen(true);
+      toast({
+        title: "Erro de Conexão",
+        description: `Não foi possível conectar à API: ${error.message}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsTestingApi(false);
+    }
   };
 
 
@@ -233,18 +344,22 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         </>
       );
     }
-    return (
-      <div className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">
-        <div
-          className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-          onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node.id, 'default'); }}
-          data-connector="true" data-handle-type="source" data-handle-id="default"
-          title="Arraste para conectar"
-        >
-          <Hash className="w-3 h-3 text-accent-foreground" />
-        </div>
-      </div>
-    );
+    // Default connector for most nodes (excluding 'start', 'option', 'condition' which have custom logic above)
+    if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition') {
+        return (
+          <div className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">
+            <div
+              className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+              onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node.id, 'default'); }}
+              data-connector="true" data-handle-type="source" data-handle-id="default"
+              title="Arraste para conectar"
+            >
+              <Hash className="w-3 h-3 text-accent-foreground" />
+            </div>
+          </div>
+        );
+    }
+    return null; // No default connector if handled above
   };
 
   const renderWhatsAppToggle = (): React.ReactNode => {
@@ -341,7 +456,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     switch (node.type) {
       case 'start':
         return (
-          <div className="space-y-2">
+          <div className="space-y-2" data-no-drag="true">
             <Label className="text-sm font-medium">Gatilhos de Início</Label>
             {(node.triggers || []).map((trigger, index) => (
               <div key={`trigger-input-${node.id}-${index}`} className="flex items-center space-x-2">
@@ -376,13 +491,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       case 'message':
         return (
           <>
-            <Textarea placeholder="Mensagem do bot..." value={node.text || ''} onChange={(e) => onUpdate(node.id, { text: e.target.value })} className="resize-none text-sm" rows={3} />
+            <Textarea data-no-drag="true" placeholder="Mensagem do bot..." value={node.text || ''} onChange={(e) => onUpdate(node.id, { text: e.target.value })} className="resize-none text-sm" rows={3} />
             {renderWhatsAppToggle()}
           </>
         );
       case 'input':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-prompttext`}>Texto da Pergunta</Label><Textarea id={`${node.id}-prompttext`} placeholder="Digite sua pergunta aqui..." value={node.promptText || ''} onChange={(e) => onUpdate(node.id, { promptText: e.target.value })} rows={2}/></div>
             <div><Label htmlFor={`${node.id}-inputtype`}>Tipo de Entrada</Label>
               <Select value={node.inputType || 'text'} onValueChange={(value) => onUpdate(node.id, { inputType: value as NodeData['inputType'] })}>
@@ -398,7 +513,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'option':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-optionqtext`}>Texto da Pergunta</Label><Textarea id={`${node.id}-optionqtext`} placeholder="Qual sua escolha?" value={node.questionText || ''} onChange={(e) => onUpdate(node.id, { questionText: e.target.value })} rows={2}/></div>
             <div><Label htmlFor={`${node.id}-optionslist`}>Opções (uma por linha)</Label><Textarea id={`${node.id}-optionslist`} placeholder="Opção 1\nOpção 2" value={node.optionsList || ''} onChange={(e) => onUpdate(node.id, { optionsList: e.target.value })} rows={3}/></div>
             <div><Label htmlFor={`${node.id}-varsavechoice`}>Salvar Escolha na Variável (opcional)</Label><Input id={`${node.id}-varsavechoice`} placeholder="variavel_escolha" value={node.variableToSaveChoice || ''} onChange={(e) => onUpdate(node.id, { variableToSaveChoice: e.target.value })} /></div>
@@ -407,7 +522,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'whatsapp-text':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-instance`}>Instância</Label><Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || 'evolution_instance'} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-phone`}>Telefone</Label><Input id={`${node.id}-phone`} placeholder="55119... ou {{variavel_tel}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })}/></div>
             <div><Label htmlFor={`${node.id}-watext`}>Mensagem</Label><Textarea id={`${node.id}-watext`} value={node.textMessage || ''} onChange={(e) => onUpdate(node.id, { textMessage: e.target.value })} rows={2}/></div>
@@ -415,7 +530,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'whatsapp-media':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-instance`}>Instância</Label><Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || 'evolution_instance'} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-phone`}>Telefone</Label><Input id={`${node.id}-phone`} placeholder="55119... ou {{variavel_tel}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })}/></div>
             <div><Label htmlFor={`${node.id}-mediaurl`}>URL da Mídia</Label><Input id={`${node.id}-mediaurl`} placeholder="https://... ou {{url_midia}}" value={node.mediaUrl || ''} onChange={(e) => onUpdate(node.id, { mediaUrl: e.target.value })}/></div>
@@ -433,7 +548,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'whatsapp-group':
          return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-instance`}>Instância</Label><Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || 'evolution_instance'} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-groupname`}>Nome do Grupo</Label><Input id={`${node.id}-groupname`} value={node.groupName || ''} onChange={(e) => onUpdate(node.id, { groupName: e.target.value })}/></div>
             <div><Label htmlFor={`${node.id}-participants`}>Participantes (IDs separados por vírgula, ex: 55119...@s.whatsapp.net)</Label><Textarea id={`${node.id}-participants`} value={node.participants || ''} onChange={(e) => onUpdate(node.id, { participants: e.target.value })} rows={2}/></div>
@@ -441,7 +556,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'condition':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-condvar`}>Variável (ex: {"{{variavel}}"})</Label><Input id={`${node.id}-condvar`} placeholder="{{variavel}}" value={node.conditionVariable || ''} onChange={(e) => onUpdate(node.id, { conditionVariable: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-condop`}>Operador</Label>
               <Select value={node.conditionOperator || '=='} onValueChange={(value) => onUpdate(node.id, { conditionOperator: value as NodeData['conditionOperator']})}>
@@ -461,7 +576,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'set-variable':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-varname`}>Nome da Variável</Label><Input id={`${node.id}-varname`} placeholder="minhaVariavel" value={node.variableName || ''} onChange={(e) => onUpdate(node.id, { variableName: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-varval`}>Valor (pode usar {"{{outra_var}}"})</Label><Input id={`${node.id}-varval`} placeholder="Valor ou {{outra_var}}" value={node.variableValue || ''} onChange={(e) => onUpdate(node.id, { variableValue: e.target.value })}/></div>
           </div>
@@ -569,35 +684,35 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               <Label htmlFor={`${node.id}-apioutputvar`}>Salvar Resposta da API na Variável</Label>
               <Input id={`${node.id}-apioutputvar`} placeholder="resposta_api" value={node.apiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { apiOutputVariable: e.target.value })} />
             </div>
-            <Button variant="outline" className="w-full mt-3" onClick={() => toast({title: "Teste API", description:"Funcionalidade de teste ainda não implementada."})}>
-                Testar Requisição (Simulado)
+            <Button variant="outline" className="w-full mt-3" onClick={handleTestApiCall} disabled={isTestingApi}>
+                <TestTube2 className="mr-2 h-4 w-4" /> {isTestingApi ? "Testando..." : "Testar Requisição"}
             </Button>
           </div>
         );
       case 'delay':
         return (
-          <div>
+          <div data-no-drag="true">
             <Label htmlFor={`${node.id}-delay`}>Duração do Atraso (em milissegundos)</Label>
             <Input id={`${node.id}-delay`} type="number" placeholder="1000" value={node.delayDuration ?? ''} onChange={(e) => onUpdate(node.id, { delayDuration: parseInt(e.target.value, 10) || 0 })} />
           </div>
         );
       case 'date-input':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-datelabel`}>Texto da Pergunta</Label><Input id={`${node.id}-datelabel`} placeholder="Ex: Qual sua data de nascimento?" value={node.dateInputLabel || ''} onChange={(e) => onUpdate(node.id, {dateInputLabel: e.target.value})} /></div>
             <div><Label htmlFor={`${node.id}-varsavedate`}>Salvar Data na Variável</Label><Input id={`${node.id}-varsavedate`} placeholder="data_nascimento" value={node.variableToSaveDate || ''} onChange={(e) => onUpdate(node.id, { variableToSaveDate: e.target.value })} /></div>
           </div>
         );
       case 'redirect':
         return (
-          <div>
+          <div data-no-drag="true">
             <Label htmlFor={`${node.id}-redirecturl`}>URL para Redirecionamento (pode usar {"{{variavel}}"})</Label>
             <Input id={`${node.id}-redirecturl`} placeholder="https://exemplo.com/{{id_usuario}}" value={node.redirectUrl || ''} onChange={(e) => onUpdate(node.id, { redirectUrl: e.target.value })} />
           </div>
         );
       case 'typing-emulation':
         return (
-          <div>
+          <div data-no-drag="true">
             <Label htmlFor={`${node.id}-typingduration`}>Duração da Simulação de Digitação (ms)</Label>
             <Input id={`${node.id}-typingduration`} type="number" placeholder="1500" value={node.typingDuration ?? ''} onChange={(e) => onUpdate(node.id, { typingDuration: parseInt(e.target.value, 10) || 0 })} />
           </div>
@@ -605,7 +720,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       case 'media-display':
         return (
           <>
-            <div className="space-y-3">
+            <div className="space-y-3" data-no-drag="true">
               <div><Label htmlFor={`${node.id}-mediadisplaytype`}>Tipo de Mídia</Label>
                 <Select value={node.mediaDisplayType || 'image'} onValueChange={(value) => onUpdate(node.id, { mediaDisplayType: value as NodeData['mediaDisplayType'] })}>
                   <SelectTrigger id={`${node.id}-mediadisplaytype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
@@ -624,14 +739,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'log-console':
         return (
-          <div>
+          <div data-no-drag="true">
             <Label htmlFor={`${node.id}-logmsg`}>Mensagem para Log (use {"{{variavel}}"} para variáveis)</Label>
             <Textarea id={`${node.id}-logmsg`} placeholder="Ex: Status: {{input.status}}, Usuário: {{user.id}}" value={node.logMessage || ''} onChange={(e) => onUpdate(node.id, { logMessage: e.target.value })} rows={2}/>
           </div>
         );
       case 'code-execution':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-codesnippet`}>Trecho de Código (JavaScript)</Label><Textarea id={`${node.id}-codesnippet`} placeholder="async (input, variables) => {\n  // input é o valor do nó anterior, se conectado\n  // variables é um objeto com as variáveis do fluxo\n  // Ex: const nome = variables.nome_usuario;\n  // return { resultado: 1 + 1, nome_modificado: nome.toUpperCase() };\n}" value={node.codeSnippet || ''} onChange={(e) => onUpdate(node.id, { codeSnippet: e.target.value })} rows={6}/></div>
             <div><Label htmlFor={`${node.id}-codeoutputvar`}>Salvar Saída (objeto) na Variável</Label><Input id={`${node.id}-codeoutputvar`} placeholder="resultado_codigo (ex: resultado_codigo.resultado)" value={node.codeOutputVariable || ''} onChange={(e) => onUpdate(node.id, { codeOutputVariable: e.target.value })} /></div>
             <p className="text-xs text-muted-foreground">Nota: O código é executado em um ambiente sandbox no servidor.</p>
@@ -639,7 +754,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'json-transform':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-inputjson`}>JSON de Entrada (objeto ou {"{{variavel}}"})</Label><Textarea id={`${node.id}-inputjson`} placeholder='{ "chave": "valor" } ou {{dados_api}}' value={node.inputJson || ''} onChange={(e) => onUpdate(node.id, { inputJson: e.target.value })} rows={3}/></div>
             <div><Label htmlFor={`${node.id}-jsonata`}>Expressão JSONata</Label><Input id={`${node.id}-jsonata`} placeholder="$.chave.outraChave[0]" value={node.jsonataExpression || ''} onChange={(e) => onUpdate(node.id, { jsonataExpression: e.target.value })}/></div>
             <div><Label htmlFor={`${node.id}-jsonoutputvar`}>Salvar JSON Transformado na Variável</Label><Input id={`${node.id}-jsonoutputvar`} placeholder="json_transformado" value={node.jsonOutputVariable || ''} onChange={(e) => onUpdate(node.id, { jsonOutputVariable: e.target.value })} /></div>
@@ -647,7 +762,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'file-upload':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-uploadprompt`}>Texto do Prompt de Upload</Label><Input id={`${node.id}-uploadprompt`} placeholder="Por favor, envie seu documento." value={node.uploadPromptText || ''} onChange={(e) => onUpdate(node.id, { uploadPromptText: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-filefilter`}>Filtro de Tipo de Arquivo (ex: image/*, .pdf)</Label><Input id={`${node.id}-filefilter`} placeholder="image/*, .pdf, .docx" value={node.fileTypeFilter || ''} onChange={(e) => onUpdate(node.id, { fileTypeFilter: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-maxsize`}>Tam. Máx. Arquivo (MB)</Label><Input id={`${node.id}-maxsize`} type="number" placeholder="5" value={node.maxFileSizeMB ?? ''} onChange={(e) => onUpdate(node.id, { maxFileSizeMB: parseInt(e.target.value, 10) || undefined })} /></div>
@@ -656,7 +771,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'rating-input':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-ratingq`}>Pergunta da Avaliação</Label><Input id={`${node.id}-ratingq`} placeholder="Como você nos avalia?" value={node.ratingQuestionText || ''} onChange={(e) => onUpdate(node.id, { ratingQuestionText: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-maxrating`}>Avaliação Máxima</Label><Input id={`${node.id}-maxrating`} type="number" placeholder="5" value={node.maxRatingValue ?? ''} onChange={(e) => onUpdate(node.id, { maxRatingValue: parseInt(e.target.value, 10) || 5 })} /></div>
             <div><Label htmlFor={`${node.id}-ratingicon`}>Ícone de Avaliação</Label>
@@ -672,7 +787,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'ai-text-generation':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-aiprompt`}>Prompt para IA (use {"{{variavel}}"} para variáveis)</Label><Textarea id={`${node.id}-aiprompt`} placeholder="Gere uma descrição para um produto chamado {{input.nome_produto}}." value={node.aiPromptText || ''} onChange={(e) => onUpdate(node.id, { aiPromptText: e.target.value })} rows={4}/></div>
             <div><Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional)</Label><Input id={`${node.id}-aimodel`} placeholder="gemini-2.0-flash (padrão)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })}/></div>
             <div><Label htmlFor={`${node.id}-aioutputvar`}>Salvar Resposta da IA na Variável</Label><Input id={`${node.id}-aioutputvar`} placeholder="resposta_ia" value={node.aiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { aiOutputVariable: e.target.value })} /></div>
@@ -681,7 +796,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'send-email':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-emailto`}>Para (E-mail ou {"{{variavel}}"})</Label><Input id={`${node.id}-emailto`} type="email" placeholder="destinatario@exemplo.com ou {{email_cliente}}" value={node.emailTo || ''} onChange={(e) => onUpdate(node.id, { emailTo: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-emailsubject`}>Assunto (pode usar {"{{variavel}}"})</Label><Input id={`${node.id}-emailsubject`} placeholder="Assunto do seu e-mail" value={node.emailSubject || ''} onChange={(e) => onUpdate(node.id, { emailSubject: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-emailbody`}>Corpo do E-mail (HTML ou Texto, pode usar {"{{variavel}}"})</Label><Textarea id={`${node.id}-emailbody`} placeholder="Olá {{input.nome_cliente}},\n\nSua mensagem aqui." value={node.emailBody || ''} onChange={(e) => onUpdate(node.id, { emailBody: e.target.value })} rows={4}/></div>
@@ -690,7 +805,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'google-sheets-append':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-gsheetid`}>ID da Planilha Google</Label><Input id={`${node.id}-gsheetid`} placeholder="abc123xyz789" value={node.googleSheetId || ''} onChange={(e) => onUpdate(node.id, { googleSheetId: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-gsheetname`}>Nome da Aba (Planilha)</Label><Input id={`${node.id}-gsheetname`} placeholder="Página1" value={node.googleSheetName || ''} onChange={(e) => onUpdate(node.id, { googleSheetName: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-gsheetdata`}>Dados da Linha (JSON array de strings, ex: ["{{val1}}", "{{val2}}"])</Label><Textarea id={`${node.id}-gsheetdata`} placeholder='["{{input.valor1}}", "{{input.valor2}}", "texto fixo"]' value={node.googleSheetRowData || ''} onChange={(e) => onUpdate(node.id, { googleSheetRowData: e.target.value })} rows={2}/></div>
@@ -699,7 +814,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'intelligent-agent':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div><Label htmlFor={`${node.id}-agentname`}>Nome do Agente</Label><Input id={`${node.id}-agentname`} placeholder="Agente de Suporte N1" value={node.agentName || ''} onChange={(e) => onUpdate(node.id, { agentName: e.target.value })} /></div>
             <div><Label htmlFor={`${node.id}-agentsystemprompt`}>Prompt do Sistema / Instruções (pode usar {"{{variavel}}"})</Label><Textarea id={`${node.id}-agentsystemprompt`} placeholder="Você é um assistente virtual especializado em {{area_especializacao}}." value={node.agentSystemPrompt || ''} onChange={(e) => onUpdate(node.id, { agentSystemPrompt: e.target.value })} rows={4}/></div>
             <div><Label htmlFor={`${node.id}-userinputvar`}>Variável com Entrada do Usuário (ex: {"{{pergunta_usuario}}"})</Label><Input id={`${node.id}-userinputvar`} placeholder="{{pergunta_usuario}}" value={node.userInputVariable || ''} onChange={(e) => onUpdate(node.id, { userInputVariable: e.target.value })} /></div>
@@ -729,7 +844,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'supabase-create-row':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div>
               <Label htmlFor={`${node.id}-tableName`}>Nome da Tabela Supabase</Label>
               <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
@@ -746,7 +861,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'supabase-read-row':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
              <div>
               <Label htmlFor={`${node.id}-tableNameRead`}>Nome da Tabela Supabase</Label>
               <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
@@ -773,7 +888,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'supabase-update-row':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div>
               <Label htmlFor={`${node.id}-tableNameUpdate`}>Nome da Tabela Supabase</Label>
               <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
@@ -799,7 +914,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         );
       case 'supabase-delete-row':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3" data-no-drag="true">
             <div>
               <Label htmlFor={`${node.id}-tableNameDelete`}>Nome da Tabela Supabase</Label>
               <Select value={node.supabaseTableName || ''} onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value })}>
@@ -828,6 +943,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   };
 
   return (
+    <>
     <motion.div
       className="w-full cursor-default bg-card rounded-lg shadow-xl border border-border relative"
       whileHover={{ scale: 1.01, boxShadow: "0px 5px 25px rgba(0,0,0,0.1)" }}
@@ -836,7 +952,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       aria-labelledby={`${node.id}-title`}
       onMouseDown={(e) => {
         const target = e.target as HTMLElement;
-        if (target.dataset.connector === 'true' || target.closest('input, textarea, select, button, [data-no-drag="true"]') || (target.closest('[role="tablist"]') || target.closest('[role="tabpanel"]'))) {
+         if (target.dataset.connector === 'true' || 
+            target.closest('[data-action="delete-node"]') ||
+            target.closest('[data-no-drag="true"]') || 
+            target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target) ||
+            target.closest('[role="tablist"]') || 
+            target.closest('[role="tabpanel"]') ||
+            target.closest('[role="dialog"]') // Prevent drag when interacting with dialog content
+        ) {
           return;
         }
         handleNodeMouseDown(e);
@@ -864,7 +987,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
         </CardHeader>
-        <CardContent className="p-3.5 text-sm">
+        <CardContent className="p-3.5 text-sm" data-no-drag={node.type === 'api-call' || node.type === 'start' || node.type === 'option' || node.type.startsWith('supabase')}>
           {renderNodeContent()}
         </CardContent>
       </Card>
@@ -881,7 +1004,55 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       
       {renderOutputConnectors()}
     </motion.div>
+
+    {node.type === 'api-call' && (
+        <Dialog open={isTestResponseModalOpen} onOpenChange={setIsTestResponseModalOpen}>
+            <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col" data-no-drag="true">
+                <DialogHeader>
+                    <DialogTitle>Resposta do Teste da API</DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 overflow-y-auto space-y-4 py-4">
+                    {testResponseError && (
+                        <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md">
+                            <h4 className="font-semibold mb-1">Erro:</h4>
+                            <pre className="text-xs whitespace-pre-wrap break-all">{testResponseError}</pre>
+                        </div>
+                    )}
+                    {testResponseData && (
+                        <>
+                            <div>
+                                <Label className="font-semibold">Status Code:</Label>
+                                <p className={`text-sm ${testResponseData.status >= 400 ? 'text-destructive' : 'text-green-600'}`}>{testResponseData.status}</p>
+                            </div>
+                            <div>
+                                <Label className="font-semibold">Headers da Resposta:</Label>
+                                <ScrollArea className="h-32 mt-1 border rounded-md p-2 bg-muted/30">
+                                    <pre className="text-xs whitespace-pre-wrap break-all">
+                                        {Object.entries(testResponseData.headers).map(([key, value]) => `${key}: ${value}`).join('\n')}
+                                    </pre>
+                                </ScrollArea>
+                            </div>
+                            <div>
+                                <Label className="font-semibold">Corpo da Resposta:</Label>
+                                <ScrollArea className="h-48 mt-1 border rounded-md p-2 bg-muted/30">
+                                    <pre className="text-xs whitespace-pre-wrap break-all">
+                                        {typeof testResponseData.body === 'string' ? testResponseData.body : JSON.stringify(testResponseData.body, null, 2)}
+                                    </pre>
+                                </ScrollArea>
+                            </div>
+                        </>
+                    )}
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsTestResponseModalOpen(false)}>Fechar</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )}
+    </>
   );
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
+    
