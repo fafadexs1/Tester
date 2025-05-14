@@ -38,5 +38,3 @@ const DraggableBlock: React.FC<DraggableBlockProps> = React.memo(({ type, label,
 
 DraggableBlock.displayName = 'DraggableBlock';
 export default DraggableBlock;
-
-    
