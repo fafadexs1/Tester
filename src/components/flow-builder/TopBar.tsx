@@ -2,19 +2,17 @@
 "use client";
 
 import type React from 'react';
-import { useState } from 'react'; // Adicionado useState
+import { useState } from 'react';
 import type { WorkspaceData } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard } from 'lucide-react';
+import { PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, Database } from 'lucide-react'; // Adicionado Database
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger, // Não será usado diretamente no item, mas o Dialog o gerencia
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from '@/hooks/use-toast';
+import { Separator } from '@/components/ui/separator';
 
 
 interface TopBarProps {
@@ -51,12 +50,26 @@ const TopBar: React.FC<TopBarProps> = ({
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-  const [supabaseUrl, setSupabaseUrl] = useState(''); // Simulação de estado para config
-  const [supabaseAnonKey, setSupabaseAnonKey] = useState(''); // Simulação de estado para config
+  
+  // Estados para configurações do Supabase
+  const [supabaseUrl, setSupabaseUrl] = useState(''); 
+  const [supabaseAnonKey, setSupabaseAnonKey] = useState(''); 
+
+  // Estados placeholder para PostgreSQL (apenas para UI)
+  const [postgresHost, setPostgresHost] = useState('');
+  const [postgresPort, setPostgresPort] = useState('');
+  const [postgresUser, setPostgresUser] = useState('');
+  const [postgresPassword, setPostgresPassword] = useState('');
+  const [postgresDatabase, setPostgresDatabase] = useState('');
+
 
   const handleSaveSettings = () => {
     // Em uma aplicação real, você salvaria isso (ex: localStorage ou backend)
-    console.log("Configurações Salvas (Simulado):", { supabaseUrl, supabaseAnonKey });
+    // e provavelmente separaria o salvamento por categoria.
+    console.log("Configurações Salvas (Simulado):", { 
+      supabase: { supabaseUrl, supabaseAnonKey },
+      postgresql: { postgresHost, postgresPort, postgresUser, postgresDatabase, postgresPasswordExists: postgresPassword.length > 0 }
+    });
     toast({
       title: "Configurações Salvas!",
       description: "Suas configurações foram (simuladamente) salvas.",
@@ -110,7 +123,7 @@ const TopBar: React.FC<TopBarProps> = ({
                 >
                   <SelectTrigger 
                     id="workspace-select-topbar-mobile" 
-                    className="h-9 w-auto min-w-[calc(100vw-280px)] max-w-[200px] text-sm" // Ajustado para ocupar espaço
+                    className="h-9 w-auto min-w-[calc(100vw-280px)] max-w-[200px] text-sm" 
                     aria-label="Selecionar Fluxo de Trabalho"
                   >
                     <SelectValue placeholder="Selecionar Fluxo" />
@@ -180,7 +193,7 @@ const TopBar: React.FC<TopBarProps> = ({
                 <span className="sr-only">Abrir menu do usuário</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem>
@@ -206,46 +219,104 @@ const TopBar: React.FC<TopBarProps> = ({
       </header>
 
       <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
-        <DialogContent className="sm:max-w-[525px] bg-card">
+        <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl bg-card max-h-[80vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Configurações da Aplicação</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-xl">Configurações da Aplicação</DialogTitle>
+            {/* <DialogDescription>
               Gerencie as configurações globais da sua aplicação aqui.
-            </DialogDescription>
+            </DialogDescription> */}
           </DialogHeader>
-          <div className="grid gap-6 py-4">
-            <div className="space-y-2">
-              <h4 className="font-medium leading-none text-lg text-card-foreground">Supabase</h4>
-              <p className="text-sm text-muted-foreground">
-                Configure as credenciais para integração com seu projeto Supabase.
-              </p>
-            </div>
-            <div className="grid gap-3">
-              <Label htmlFor="supabase-url" className="text-card-foreground">URL do Projeto Supabase</Label>
-              <Input
-                id="supabase-url"
-                placeholder="https://seunomeprojeto.supabase.co"
-                value={supabaseUrl}
-                onChange={(e) => setSupabaseUrl(e.target.value)}
-                className="bg-input text-foreground"
-              />
-            </div>
-            <div className="grid gap-3">
-              <Label htmlFor="supabase-anon-key" className="text-card-foreground">Chave Anônima (Anon Key) Supabase</Label>
-              <Input
-                id="supabase-anon-key"
-                type="password"
-                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                value={supabaseAnonKey}
-                onChange={(e) => setSupabaseAnonKey(e.target.value)}
-                className="bg-input text-foreground"
-              />
-               <p className="text-xs text-muted-foreground">
-                Esta chave é usada para acesso público aos dados do seu projeto.
-              </p>
-            </div>
+          
+          <div className="flex-grow overflow-y-auto pr-2 space-y-8 py-4">
+            {/* Categoria Banco de Dados */}
+            <section>
+              <div className="flex items-center mb-4">
+                <Database className="w-6 h-6 mr-3 text-primary" />
+                <h3 className="text-lg font-semibold text-card-foreground">Banco de Dados</h3>
+              </div>
+              <Separator className="mb-6" />
+
+              {/* Sub-seção Supabase */}
+              <div className="ml-4 pl-4 border-l-2 border-border space-y-6">
+                <div>
+                    <h4 className="font-medium leading-none text-md text-card-foreground mb-1">Supabase</h4>
+                    <p className="text-sm text-muted-foreground mb-4">
+                        Configure as credenciais para integração com seu projeto Supabase.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                        <div>
+                            <Label htmlFor="supabase-url" className="text-card-foreground">URL do Projeto Supabase</Label>
+                            <Input
+                                id="supabase-url"
+                                placeholder="https://seunomeprojeto.supabase.co"
+                                value={supabaseUrl}
+                                onChange={(e) => setSupabaseUrl(e.target.value)}
+                                className="bg-input text-foreground mt-1"
+                            />
+                        </div>
+                        <div>
+                            <Label htmlFor="supabase-anon-key" className="text-card-foreground">Chave Anônima (Anon Key)</Label>
+                            <Input
+                                id="supabase-anon-key"
+                                type="password"
+                                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                                value={supabaseAnonKey}
+                                onChange={(e) => setSupabaseAnonKey(e.target.value)}
+                                className="bg-input text-foreground mt-1"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Esta chave é usada para acesso público aos dados do seu projeto.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <Separator className="my-8" />
+
+                {/* Sub-seção PostgreSQL (Placeholder) */}
+                <div>
+                    <h4 className="font-medium leading-none text-md text-card-foreground mb-1">PostgreSQL</h4>
+                    <p className="text-sm text-muted-foreground mb-4">
+                        Configure as credenciais para conexão com seu banco de dados PostgreSQL. (Em breve)
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                        <div>
+                            <Label htmlFor="postgres-host" className="text-card-foreground">Host</Label>
+                            <Input id="postgres-host" placeholder="localhost" value={postgresHost} onChange={e => setPostgresHost(e.target.value)} disabled className="bg-input text-foreground mt-1" />
+                        </div>
+                        <div>
+                            <Label htmlFor="postgres-port" className="text-card-foreground">Porta</Label>
+                            <Input id="postgres-port" placeholder="5432" value={postgresPort} onChange={e => setPostgresPort(e.target.value)} disabled className="bg-input text-foreground mt-1" />
+                        </div>
+                        <div>
+                            <Label htmlFor="postgres-user" className="text-card-foreground">Usuário</Label>
+                            <Input id="postgres-user" placeholder="seu_usuario" value={postgresUser} onChange={e => setPostgresUser(e.target.value)} disabled className="bg-input text-foreground mt-1" />
+                        </div>
+                        <div>
+                            <Label htmlFor="postgres-password" className="text-card-foreground">Senha</Label>
+                            <Input id="postgres-password" type="password" placeholder="********" value={postgresPassword} onChange={e => setPostgresPassword(e.target.value)} disabled className="bg-input text-foreground mt-1" />
+                        </div>
+                        <div className="md:col-span-2">
+                            <Label htmlFor="postgres-database" className="text-card-foreground">Nome do Banco</Label>
+                            <Input id="postgres-database" placeholder="nome_do_banco" value={postgresDatabase} onChange={e => setPostgresDatabase(e.target.value)} disabled className="bg-input text-foreground mt-1" />
+                        </div>
+                    </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Outras Categorias de Configuração (Placeholder) */}
+            {/* 
+            <section>
+              <h3 className="text-lg font-semibold text-card-foreground mb-2">Outra Categoria</h3>
+              <Separator className="mb-4" />
+              <p className="text-sm text-muted-foreground">Configurações para outra categoria aqui...</p>
+            </section>
+            */}
+
           </div>
-          <DialogFooter>
+          
+          <DialogFooter className="mt-auto pt-4 border-t">
             <Button variant="outline" onClick={() => setIsSettingsDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleSaveSettings}>Salvar Configurações</Button>
           </DialogFooter>
