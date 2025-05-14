@@ -28,27 +28,28 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
   const [isTesting, setIsTesting] = useState(false);
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
   const [flowVariables, setFlowVariables] = useState<Record<string, any>>({});
-  const [awaitingInputFor, setAwaitingInputFor] = useState<NodeData | null>(null); // Para saber qual nó 'input' está esperando
+  const [awaitingInputFor, setAwaitingInputFor] = useState<NodeData | null>(null); 
 
   const getNodeById = (nodeId: string): NodeData | undefined => {
     return activeWorkspace?.nodes.find(n => n.id === nodeId);
   };
 
   const findNextNodeId = (fromNodeId: string, sourceHandle?: string): string | null => {
+    console.log(`[TestChatPanel] findNextNodeId: fromNodeId=${fromNodeId}, sourceHandle=${sourceHandle}`);
+    console.log('[TestChatPanel] findNextNodeId: activeWorkspace?.connections', activeWorkspace?.connections);
     const connection = activeWorkspace?.connections.find(
       conn => conn.from === fromNodeId && (conn.sourceHandle === sourceHandle || (!sourceHandle && conn.sourceHandle === 'default'))
     );
+    console.log('[TestChatPanel] findNextNodeId: found connection', connection);
     return connection ? connection.to : null;
   };
 
   const substituteVariables = (text: string | undefined | null): string => {
     if (text === undefined || text === null) {
-      // console.warn('[TestChatPanel] substituteVariables received undefined/null input. Returning empty string.');
       return '';
     }
-    let mutableText = text; // Ensure we are working with a mutable variable if text is a string
+    let mutableText = text; 
     if (typeof mutableText !== 'string') {
-      console.warn('[TestChatPanel] substituteVariables received non-string input (but not undefined/null):', mutableText, 'Type:', typeof mutableText, '. Converting to string.');
       mutableText = String(mutableText);
     }
     
@@ -57,10 +58,39 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
       substitutedText = substitutedText.replace(regex, String(flowVariables[key] ?? '')); 
     }
-    // Remove placeholders não substituídos
     substitutedText = substitutedText.replace(/\{\{[^}]+\}\}/g, ''); 
     return substitutedText;
   };
+
+  // Helper to simulate saving variable output for various node types
+  const simulateVariableSave = (node: NodeData) => {
+    let variableName: string | undefined = undefined;
+    let simulatedValue: any = `[Valor simulado para ${node.title || node.type}]`;
+
+    switch(node.type) {
+      case 'api-call': variableName = node.apiOutputVariable; simulatedValue = { data: "dados da API simulados", status: 200 }; break;
+      case 'date-input': variableName = node.variableToSaveDate; simulatedValue = new Date().toISOString().split('T')[0]; break;
+      case 'code-execution': variableName = node.codeOutputVariable; simulatedValue = { result: "resultado do código simulado" }; break;
+      case 'json-transform': variableName = node.jsonOutputVariable; simulatedValue = { transformed: "JSON transformado simulado" }; break;
+      case 'file-upload': variableName = node.fileUrlVariable; simulatedValue = "https://placehold.co/file.txt"; break;
+      case 'rating-input': variableName = node.ratingOutputVariable; simulatedValue = Math.floor(Math.random() * (node.maxRatingValue || 5)) + 1; break;
+      case 'ai-text-generation': variableName = node.aiOutputVariable; simulatedValue = "Texto gerado por IA simulado."; break;
+      case 'intelligent-agent': variableName = node.agentResponseVariable; simulatedValue = "Resposta do agente inteligente simulada."; break;
+      case 'supabase-create-row': variableName = node.supabaseResultVariable; simulatedValue = { id: uuidv4(), message: "Linha criada no Supabase (simulado)"}; break;
+      case 'supabase-read-row': variableName = node.supabaseResultVariable; simulatedValue = [{ id: node.supabaseIdentifierValue || uuidv4(), data: "Dados lidos do Supabase (simulado)" }]; break;
+      // Note: input, option, set-variable are handled more directly upon user interaction or node processing.
+    }
+
+    if (variableName && variableName.trim() !== '') {
+      setFlowVariables(prev => {
+        const newVars = {...prev, [variableName as string]: simulatedValue};
+        console.log(`[TestChatPanel] Simulating save for node ${node.id} (${node.type}): ${variableName} =`, simulatedValue, "New flowVariables:", newVars);
+        setMessages(prevMessages => [...prevMessages, { id: uuidv4(), text: `(Simulado) Variável "${variableName}" definida como: ${JSON.stringify(simulatedValue)}.`, sender: 'bot'}]);
+        return newVars;
+      });
+    }
+  };
+
 
   const processNode = async (nodeId: string | null) => {
     console.log('[TestChatPanel] processNode called with nodeId:', nodeId);
@@ -90,11 +120,11 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     }
     
     console.log('[TestChatPanel] Processing node:', JSON.parse(JSON.stringify(node)));
+    console.log('[TestChatPanel] Current flowVariables before processing node:', JSON.parse(JSON.stringify(flowVariables)));
     setCurrentNodeId(node.id);
     let nextNodeId: string | null = null;
     let autoAdvance = true;
 
-    // Simulação de 'typing'
     if (node.type !== 'start' && node.type !== 'delay') { 
         const typingMessageId = uuidv4();
         setMessages(prev => [...prev, { id: typingMessageId, text: "Bot está digitando...", sender: 'bot' }]);
@@ -144,7 +174,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
           }]);
         } else {
             setMessages(prev => [...prev, { id: uuidv4(), text: "(Nó de opções mal configurado)", sender: 'bot' }]);
-             autoAdvance = false; // Parar se mal configurado
+             autoAdvance = false; 
         }
         setAwaitingInputFor(node); 
         autoAdvance = false;
@@ -152,30 +182,26 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       
       case 'condition':
         let conditionMet = false;
-        const conditionVarField = node.conditionVariable; // Nome da variável ou string com {{vars}}, ex: "userInput" ou "{{data.user.age}}"
+        const conditionVarField = node.conditionVariable; 
         const conditionOperator = node.conditionOperator;
-        const conditionCompareValueField = node.conditionValue; // Valor literal ou string com {{vars}}
+        const conditionCompareValueField = node.conditionValue; 
 
         let actualValue: any;
         let displayVarName = conditionVarField;
 
         if (conditionVarField) {
-            // Primeiro, tentamos interpretar como uma referência de variável direta (sem chaves)
             if (!conditionVarField.startsWith("{{") && !conditionVarField.endsWith("}}") && flowVariables.hasOwnProperty(conditionVarField)) {
                 actualValue = flowVariables[conditionVarField];
                 displayVarName = conditionVarField;
             } else {
-                // Se não for uma chave direta ou tiver chaves, substituímos as variáveis
                 const substitutedValue = substituteVariables(conditionVarField);
-                // Se o campo original era uma referência {{var}}, tentamos buscar o valor da variável substituída se ela existir
-                // Caso contrário, usamos o valor substituído diretamente (pode ser um valor literal após substituição)
                 if (conditionVarField.startsWith("{{") && conditionVarField.endsWith("}}")) {
                     const cleanVarName = conditionVarField.substring(2, conditionVarField.length - 2).trim();
-                    actualValue = flowVariables[cleanVarName]; // Busca o valor da variável
+                    actualValue = flowVariables[cleanVarName]; 
                     displayVarName = cleanVarName;
                 } else {
-                     actualValue = substitutedValue; // Usa o resultado da substituição como valor
-                     displayVarName = substitutedValue; // Mostra o valor substituído
+                     actualValue = substitutedValue; 
+                     displayVarName = substitutedValue; 
                 }
             }
         }
@@ -212,7 +238,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         nextNodeId = findNextNodeId(node.id, conditionMet ? 'true' : 'false');
         if (!nextNodeId) {
             setMessages(prev => [...prev, { id: uuidv4(), text: `Caminho para '${conditionMet ? 'true' : 'false'}' não conectado. Tentando 'default' se existir.`, sender: 'bot' }]);
-            nextNodeId = findNextNodeId(node.id, 'default'); // Fallback
+            nextNodeId = findNextNodeId(node.id, 'default'); 
         }
         break;
       
@@ -224,7 +250,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         break;
       
       case 'set-variable':
-        if (node.variableName) {
+        if (node.variableName && node.variableName.trim() !== '') {
             const valueToSet = node.variableValue ? substituteVariables(node.variableValue) : '';
             setFlowVariables(prev => ({...prev, [node.variableName as string]: valueToSet}));
             setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${node.variableName}" definida como "${valueToSet}".`, sender: 'bot' }]);
@@ -235,9 +261,60 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
 
+      case 'api-call':
+      case 'date-input':
+      case 'code-execution':
+      case 'json-transform':
+      case 'file-upload':
+      case 'rating-input':
+      case 'ai-text-generation':
+      case 'intelligent-agent':
+      case 'supabase-create-row':
+      case 'supabase-read-row':
+        // Simulate processing and saving variable for these node types
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Processando nó: ${node.title || node.type} (simulado)...`, sender: 'bot' }]);
+        simulateVariableSave(node);
+        nextNodeId = findNextNodeId(node.id, 'default');
+        break;
+      
+      case 'typing-emulation':
+         setMessages(prev => [...prev, { id: uuidv4(), text: `(Simulando digitação por ${ (node.typingDuration || 1500) / 1000}s...)`, sender: 'bot' }]);
+         await new Promise(resolve => setTimeout(resolve, node.typingDuration || 1500));
+         nextNodeId = findNextNodeId(node.id, 'default');
+         break;
+
+      case 'log-console':
+        const logMsg = substituteVariables(node.logMessage);
+        console.log(`[Fluxo de Teste Log]: ${logMsg}`);
+        setMessages(prev => [...prev, {id: uuidv4(), text: `(Log no console: ${logMsg})`, sender: 'bot'}]);
+        nextNodeId = findNextNodeId(node.id, 'default');
+        break;
+
+      // Nodes that typically end a flow or don't have a default output in simulation
+      case 'redirect':
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Simulando redirecionamento para: ${substituteVariables(node.redirectUrl)}`, sender: 'bot' }]);
+        autoAdvance = false; // End simulation here for redirect
+        setIsTesting(false);
+        setCurrentNodeId(null);
+        break;
+      case 'send-email':
+      case 'google-sheets-append':
+      case 'whatsapp-text':
+      case 'whatsapp-media':
+      case 'whatsapp-group':
+      case 'supabase-update-row':
+      case 'supabase-delete-row':
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Simulando ação do nó: ${node.title || node.type}.`, sender: 'bot' }]);
+        // These nodes might define variables in a real scenario, but for simulation, we mainly acknowledge them.
+        // If they had output variables in their NodeData definition, simulateVariableSave could be called.
+        nextNodeId = findNextNodeId(node.id, 'default');
+        break;
+
       default:
-        setMessages(prev => [...prev, { id: uuidv4(), text: `Tipo de nó "${node.type}" (${node.title || 'Sem título'}) não implementado no chat de teste. Fim da simulação.`, sender: 'bot' }]);
-        autoAdvance = false; // Para o fluxo
+        // Exhaustive check for unhandled node types
+        const exhaustiveCheck: never = node.type;
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Tipo de nó "${exhaustiveCheck}" (${node.title || 'Sem título'}) não implementado no chat de teste. Fim da simulação.`, sender: 'bot' }]);
+        autoAdvance = false; 
         setIsTesting(false);
         setAwaitingInputFor(null);
         setCurrentNodeId(null);
@@ -246,7 +323,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
     if (autoAdvance && nextNodeId) {
       processNode(nextNodeId);
-    } else if (autoAdvance && !nextNodeId && node.type !== 'start' && node.type !== 'input' && node.type !== 'option') { 
+    } else if (autoAdvance && !nextNodeId && node.type !== 'start' && node.type !== 'input' && node.type !== 'option' && node.type !== 'redirect' ) { 
        processNode(null); 
     }
   };
@@ -254,7 +331,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
   const handleStartTest = () => {
     if (!activeWorkspace || activeWorkspace.nodes.length === 0) {
       console.error('[TestChatPanel] Tentativa de iniciar teste sem fluxo ativo ou com fluxo vazio.');
-      setMessages([{ id: 'error-no-workspace', text: "Nenhum fluxo ativo ou o fluxo está vazio.", sender: 'bot' }]);
+      setMessages([{ id: uuidv4(), text: "Nenhum fluxo ativo ou o fluxo está vazio.", sender: 'bot' }]);
       setIsTesting(false);
       return;
     }
@@ -273,7 +350,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       processNode(startNode.id);
     } else {
       console.error('[TestChatPanel] Nenhum nó de início encontrado no fluxo ativo.');
-      setMessages([{ id: 'error-no-start-node', text: "Nenhum nó de 'Início do Fluxo' encontrado.", sender: 'bot' }]);
+      setMessages([{ id: uuidv4(), text: "Nenhum nó de 'Início do Fluxo' encontrado.", sender: 'bot' }]);
       setIsTesting(false);
     }
   };
@@ -299,7 +376,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     const userMessageText = inputValue;
     setMessages(prev => [...prev, { id: uuidv4(), text: userMessageText, sender: 'user' }]);
     
-    if (awaitingInputFor.variableToSaveResponse) {
+    if (awaitingInputFor.variableToSaveResponse && awaitingInputFor.variableToSaveResponse.trim() !== '') {
       console.log(`[TestChatPanel] Saving input to variable: ${awaitingInputFor.variableToSaveResponse} = ${userMessageText}`);
       setFlowVariables(prevVars => {
           const newVars = {...prevVars, [awaitingInputFor.variableToSaveResponse as string]: userMessageText };
@@ -326,7 +403,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
     setMessages(prev => [...prev, { id: uuidv4(), text: `Você escolheu: ${optionText}`, sender: 'user' }]);
     
-    if (awaitingInputFor.variableToSaveChoice) {
+    if (awaitingInputFor.variableToSaveChoice && awaitingInputFor.variableToSaveChoice.trim() !== '') {
       console.log(`[TestChatPanel] Saving choice to variable: ${awaitingInputFor.variableToSaveChoice} = ${optionText}`);
       setFlowVariables(prevVars => {
         const newVars = {...prevVars, [awaitingInputFor.variableToSaveChoice as string]: optionText };
@@ -336,7 +413,6 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     }
 
     console.log(`[TestChatPanel] Finding next node from: ${awaitingInputFor.id} with sourceHandle (optionText): "${optionText}"`);
-    console.log('[TestChatPanel] Available connections for active workspace:', JSON.parse(JSON.stringify(activeWorkspace?.connections || [])));
     const nextNodeIdAfterOption = findNextNodeId(awaitingInputFor.id, optionText);
     console.log('[TestChatPanel] nextNodeIdAfterOption found:', nextNodeIdAfterOption);
     
@@ -449,3 +525,4 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
 export default TestChatPanel;
 
+    
