@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Send, Play, RotateCcw, MessageSquare } from 'lucide-react';
 import type { WorkspaceData, NodeData, Connection } from '@/lib/types'; // Importar tipos
+import { v4 as uuidv4 } from 'uuid';
 
 interface Message {
   id: string;
@@ -65,13 +66,13 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     console.log('[TestChatPanel] processNode called with nodeId:', nodeId);
     if (!activeWorkspace) {
         console.error('[TestChatPanel] processNode: activeWorkspace is null or undefined.');
-        setMessages(prev => [...prev, { id: Date.now().toString(), text: "Erro crítico: Fluxo ativo não encontrado.", sender: 'bot' }]);
+        setMessages(prev => [...prev, { id: uuidv4(), text: "Erro crítico: Fluxo ativo não encontrado.", sender: 'bot' }]);
         setIsTesting(false);
         return;
     }
 
     if (!nodeId) {
-      setMessages(prev => [...prev, { id: Date.now().toString(), text: "Fim do fluxo.", sender: 'bot' }]);
+      setMessages(prev => [...prev, { id: uuidv4(), text: "Fim do fluxo.", sender: 'bot' }]);
       setIsTesting(false);
       setAwaitingInputFor(null);
       setCurrentNodeId(null);
@@ -81,7 +82,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     const node = getNodeById(nodeId);
     if (!node) {
       console.error(`[TestChatPanel] processNode: Node with ID ${nodeId} not found.`);
-      setMessages(prev => [...prev, { id: Date.now().toString(), text: `Erro: Nó com ID ${nodeId} não encontrado. Fim da simulação.`, sender: 'bot' }]);
+      setMessages(prev => [...prev, { id: uuidv4(), text: `Erro: Nó com ID ${nodeId} não encontrado. Fim da simulação.`, sender: 'bot' }]);
       setIsTesting(false);
       setAwaitingInputFor(null);
       setCurrentNodeId(null);
@@ -95,7 +96,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
     // Simulação de 'typing'
     if (node.type !== 'start' && node.type !== 'delay') { 
-        const typingMessageId = `${Date.now()}-typing`;
+        const typingMessageId = uuidv4();
         setMessages(prev => [...prev, { id: typingMessageId, text: "Bot está digitando...", sender: 'bot' }]);
         await new Promise(resolve => setTimeout(resolve, 600)); 
         setMessages(prev => prev.filter(m => m.id !== typingMessageId)); 
@@ -104,29 +105,29 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
     switch (node.type) {
       case 'start':
-        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Iniciando fluxo a partir de: ${node.title || 'Nó de Início'}`, sender: 'bot' }]);
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Iniciando fluxo a partir de: ${node.title || 'Nó de Início'}`, sender: 'bot' }]);
         if (node.triggers && node.triggers.length > 0 && node.triggers[0]) {
           nextNodeId = findNextNodeId(node.id, node.triggers[0]);
         } else {
-          setMessages(prev => [...prev, { id: Date.now().toString(), text: "Nó de início não tem gatilhos configurados ou conectados.", sender: 'bot' }]);
+          setMessages(prev => [...prev, { id: uuidv4(), text: "Nó de início não tem gatilhos configurados ou conectados.", sender: 'bot' }]);
           autoAdvance = false;
         }
         break;
       
       case 'message':
         if (node.text) {
-          setMessages(prev => [...prev, { id: Date.now().toString(), text: substituteVariables(node.text), sender: 'bot' }]);
+          setMessages(prev => [...prev, { id: uuidv4(), text: substituteVariables(node.text), sender: 'bot' }]);
         } else {
-            setMessages(prev => [...prev, { id: Date.now().toString(), text: "(Nó de mensagem vazio)", sender: 'bot' }]);
+            setMessages(prev => [...prev, { id: uuidv4(), text: "(Nó de mensagem vazio)", sender: 'bot' }]);
         }
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
 
       case 'input':
         if (node.promptText) {
-          setMessages(prev => [...prev, { id: Date.now().toString(), text: substituteVariables(node.promptText), sender: 'bot' }]);
+          setMessages(prev => [...prev, { id: uuidv4(), text: substituteVariables(node.promptText), sender: 'bot' }]);
         } else {
-            setMessages(prev => [...prev, { id: Date.now().toString(), text: "(Nó de entrada sem pergunta)", sender: 'bot' }]);
+            setMessages(prev => [...prev, { id: uuidv4(), text: "(Nó de entrada sem pergunta)", sender: 'bot' }]);
         }
         setAwaitingInputFor(node); 
         autoAdvance = false;
@@ -136,13 +137,13 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         if (node.questionText && node.optionsList) {
           const options = node.optionsList.split('\n').map(opt => opt.trim()).filter(opt => opt);
           setMessages(prev => [...prev, { 
-            id: Date.now().toString(), 
+            id: uuidv4(), 
             text: substituteVariables(node.questionText), 
             sender: 'bot',
             options: options 
           }]);
         } else {
-            setMessages(prev => [...prev, { id: Date.now().toString(), text: "(Nó de opções mal configurado)", sender: 'bot' }]);
+            setMessages(prev => [...prev, { id: uuidv4(), text: "(Nó de opções mal configurado)", sender: 'bot' }]);
              autoAdvance = false; // Parar se mal configurado
         }
         setAwaitingInputFor(node); 
@@ -186,7 +187,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         console.log(`[TestChatPanel] Condition Node: Variable Field: "${conditionVarField}", Operator: "${conditionOperator}", Compare Value Field: "${conditionCompareValueField}"`);
         console.log(`[TestChatPanel] Condition Evaluation: Display Var Name: "${displayVarName}", Actual Value:`, actualValue, `Operator: "${conditionOperator}", Value to Compare:`, valueToCompare);
         
-        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Avaliando condição: '${displayVarName}' (valor: ${JSON.stringify(actualValue)}) ${conditionOperator} '${valueToCompare === undefined ? 'N/A' : valueToCompare}'`, sender: 'bot' }]);
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Avaliando condição: '${displayVarName}' (valor: ${JSON.stringify(actualValue)}) ${conditionOperator} '${valueToCompare === undefined ? 'N/A' : valueToCompare}'`, sender: 'bot' }]);
         
         switch (conditionOperator) {
             case '==': conditionMet = String(actualValue ?? '') === String(valueToCompare ?? ''); break;
@@ -203,21 +204,21 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                 conditionMet = actualValue !== undefined && actualValue !== null && String(actualValue).trim() !== '';
                 break;
             default:
-                setMessages(prev => [...prev, { id: Date.now().toString(), text: `Operador de condição '${conditionOperator}' desconhecido. Assumindo falso.`, sender: 'bot' }]);
+                setMessages(prev => [...prev, { id: uuidv4(), text: `Operador de condição '${conditionOperator}' desconhecido. Assumindo falso.`, sender: 'bot' }]);
                 conditionMet = false;
         }
 
-        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Resultado da condição: ${conditionMet ? 'Verdadeiro' : 'Falso'}.`, sender: 'bot' }]);
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Resultado da condição: ${conditionMet ? 'Verdadeiro' : 'Falso'}.`, sender: 'bot' }]);
         nextNodeId = findNextNodeId(node.id, conditionMet ? 'true' : 'false');
         if (!nextNodeId) {
-            setMessages(prev => [...prev, { id: Date.now().toString(), text: `Caminho para '${conditionMet ? 'true' : 'false'}' não conectado. Tentando 'default' se existir.`, sender: 'bot' }]);
+            setMessages(prev => [...prev, { id: uuidv4(), text: `Caminho para '${conditionMet ? 'true' : 'false'}' não conectado. Tentando 'default' se existir.`, sender: 'bot' }]);
             nextNodeId = findNextNodeId(node.id, 'default'); // Fallback
         }
         break;
       
       case 'delay':
         const duration = node.delayDuration || 1000;
-        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Aguardando ${duration / 1000} segundos...`, sender: 'bot' }]);
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Aguardando ${duration / 1000} segundos...`, sender: 'bot' }]);
         await new Promise(resolve => setTimeout(resolve, duration));
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
@@ -226,16 +227,16 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         if (node.variableName) {
             const valueToSet = node.variableValue ? substituteVariables(node.variableValue) : '';
             setFlowVariables(prev => ({...prev, [node.variableName as string]: valueToSet}));
-            setMessages(prev => [...prev, { id: Date.now().toString(), text: `Variável "${node.variableName}" definida como "${valueToSet}".`, sender: 'bot' }]);
-            console.log(`[TestChatPanel] Variable Set: ${node.variableName} = ${valueToSet}. Current flowVariables:`, flowVariables);
+            setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${node.variableName}" definida como "${valueToSet}".`, sender: 'bot' }]);
+            console.log(`[TestChatPanel] Variable Set: ${node.variableName} = ${valueToSet}. Current flowVariables:`, JSON.parse(JSON.stringify(flowVariables)));
         } else {
-            setMessages(prev => [...prev, { id: Date.now().toString(), text: `Nó "Definir Variável" sem nome de variável configurado.`, sender: 'bot' }]);
+            setMessages(prev => [...prev, { id: uuidv4(), text: `Nó "Definir Variável" sem nome de variável configurado.`, sender: 'bot' }]);
         }
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
 
       default:
-        setMessages(prev => [...prev, { id: Date.now().toString(), text: `Tipo de nó "${node.type}" (${node.title || 'Sem título'}) não implementado no chat de teste. Fim da simulação.`, sender: 'bot' }]);
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Tipo de nó "${node.type}" (${node.title || 'Sem título'}) não implementado no chat de teste. Fim da simulação.`, sender: 'bot' }]);
         autoAdvance = false; // Para o fluxo
         setIsTesting(false);
         setAwaitingInputFor(null);
@@ -296,7 +297,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     console.log('[TestChatPanel] Current flowVariables before update:', JSON.parse(JSON.stringify(flowVariables)));
 
     const userMessageText = inputValue;
-    setMessages(prev => [...prev, { id: Date.now().toString(), text: userMessageText, sender: 'user' }]);
+    setMessages(prev => [...prev, { id: uuidv4(), text: userMessageText, sender: 'user' }]);
     
     if (awaitingInputFor.variableToSaveResponse) {
       console.log(`[TestChatPanel] Saving input to variable: ${awaitingInputFor.variableToSaveResponse} = ${userMessageText}`);
@@ -323,7 +324,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     console.log('[TestChatPanel] awaitingInputFor (option node):', JSON.parse(JSON.stringify(awaitingInputFor)));
     console.log('[TestChatPanel] Current flowVariables before update:', JSON.parse(JSON.stringify(flowVariables)));
 
-    setMessages(prev => [...prev, { id: Date.now().toString(), text: `Você escolheu: ${optionText}`, sender: 'user' }]);
+    setMessages(prev => [...prev, { id: uuidv4(), text: `Você escolheu: ${optionText}`, sender: 'user' }]);
     
     if (awaitingInputFor.variableToSaveChoice) {
       console.log(`[TestChatPanel] Saving choice to variable: ${awaitingInputFor.variableToSaveChoice} = ${optionText}`);
