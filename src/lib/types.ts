@@ -36,6 +36,7 @@ export interface NodeData {
   title: string;
   x: number;
   y: number;
+  dataAiHint?: string; // Para placeholder de imagens
   
   // Propriedades específicas dos tipos de nó
   text?: string; // Para 'message'
@@ -173,3 +174,5 @@ export interface WorkspaceData {
   nodes: NodeData[];
   connections: Connection[];
 }
+
+    
