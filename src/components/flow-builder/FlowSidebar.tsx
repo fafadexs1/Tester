@@ -8,8 +8,7 @@ import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, 
-  Database, DatabaseZap, Rows, Search, Edit3, Trash, PlayCircle // Adicionado PlayCircle para o nó de início
-  // Removidos PlusCircle, Save, Undo2, LayoutGrid
+  Database, DatabaseZap, Rows, Search, Edit3, Trash, PlayCircle, StopCircle // Adicionado StopCircle para o nó de Fim do Fluxo
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 // Removidos Button, Label, Selects, Separator, pois os controles de workspace foram movidos
@@ -33,6 +32,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
         { type: "media-display", label: "Exibir Mídia", icon: <FileImage {...iconProps} className="text-blue-500" />, defaultData: { mediaDisplayType: 'image', mediaDisplayUrl: 'https://placehold.co/300x200.png', dataAiHint: 'placeholder abstract', mediaDisplayText: 'Imagem de exemplo' } },
         { type: "rating-input", label: "Entrada de Avaliação", icon: <Star {...iconProps} className="text-yellow-400" />, defaultData: { ratingQuestionText: 'Como você avalia nosso serviço?', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: 'avaliacao_servico' } },
         { type: "file-upload", label: "Upload de Arquivo", icon: <UploadCloud {...iconProps} className="text-fuchsia-500" />, defaultData: { uploadPromptText: 'Por favor, envie seu arquivo.', maxFileSizeMB: 5, fileUrlVariable: 'url_arquivo_enviado' } },
+        { type: "end-flow", label: "Fim do Fluxo", icon: <StopCircle {...iconProps} className="text-destructive" />, defaultData: {} },
       ]
     },
     {

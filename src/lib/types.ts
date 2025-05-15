@@ -33,7 +33,8 @@ export type NodeType =
   | 'supabase-create-row'
   | 'supabase-read-row'
   | 'supabase-update-row'
-  | 'supabase-delete-row';
+  | 'supabase-delete-row'
+  | 'end-flow';
 
 export interface ApiHeader {
   id: string;
@@ -163,9 +164,7 @@ export interface NodeData {
   supabaseDataJson?: string; 
   supabaseColumnsToSelect?: string; 
   supabaseResultVariable?: string; 
-  // supabaseReturnSingleValue?: boolean; // Removido
-  // supabaseSingleValueColumn?: string; // Removido
-
+  
   triggers?: string[];
 }
 
@@ -178,6 +177,7 @@ export interface Connection {
 
 export interface DrawingLineData {
   fromId: string;
+  fromNodeData: NodeData; // Adicionado para fácil acesso ao nó de origem
   sourceHandleId: string;
   startX: number;
   startY: number;

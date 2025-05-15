@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Send, Play, RotateCcw, MessageSquare, Loader2 } from 'lucide-react';
+import { Send, Play, RotateCcw, MessageSquare, Loader2, LogOut } from 'lucide-react';
 import type { WorkspaceData, NodeData, Connection } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -32,12 +32,6 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
   const [awaitingInputFor, setAwaitingInputFor] = useState<NodeData | null>(null);
   const [isProcessingNode, setIsProcessingNode] = useState(false);
   
-  const activeFlowVariablesRef = useRef<Record<string, any>>(flowVariables);
-  useEffect(() => {
-    activeFlowVariablesRef.current = flowVariables;
-  }, [flowVariables]);
-
-
   const getNodeById = (nodeId: string): NodeData | undefined => {
     return activeWorkspace?.nodes.find(n => n.id === nodeId);
   };
@@ -63,15 +57,14 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
   
     const substitutedText = mutableText.replace(variableRegex, (match, variableName) => {
-      // Acessar valor da variável
-      let value = currentActiveFlowVariables;
+      let value: any = currentActiveFlowVariables;
       const parts = variableName.split('.');
       for (const part of parts) {
         if (value && typeof value === 'object' && part in value) {
           value = value[part];
         } else {
-          console.log(`[TestChatPanel] substituteVariables: Part "${part}" of variable "{{${variableName}}}" not found or value is not an object.`);
-          return ''; // Retorna string vazia se o caminho não for encontrado
+          console.log(`[TestChatPanel] substituteVariables: Part "${part}" of variable "{{${variableName}}}" not found or value is not an object. Vars:`, JSON.parse(JSON.stringify(currentActiveFlowVariables)));
+          return ''; 
         }
       }
   
@@ -116,27 +109,37 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     }
   };
 
-  const processNode = async (nodeId: string | null, varsForThisExecution: Record<string, any>) => {
-    console.log(`[TestChatPanel] processNode ENTER: nodeId: ${nodeId}, receivedVars:`, JSON.parse(JSON.stringify(varsForThisExecution || {})));
+  const handleEndChatTest = () => {
+    console.log('[TestChatPanel] handleEndChatTest called');
+    setMessages(prev => [...prev, { id: uuidv4(), text: "Teste encerrado.", sender: 'bot' }]);
+    setIsTesting(false);
+    setAwaitingInputFor(null);
+    setCurrentNodeId(null);
+    setIsProcessingNode(false); // Certificar que o processamento para
+  };
+
+
+  const processNode = async (nodeId: string | null, receivedVars: Record<string, any>) => {
+    console.log(`[TestChatPanel] processNode ENTER: nodeId: ${nodeId}, receivedVars:`, JSON.parse(JSON.stringify(receivedVars || {})));
     setIsProcessingNode(true);
     setCurrentNodeId(nodeId); 
 
     if (!activeWorkspace) {
         console.error('[TestChatPanel] processNode: activeWorkspace is null or undefined.');
         setMessages(prev => [...prev, { id: uuidv4(), text: "Erro crítico: Fluxo ativo não encontrado.", sender: 'bot' }]);
-        setIsTesting(false);
-        setIsProcessingNode(false);
+        handleEndChatTest();
         return;
     }
 
-    let activeVars = { ...(varsForThisExecution || {}) };
+    let activeVars = { ...(receivedVars || {}) };
     console.log(`[TestChatPanel] processNode: effective activeVars for this node:`, JSON.parse(JSON.stringify(activeVars)));
 
 
     if (!nodeId) {
-      setMessages(prev => [...prev, { id: uuidv4(), text: "Fim do fluxo.", sender: 'bot' }]);
-      setIsTesting(false);
-      setAwaitingInputFor(null);
+      // Flow ended because no next node, but not via 'end-flow' node.
+      setMessages(prev => [...prev, { id: uuidv4(), text: "Fim do caminho atual. O fluxo está pausado. Use 'Encerrar Teste' ou 'Reiniciar Teste'.", sender: 'bot' }]);
+      // Do not call handleEndChatTest here, let the user decide.
+      setAwaitingInputFor(null); 
       setIsProcessingNode(false);
       return;
     }
@@ -145,9 +148,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     if (!node) {
       console.error(`[TestChatPanel] processNode: Node with ID ${nodeId} not found.`);
       setMessages(prev => [...prev, { id: uuidv4(), text: `Erro: Nó com ID ${nodeId} não encontrado. Fim da simulação.`, sender: 'bot' }]);
-      setIsTesting(false);
-      setAwaitingInputFor(null);
-      setIsProcessingNode(false);
+      handleEndChatTest();
       return;
     }
 
@@ -157,7 +158,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     let autoAdvance = true;
     let updatedVarsForNextNode = { ...activeVars };
 
-    if (node.type !== 'start' && node.type !== 'delay') {
+    if (node.type !== 'start' && node.type !== 'delay' && node.type !== 'end-flow') {
         const typingMessageId = uuidv4();
         setMessages(prev => [...prev, { id: typingMessageId, text: "Bot está digitando...", sender: 'bot' }]);
         await new Promise(resolve => setTimeout(resolve, 600));
@@ -278,7 +279,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             const valueToSet = node.variableValue ? substituteVariables(node.variableValue, updatedVarsForNextNode) : '';
             updatedVarsForNextNode = {...updatedVarsForNextNode, [node.variableName as string]: valueToSet};
             setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${node.variableName}" definida como "${valueToSet}".`, sender: 'bot' }]);
-            console.log(`[TestChatPanel] Variable Set: ${node.variableName} = ${valueToSet}. Current vars for next step:`, JSON.parse(JSON.stringify(updatedVarsForNextNode)));
+            console.log(`[TestChatPanel] Variable Set: ${node.variableName} = ${valueToSet}. New vars for next step:`, JSON.parse(JSON.stringify(updatedVarsForNextNode)));
         } else {
             setMessages(prev => [...prev, { id: uuidv4(), text: `Nó "Definir Variável" sem nome de variável configurado.`, sender: 'bot' }]);
         }
@@ -302,7 +303,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         
         let columnsToSelect = substituteVariables(node.supabaseColumnsToSelect, updatedVarsForNextNode).trim();
         if (!columnsToSelect && (node.type === 'supabase-read-row' || node.type === 'supabase-create-row' || node.type === 'supabase-update-row')) {
-            columnsToSelect = '*';
+            columnsToSelect = '*'; // Default to all columns if not specified for ops that return data
         }
         
         console.log(`[TestChatPanel] Supabase Op: ${node.type} - Table: ${tableName}, ID Col: ${idColumn}, ID Val: ${idValue}, DataJSON: ${dataJsonString}, Select: ${columnsToSelect}`);
@@ -323,6 +324,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Linha criada na tabela '${tableName}'. Resultado: ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
           } else if (node.type === 'supabase-read-row') {
             if (!idColumn || (idValue === undefined || idValue === null || String(idValue).trim() === '')) { throw new Error("Coluna identificadora ou valor não fornecidos para leitura."); }
+            console.log(`[TestChatPanel] Supabase Read - Querying: table='${tableName}', select='${columnsToSelect}', eq_col='${idColumn}', eq_val='${String(idValue)}'`);
             const { data, error } = await supabase.from(tableName).select(columnsToSelect).eq(idColumn, String(idValue));
             console.log(`[TestChatPanel] Supabase read RAW data for node ${node.id}:`, data);
             if (error) throw error;
@@ -331,14 +333,14 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                 if (data.length === 1) {
                     const singleRow = data[0];
                     const keys = Object.keys(singleRow);
-                    if (keys.length === 1) { // Se apenas uma coluna foi retornada
+                    if (keys.length === 1 && columnsToSelect !== '*' && !columnsToSelect.includes(',')) { 
                         resultDataToSave = singleRow[keys[0]];
                         setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Valor único lido da tabela '${tableName}', coluna '${keys[0]}': ${resultDataToSave}`, sender: 'bot' }]);
-                    } else { // Múltiplas colunas, retorna o objeto da linha
+                    } else { 
                         resultDataToSave = singleRow;
                         setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Dados lidos da tabela '${tableName}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
                     }
-                } else { // Múltiplas linhas retornadas
+                } else { 
                     resultDataToSave = data;
                     setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Múltiplas linhas lidas da tabela '${tableName}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
                 }
@@ -368,7 +370,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             const varName = node.supabaseResultVariable as string;
             console.log(`[TestChatPanel] ${node.type.toUpperCase()}: Attempting to set variable "${varName}" with data:`, JSON.parse(JSON.stringify(resultDataToSave)));
             updatedVarsForNextNode = { ...updatedVarsForNextNode, [varName]: resultDataToSave };
-             setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${varName}" definida com o resultado.`, sender: 'bot' }]);
+            setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${varName}" definida com o resultado.`, sender: 'bot' }]);
           }
 
         } catch (e: any) {
@@ -425,9 +427,15 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       case 'redirect':
         setMessages(prev => [...prev, { id: uuidv4(), text: `Simulando redirecionamento para: ${substituteVariables(node.redirectUrl, updatedVarsForNextNode)}`, sender: 'bot' }]);
         autoAdvance = false;
-        setIsTesting(false);
-        setCurrentNodeId(null);
+        handleEndChatTest(); // Explicitly end test on redirect
         break;
+      
+      case 'end-flow':
+        setMessages(prev => [...prev, { id: uuidv4(), text: "Fluxo encerrado.", sender: 'bot' }]);
+        autoAdvance = false;
+        handleEndChatTest();
+        break;
+
       case 'send-email':
       case 'google-sheets-append':
       case 'whatsapp-text':
@@ -441,20 +449,18 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       default:
         setMessages(prev => [...prev, { id: uuidv4(), text: `Tipo de nó "${node.type}" (${node.title || 'Sem título'}) não implementado no chat de teste. Fim da simulação.`, sender: 'bot' }]);
         autoAdvance = false;
-        setIsTesting(false);
-        setAwaitingInputFor(null);
-        setCurrentNodeId(null);
+        handleEndChatTest();
         break;
     }
 
     setFlowVariables(updatedVarsForNextNode);
-    activeFlowVariablesRef.current = updatedVarsForNextNode;
     console.log(`[TestChatPanel] processNode EXIT: nodeId: ${node.id}, vars passed to next step (or final state):`, JSON.parse(JSON.stringify(updatedVarsForNextNode)));
 
     setIsProcessingNode(false);
     if (autoAdvance && nextNodeId) {
       await processNode(nextNodeId, updatedVarsForNextNode);
-    } else if (autoAdvance && !nextNodeId && node.type !== 'start' && node.type !== 'input' && node.type !== 'option' && node.type !== 'redirect' ) {
+    } else if (autoAdvance && !nextNodeId && node.type !== 'input' && node.type !== 'option' && node.type !== 'redirect' && node.type !== 'end-flow' ) {
+      // Only auto-end if not waiting for input or explicitly ended
       await processNode(null, updatedVarsForNextNode); 
     }
   };
@@ -470,7 +476,6 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     setMessages([]);
     const initialVars = {};
     setFlowVariables(initialVars); 
-    activeFlowVariablesRef.current = initialVars; 
     setAwaitingInputFor(null);
     setIsTesting(true);
     setCurrentNodeId(null);
@@ -494,7 +499,6 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     setInputValue('');
     const initialVars = {};
     setFlowVariables(initialVars);
-    activeFlowVariablesRef.current = initialVars;
     setIsProcessingNode(false);
   };
 
@@ -506,7 +510,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     const userMessageText = inputValue;
     setMessages(prev => [...prev, { id: uuidv4(), text: userMessageText, sender: 'user' }]);
 
-    let varsAfterInput = { ...activeFlowVariablesRef.current }; 
+    let varsAfterInput = { ...flowVariables }; 
     console.log(`[TestChatPanel] awaitingInputFor (input node):`, JSON.parse(JSON.stringify(awaitingInputFor)));
     if (awaitingInputFor.variableToSaveResponse && awaitingInputFor.variableToSaveResponse.trim() !== '') {
       const varName = awaitingInputFor.variableToSaveResponse as string;
@@ -516,7 +520,6 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     
     console.log('[TestChatPanel] flowVariables after input save:', JSON.parse(JSON.stringify(varsAfterInput)));
     setFlowVariables(varsAfterInput); 
-    activeFlowVariablesRef.current = varsAfterInput;
     setInputValue('');
 
     const nextNodeIdAfterInput = findNextNodeId(awaitingInputFor.id, 'default');
@@ -532,7 +535,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     console.log('[TestChatPanel] handleOptionClick triggered. Option chosen:', optionText);
     setMessages(prev => [...prev, { id: uuidv4(), text: `Você escolheu: ${optionText}`, sender: 'user' }]);
 
-    let varsAfterOption = { ...activeFlowVariablesRef.current }; 
+    let varsAfterOption = { ...flowVariables }; 
     if (awaitingInputFor.variableToSaveChoice && awaitingInputFor.variableToSaveChoice.trim() !== '') {
       const varName = awaitingInputFor.variableToSaveChoice as string;
       console.log(`[TestChatPanel] Saving choice to variable: ${varName} = ${optionText}`);
@@ -541,7 +544,6 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     
     console.log('[TestChatPanel] flowVariables after option save:', JSON.parse(JSON.stringify(varsAfterOption)));
     setFlowVariables(varsAfterOption); 
-    activeFlowVariablesRef.current = varsAfterOption;
 
     const nextNodeIdAfterOption = findNextNodeId(awaitingInputFor.id, optionText);
     console.log('[TestChatPanel] nextNodeIdAfterOption found:', nextNodeIdAfterOption);
@@ -561,23 +563,17 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     <Card className="w-[380px] h-full flex flex-col border-l border-border shadow-none rounded-none">
       <CardHeader className="p-4 border-b flex flex-row items-center justify-between">
         <CardTitle className="text-lg">Teste do Fluxo</CardTitle>
-        {!isTesting ? (
-          <Button onClick={handleStartTest} size="sm" disabled={!activeWorkspace || activeWorkspace.nodes.length === 0 || isProcessingNode}>
-            <Play className="mr-2 h-4 w-4" /> Iniciar
-          </Button>
-        ) : (
-          <Button onClick={handleRestartTest} variant="outline" size="sm" disabled={isProcessingNode}>
-             {isProcessingNode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+        <Button onClick={handleRestartTest} variant="outline" size="sm" disabled={isProcessingNode}>
+            {isProcessingNode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
             {isProcessingNode ? "Processando..." : "Reiniciar"}
-          </Button>
-        )}
+        </Button>
       </CardHeader>
       <CardContent className="flex-1 p-0 overflow-hidden">
         <ScrollArea className="h-full p-4">
           {messages.length === 0 && !isTesting && (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <MessageSquare className="w-12 h-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">Clique em "Iniciar" para simular este fluxo.</p>
+              <p className="text-muted-foreground">Clique em "Iniciar" no rodapé para simular este fluxo.</p>
               {(!activeWorkspace || activeWorkspace.nodes.length === 0) && (
                 <p className="text-sm text-destructive mt-2">Nenhum fluxo ativo ou o fluxo está vazio.</p>
               )}
@@ -627,7 +623,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                 )}
               </div>
             ))}
-             {isProcessingNode && messages.length > 0 && (
+             {isProcessingNode && messages.length > 0 && currentNodeId && (
                  <div className="flex justify-start mt-2">
                     <div className="max-w-[85%] p-2.5 rounded-lg text-sm shadow-sm bg-muted text-muted-foreground rounded-bl-none flex items-center">
                         <Loader2 className="h-4 w-4 animate-spin mr-2"/>
@@ -639,7 +635,11 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         </ScrollArea>
       </CardContent>
       <CardFooter className="p-4 border-t">
-        {isTesting ? (
+        {!isTesting ? (
+           <Button onClick={handleStartTest} className="w-full" disabled={!activeWorkspace || activeWorkspace.nodes.length === 0 || isProcessingNode}>
+            <Play className="mr-2 h-4 w-4" /> Iniciar Teste
+          </Button>
+        ) : (
           <div className="flex w-full items-center space-x-2">
             <Input
               type="text"
@@ -658,11 +658,16 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             >
               <Send className="h-4 w-4" />
             </Button>
+            <Button
+              onClick={handleEndChatTest}
+              variant="outline"
+              size="icon"
+              aria-label="Encerrar Teste"
+              disabled={isProcessingNode}
+            >
+              <LogOut className="h-4 w-4 text-destructive" />
+            </Button>
           </div>
-        ) : (
-           <Button onClick={handleStartTest} className="w-full" disabled={!activeWorkspace || activeWorkspace.nodes.length === 0 || isProcessingNode}>
-            <Play className="mr-2 h-4 w-4" /> Iniciar Teste
-          </Button>
         )}
       </CardFooter>
     </Card>

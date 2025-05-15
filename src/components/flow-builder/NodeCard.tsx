@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash, 
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,7 +33,7 @@ import { fetchSupabaseTablesAction, fetchSupabaseTableColumnsAction } from '@/li
 interface NodeCardProps {
   node: NodeData;
   onUpdate: (id: string, changes: Partial<NodeData>) => void;
-  onStartConnection: (event: React.MouseEvent, fromId: string, sourceHandleId?: string) => void;
+  onStartConnection: (event: React.MouseEvent, fromNodeData: NodeData, sourceHandleId?: string) => void;
   onDeleteNode: (id: string) => void;
   definedVariablesInFlow: string[];
 }
@@ -419,12 +419,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       'supabase-read-row': <Search {...iconProps} className="text-blue-500" />,
       'supabase-update-row': <Edit3 {...iconProps} className="text-yellow-500" />,
       'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />, 
+      'end-flow': <StopCircle {...iconProps} className="text-destructive" />,
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
     return icons[node.type] || icons.default;
   };
   
   const renderOutputConnectors = (): React.ReactNode => {
+    if (node.type === 'end-flow') {
+      return null; // No output for end-flow node
+    }
     if (node.type === 'start') {
       return (node.triggers || []).map((triggerName, index) => (
         <div
@@ -436,7 +440,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{triggerName}</span>
           <div
             className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node.id, triggerName); }}
+            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, triggerName); }}
             data-connector="true"
             data-handle-type="source"
             data-handle-id={triggerName}
@@ -458,7 +462,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{optionText}</span>
           <div
             className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node.id, optionText); }}
+            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, optionText); }}
             data-connector="true"
             data-handle-type="source"
             data-handle-id={optionText}
@@ -476,7 +480,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <div
               title="Saída Verdadeiro"
               className="w-5 h-5 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-              onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node.id, 'true'); }}
+              onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'true'); }}
               data-connector="true" data-handle-type="source" data-handle-id="true"
             >
               <Hash className="w-3 h-3 text-white" />
@@ -487,7 +491,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <div
               title="Saída Falso"
               className="w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-              onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node.id, 'false'); }}
+              onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'false'); }}
               data-connector="true" data-handle-type="source" data-handle-id="false"
             >
                <Hash className="w-3 h-3 text-white" />
@@ -496,12 +500,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         </>
       );
     }
-    if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition') {
+    // For all other nodes that are not 'start', 'option', 'condition', or 'end-flow'
+    if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow') {
         return (
           <div className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">
             <div
               className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-              onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node.id, 'default'); }}
+              onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}
               data-connector="true" data-handle-type="source" data-handle-id="default"
               title="Arraste para conectar"
             >
@@ -1346,6 +1351,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           </div>
         );
       }
+      case 'end-flow':
+        return <p className="text-sm text-muted-foreground italic">Este nó encerra o fluxo.</p>;
       default:
         return <p className="text-xs text-muted-foreground italic">Nenhuma configuração para este tipo de nó.</p>;
     }
@@ -1398,12 +1405,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
         </CardHeader>
-        <CardContent className="p-3.5 text-sm" data-no-drag={node.type === 'api-call' || node.type === 'start' || node.type === 'option' || node.type.startsWith('supabase-')}>
+        <CardContent className="p-3.5 text-sm" data-no-drag={node.type === 'api-call' || node.type === 'start' || node.type === 'option' || node.type.startsWith('supabase-') || node.type === 'end-flow'}>
           {renderNodeContent()}
         </CardContent>
       </Card>
       
-      {node.type !== 'start' && (
+      {node.type !== 'start' && node.type !== 'end-flow' && (
         <div className="absolute -left-2.5 top-1/2 -translate-y-1/2 z-10">
           <div
               title="Conecte aqui"
