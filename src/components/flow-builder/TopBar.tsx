@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, 
-  Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound
+  Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, ZoomIn, ZoomOut, RefreshCcwDot as ResetZoomIcon
 } from 'lucide-react';
 import {
   Dialog,
@@ -57,6 +57,8 @@ interface TopBarProps {
   appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
+  onZoom: (direction: 'in' | 'out' | 'reset') => void;
+  currentZoomLevel: number;
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -69,6 +71,8 @@ const TopBar: React.FC<TopBarProps> = ({
   appName = "Flowise Lite",
   isChatPanelOpen,
   onToggleChatPanel,
+  onZoom,
+  currentZoomLevel,
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -76,7 +80,7 @@ const TopBar: React.FC<TopBarProps> = ({
   
   const [supabaseUrl, setSupabaseUrl] = useState(''); 
   const [supabaseAnonKey, setSupabaseAnonKey] = useState(''); 
-  const [supabaseServiceKey, setSupabaseServiceKey] = useState(''); // Novo estado
+  const [supabaseServiceKey, setSupabaseServiceKey] = useState('');
   const [isSupabaseEnabled, setIsSupabaseEnabled] = useState(false);
 
   const [postgresHost, setPostgresHost] = useState('');
@@ -89,16 +93,15 @@ const TopBar: React.FC<TopBarProps> = ({
   const [evolutionApiUrl, setEvolutionApiUrl] = useState('');
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
 
-
   useEffect(() => {
     const savedSupabaseUrl = localStorage.getItem('supabaseUrl');
     const savedSupabaseAnonKey = localStorage.getItem('supabaseAnonKey');
-    const savedSupabaseServiceKey = localStorage.getItem('supabaseServiceKey'); // Carregar
+    const savedSupabaseServiceKey = localStorage.getItem('supabaseServiceKey');
     const savedIsSupabaseEnabled = localStorage.getItem('isSupabaseEnabled') === 'true';
     
     if (savedSupabaseUrl) setSupabaseUrl(savedSupabaseUrl);
     if (savedSupabaseAnonKey) setSupabaseAnonKey(savedSupabaseAnonKey);
-    if (savedSupabaseServiceKey) setSupabaseServiceKey(savedSupabaseServiceKey); // Carregar
+    if (savedSupabaseServiceKey) setSupabaseServiceKey(savedSupabaseServiceKey);
     setIsSupabaseEnabled(savedIsSupabaseEnabled);
 
     const savedPostgresHost = localStorage.getItem('postgresHost');
@@ -125,7 +128,7 @@ const TopBar: React.FC<TopBarProps> = ({
   const handleSaveSettings = () => {
     localStorage.setItem('supabaseUrl', supabaseUrl);
     localStorage.setItem('supabaseAnonKey', supabaseAnonKey);
-    localStorage.setItem('supabaseServiceKey', supabaseServiceKey); // Salvar
+    localStorage.setItem('supabaseServiceKey', supabaseServiceKey);
     localStorage.setItem('isSupabaseEnabled', String(isSupabaseEnabled));
 
     localStorage.setItem('postgresHost', postgresHost);
@@ -208,7 +211,7 @@ const TopBar: React.FC<TopBarProps> = ({
           </Button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 md:gap-2">
           <div className="md:hidden">
             {activeWorkspaceId && workspaces.length > 0 && (
               <Select
@@ -297,20 +300,35 @@ const TopBar: React.FC<TopBarProps> = ({
             <Undo2 className="h-4 w-4" />
           </Button>
 
+          <div className="flex items-center border-l pl-1 md:pl-2 ml-1 md:ml-2">
+            <Button variant="ghost" size="icon" onClick={() => onZoom('out')} aria-label="Diminuir Zoom">
+                <ZoomOut className="h-5 w-5" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => onZoom('reset')} className="w-14 text-xs font-mono" aria-label="Resetar Zoom">
+                <ResetZoomIcon className="h-4 w-4 mr-1 md:hidden" />
+                <span className="hidden md:inline">{Math.round(currentZoomLevel * 100)}%</span>
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => onZoom('in')} aria-label="Aumentar Zoom">
+                <ZoomIn className="h-5 w-5" />
+            </Button>
+          </div>
+
+
           <Button
             onClick={onToggleChatPanel}
             variant="outline"
             size="icon"
             aria-label={isChatPanelOpen ? "Fechar painel de chat" : "Abrir painel de chat"}
+            className="ml-1 md:ml-2"
           >
             {isChatPanelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full">
+              <Button variant="ghost" size="icon" className="rounded-full ml-1 md:ml-2">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="https://placehold.co/40x40.png?text=UE" alt="@usuarioexemplo" data-ai-hint="user avatar" />
+                  <AvatarImage src="https://placehold.co/40x40.png?text=UE" alt="@usuarioexemplo" data-ai-hint="user avatar"/>
                   <AvatarFallback>UE</AvatarFallback>
                 </Avatar>
                 <span className="sr-only">Abrir menu do usuário</span>
@@ -401,7 +419,7 @@ const TopBar: React.FC<TopBarProps> = ({
                             </div>
                             <div>
                               <Label htmlFor="supabase-anon-key" className="text-card-foreground/90 text-sm">Chave Pública (Anon Key)</Label>
-                               <div className="flex items-center space-x-2">
+                               <div className="flex items-center space-x-2 mt-1">
                                 <KeyRound className="w-4 h-4 text-muted-foreground" />
                                 <Input
                                     id="supabase-anon-key"
@@ -418,7 +436,7 @@ const TopBar: React.FC<TopBarProps> = ({
                             </div>
                              <div>
                               <Label htmlFor="supabase-service-key" className="text-card-foreground/90 text-sm">Chave de Serviço (Service Role Key)</Label>
-                               <div className="flex items-center space-x-2">
+                               <div className="flex items-center space-x-2 mt-1">
                                 <KeyRound className="w-4 h-4 text-muted-foreground" />
                                 <Input
                                     id="supabase-service-key"
@@ -520,13 +538,13 @@ const TopBar: React.FC<TopBarProps> = ({
                               <Label htmlFor="evolution-api-url" className="text-card-foreground/90 text-sm">URL do WebSocket da API Evolution</Label>
                               <Input
                                 id="evolution-api-url"
-                                placeholder="ws://localhost:8080"
+                                placeholder="ws://localhost:8080 ou wss://sua-api.com"
                                 value={evolutionApiUrl}
                                 onChange={(e) => setEvolutionApiUrl(e.target.value)}
                                 className="bg-input text-foreground mt-1"
                               />
                               <p className="text-xs text-muted-foreground mt-1">
-                                Exemplo: ws://localhost:8080 ou wss://sua-api.com. A lógica de conexão real deve ser implementada.
+                                Necessário para os blocos do WhatsApp enviarem mensagens e para simular o recebimento de webhooks no chat de teste.
                               </p>
                             </div>
                           </div>
@@ -550,3 +568,4 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
+
