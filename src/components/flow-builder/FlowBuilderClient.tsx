@@ -7,6 +7,7 @@ import {
   NODE_WIDTH, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX, GRID_SIZE,
   START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y,
   OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y
+  // MIN_ZOOM, MAX_ZOOM, ZOOM_STEP // Não são mais usados aqui se os botões de zoom forem removidos
 } from '@/lib/constants';
 import FlowSidebar from './FlowSidebar';
 import Canvas from './Canvas';
@@ -23,8 +24,7 @@ const LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN = 'flowiseLiteChatPanelOpen';
 
 // Helper function to generate unique variable names
 function generateUniqueVariableName(baseName: string, existingNames: string[]): string {
-  if (!baseName || baseName.trim() === '') return ''; // Do not process empty base names
-  // Remove {{ }} if present
+  if (!baseName || baseName.trim() === '') return ''; 
   const cleanedBaseName = baseName.replace(/\{\{/g, '').replace(/\}\}/g, '').trim();
   if (cleanedBaseName === '') return '';
 
@@ -40,7 +40,6 @@ function generateUniqueVariableName(baseName: string, existingNames: string[]): 
   return newName;
 }
 
-// Fields in NodeData.defaultData that define a variable name and should be made unique
 const VARIABLE_DEFINING_FIELDS: (keyof NodeData)[] = [
   'variableToSaveResponse',
   'variableToSaveChoice',
@@ -66,10 +65,14 @@ export default function FlowBuilderClient() {
   const [highlightedConnectionId, setHighlightedConnectionId] = useState<string | null>(null);
 
   const [canvasOffset, setCanvasOffset] = useState<CanvasOffset>({ x: GRID_SIZE * 2, y: GRID_SIZE * 2 });
+  const [zoomLevel, setZoomLevel] = useState(1); // Mantido para lógica interna do Canvas, mesmo sem botões
+  
   const isPanning = useRef(false);
   const panStartMousePosition = useRef({ x: 0, y: 0 });
   const initialCanvasOffsetOnPanStart = useRef({ x: 0, y: 0 });
-  const mainContentRef = useRef<HTMLDivElement>(null);
+  
+  const mainContentRef = useRef<HTMLDivElement>(null); 
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   const [isChatPanelOpen, setIsChatPanelOpen] = useState(true);
   const [hasMounted, setHasMounted] = useState(false);
@@ -97,11 +100,10 @@ export default function FlowBuilderClient() {
       
       setDefinedVariablesInFlow(prevDefinedVars => {
         const newVarsArray = Array.from(variables).sort();
-        // Compare stringified versions to check for content equality
         if (JSON.stringify(prevDefinedVars) === JSON.stringify(newVarsArray)) {
-          return prevDefinedVars; // Keep the same array reference if content is the same
+          return prevDefinedVars; 
         }
-        return newVarsArray; // Update with new array reference if content changed
+        return newVarsArray; 
       });
 
     } else {
@@ -343,8 +345,8 @@ export default function FlowBuilderClient() {
     );
   }, [activeWorkspaceId]);
 
-  const handleDropNode = useCallback((item: DraggableBlockItemData, viewportOffset: { x: number, y: number }) => {
-    console.log('[FlowBuilderClient] handleDropNode called with:', { item, viewportOffset: JSON.parse(JSON.stringify(viewportOffset)), activeWorkspaceId });
+  const handleDropNode = useCallback((item: DraggableBlockItemData, logicalDropCoords: { x: number, y: number }) => {
+    console.log('[FlowBuilderClient] handleDropNode called with:', { item, logicalDropCoords: JSON.parse(JSON.stringify(logicalDropCoords)), activeWorkspaceId });
     if (!activeWorkspaceId) {
       console.error('[FlowBuilderClient] No activeWorkspaceId, cannot add node.');
       return;
@@ -421,8 +423,8 @@ export default function FlowBuilderClient() {
       title: item.label,
       ...baseNodeData, 
       ...itemDefaultDataCopy, 
-      x: viewportOffset.x - NODE_WIDTH / 2, 
-      y: viewportOffset.y - NODE_HEADER_HEIGHT_APPROX / 2, 
+      x: logicalDropCoords.x - NODE_WIDTH / 2, 
+      y: logicalDropCoords.y - NODE_HEADER_HEIGHT_APPROX / 2, 
     };
     console.log('[FlowBuilderClient] New node created:', JSON.parse(JSON.stringify(newNode)));
     
@@ -451,13 +453,12 @@ export default function FlowBuilderClient() {
     console.log('[FlowBuilderClient] Node deleted:', nodeIdToDelete);
   }, [updateActiveWorkspace]);
 
-  const handleStartConnection = useCallback((e: React.MouseEvent, fromId: string, sourceHandleId = 'default') => {
-    const fromNode = currentNodes.find(n => n.id === fromId); 
-    if (!fromNode || !mainContentRef.current) return;
-    
-    const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background'); 
-    if (!canvasElement) return;
-    const canvasRect = canvasElement.getBoundingClientRect();
+  const handleStartConnection = useCallback((e: React.MouseEvent, fromNode: NodeData, sourceHandleId = 'default') => {
+    if (!canvasRef.current) {
+      console.warn('[FlowBuilderClient] handleStartConnection: canvasRef.current is null.');
+      return;
+    }
+    const canvasRect = canvasRef.current.getBoundingClientRect();
 
     let startYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET; 
     if (fromNode.type === 'start' && fromNode.triggers && sourceHandleId) {
@@ -476,25 +477,29 @@ export default function FlowBuilderClient() {
         else if (sourceHandleId === 'false') startYOffset = NODE_HEADER_HEIGHT_APPROX * (2/3) + 6;
     }
 
-    const lineStartX = fromNode.x + NODE_WIDTH; 
-    const lineStartY = fromNode.y + startYOffset; 
+    // Convert visual node position (relative to canvas div after transforms) to logical position
+    const logicalNodeX = fromNode.x;
+    const logicalNodeY = fromNode.y;
     
-    const lineCurrentX = (e.clientX - canvasRect.left);
-    const lineCurrentY = (e.clientY - canvasRect.top);
+    const lineStartX = logicalNodeX + NODE_WIDTH; 
+    const lineStartY = logicalNodeY + startYOffset; 
+    
+    const lineCurrentX = (e.clientX - canvasRect.left - canvasOffset.x) / zoomLevel;
+    const lineCurrentY = (e.clientY - canvasRect.top - canvasOffset.y) / zoomLevel;
 
     setDrawingLine({
-      fromId,
+      fromId: fromNode.id,
       sourceHandleId,
       startX: lineStartX, 
       startY: lineStartY, 
       currentX: lineCurrentX, 
       currentY: lineCurrentY, 
     });
-  }, [currentNodes]); 
+  }, [zoomLevel, canvasOffset]); 
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) { 
-      e.preventDefault();
+      // e.preventDefault(); // Removido para testar se interfere no drag-and-drop
       isPanning.current = true;
       panStartMousePosition.current = { x: e.clientX, y: e.clientY };
       initialCanvasOffsetOnPanStart.current = { ...canvasOffset };
@@ -511,25 +516,26 @@ export default function FlowBuilderClient() {
         y: initialCanvasOffsetOnPanStart.current.y + dy,
       });
     } else if (drawingLine) {
-      const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background');
-      if (!canvasElement) return;
-      const canvasRect = canvasElement.getBoundingClientRect();
+      if (!canvasRef.current) {
+        console.warn("[FlowBuilderClient] handleGlobalMouseMove (drawingLine): canvasRef.current is null.");
+        return;
+      }
+      const canvasRect = canvasRef.current.getBoundingClientRect();
       setDrawingLine((prev) => {
         if (!prev) return null;
         return {
           ...prev,
-          currentX: (e.clientX - canvasRect.left),
-          currentY: (e.clientY - canvasRect.top),
+          currentX: (e.clientX - canvasRect.left - canvasOffset.x) / zoomLevel,
+          currentY: (e.clientY - canvasRect.top - canvasOffset.y) / zoomLevel,
         };
       });
     }
-  }, [drawingLine]); 
+  }, [drawingLine, zoomLevel, canvasOffset]); 
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
       isPanning.current = false;
-       const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null;
-      if (canvasElement) canvasElement.style.cursor = 'grab';
+      if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
     } else if (drawingLine) {
       const targetElement = document.elementFromPoint(e.clientX, e.clientY);
       const targetHandleElement = targetElement?.closest('[data-handle-type="target"]');
@@ -605,8 +611,7 @@ export default function FlowBuilderClient() {
     const handleMouseLeaveWindow = () => {
       if (isPanning.current) {
         isPanning.current = false;
-        const canvasElement = mainContentRef.current?.querySelector('.relative.flex-1.bg-background') as HTMLElement | null;
-        if (canvasElement) canvasElement.style.cursor = 'grab';
+        if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
       }
       if (drawingLineRef.current) { 
         setDrawingLine(null);
@@ -634,15 +639,20 @@ export default function FlowBuilderClient() {
           appName="Flowise Lite"
           isChatPanelOpen={isChatPanelOpen}
           onToggleChatPanel={toggleChatPanel}
+          // As props de zoom foram removidas do TopBar,
+          // mas a lógica de zoom permanece no FlowBuilderClient e Canvas
+          // para o caso de reintroduzirmos controles de zoom futuramente.
         />
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden" ref={mainContentRef}>
           <FlowSidebar />
-          <div ref={mainContentRef} className="flex-1 flex flex-col overflow-hidden relative">
+          <div className="flex-1 flex relative overflow-hidden"> {/* Removido flex-col daqui */}
             <Canvas
+              ref={canvasRef} // Passa a ref para o Canvas
               nodes={currentNodes}
               connections={currentConnections}
               drawingLine={drawingLine}
               canvasOffset={canvasOffset}
+              zoomLevel={zoomLevel} // Passa o zoomLevel
               onDropNode={handleDropNode}
               onUpdateNode={updateNode}
               onStartConnection={handleStartConnection}
@@ -665,3 +675,4 @@ export default function FlowBuilderClient() {
   );
 }
 
+    

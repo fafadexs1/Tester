@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, 
-  Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, ZoomIn, ZoomOut, RefreshCcwDot as ResetZoomIcon
+  Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound
+  // Removido: ZoomIn, ZoomOut, RefreshCcwDot as ResetZoomIcon
 } from 'lucide-react';
 import {
   Dialog,
@@ -57,8 +58,8 @@ interface TopBarProps {
   appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
-  onZoom: (direction: 'in' | 'out' | 'reset') => void;
-  currentZoomLevel: number;
+  onZoom?: (direction: 'in' | 'out' | 'reset') => void; // Tornar opcional
+  currentZoomLevel?: number; // Tornar opcional
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -71,8 +72,8 @@ const TopBar: React.FC<TopBarProps> = ({
   appName = "Flowise Lite",
   isChatPanelOpen,
   onToggleChatPanel,
-  onZoom,
-  currentZoomLevel,
+  onZoom, // Não usado se removermos os botões
+  currentZoomLevel, // Não usado se removermos os botões
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -94,34 +95,34 @@ const TopBar: React.FC<TopBarProps> = ({
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
 
   useEffect(() => {
-    if (isSettingsDialogOpen) { // Load settings when dialog opens
-      const savedSupabaseUrl = localStorage.getItem('supabaseUrl');
-      const savedSupabaseAnonKey = localStorage.getItem('supabaseAnonKey');
-      const savedSupabaseServiceKey = localStorage.getItem('supabaseServiceKey');
+    if (isSettingsDialogOpen) { 
+      const savedSupabaseUrl = localStorage.getItem('supabaseUrl') || '';
+      const savedSupabaseAnonKey = localStorage.getItem('supabaseAnonKey') || '';
+      const savedSupabaseServiceKey = localStorage.getItem('supabaseServiceKey') || '';
       const savedIsSupabaseEnabled = localStorage.getItem('isSupabaseEnabled') === 'true';
       
-      if (savedSupabaseUrl) setSupabaseUrl(savedSupabaseUrl);
-      if (savedSupabaseAnonKey) setSupabaseAnonKey(savedSupabaseAnonKey);
-      if (savedSupabaseServiceKey) setSupabaseServiceKey(savedSupabaseServiceKey);
+      setSupabaseUrl(savedSupabaseUrl);
+      setSupabaseAnonKey(savedSupabaseAnonKey);
+      setSupabaseServiceKey(savedSupabaseServiceKey);
       setIsSupabaseEnabled(savedIsSupabaseEnabled);
 
-      const savedPostgresHost = localStorage.getItem('postgresHost');
-      const savedPostgresPort = localStorage.getItem('postgresPort');
-      const savedPostgresUser = localStorage.getItem('postgresUser');
-      const savedPostgresPassword = localStorage.getItem('postgresPassword');
-      const savedPostgresDatabase = localStorage.getItem('postgresDatabase');
+      const savedPostgresHost = localStorage.getItem('postgresHost') || '';
+      const savedPostgresPort = localStorage.getItem('postgresPort') || '';
+      const savedPostgresUser = localStorage.getItem('postgresUser') || '';
+      const savedPostgresPassword = localStorage.getItem('postgresPassword') || '';
+      const savedPostgresDatabase = localStorage.getItem('postgresDatabase') || '';
       const savedIsPostgresEnabled = localStorage.getItem('isPostgresEnabled') === 'true';
 
-      if (savedPostgresHost) setPostgresHost(savedPostgresHost);
-      if (savedPostgresPort) setPostgresPort(savedPostgresPort);
-      if (savedPostgresUser) setPostgresUser(savedPostgresUser);
-      if (savedPostgresPassword) setPostgresPassword(savedPostgresPassword);
-      if (savedPostgresDatabase) setPostgresDatabase(savedPostgresDatabase);
+      setPostgresHost(savedPostgresHost);
+      setPostgresPort(savedPostgresPort);
+      setPostgresUser(savedPostgresUser);
+      setPostgresPassword(savedPostgresPassword);
+      setPostgresDatabase(savedPostgresDatabase);
       setIsPostgresEnabled(savedIsPostgresEnabled);
 
-      const savedEvolutionApiUrl = localStorage.getItem('evolutionApiUrl');
+      const savedEvolutionApiUrl = localStorage.getItem('evolutionApiUrl') || '';
       const savedIsEvolutionApiEnabled = localStorage.getItem('isEvolutionApiEnabled') === 'true';
-      if (savedEvolutionApiUrl) setEvolutionApiUrl(savedEvolutionApiUrl);
+      setEvolutionApiUrl(savedEvolutionApiUrl);
       setIsEvolutionApiEnabled(savedIsEvolutionApiEnabled);
     }
   }, [isSettingsDialogOpen]);
@@ -301,19 +302,7 @@ const TopBar: React.FC<TopBarProps> = ({
             <Undo2 className="h-4 w-4" />
           </Button>
 
-          <div className="flex items-center border-l pl-1 md:pl-2 ml-1 md:ml-2">
-            <Button variant="ghost" size="icon" onClick={() => onZoom('out')} aria-label="Diminuir Zoom">
-                <ZoomOut className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => onZoom('reset')} className="w-14 text-xs font-mono" aria-label="Resetar Zoom">
-                <ResetZoomIcon className="h-4 w-4 mr-1 md:hidden" />
-                <span className="hidden md:inline">{Math.round(currentZoomLevel * 100)}%</span>
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => onZoom('in')} aria-label="Aumentar Zoom">
-                <ZoomIn className="h-5 w-5" />
-            </Button>
-          </div>
-
+          {/* Controles de Zoom removidos daqui */}
 
           <Button
             onClick={onToggleChatPanel}
@@ -388,7 +377,7 @@ const TopBar: React.FC<TopBarProps> = ({
               {activeSettingsCategory === 'database' && (
                 <section>
                   <h3 className="text-lg font-semibold text-card-foreground mb-4">Configurações de Banco de Dados</h3>
-                  <Accordion type="multiple" className="w-full space-y-4" defaultValue={['supabase', 'postgresql']}>
+                  <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={isSupabaseEnabled ? 'supabase' : (isPostgresEnabled ? 'postgresql' : undefined) }>
                     <AccordionItem value="supabase" className="border rounded-lg shadow-sm">
                       <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
                         <div className="flex items-center space-x-3">
@@ -515,7 +504,7 @@ const TopBar: React.FC<TopBarProps> = ({
               {activeSettingsCategory === 'integrations' && (
                  <section>
                   <h3 className="text-lg font-semibold text-card-foreground mb-4">Configurações de Integrações</h3>
-                  <Accordion type="multiple" className="w-full space-y-4" defaultValue={['evolution-api']}>
+                  <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={isEvolutionApiEnabled ? 'evolution-api' : undefined}>
                     <AccordionItem value="evolution-api" className="border rounded-lg shadow-sm">
                       <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
                         <div className="flex items-center space-x-3">
@@ -569,3 +558,5 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
+
+    
