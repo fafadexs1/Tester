@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, 
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy,
-  TerminalSquare, ListOrdered, RotateCcw as ResetZoomIcon, RefreshCw, AlertCircle, FileText
+  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText
 } from 'lucide-react';
 import {
   Dialog,
@@ -51,8 +51,11 @@ const PostgresIcon = () => (
 type SettingsCategory = 'database' | 'integrations';
 interface WebhookLogEntry {
   timestamp: string;
+  method?: string;
+  url?: string;
+  headers?: Record<string, string>;
   payload?: any;
-  error?: any;
+  error?: any; // Kept if the original error logging in webhook receiver is to be used
 }
 
 interface TopBarProps {
@@ -82,7 +85,6 @@ const TopBar: React.FC<TopBarProps> = ({
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [activeSettingsCategory, setActiveSettingsCategory] = useState<SettingsCategory>('database');
   
-  // States for Webhook Logs Dialog
   const [isWebhookLogsDialogOpen, setIsWebhookLogsDialogOpen] = useState(false);
   const [evolutionWebhookLogEntries, setEvolutionWebhookLogEntries] = useState<WebhookLogEntry[]>([]);
   const [isLoadingEvolutionLogs, setIsLoadingEvolutionLogs] = useState(false);
@@ -319,7 +321,7 @@ const TopBar: React.FC<TopBarProps> = ({
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setIsWebhookLogsDialogOpen(true)}>
                 <ListOrdered className="mr-2 h-4 w-4" />
-                <span>Logs de Eventos API Evolution</span>
+                <span>Logs de Eventos da API Evolution</span>
               </DropdownMenuItem>
               <DropdownMenuItem disabled>
                 {/* <History className="mr-2 h-4 w-4" /> */}
@@ -732,6 +734,9 @@ const TopBar: React.FC<TopBarProps> = ({
                         <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm text-primary/80 mr-2">
                           {new Date(log.timestamp).toLocaleTimeString()}
                         </span>
+                        <span className="font-semibold mr-1">
+                          {log.method || 'POST'}
+                        </span>
                         {log.error ? (
                             <span className="text-destructive font-semibold">Erro ao Processar Webhook</span>
                         ) : log.payload?.event ? (
@@ -739,12 +744,30 @@ const TopBar: React.FC<TopBarProps> = ({
                         ) : log.payload?.type ? (
                             <span className="text-accent font-semibold">{log.payload.type}</span>
                         ) : (
-                            <span>Payload Recebido</span>
+                            <span>Evento Recebido</span>
                         )}
                       </summary>
-                      <pre className="mt-2 p-2 bg-muted rounded-sm overflow-auto text-xs text-foreground/70 max-h-60">
-                        {JSON.stringify(log.payload || log.error, null, 2)}
-                      </pre>
+                      <div className="mt-2 p-2 bg-muted rounded-sm overflow-auto text-xs text-foreground/70 space-y-2">
+                        {log.url && (
+                          <div>
+                            <strong>URL:</strong> <span className="break-all">{log.url}</span>
+                          </div>
+                        )}
+                        {log.headers && (
+                          <div>
+                            <strong>Headers:</strong>
+                            <pre className="mt-1 p-1 bg-background/50 rounded text-xs max-h-24 overflow-y-auto">
+                              {JSON.stringify(log.headers, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                        <div>
+                          <strong>Payload:</strong>
+                          <pre className="mt-1 p-1 bg-background/50 rounded text-xs max-h-60 overflow-y-auto">
+                            {JSON.stringify(log.payload || log.error, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
                     </details>
                   ))}
                 </div>
