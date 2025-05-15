@@ -33,7 +33,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-// import { MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/lib/constants';
+import { MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/lib/constants';
 
 
 const SupabaseIcon = () => (
@@ -60,8 +60,8 @@ interface TopBarProps {
   appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
-  // currentZoomLevel: number; 
-  // onZoom: (direction: 'in' | 'out' | 'reset') => void; 
+  currentZoomLevel: number; 
+  onZoom: (direction: 'in' | 'out' | 'reset') => void; 
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -74,8 +74,8 @@ const TopBar: React.FC<TopBarProps> = ({
   appName = "Flowise Lite",
   isChatPanelOpen,
   onToggleChatPanel,
-  // currentZoomLevel, 
-  // onZoom, 
+  currentZoomLevel, 
+  onZoom, 
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -94,17 +94,16 @@ const TopBar: React.FC<TopBarProps> = ({
   const [postgresDatabase, setPostgresDatabase] = useState('');
   const [isPostgresEnabled, setIsPostgresEnabled] = useState(false);
 
-  const [evolutionApiUrl, setEvolutionApiUrl] = useState('');
+  const [evolutionApiBaseUrl, setEvolutionApiBaseUrl] = useState('');
   const [evolutionGlobalApiKey, setEvolutionGlobalApiKey] = useState('');
   const [defaultEvolutionInstanceName, setDefaultEvolutionInstanceName] = useState('');
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
-  const [flowiseLiteWebSocketUrlForEvolution, setFlowiseLiteWebSocketUrlForEvolution] = useState('');
+  const [flowiseLiteWebhookUrlForEvolution, setFlowiseLiteWebhookUrlForEvolution] = useState('');
 
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      setFlowiseLiteWebSocketUrlForEvolution(`${protocol}//${window.location.host}/api/evolution/ws`);
+      setFlowiseLiteWebhookUrlForEvolution(`${window.location.origin}/api/evolution/webhook`);
     }
   }, []);
 
@@ -134,12 +133,12 @@ const TopBar: React.FC<TopBarProps> = ({
       setPostgresDatabase(savedPostgresDatabase);
       setIsPostgresEnabled(savedIsPostgresEnabled);
 
-      const savedEvolutionApiUrl = localStorage.getItem('evolutionApiUrl') || ''; // This is for Flowise to SEND to Evolution
+      const savedEvolutionApiBaseUrl = localStorage.getItem('evolutionApiBaseUrl') || '';
       const savedEvolutionGlobalApiKey = localStorage.getItem('evolutionApiKey') || '';
       const savedDefaultEvolutionInstanceName = localStorage.getItem('defaultEvolutionInstanceName') || '';
       const savedIsEvolutionApiEnabled = localStorage.getItem('isEvolutionApiEnabled') === 'true';
 
-      setEvolutionApiUrl(savedEvolutionApiUrl);
+      setEvolutionApiBaseUrl(savedEvolutionApiBaseUrl);
       setEvolutionGlobalApiKey(savedEvolutionGlobalApiKey);
       setDefaultEvolutionInstanceName(savedDefaultEvolutionInstanceName);
       setIsEvolutionApiEnabled(savedIsEvolutionApiEnabled);
@@ -159,7 +158,7 @@ const TopBar: React.FC<TopBarProps> = ({
     localStorage.setItem('postgresDatabase', postgresDatabase);
     localStorage.setItem('isPostgresEnabled', String(isPostgresEnabled));
 
-    localStorage.setItem('evolutionApiUrl', evolutionApiUrl);
+    localStorage.setItem('evolutionApiBaseUrl', evolutionApiBaseUrl);
     localStorage.setItem('evolutionApiKey', evolutionGlobalApiKey);
     localStorage.setItem('defaultEvolutionInstanceName', defaultEvolutionInstanceName);
     localStorage.setItem('isEvolutionApiEnabled', String(isEvolutionApiEnabled));
@@ -167,7 +166,7 @@ const TopBar: React.FC<TopBarProps> = ({
     console.log("Configurações Salvas:", { 
       supabase: { supabaseUrl, supabaseAnonKey, supabaseServiceKeyExists: supabaseServiceKey.length > 0, isSupabaseEnabled },
       postgresql: { postgresHost, postgresPort, postgresUser, postgresDatabase, isPostgresEnabled, postgresPasswordExists: postgresPassword.length > 0 },
-      evolutionApi: { evolutionApiUrl, evolutionApiKeyExists: evolutionGlobalApiKey.length > 0, defaultEvolutionInstanceName, isEvolutionApiEnabled, flowiseLiteWebSocketUrlForEvolution }
+      evolutionApi: { evolutionApiBaseUrl, evolutionApiKeyExists: evolutionGlobalApiKey.length > 0, defaultEvolutionInstanceName, isEvolutionApiEnabled, flowiseLiteWebhookUrlForEvolution }
     });
     toast({
       title: "Configurações Salvas!",
@@ -207,9 +206,6 @@ const TopBar: React.FC<TopBarProps> = ({
     });
   };
   
-  const httpWebhookUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/evolution/webhook` : '';
-
-
   return (
     <>
       <header className="flex items-center justify-between h-16 px-4 md:px-6 border-b bg-card text-card-foreground shadow-sm shrink-0">
@@ -275,7 +271,6 @@ const TopBar: React.FC<TopBarProps> = ({
             <span className="sr-only">Novo Fluxo</span>
           </Button>
           
-          {/* 
           <Button variant="outline" size="icon" onClick={() => onZoom('in')} className="hidden md:inline-flex" aria-label="Aumentar Zoom">
             <ZoomIn className="h-4 w-4" />
           </Button>
@@ -285,7 +280,6 @@ const TopBar: React.FC<TopBarProps> = ({
           <Button variant="outline" size="icon" onClick={() => onZoom('out')} className="hidden md:inline-flex" aria-label="Diminuir Zoom">
             <ZoomOut className="h-4 w-4" />
           </Button>
-          */}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -323,7 +317,7 @@ const TopBar: React.FC<TopBarProps> = ({
           >
             <Rocket className="mr-2 h-4 w-4" /> Publicar
           </Button>
-          <Button 
+           <Button 
             onClick={handlePublishFlow} 
             variant="default" 
             size="icon"
@@ -595,12 +589,12 @@ const TopBar: React.FC<TopBarProps> = ({
                         {isEvolutionApiEnabled && (
                           <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
                             <div>
-                              <Label htmlFor="evolution-api-url" className="text-card-foreground/90 text-sm">URL Base da API Evolution (para enviar mensagens)</Label>
+                              <Label htmlFor="evolution-api-base-url" className="text-card-foreground/90 text-sm">URL Base da API Evolution (para enviar mensagens)</Label>
                               <Input
-                                id="evolution-api-url"
+                                id="evolution-api-base-url"
                                 placeholder="http://localhost:8080"
-                                value={evolutionApiUrl}
-                                onChange={(e) => setEvolutionApiUrl(e.target.value)}
+                                value={evolutionApiBaseUrl}
+                                onChange={(e) => setEvolutionApiBaseUrl(e.target.value)}
                                 className="bg-input text-foreground mt-1"
                               />
                             </div>
@@ -629,29 +623,29 @@ const TopBar: React.FC<TopBarProps> = ({
                                </div>
                             </div>
                              <div className="pt-4 border-t border-border">
-                                <Label className="text-card-foreground/90 text-sm font-medium">URL do WebSocket do Flowise Lite (para Evolution API conectar)</Label>
+                                <Label className="text-card-foreground/90 text-sm font-medium">URL de Webhook do Flowise Lite (para Evolution API enviar eventos)</Label>
                                 <p className="text-xs text-muted-foreground mt-1 mb-2">
-                                  Configure sua API Evolution para se conectar a este endpoint WebSocket para que o Flowise Lite possa (conceitualmente) receber eventos.
+                                  Configure sua instância da API Evolution para enviar eventos (webhooks) para esta URL.
                                 </p>
                                 <div className="flex items-center space-x-2">
                                     <Input
-                                        id="flowise-websocket-url-for-evolution"
+                                        id="flowise-webhook-url-for-evolution"
                                         type="text"
-                                        value={flowiseLiteWebSocketUrlForEvolution}
+                                        value={flowiseLiteWebhookUrlForEvolution}
                                         readOnly
                                         className="bg-input text-foreground flex-1 cursor-default"
                                     />
                                     <Button
                                         variant="outline"
                                         size="icon"
-                                        onClick={() => handleCopyToClipboard(flowiseLiteWebSocketUrlForEvolution, "URL do WebSocket")}
-                                        title="Copiar URL do WebSocket"
+                                        onClick={() => handleCopyToClipboard(flowiseLiteWebhookUrlForEvolution, "URL de Webhook")}
+                                        title="Copiar URL de Webhook"
                                     >
                                         <Copy className="w-4 h-4" />
                                     </Button>
                                 </div>
-                                <p className="text-xs text-destructive mt-1 italic">
-                                  Nota: Esta funcionalidade WebSocket é para <strong>desenvolvimento local</strong>. Para produção, um servidor WebSocket dedicado e uma configuração de backend robusta são necessários e não estão incluídos no Flowise Lite.
+                                <p className="text-xs text-muted-foreground mt-1 italic">
+                                  Os payloads recebidos neste endpoint serão logados no console do servidor Next.js.
                                 </p>
                             </div>
                           </div>
@@ -677,12 +671,8 @@ const TopBar: React.FC<TopBarProps> = ({
             <DialogTitle>Logs de Eventos da API Evolution</DialogTitle>
             <DialogDescription>
               Se você configurou sua API Evolution para enviar eventos para o endpoint HTTP Webhook 
-              (<code className="mx-1 p-1 text-xs bg-muted rounded-sm break-all">{httpWebhookUrl}</code>),
-              os payloads serão registrados no console do seu servidor Next.js.
-              <br/><br/>
-              Se você está usando a integração WebSocket (DEV-ONLY), as mensagens recebidas no endpoint
-              (<code className="mx-1 p-1 text-xs bg-muted rounded-sm break-all">{flowiseLiteWebSocketUrlForEvolution}</code>)
-              também serão logadas no console do servidor Next.js.
+              (<code className="mx-1 p-1 text-xs bg-muted rounded-sm break-all">{flowiseLiteWebhookUrlForEvolution}</code>),
+              os payloads serão registrados no console do seu servidor Next.js (onde você executa o comando de desenvolvimento).
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 text-sm">

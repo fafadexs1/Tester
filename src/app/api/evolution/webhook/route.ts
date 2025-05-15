@@ -2,12 +2,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Esta rota agora é principalmente um placeholder, já que a intenção é mudar para WebSockets
-// para recebimento de eventos da Evolution API, o que requer uma arquitetura de backend diferente.
-
 export async function POST(request: NextRequest) {
-  console.log('[Evolution API - /api/evolution/webhook - LEGACY] Received a POST request.');
-  console.warn('[Evolution API - /api/evolution/webhook - LEGACY] This HTTP webhook endpoint is considered legacy. Prefer configuring Evolution API to connect to a WebSocket endpoint if available in Flowise Lite for real-time events.');
+  console.log('[Evolution API Webhook] Received a POST request.');
 
   try {
     let payload: any;
@@ -15,48 +11,47 @@ export async function POST(request: NextRequest) {
 
     if (contentType && contentType.includes('application/json')) {
       payload = await request.json();
-      console.log('[Evolution API - /api/evolution/webhook - LEGACY] Received JSON payload:', JSON.stringify(payload, null, 2));
+      console.log('[Evolution API Webhook] Received JSON payload:', JSON.stringify(payload, null, 2));
     } else {
       const textPayload = await request.text();
       payload = { raw_text: textPayload };
-      console.log('[Evolution API - /api/evolution/webhook - LEGACY] Received non-JSON payload (logged as raw_text):', textPayload);
+      console.log('[Evolution API Webhook] Received non-JSON payload (logged as raw_text):', textPayload);
     }
 
-    // Lógica para processar o payload e interagir com os fluxos Flowise Lite
-    // seria implementada aqui em um sistema de backend completo.
-    // Por agora, apenas logamos e confirmamos.
+    // Em uma implementação completa, aqui você processaria o payload
+    // para encontrar um fluxo Flowise Lite correspondente e iniciar/continuar sua execução.
+    // Por agora, apenas logamos e confirmamos o recebimento.
 
     return NextResponse.json(
-      { status: "received_legacy", message: "Legacy webhook received by Flowise Lite. Consider WebSocket for future integrations." },
+      { status: "received", message: "Webhook received by Flowise Lite." },
       { status: 200 }
     );
   } catch (error: any) {
-    console.error('[Evolution API - /api/evolution/webhook - LEGACY] Error processing webhook:', error.message);
+    console.error('[Evolution API Webhook] Error processing webhook:', error.message);
     try {
-        const rawBody = await request.text(); 
-        console.error('[Evolution API - /api/evolution/webhook - LEGACY] Raw request body (on error):', rawBody);
+        const rawBody = await request.text(); // Tenta ler o corpo cru em caso de erro de parse JSON
+        console.error('[Evolution API Webhook] Raw request body (on error):', rawBody);
     } catch (textError) {
-        console.error('[Evolution API - /api/evolution/webhook - LEGACY] Could not read raw request body on error.');
+        console.error('[Evolution API Webhook] Could not read raw request body on error.');
     }
-
     return NextResponse.json(
-      { status: "error", message: "Error processing legacy webhook", error: error.message },
-      { status: 400 }
+      { status: "error", message: "Error processing webhook", error: error.message },
+      { status: 400 } // Use 400 para erro de cliente se o payload for malformado
     );
   }
 }
 
 export async function GET(request: NextRequest) {
-  console.log('[Evolution API - /api/evolution/webhook - INFO] Received a GET request.');
+  console.log('[Evolution API Webhook INFO] Received a GET request.');
   const host = request.nextUrl.host;
-  const protocol = request.nextUrl.protocol.replace('http','ws'); // Assume ws or wss based on http/https
+  const protocol = request.nextUrl.protocol;
 
   return NextResponse.json(
     { 
-      message: "Informações sobre a integração com API Evolution.",
-      legacyWebhookEndpoint: `POST ${request.nextUrl.protocol}//${host}/api/evolution/webhook`,
-      conceptualWebSocketEndpoint: `${protocol}//${host}/api/evolution/ws`,
-      status: "Este endpoint HTTP POST é para webhooks legados. Para recebimento de eventos em tempo real, a API Evolution deveria se conectar a um endpoint WebSocket (ws/wss) no Flowise Lite, que precisaria ser implementado no backend do Flowise Lite."
+      message: "Informações sobre o endpoint de Webhook da API Evolution para Flowise Lite.",
+      webhookEndpoint: `POST ${protocol}//${host}/api/evolution/webhook`,
+      description: "Configure sua instância da API Evolution para enviar eventos (webhooks) para a URL acima. Os payloads recebidos serão logados no console do servidor Next.js.",
+      status: "Este endpoint está ativo e aguardando requisições POST."
     },
     { status: 200 }
   );
