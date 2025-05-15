@@ -94,36 +94,37 @@ const TopBar: React.FC<TopBarProps> = ({
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
 
   useEffect(() => {
-    const savedSupabaseUrl = localStorage.getItem('supabaseUrl');
-    const savedSupabaseAnonKey = localStorage.getItem('supabaseAnonKey');
-    const savedSupabaseServiceKey = localStorage.getItem('supabaseServiceKey');
-    const savedIsSupabaseEnabled = localStorage.getItem('isSupabaseEnabled') === 'true';
-    
-    if (savedSupabaseUrl) setSupabaseUrl(savedSupabaseUrl);
-    if (savedSupabaseAnonKey) setSupabaseAnonKey(savedSupabaseAnonKey);
-    if (savedSupabaseServiceKey) setSupabaseServiceKey(savedSupabaseServiceKey);
-    setIsSupabaseEnabled(savedIsSupabaseEnabled);
+    if (isSettingsDialogOpen) { // Load settings when dialog opens
+      const savedSupabaseUrl = localStorage.getItem('supabaseUrl');
+      const savedSupabaseAnonKey = localStorage.getItem('supabaseAnonKey');
+      const savedSupabaseServiceKey = localStorage.getItem('supabaseServiceKey');
+      const savedIsSupabaseEnabled = localStorage.getItem('isSupabaseEnabled') === 'true';
+      
+      if (savedSupabaseUrl) setSupabaseUrl(savedSupabaseUrl);
+      if (savedSupabaseAnonKey) setSupabaseAnonKey(savedSupabaseAnonKey);
+      if (savedSupabaseServiceKey) setSupabaseServiceKey(savedSupabaseServiceKey);
+      setIsSupabaseEnabled(savedIsSupabaseEnabled);
 
-    const savedPostgresHost = localStorage.getItem('postgresHost');
-    const savedPostgresPort = localStorage.getItem('postgresPort');
-    const savedPostgresUser = localStorage.getItem('postgresUser');
-    const savedPostgresPassword = localStorage.getItem('postgresPassword');
-    const savedPostgresDatabase = localStorage.getItem('postgresDatabase');
-    const savedIsPostgresEnabled = localStorage.getItem('isPostgresEnabled') === 'true';
+      const savedPostgresHost = localStorage.getItem('postgresHost');
+      const savedPostgresPort = localStorage.getItem('postgresPort');
+      const savedPostgresUser = localStorage.getItem('postgresUser');
+      const savedPostgresPassword = localStorage.getItem('postgresPassword');
+      const savedPostgresDatabase = localStorage.getItem('postgresDatabase');
+      const savedIsPostgresEnabled = localStorage.getItem('isPostgresEnabled') === 'true';
 
-    if (savedPostgresHost) setPostgresHost(savedPostgresHost);
-    if (savedPostgresPort) setPostgresPort(savedPostgresPort);
-    if (savedPostgresUser) setPostgresUser(savedPostgresUser);
-    if (savedPostgresPassword) setPostgresPassword(savedPostgresPassword);
-    if (savedPostgresDatabase) setPostgresDatabase(savedPostgresDatabase);
-    setIsPostgresEnabled(savedIsPostgresEnabled);
+      if (savedPostgresHost) setPostgresHost(savedPostgresHost);
+      if (savedPostgresPort) setPostgresPort(savedPostgresPort);
+      if (savedPostgresUser) setPostgresUser(savedPostgresUser);
+      if (savedPostgresPassword) setPostgresPassword(savedPostgresPassword);
+      if (savedPostgresDatabase) setPostgresDatabase(savedPostgresDatabase);
+      setIsPostgresEnabled(savedIsPostgresEnabled);
 
-    const savedEvolutionApiUrl = localStorage.getItem('evolutionApiUrl');
-    const savedIsEvolutionApiEnabled = localStorage.getItem('isEvolutionApiEnabled') === 'true';
-    if (savedEvolutionApiUrl) setEvolutionApiUrl(savedEvolutionApiUrl);
-    setIsEvolutionApiEnabled(savedIsEvolutionApiEnabled);
-
-  }, []);
+      const savedEvolutionApiUrl = localStorage.getItem('evolutionApiUrl');
+      const savedIsEvolutionApiEnabled = localStorage.getItem('isEvolutionApiEnabled') === 'true';
+      if (savedEvolutionApiUrl) setEvolutionApiUrl(savedEvolutionApiUrl);
+      setIsEvolutionApiEnabled(savedIsEvolutionApiEnabled);
+    }
+  }, [isSettingsDialogOpen]);
 
   const handleSaveSettings = () => {
     localStorage.setItem('supabaseUrl', supabaseUrl);
@@ -568,4 +569,3 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
-
