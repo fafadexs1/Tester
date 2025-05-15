@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   MessageSquareText, Type as InputIcon, ListChecks, Trash2, BotMessageSquare,
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
-  CalendarDays, ExternalLink, MoreHorizontal, FileImage,
+  CalendarDays, ExternalLink, MoreHorizontal, FileImage, PauseCircle,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash, 
   Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle
 } from 'lucide-react';
@@ -398,6 +398,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       'whatsapp-text': <BotMessageSquare {...iconProps} className="text-teal-500" />,
       'whatsapp-media': <ImageUp {...iconProps} className="text-indigo-500" />,
       'whatsapp-group': <UserPlus2 {...iconProps} className="text-pink-500" />,
+      'whatsapp-webhook-wait': <PauseCircle {...iconProps} className="text-blue-600" />,
       'condition': <GitFork {...iconProps} className="text-orange-500" />,
       'set-variable': <Variable {...iconProps} className="text-cyan-500" />,
       'api-call': <Webhook {...iconProps} className="text-red-500" />,
@@ -427,7 +428,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   
   const renderOutputConnectors = (): React.ReactNode => {
     if (node.type === 'end-flow') {
-      return null; // No output for end-flow node
+      return null; 
     }
     if (node.type === 'start') {
       return (node.triggers || []).map((triggerName, index) => (
@@ -500,7 +501,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         </>
       );
     }
-    // For all other nodes that are not 'start', 'option', 'condition', or 'end-flow'
     if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow') {
         return (
           <div className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">
@@ -798,6 +798,42 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                     {renderVariableInserter(node.participants, (newText) => onUpdate(node.id, { participants: newText }), true)}
                 </div>
             </div>
+          </div>
+        );
+      case 'whatsapp-webhook-wait':
+        return (
+          <div className="space-y-3" data-no-drag="true">
+            <div>
+              <Label htmlFor={`${node.id}-promptwhilewait`}>Prompt no Teste (Aguardando)</Label>
+              <div className="relative">
+                <Input id={`${node.id}-promptwhilewait`} placeholder="Aguardando webhook simulado..." value={node.promptTextWhileWaiting || ''} onChange={(e) => onUpdate(node.id, { promptTextWhileWaiting: e.target.value })} className="pr-8"/>
+                {renderVariableInserter(node.promptTextWhileWaiting, (newText) => onUpdate(node.id, { promptTextWhileWaiting: newText }))}
+              </div>
+            </div>
+            <div>
+              <Label htmlFor={`${node.id}-receivedjsonvar`}>Salvar JSON Recebido Em</Label>
+              <div className="relative">
+                <Input id={`${node.id}-receivedjsonvar`} placeholder="webhook_whatsapp_json" value={node.receivedJsonVariable || ''} onChange={(e) => onUpdate(node.id, { receivedJsonVariable: e.target.value })} />
+                {renderVariableInserter(node.receivedJsonVariable, (newText) => onUpdate(node.id, { receivedJsonVariable: newText }))}
+              </div>
+            </div>
+            <div>
+              <Label htmlFor={`${node.id}-extracttextvar`}>Extrair Texto Para Variável (Opcional)</Label>
+              <div className="relative">
+                <Input id={`${node.id}-extracttextvar`} placeholder="texto_recebido_wa" value={node.extractTextToVariable || ''} onChange={(e) => onUpdate(node.id, { extractTextToVariable: e.target.value })} />
+                {renderVariableInserter(node.extractTextToVariable, (newText) => onUpdate(node.id, { extractTextToVariable: newText }))}
+              </div>
+            </div>
+            {node.extractTextToVariable && (
+              <div>
+                <Label htmlFor={`${node.id}-textpathjson`}>Caminho do Texto no JSON (ex: message.text)</Label>
+                <div className="relative">
+                  <Input id={`${node.id}-textpathjson`} placeholder="message.body.text" value={node.textPathInJson || ''} onChange={(e) => onUpdate(node.id, { textPathInJson: e.target.value })} className="pr-8"/>
+                  {renderVariableInserter(node.textPathInJson, (newText) => onUpdate(node.id, { textPathInJson: newText }))}
+                </div>
+              </div>
+            )}
+             <p className="text-xs text-muted-foreground italic pt-1">No painel de teste, você poderá colar um JSON para simular o webhook.</p>
           </div>
         );
       case 'condition':
@@ -1276,7 +1312,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length > 0 && (
                 <Select 
                     value={node.supabaseTableName || ''} 
-                    onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value, supabaseIdentifierColumn: ''})}
+                    onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value, supabaseIdentifierColumn: '', supabaseColumnsToSelect: '*' })}
                 >
                   <SelectTrigger id={`${node.id}-tableName`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
                   <SelectContent>
@@ -1405,7 +1441,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
         </CardHeader>
-        <CardContent className="p-3.5 text-sm" data-no-drag={node.type === 'api-call' || node.type === 'start' || node.type === 'option' || node.type.startsWith('supabase-') || node.type === 'end-flow'}>
+        <CardContent className="p-3.5 text-sm" data-no-drag={node.type === 'api-call' || node.type === 'start' || node.type === 'option' || node.type.startsWith('supabase-') || node.type === 'end-flow' || node.type === 'whatsapp-webhook-wait'}>
           {renderNodeContent()}
         </CardContent>
       </Card>
@@ -1472,5 +1508,3 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
-    

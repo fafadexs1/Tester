@@ -12,7 +12,8 @@ export type NodeType =
   | 'option' 
   | 'whatsapp-text' 
   | 'whatsapp-media' 
-  | 'whatsapp-group' 
+  | 'whatsapp-group'
+  | 'whatsapp-webhook-wait' // Novo tipo de nó
   | 'condition' 
   | 'set-variable' 
   | 'api-call' 
@@ -81,6 +82,12 @@ export interface NodeData {
   groupName?: string; 
   participants?: string; 
   
+  // Para whatsapp-webhook-wait
+  promptTextWhileWaiting?: string;
+  receivedJsonVariable?: string;
+  extractTextToVariable?: string;
+  textPathInJson?: string;
+
   conditionVariable?: string; 
   conditionOperator?: '==' | '!=' | '>' | '<' | 'contains' | 'startsWith' | 'endsWith' | 'isEmpty' | 'isNotEmpty'; 
   conditionValue?: string; 
@@ -88,7 +95,6 @@ export interface NodeData {
   variableName?: string; 
   variableValue?: string; 
   
-  // Para 'api-call' - Campos Reformulados
   apiUrl?: string; 
   apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'; 
   apiAuthType?: 'none' | 'bearer' | 'basic';
@@ -98,9 +104,9 @@ export interface NodeData {
   apiHeadersList?: ApiHeader[];
   apiQueryParamsList?: ApiQueryParam[];
   apiBodyType?: 'none' | 'json' | 'form-data' | 'raw';
-  apiBodyJson?: string; // Usado se apiBodyType for 'json'
-  apiBodyFormDataList?: ApiFormDataEntry[]; // Usado se apiBodyType for 'form-data'
-  apiBodyRaw?: string; // Usado se apiBodyType for 'raw'
+  apiBodyJson?: string; 
+  apiBodyFormDataList?: ApiFormDataEntry[]; 
+  apiBodyRaw?: string; 
   apiOutputVariable?: string;
   
   delayDuration?: number; 
@@ -177,7 +183,6 @@ export interface Connection {
 
 export interface DrawingLineData {
   fromId: string;
-  fromNodeData: NodeData; // Adicionado para fácil acesso ao nó de origem
   sourceHandleId: string;
   startX: number;
   startY: number;

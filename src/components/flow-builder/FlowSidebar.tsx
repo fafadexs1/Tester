@@ -2,22 +2,19 @@
 "use client";
 
 import type React from 'react';
-// Removido WorkspaceData, pois não é mais gerenciado aqui
 import DraggableBlock from './DraggableBlock';
 import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, 
-  Database, DatabaseZap, Rows, Search, Edit3, Trash, PlayCircle, StopCircle // Adicionado StopCircle para o nó de Fim do Fluxo
+  Database, Rows, Search, Edit3, Trash, PlayCircle, StopCircle, PauseCircle
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-// Removidos Button, Label, Selects, Separator, pois os controles de workspace foram movidos
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
-// Props foram removidas pois a sidebar agora só exibe blocos
 interface FlowSidebarProps {}
 
-const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
+const FlowSidebar: React.FC<FlowSidebarProps> = () => {
   const iconProps = { className: "w-4 h-4" };
 
   const blockCategories = [
@@ -71,10 +68,10 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
       value: "supabase",
       title: "Supabase",
       blocks: [
-        { type: "supabase-create-row", label: "Criar Linha", icon: <Rows {...iconProps} className="text-green-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseDataJson: '{ "coluna": "valor" }', supabaseResultVariable: 'id_linha_criada_supabase' } },
-        { type: "supabase-read-row", label: "Ler Linha(s)", icon: <Search {...iconProps} className="text-blue-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '1', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase' } },
-        { type: "supabase-update-row", label: "Atualizar Linha", icon: <Edit3 {...iconProps} className="text-yellow-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '1', supabaseDataJson: '{ "coluna": "novo_valor" }' } },
-        { type: "supabase-delete-row", label: "Deletar Linha", icon: <Trash {...iconProps} className="text-red-500" />, defaultData: { supabaseTableName: 'minha_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '1' } },
+        { type: "supabase-create-row", label: "Criar Linha", icon: <Rows {...iconProps} className="text-green-500" />, defaultData: { supabaseTableName: '', supabaseDataJson: '{ "coluna": "valor" }', supabaseResultVariable: 'id_linha_criada_supabase' } },
+        { type: "supabase-read-row", label: "Ler Linha(s)", icon: <Search {...iconProps} className="text-blue-500" />, defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase' } },
+        { type: "supabase-update-row", label: "Atualizar Linha", icon: <Edit3 {...iconProps} className="text-yellow-500" />, defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseDataJson: '{ "coluna": "novo_valor" }' } },
+        { type: "supabase-delete-row", label: "Deletar Linha", icon: <Trash {...iconProps} className="text-red-500" />, defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '' } },
       ]
     },
     {
@@ -84,14 +81,23 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
         { type: "whatsapp-text", label: "Enviar Texto (WA)", icon: <BotMessageSquare {...iconProps} className="text-teal-600" />, defaultData: { textMessage: 'Olá!', instanceName: 'evolution_instance' } },
         { type: "whatsapp-media", label: "Enviar Mídia (WA)", icon: <ImageUp {...iconProps} className="text-indigo-600" />, defaultData: { mediaType: 'image', instanceName: 'evolution_instance', mediaUrl: 'https://placehold.co/300x200.png', dataAiHint: 'placeholder abstract' } },
         { type: "whatsapp-group", label: "Criar Grupo (WA)", icon: <UserPlus2 {...iconProps} className="text-pink-600" />, defaultData: { groupName: 'Novo Grupo', instanceName: 'evolution_instance' } },
+        { 
+          type: "whatsapp-webhook-wait", 
+          label: "Aguardar Webhook WA (Sim.)", 
+          icon: <PauseCircle {...iconProps} className="text-blue-600" />, 
+          defaultData: { 
+            promptTextWhileWaiting: 'Aguardando webhook simulado do WhatsApp...', 
+            receivedJsonVariable: 'webhook_whatsapp_json', 
+            extractTextToVariable: 'texto_recebido_wa', 
+            textPathInJson: 'message.text' 
+          } 
+        },
       ]
     }
   ];
 
   return (
     <aside className="w-80 bg-sidebar border-r border-sidebar-border shadow-lg flex flex-col">
-      {/* Seção de Workspaces removida daqui */}
-      
       <div className="p-4 border-b border-sidebar-border">
         <h2 className="text-lg font-semibold text-sidebar-foreground">Blocos de Fluxo</h2>
       </div>
@@ -102,8 +108,8 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
               <AccordionTrigger className="text-sm font-medium text-sidebar-foreground/90 hover:text-sidebar-foreground">
                 {category.title}
               </AccordionTrigger>
-              <AccordionContent className="pt-2 pb-4"> {/* Ajustado padding bottom */}
-                <div className="grid grid-cols-2 gap-2"> {/* Adicionado grid layout */}
+              <AccordionContent className="pt-2 pb-4">
+                <div className="grid grid-cols-2 gap-2">
                   {category.blocks.map(block => (
                     <DraggableBlock 
                       key={block.type}
@@ -124,4 +130,3 @@ const FlowSidebar: React.FC<FlowSidebarProps> = (/* Props removidas */) => {
 };
 
 export default FlowSidebar;
-

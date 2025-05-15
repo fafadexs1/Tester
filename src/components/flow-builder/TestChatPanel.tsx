@@ -5,12 +5,14 @@ import type React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Send, Play, RotateCcw, MessageSquare, Loader2, LogOut } from 'lucide-react';
+import { Send, Play, RotateCcw, MessageSquare, Loader2, LogOut, Webhook } from 'lucide-react';
 import type { WorkspaceData, NodeData, Connection } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { useToast } from '@/hooks/use-toast';
 
 interface Message {
   id: string;
@@ -19,18 +21,29 @@ interface Message {
   options?: string[];
 }
 
+type AwaitingInputType = 'text' | 'option' | 'webhook_json';
+
 interface TestChatPanelProps {
   activeWorkspace: WorkspaceData | null | undefined;
 }
 
 const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
+  const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null); 
   const [flowVariables, setFlowVariables] = useState<Record<string, any>>({});
   const [awaitingInputFor, setAwaitingInputFor] = useState<NodeData | null>(null);
+  const [awaitingInputType, setAwaitingInputType] = useState<AwaitingInputType>('text');
+  const [simulatedWebhookJson, setSimulatedWebhookJson] = useState('');
   const [isProcessingNode, setIsProcessingNode] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
   
   const getNodeById = (nodeId: string): NodeData | undefined => {
     return activeWorkspace?.nodes.find(n => n.id === nodeId);
@@ -114,13 +127,14 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     setMessages(prev => [...prev, { id: uuidv4(), text: "Teste encerrado.", sender: 'bot' }]);
     setIsTesting(false);
     setAwaitingInputFor(null);
+    setAwaitingInputType('text');
     setCurrentNodeId(null);
-    setIsProcessingNode(false); // Certificar que o processamento para
+    setIsProcessingNode(false); 
   };
-
 
   const processNode = async (nodeId: string | null, receivedVars: Record<string, any>) => {
     console.log(`[TestChatPanel] processNode ENTER: nodeId: ${nodeId}, receivedVars:`, JSON.parse(JSON.stringify(receivedVars || {})));
+    
     setIsProcessingNode(true);
     setCurrentNodeId(nodeId); 
 
@@ -128,6 +142,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         console.error('[TestChatPanel] processNode: activeWorkspace is null or undefined.');
         setMessages(prev => [...prev, { id: uuidv4(), text: "Erro crítico: Fluxo ativo não encontrado.", sender: 'bot' }]);
         handleEndChatTest();
+        setIsProcessingNode(false);
         return;
     }
 
@@ -136,9 +151,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
 
     if (!nodeId) {
-      // Flow ended because no next node, but not via 'end-flow' node.
       setMessages(prev => [...prev, { id: uuidv4(), text: "Fim do caminho atual. O fluxo está pausado. Use 'Encerrar Teste' ou 'Reiniciar Teste'.", sender: 'bot' }]);
-      // Do not call handleEndChatTest here, let the user decide.
       setAwaitingInputFor(null); 
       setIsProcessingNode(false);
       return;
@@ -149,16 +162,17 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       console.error(`[TestChatPanel] processNode: Node with ID ${nodeId} not found.`);
       setMessages(prev => [...prev, { id: uuidv4(), text: `Erro: Nó com ID ${nodeId} não encontrado. Fim da simulação.`, sender: 'bot' }]);
       handleEndChatTest();
+      setIsProcessingNode(false);
       return;
     }
 
-    console.log(`[TestChatPanel] Processing node: ${node.id} (${node.type}), Title: ${node.title}. Effective vars:`, JSON.parse(JSON.stringify(activeVars)));
+    console.log(`[TestChatPanel] Processing node: ${node.id} (${node.type}), Title: ${node.title}. Effective vars for substitution:`, JSON.parse(JSON.stringify(activeVars)));
     
     let nextNodeId: string | null = null;
     let autoAdvance = true;
     let updatedVarsForNextNode = { ...activeVars };
 
-    if (node.type !== 'start' && node.type !== 'delay' && node.type !== 'end-flow') {
+    if (node.type !== 'start' && node.type !== 'delay' && node.type !== 'end-flow' && node.type !== 'whatsapp-webhook-wait') {
         const typingMessageId = uuidv4();
         setMessages(prev => [...prev, { id: typingMessageId, text: "Bot está digitando...", sender: 'bot' }]);
         await new Promise(resolve => setTimeout(resolve, 600));
@@ -192,6 +206,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             setMessages(prev => [...prev, { id: uuidv4(), text: "(Nó de entrada sem pergunta)", sender: 'bot' }]);
         }
         setAwaitingInputFor(node);
+        setAwaitingInputType('text');
         autoAdvance = false;
         break;
 
@@ -204,11 +219,11 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             sender: 'bot',
             options: options
           }]);
+          setAwaitingInputFor(node);
+          setAwaitingInputType('option');
         } else {
             setMessages(prev => [...prev, { id: uuidv4(), text: "(Nó de opções mal configurado)", sender: 'bot' }]);
-             autoAdvance = false;
         }
-        setAwaitingInputFor(node);
         autoAdvance = false;
         break;
 
@@ -285,6 +300,22 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         }
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
+      
+      case 'whatsapp-text':
+      case 'whatsapp-media':
+      case 'whatsapp-group':
+        const actionType = node.type.split('-')[1];
+        setMessages(prev => [...prev, { id: uuidv4(), text: `(Simulando envio de ${actionType} para API Evolution via instância '${substituteVariables(node.instanceName, updatedVarsForNextNode)}')`, sender: 'bot' }]);
+        nextNodeId = findNextNodeId(node.id, 'default');
+        break;
+      
+      case 'whatsapp-webhook-wait':
+        const promptMsg = substituteVariables(node.promptTextWhileWaiting, updatedVarsForNextNode) || 'Aguardando simulação de webhook do WhatsApp...';
+        setMessages(prev => [...prev, { id: uuidv4(), text: promptMsg, sender: 'bot' }]);
+        setAwaitingInputFor(node);
+        setAwaitingInputType('webhook_json');
+        autoAdvance = false;
+        break;
 
       case 'supabase-create-row':
       case 'supabase-read-row':
@@ -303,7 +334,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         
         let columnsToSelect = substituteVariables(node.supabaseColumnsToSelect, updatedVarsForNextNode).trim();
         if (!columnsToSelect && (node.type === 'supabase-read-row' || node.type === 'supabase-create-row' || node.type === 'supabase-update-row')) {
-            columnsToSelect = '*'; // Default to all columns if not specified for ops that return data
+            columnsToSelect = '*'; 
         }
         
         console.log(`[TestChatPanel] Supabase Op: ${node.type} - Table: ${tableName}, ID Col: ${idColumn}, ID Val: ${idValue}, DataJSON: ${dataJsonString}, Select: ${columnsToSelect}`);
@@ -427,7 +458,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       case 'redirect':
         setMessages(prev => [...prev, { id: uuidv4(), text: `Simulando redirecionamento para: ${substituteVariables(node.redirectUrl, updatedVarsForNextNode)}`, sender: 'bot' }]);
         autoAdvance = false;
-        handleEndChatTest(); // Explicitly end test on redirect
+        handleEndChatTest(); 
         break;
       
       case 'end-flow':
@@ -438,9 +469,6 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
       case 'send-email':
       case 'google-sheets-append':
-      case 'whatsapp-text':
-      case 'whatsapp-media':
-      case 'whatsapp-group':
       case 'media-display': 
         setMessages(prev => [...prev, { id: uuidv4(), text: `Simulando ação do nó: ${node.title || node.type}.`, sender: 'bot' }]);
         nextNodeId = findNextNodeId(node.id, 'default');
@@ -459,8 +487,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     setIsProcessingNode(false);
     if (autoAdvance && nextNodeId) {
       await processNode(nextNodeId, updatedVarsForNextNode);
-    } else if (autoAdvance && !nextNodeId && node.type !== 'input' && node.type !== 'option' && node.type !== 'redirect' && node.type !== 'end-flow' ) {
-      // Only auto-end if not waiting for input or explicitly ended
+    } else if (autoAdvance && !nextNodeId && node.type !== 'input' && node.type !== 'option' && node.type !== 'redirect' && node.type !== 'end-flow' && node.type !== 'whatsapp-webhook-wait') {
       await processNode(null, updatedVarsForNextNode); 
     }
   };
@@ -477,6 +504,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     const initialVars = {};
     setFlowVariables(initialVars); 
     setAwaitingInputFor(null);
+    setAwaitingInputType('text');
     setIsTesting(true);
     setCurrentNodeId(null);
 
@@ -495,61 +523,115 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     setIsTesting(false);
     setCurrentNodeId(null);
     setAwaitingInputFor(null);
+    setAwaitingInputType('text');
     setMessages([]);
     setInputValue('');
+    setSimulatedWebhookJson('');
     const initialVars = {};
     setFlowVariables(initialVars);
     setIsProcessingNode(false);
   };
 
   const handleSendMessage = async () => {
-    if (inputValue.trim() === '' || !awaitingInputFor || awaitingInputFor.type !== 'input' || isProcessingNode) {
+    if (inputValue.trim() === '' || !awaitingInputFor || awaitingInputType !== 'text' || isProcessingNode) {
         return;
     }
     console.log('[TestChatPanel] handleSendMessage triggered.');
     const userMessageText = inputValue;
     setMessages(prev => [...prev, { id: uuidv4(), text: userMessageText, sender: 'user' }]);
 
-    let varsAfterInput = { ...flowVariables }; 
-    console.log(`[TestChatPanel] awaitingInputFor (input node):`, JSON.parse(JSON.stringify(awaitingInputFor)));
+    let currentVarsSnapshot = { ...flowVariables }; 
     if (awaitingInputFor.variableToSaveResponse && awaitingInputFor.variableToSaveResponse.trim() !== '') {
       const varName = awaitingInputFor.variableToSaveResponse as string;
       console.log(`[TestChatPanel] Saving input to variable: ${varName} = ${userMessageText}`);
-      varsAfterInput = { ...varsAfterInput, [varName]: userMessageText };
+      currentVarsSnapshot = { ...currentVarsSnapshot, [varName]: userMessageText };
     }
     
-    console.log('[TestChatPanel] flowVariables after input save:', JSON.parse(JSON.stringify(varsAfterInput)));
-    setFlowVariables(varsAfterInput); 
+    console.log('[TestChatPanel] flowVariables after input save:', JSON.parse(JSON.stringify(currentVarsSnapshot)));
+    setFlowVariables(currentVarsSnapshot); 
     setInputValue('');
 
     const nextNodeIdAfterInput = findNextNodeId(awaitingInputFor.id, 'default');
     console.log('[TestChatPanel] nextNodeIdAfterInput found:', nextNodeIdAfterInput);
     setAwaitingInputFor(null);
-    await processNode(nextNodeIdAfterInput, varsAfterInput);
+    await processNode(nextNodeIdAfterInput, currentVarsSnapshot);
   };
 
   const handleOptionClick = async (optionText: string) => {
-    if (!awaitingInputFor || awaitingInputFor.type !== 'option' || isProcessingNode) {
+    if (!awaitingInputFor || awaitingInputType !== 'option' || isProcessingNode) {
       return;
     }
     console.log('[TestChatPanel] handleOptionClick triggered. Option chosen:', optionText);
     setMessages(prev => [...prev, { id: uuidv4(), text: `Você escolheu: ${optionText}`, sender: 'user' }]);
 
-    let varsAfterOption = { ...flowVariables }; 
+    let currentVarsSnapshot = { ...flowVariables }; 
     if (awaitingInputFor.variableToSaveChoice && awaitingInputFor.variableToSaveChoice.trim() !== '') {
       const varName = awaitingInputFor.variableToSaveChoice as string;
       console.log(`[TestChatPanel] Saving choice to variable: ${varName} = ${optionText}`);
-      varsAfterOption = { ...varsAfterOption, [varName]: optionText };
+      currentVarsSnapshot = { ...currentVarsSnapshot, [varName]: optionText };
     }
     
-    console.log('[TestChatPanel] flowVariables after option save:', JSON.parse(JSON.stringify(varsAfterOption)));
-    setFlowVariables(varsAfterOption); 
+    console.log('[TestChatPanel] flowVariables after option save:', JSON.parse(JSON.stringify(currentVarsSnapshot)));
+    setFlowVariables(currentVarsSnapshot); 
 
     const nextNodeIdAfterOption = findNextNodeId(awaitingInputFor.id, optionText);
     console.log('[TestChatPanel] nextNodeIdAfterOption found:', nextNodeIdAfterOption);
 
     setAwaitingInputFor(null);
-    await processNode(nextNodeIdAfterOption, varsAfterOption);
+    setAwaitingInputType('text'); 
+    await processNode(nextNodeIdAfterOption, currentVarsSnapshot);
+  };
+
+  const handleSimulateWebhookSubmit = async () => {
+    if (simulatedWebhookJson.trim() === '' || !awaitingInputFor || awaitingInputType !== 'webhook_json' || isProcessingNode) {
+      return;
+    }
+    console.log('[TestChatPanel] handleSimulateWebhookSubmit triggered.');
+    setMessages(prev => [...prev, { id: uuidv4(), text: `Webhook simulado submetido: ${simulatedWebhookJson.substring(0,100)}...`, sender: 'user' }]);
+    
+    let parsedJson: any;
+    try {
+      parsedJson = JSON.parse(simulatedWebhookJson);
+    } catch (error) {
+      toast({ title: "Erro no JSON", description: "O JSON do webhook simulado é inválido.", variant: "destructive"});
+      setMessages(prev => [...prev, {id: uuidv4(), text: "Erro: JSON do webhook simulado inválido.", sender: 'bot'}]);
+      return;
+    }
+
+    let currentVarsSnapshot = { ...flowVariables };
+    const node = awaitingInputFor;
+
+    if (node.receivedJsonVariable) {
+      currentVarsSnapshot = { ...currentVarsSnapshot, [node.receivedJsonVariable as string]: parsedJson };
+      setMessages(prev => [...prev, {id: uuidv4(), text: `Variável "${node.receivedJsonVariable}" definida com o JSON do webhook.`, sender: 'bot'}]);
+    }
+
+    if (node.extractTextToVariable && node.textPathInJson) {
+      let extractedValue: any = parsedJson;
+      const pathParts = node.textPathInJson.split('.');
+      try {
+        for (const part of pathParts) {
+          if (extractedValue && typeof extractedValue === 'object' && part in extractedValue) {
+            extractedValue = extractedValue[part];
+          } else {
+            throw new Error(`Caminho "${node.textPathInJson}" não encontrado no JSON.`);
+          }
+        }
+        currentVarsSnapshot = { ...currentVarsSnapshot, [node.extractTextToVariable as string]: String(extractedValue) };
+         setMessages(prev => [...prev, {id: uuidv4(), text: `Variável "${node.extractTextToVariable}" definida com: "${String(extractedValue)}"`, sender: 'bot'}]);
+      } catch (e: any) {
+        toast({ title: "Erro ao Extrair Texto", description: e.message, variant: "destructive"});
+        setMessages(prev => [...prev, {id: uuidv4(), text: `Erro ao extrair texto do JSON: ${e.message}`, sender: 'bot'}]);
+      }
+    }
+    
+    setFlowVariables(currentVarsSnapshot);
+    setSimulatedWebhookJson('');
+    setAwaitingInputFor(null);
+    setAwaitingInputType('text');
+
+    const nextNodeIdAfterWebhook = findNextNodeId(node.id, 'default');
+    await processNode(nextNodeIdAfterWebhook, currentVarsSnapshot);
   };
 
 
@@ -557,6 +639,82 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     handleRestartTest();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id]);
+
+
+  const renderChatInputArea = () => {
+    if (!isTesting) {
+      return (
+        <Button onClick={handleStartTest} className="w-full" disabled={!activeWorkspace || activeWorkspace.nodes.length === 0 || isProcessingNode}>
+          <Play className="mr-2 h-4 w-4" /> Iniciar Teste
+        </Button>
+      );
+    }
+
+    if (awaitingInputType === 'webhook_json') {
+      return (
+        <div className="flex flex-col w-full space-y-2">
+          <Textarea
+            placeholder="Cole aqui o JSON do webhook simulado..."
+            value={simulatedWebhookJson}
+            onChange={(e) => setSimulatedWebhookJson(e.target.value)}
+            className="flex-1 text-xs"
+            rows={4}
+            disabled={isProcessingNode}
+          />
+          <div className="flex space-x-2">
+            <Button
+              onClick={handleSimulateWebhookSubmit}
+              disabled={!simulatedWebhookJson.trim() || isProcessingNode}
+              className="flex-1"
+            >
+              <Webhook className="mr-2 h-4 w-4" /> Submeter Webhook Simulado
+            </Button>
+             <Button
+              onClick={handleEndChatTest}
+              variant="outline"
+              size="icon"
+              aria-label="Encerrar Teste"
+              disabled={isProcessingNode}
+            >
+              <LogOut className="h-4 w-4 text-destructive" />
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // Default: text input or awaiting options (options are rendered with messages)
+    return (
+      <div className="flex w-full items-center space-x-2">
+        <Input
+          type="text"
+          placeholder={awaitingInputType === 'text' && awaitingInputFor ? "Digite sua resposta..." : (awaitingInputType === 'option' ? "Escolha uma opção acima..." : "Aguardando...")}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyPress={(e) => { if (e.key === 'Enter' && awaitingInputType === 'text' && inputValue.trim() !== '' && !isProcessingNode) handleSendMessage(); }}
+          className="flex-1"
+          disabled={!isTesting || awaitingInputType !== 'text' || isProcessingNode}
+        />
+        <Button
+          onClick={handleSendMessage}
+          disabled={!isTesting || !inputValue.trim() || awaitingInputType !== 'text' || isProcessingNode}
+          size="icon"
+          aria-label="Enviar"
+        >
+          <Send className="h-4 w-4" />
+        </Button>
+        <Button
+          onClick={handleEndChatTest}
+          variant="outline"
+          size="icon"
+          aria-label="Encerrar Teste"
+          disabled={isProcessingNode}
+        >
+          <LogOut className="h-4 w-4 text-destructive" />
+        </Button>
+      </div>
+    );
+  };
 
 
   return (
@@ -579,7 +737,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
               )}
             </div>
           )}
-           {messages.length === 0 && isTesting && currentNodeId && !isProcessingNode && (
+           {messages.length === 0 && isTesting && currentNodeId && !isProcessingNode && awaitingInputType !== 'webhook_json' && (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <p className="text-muted-foreground">Aguardando a primeira mensagem do fluxo...</p>
             </div>
@@ -605,7 +763,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                 >
                   {typeof msg.text === 'string' ? msg.text.split('\n').map((line, i) => <p key={i}>{line}</p>) : msg.text}
                 </div>
-                {msg.sender === 'bot' && msg.options && msg.options.length > 0 && (
+                {msg.sender === 'bot' && msg.options && msg.options.length > 0 && awaitingInputType === 'option' && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {msg.options.map(opt => (
                       <Button
@@ -632,48 +790,14 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                 </div>
             )}
           </div>
+          <div ref={messagesEndRef} />
         </ScrollArea>
       </CardContent>
       <CardFooter className="p-4 border-t">
-        {!isTesting ? (
-           <Button onClick={handleStartTest} className="w-full" disabled={!activeWorkspace || activeWorkspace.nodes.length === 0 || isProcessingNode}>
-            <Play className="mr-2 h-4 w-4" /> Iniciar Teste
-          </Button>
-        ) : (
-          <div className="flex w-full items-center space-x-2">
-            <Input
-              type="text"
-              placeholder={awaitingInputFor && awaitingInputFor.type === 'input' ? "Digite sua resposta..." : (awaitingInputFor && awaitingInputFor.type === 'option' ? "Escolha uma opção acima..." : "Aguardando...")}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={(e) => { if (e.key === 'Enter' && awaitingInputFor && awaitingInputFor.type === 'input' && inputValue.trim() !== '' && !isProcessingNode) handleSendMessage(); }}
-              className="flex-1"
-              disabled={!isTesting || (awaitingInputFor?.type !== 'input') || isProcessingNode}
-            />
-            <Button
-              onClick={handleSendMessage}
-              disabled={!isTesting || !inputValue.trim() || (awaitingInputFor?.type !== 'input') || isProcessingNode}
-              size="icon"
-              aria-label="Enviar"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-            <Button
-              onClick={handleEndChatTest}
-              variant="outline"
-              size="icon"
-              aria-label="Encerrar Teste"
-              disabled={isProcessingNode}
-            >
-              <LogOut className="h-4 w-4 text-destructive" />
-            </Button>
-          </div>
-        )}
+        {renderChatInputArea()}
       </CardFooter>
     </Card>
   );
 };
 
 export default TestChatPanel;
-
-    
