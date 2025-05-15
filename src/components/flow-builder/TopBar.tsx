@@ -9,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, 
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound
-  // Removido: ZoomIn, ZoomOut, RefreshCcwDot as ResetZoomIcon
 } from 'lucide-react';
 import {
   Dialog,
@@ -58,8 +57,6 @@ interface TopBarProps {
   appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
-  onZoom?: (direction: 'in' | 'out' | 'reset') => void; // Tornar opcional
-  currentZoomLevel?: number; // Tornar opcional
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -72,8 +69,6 @@ const TopBar: React.FC<TopBarProps> = ({
   appName = "Flowise Lite",
   isChatPanelOpen,
   onToggleChatPanel,
-  onZoom, // Não usado se removermos os botões
-  currentZoomLevel, // Não usado se removermos os botões
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -92,6 +87,8 @@ const TopBar: React.FC<TopBarProps> = ({
   const [isPostgresEnabled, setIsPostgresEnabled] = useState(false);
 
   const [evolutionApiUrl, setEvolutionApiUrl] = useState('');
+  const [evolutionApiKey, setEvolutionApiKey] = useState('');
+  const [defaultEvolutionInstanceName, setDefaultEvolutionInstanceName] = useState('');
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
 
   useEffect(() => {
@@ -121,8 +118,12 @@ const TopBar: React.FC<TopBarProps> = ({
       setIsPostgresEnabled(savedIsPostgresEnabled);
 
       const savedEvolutionApiUrl = localStorage.getItem('evolutionApiUrl') || '';
+      const savedEvolutionApiKey = localStorage.getItem('evolutionApiKey') || '';
+      const savedDefaultEvolutionInstanceName = localStorage.getItem('defaultEvolutionInstanceName') || '';
       const savedIsEvolutionApiEnabled = localStorage.getItem('isEvolutionApiEnabled') === 'true';
       setEvolutionApiUrl(savedEvolutionApiUrl);
+      setEvolutionApiKey(savedEvolutionApiKey);
+      setDefaultEvolutionInstanceName(savedDefaultEvolutionInstanceName);
       setIsEvolutionApiEnabled(savedIsEvolutionApiEnabled);
     }
   }, [isSettingsDialogOpen]);
@@ -141,12 +142,14 @@ const TopBar: React.FC<TopBarProps> = ({
     localStorage.setItem('isPostgresEnabled', String(isPostgresEnabled));
 
     localStorage.setItem('evolutionApiUrl', evolutionApiUrl);
+    localStorage.setItem('evolutionApiKey', evolutionApiKey);
+    localStorage.setItem('defaultEvolutionInstanceName', defaultEvolutionInstanceName);
     localStorage.setItem('isEvolutionApiEnabled', String(isEvolutionApiEnabled));
 
     console.log("Configurações Salvas:", { 
       supabase: { supabaseUrl, supabaseAnonKey, supabaseServiceKeyExists: supabaseServiceKey.length > 0, isSupabaseEnabled },
       postgresql: { postgresHost, postgresPort, postgresUser, postgresDatabase, isPostgresEnabled, postgresPasswordExists: postgresPassword.length > 0 },
-      evolutionApi: { evolutionApiUrl, isEvolutionApiEnabled }
+      evolutionApi: { evolutionApiUrl, evolutionApiKeyExists: evolutionApiKey.length > 0, defaultEvolutionInstanceName, isEvolutionApiEnabled }
     });
     toast({
       title: "Configurações Salvas!",
@@ -301,8 +304,6 @@ const TopBar: React.FC<TopBarProps> = ({
           >
             <Undo2 className="h-4 w-4" />
           </Button>
-
-          {/* Controles de Zoom removidos daqui */}
 
           <Button
             onClick={onToggleChatPanel}
@@ -525,16 +526,46 @@ const TopBar: React.FC<TopBarProps> = ({
                         {isEvolutionApiEnabled && (
                           <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
                             <div>
-                              <Label htmlFor="evolution-api-url" className="text-card-foreground/90 text-sm">URL do WebSocket da API Evolution</Label>
+                              <Label htmlFor="evolution-api-url" className="text-card-foreground/90 text-sm">URL Base da API Evolution</Label>
                               <Input
                                 id="evolution-api-url"
-                                placeholder="ws://localhost:8080 ou wss://sua-api.com"
+                                placeholder="http://localhost:8080"
                                 value={evolutionApiUrl}
                                 onChange={(e) => setEvolutionApiUrl(e.target.value)}
                                 className="bg-input text-foreground mt-1"
                               />
                               <p className="text-xs text-muted-foreground mt-1">
-                                Necessário para os blocos do WhatsApp enviarem mensagens e para simular o recebimento de webhooks no chat de teste.
+                                URL base da sua instância da API Evolution para chamadas REST (ex: envio de mensagens).
+                              </p>
+                            </div>
+                             <div>
+                              <Label htmlFor="default-evolution-instance-name" className="text-card-foreground/90 text-sm">Nome da Instância Padrão</Label>
+                              <Input
+                                id="default-evolution-instance-name"
+                                placeholder="evolution_instance_padrao"
+                                value={defaultEvolutionInstanceName}
+                                onChange={(e) => setDefaultEvolutionInstanceName(e.target.value)}
+                                className="bg-input text-foreground mt-1"
+                              />
+                               <p className="text-xs text-muted-foreground mt-1">
+                                Nome da instância padrão a ser usada se não especificado no nó.
+                              </p>
+                            </div>
+                            <div>
+                              <Label htmlFor="evolution-api-key" className="text-card-foreground/90 text-sm">Chave de API Global da Evolution (Opcional)</Label>
+                               <div className="flex items-center space-x-2 mt-1">
+                                <KeyRound className="w-4 h-4 text-muted-foreground" />
+                                <Input
+                                    id="evolution-api-key"
+                                    type="password"
+                                    placeholder="Sua chave de API global, se configurada"
+                                    value={evolutionApiKey}
+                                    onChange={(e) => setEvolutionApiKey(e.target.value)}
+                                    className="bg-input text-foreground flex-1"
+                                />
+                               </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Necessária se sua API Evolution estiver protegida por uma chave de API global.
                               </p>
                             </div>
                           </div>

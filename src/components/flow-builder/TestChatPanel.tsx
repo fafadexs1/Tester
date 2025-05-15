@@ -10,11 +10,13 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Send, Play, RotateCcw, MessageSquare, Loader2, LogOut, Webhook as WebhookIcon } from 'lucide-react';
+import { Send, Play, RotateCcw, MessageSquare, Loader2, LogOut, Webhook as WebhookIcon, FileJson2 } from 'lucide-react';
 import type { WorkspaceData, NodeData } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
+import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
+
 
 interface Message {
   id: string;
@@ -35,7 +37,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
   const [inputValue, setInputValue] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null); 
-  const [flowVariables, setFlowVariables] = useState<Record<string, any>>({});
+  const flowVariablesRef = useRef<Record<string, any>>({}); // Usar ref para acesso síncrono
   const [awaitingInputFor, setAwaitingInputFor] = useState<NodeData | null>(null);
   const [awaitingInputType, setAwaitingInputType] = useState<AwaitingInputType>('text');
   const [isProcessingNode, setIsProcessingNode] = useState(false);
@@ -46,16 +48,14 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
   const [webhookJsonInput, setWebhookJsonInput] = useState<string>('');
   const [availableStartTriggers, setAvailableStartTriggers] = useState<string[]>([]);
 
-  const activeFlowVariablesRef = useRef(flowVariables);
-  useEffect(() => {
-    activeFlowVariablesRef.current = flowVariables;
-  }, [flowVariables]);
+  const messagesEndRef = useRef<null | HTMLDivElement>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
+  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  };
+
+  useEffect(scrollToBottom, [messages]);
+
 
   useEffect(() => {
     if (isSimulateWebhookDialogOpen && activeWorkspace) {
@@ -84,7 +84,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     if (text === undefined || text === null) {
       return '';
     }
-    let mutableText = String(text); // Ensure it's a string
+    let mutableText = String(text);
   
     const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
   
@@ -95,13 +95,13 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         if (value && typeof value === 'object' && part in value) {
           value = value[part];
         } else {
-          console.log(`[TestChatPanel] substituteVariables: Part "${part}" of variable "{{${variableName}}}" not found or value is not an object. Vars:`, JSON.parse(JSON.stringify(currentActiveFlowVariables)));
-          return ''; 
+          console.warn(`[TestChatPanel] substituteVariables: Part "${part}" of variable "{{${variableName}}}" not found or value is not an object. Vars:`, JSON.parse(JSON.stringify(currentActiveFlowVariables)));
+          return match; // Retorna o placeholder original se a variável não for encontrada
         }
       }
   
       if (value === undefined || value === null) {
-        console.log(`[TestChatPanel] substituteVariables: Variable "{{${variableName}}}" resolved to undefined/null.`);
+        console.warn(`[TestChatPanel] substituteVariables: Variable "{{${variableName}}}" resolved to undefined/null.`);
         return ''; 
       }
       if (typeof value === 'object' || Array.isArray(value)) {
@@ -143,7 +143,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
   const handleEndChatTest = useCallback(() => {
     console.log('[TestChatPanel] handleEndChatTest called');
-    setMessages(prev => [...prev, { id: uuidv4(), text: "Teste encerrado.", sender: 'bot' }]);
+    setMessages(prev => [...prev, { id: uuidv4(), text: "Teste encerrado pelo usuário.", sender: 'bot' }]);
     setIsTesting(false);
     setAwaitingInputFor(null);
     setAwaitingInputType('text');
@@ -156,6 +156,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     
     setIsProcessingNode(true);
     setCurrentNodeId(nodeId); 
+    flowVariablesRef.current = { ...varsForThisExecution }; // Sincroniza a ref com as variáveis atuais
 
     if (!activeWorkspace) {
         console.error('[TestChatPanel] processNode: activeWorkspace is null or undefined.');
@@ -167,7 +168,6 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
     let activeVars = { ...(varsForThisExecution || {}) };
     console.log(`[TestChatPanel] processNode: effective activeVars for this node:`, JSON.parse(JSON.stringify(activeVars)));
-
 
     if (!nodeId) {
       setMessages(prev => [...prev, { id: uuidv4(), text: "Fim do caminho atual. O fluxo está pausado. Use 'Encerrar Teste' ou 'Reiniciar Teste'.", sender: 'bot' }]);
@@ -200,13 +200,12 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
     switch (node.type) {
       case 'start':
-        setMessages(prev => [...prev, { id: uuidv4(), text: `Iniciando fluxo a partir de: ${node.title || 'Nó de Início'}`, sender: 'bot' }]);
-        // A lógica de qual trigger usar é gerenciada por quem chama `processNode` para um nó de início (handleStartTest ou handleSimulateWebhookAndStartFlow)
-        // Aqui, simplesmente tentamos avançar se já houver um `default` ou o primeiro trigger se chamado diretamente.
-        // No entanto, handleStartTest/handleSimulateWebhookAndStartFlow são mais específicos.
-        // Esta parte só seria relevante se processNode fosse chamado diretamente com um nó 'start' sem contexto de gatilho.
-        if (node.triggers && node.triggers.length > 0 && node.triggers[0]) {
-          nextNodeId = findNextNodeId(node.id, node.triggers[0]);
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Iniciando fluxo a partir de: ${node.title || 'Nó de Início'} com gatilho específico.`, sender: 'bot' }]);
+        const triggerToUse = activeVars._triggerName || (node.triggers && node.triggers.length > 0 ? node.triggers[0] : null);
+        
+        if (triggerToUse) {
+          nextNodeId = findNextNodeId(node.id, triggerToUse);
+          if (updatedVarsForNextNode._triggerName) delete updatedVarsForNextNode._triggerName; 
         } else {
           setMessages(prev => [...prev, { id: uuidv4(), text: "Nó de início não tem gatilhos configurados ou conectados.", sender: 'bot' }]);
           autoAdvance = false;
@@ -260,23 +259,19 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         let displayVarName = conditionVarField;
 
         if (conditionVarField) {
-            // Tenta substituir primeiro, caso o nome da variável em si seja uma variável
             let substitutedVarName = substituteVariables(conditionVarField, updatedVarsForNextNode);
             if (conditionVarField.startsWith("{{") && conditionVarField.endsWith("}}")) {
                 const cleanVarName = conditionVarField.substring(2, conditionVarField.length - 2).trim();
                 actualValue = updatedVarsForNextNode[cleanVarName];
-                displayVarName = cleanVarName; // Mantenha o nome limpo para exibição
+                displayVarName = cleanVarName; 
             } else {
-                 // Se não for um placeholder, pode ser um nome de variável direto ou um valor literal
-                 // Primeiro, tente como nome de variável
                  actualValue = updatedVarsForNextNode[conditionVarField];
                  displayVarName = conditionVarField;
-                 if (actualValue === undefined) { // Se não encontrou como variável, use o valor literal (após substituição)
+                 if (actualValue === undefined) { 
                     actualValue = substitutedVarName;
                  }
             }
         }
-
 
         const valueToCompare = conditionCompareValueField
             ? substituteVariables(conditionCompareValueField, updatedVarsForNextNode)
@@ -332,10 +327,47 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         break;
       
       case 'whatsapp-text':
-      case 'whatsapp-media':
-      case 'whatsapp-group':
-        const actionType = node.type.split('-')[1];
-        setMessages(prev => [...prev, { id: uuidv4(), text: `(Simulando envio de ${actionType} para API Evolution via instância '${substituteVariables(node.instanceName, updatedVarsForNextNode)}')`, sender: 'bot' }]);
+      case 'whatsapp-media': {
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Tentando enviar mensagem WhatsApp (${node.type})...`, sender: 'bot' }]);
+        const isEvolutionApiConfigured = localStorage.getItem('isEvolutionApiEnabled') === 'true';
+        const evolutionApiBaseUrl = localStorage.getItem('evolutionApiUrl');
+        const evolutionGlobalApiKey = localStorage.getItem('evolutionApiKey');
+        const defaultInstanceNameSetting = localStorage.getItem('defaultEvolutionInstanceName');
+
+        const instanceName = substituteVariables(node.instanceName, updatedVarsForNextNode) || defaultInstanceNameSetting || 'evolution_instance';
+        const recipientPhoneNumber = substituteVariables(node.phoneNumber, updatedVarsForNextNode);
+        
+        if (!isEvolutionApiConfigured || !evolutionApiBaseUrl) {
+            setMessages(prev => [...prev, { id: uuidv4(), text: "Erro: API Evolution não configurada ou URL base ausente. Verifique as Configurações Globais.", sender: 'bot' }]);
+        } else if (!recipientPhoneNumber) {
+            setMessages(prev => [...prev, { id: uuidv4(), text: `Erro: Número de telefone do destinatário não fornecido no nó "${node.title}".`, sender: 'bot' }]);
+        } else {
+            try {
+                const result = await sendWhatsAppMessageAction({
+                    baseUrl: evolutionApiBaseUrl,
+                    apiKey: evolutionGlobalApiKey || undefined,
+                    instanceName: instanceName,
+                    recipientPhoneNumber: recipientPhoneNumber,
+                    messageType: node.type === 'whatsapp-text' ? 'text' : node.mediaType || 'image',
+                    textContent: node.type === 'whatsapp-text' ? substituteVariables(node.textMessage, updatedVarsForNextNode) : undefined,
+                    mediaUrl: node.type === 'whatsapp-media' ? substituteVariables(node.mediaUrl, updatedVarsForNextNode) : undefined,
+                    caption: node.type === 'whatsapp-media' ? substituteVariables(node.caption, updatedVarsForNextNode) : undefined,
+                });
+
+                if (result.success) {
+                    setMessages(prev => [...prev, { id: uuidv4(), text: `WhatsApp: Mensagem enviada com sucesso para ${recipientPhoneNumber} via instância ${instanceName}.`, sender: 'bot' }]);
+                } else {
+                    setMessages(prev => [...prev, { id: uuidv4(), text: `WhatsApp: Erro ao enviar mensagem: ${result.error || 'Erro desconhecido'}`, sender: 'bot' }]);
+                }
+            } catch (error: any) {
+                 setMessages(prev => [...prev, { id: uuidv4(), text: `WhatsApp: Exceção ao enviar mensagem: ${error.message}`, sender: 'bot' }]);
+            }
+        }
+        nextNodeId = findNextNodeId(node.id, 'default');
+        break;
+      }
+      case 'whatsapp-group': 
+        setMessages(prev => [...prev, { id: uuidv4(), text: `(Simulando criação de grupo WhatsApp: '${substituteVariables(node.groupName, updatedVarsForNextNode)}')`, sender: 'bot' }]);
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
       
@@ -376,47 +408,38 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             operationSucceeded = true;
             setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Linha criada na tabela '${tableName}'. Resultado: ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
           } else if (node.type === 'supabase-read-row') {
-            if (!idColumn || (idValue === undefined || idValue === null || String(idValue).trim() === '')) { 
-              // If no ID column/value, attempt to select all if columnsToSelect implies it
-              if (columnsToSelect && columnsToSelect.trim() !== '') {
-                 const { data, error } = await supabase.from(tableName).select(columnsToSelect);
-                 if (error) throw error;
-                 resultDataToSave = data;
-                 setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Dados lidos da tabela '${tableName}' (sem filtro ID): ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
-              } else {
-                throw new Error("Coluna identificadora ou valor não fornecidos para leitura específica, e nenhuma coluna de seleção geral.");
-              }
+            let query = supabase.from(tableName).select(columnsToSelect);
+            if (idColumn && (idValue !== undefined && idValue !== null && String(idValue).trim() !== '')) {
+                 query = query.eq(idColumn, String(idValue));
+                 console.log(`[TestChatPanel] Supabase Read - Querying with filter: table='${tableName}', select='${columnsToSelect}', eq_col='${idColumn}', eq_val='${String(idValue)}'`);
             } else {
-              console.log(`[TestChatPanel] Supabase Read - Querying: table='${tableName}', select='${columnsToSelect}', eq_col='${idColumn}', eq_val='${String(idValue)}'`);
-              const { data, error } = await supabase.from(tableName).select(columnsToSelect).eq(idColumn, String(idValue));
-              if (error) throw error;
-              resultDataToSave = data; // data is an array
+                 console.log(`[TestChatPanel] Supabase Read - Querying without filter (all rows): table='${tableName}', select='${columnsToSelect}'`);
             }
+            const { data, error } = await query;
+            if (error) throw error;
             
-            // Process result for 'supabase-read-row'
-            if (resultDataToSave && Array.isArray(resultDataToSave)) {
-              if (resultDataToSave.length === 0) {
-                  setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Nenhum registro encontrado na tabela '${tableName}' com ${idColumn} = '${idValue}'.`, sender: 'bot' }]);
-                  resultDataToSave = null;
-              } else if (resultDataToSave.length === 1) {
-                  const singleRow = resultDataToSave[0];
-                  const keys = Object.keys(singleRow);
-                  if (keys.length === 1 && columnsToSelect !== '*' && !columnsToSelect.includes(',')) { 
-                      resultDataToSave = singleRow[keys[0]]; // Extract single value
-                      setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Valor único lido da tabela '${tableName}', coluna '${keys[0]}': ${resultDataToSave}`, sender: 'bot' }]);
-                  } else { 
-                      resultDataToSave = singleRow; // Save the single row object
-                      setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Dados lidos da tabela '${tableName}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
-                  }
-              } else { // Multiple rows returned
-                  setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Múltiplas linhas lidas da tabela '${tableName}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
-                  // resultDataToSave remains the array of objects
-              }
-            } else if (resultDataToSave === null) { // Explicitly null if no records from a specific query
-               setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Nenhum registro encontrado.`, sender: 'bot' }]);
+            console.log(`[TestChatPanel] Supabase read RAW data for node ${node.id}:`, data);
+            
+            if (data && data.length > 0) {
+                if (data.length === 1) {
+                    const singleRow = data[0];
+                    const keys = Object.keys(singleRow);
+                    if (keys.length === 1 && columnsToSelect && columnsToSelect.trim() !== '*' && !columnsToSelect.includes(',')) {
+                        resultDataToSave = singleRow[keys[0]]; // Save only the value
+                        setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Valor único lido da tabela '${tableName}', coluna '${keys[0]}': ${resultDataToSave}`, sender: 'bot' }]);
+                    } else {
+                        resultDataToSave = singleRow; // Save the whole row object
+                        setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Dados lidos da tabela '${tableName}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
+                    }
+                } else {
+                    resultDataToSave = data; // Save array of rows
+                    setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Múltiplas linhas lidas da tabela '${tableName}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
+                }
+            } else {
+                resultDataToSave = null;
+                setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Nenhum registro encontrado na tabela '${tableName}'${idColumn && idValue ? ` com ${idColumn} = '${idValue}'` : ''}.`, sender: 'bot' }]);
             }
             operationSucceeded = true;
-
           } else if (node.type === 'supabase-update-row') {
             if (!idColumn || (idValue === undefined || idValue === null || String(idValue).trim() === '') || !dataJsonString) { throw new Error("Informações incompletas para atualização."); }
             let dataToUpdate = JSON.parse(dataJsonString);
@@ -435,10 +458,10 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
           if (operationSucceeded && node.supabaseResultVariable && node.supabaseResultVariable.trim() !== '') {
             const varName = node.supabaseResultVariable as string;
-            console.log(`[TestChatPanel] ${node.type.toUpperCase()}: Attempting to set variable "${varName}" with data:`, JSON.parse(JSON.stringify(resultDataToSave)));
+            console.log(`[TestChatPanel] Supabase Op (${node.type}): Attempting to set variable "${varName}" with data:`, JSON.parse(JSON.stringify(resultDataToSave)));
             updatedVarsForNextNode = { ...updatedVarsForNextNode, [varName]: resultDataToSave };
-            console.log(`[TestChatPanel] ${node.type.toUpperCase()}: Variable "${varName}" set. New flowVariables:`, JSON.parse(JSON.stringify(updatedVarsForNextNode)));
-            setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${varName}" definida com o resultado.`, sender: 'bot' }]);
+            console.log(`[TestChatPanel] Supabase Op (${node.type}): Variable "${varName}" set. New flowVariables:`, JSON.parse(JSON.stringify(updatedVarsForNextNode)));
+            setMessages(prev => [...prev, { id: uuidv4(), text: `Variável "${varName}" definida com o resultado Supabase.`, sender: 'bot' }]);
           }
 
         } catch (e: any) {
@@ -512,14 +535,13 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         break;
 
       default:
-        setMessages(prev => [...prev, { id: uuidv4(), text: `Tipo de nó "${node.type}" (${node.title || 'Sem título'}) não implementado no chat de teste. Fim da simulação.`, sender: 'bot' }]);
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Tipo de nó "${(node as any).type}" (${(node as any).title || 'Sem título'}) não implementado no chat de teste. Fim da simulação.`, sender: 'bot' }]);
         autoAdvance = false;
         handleEndChatTest();
         break;
     }
 
-    setFlowVariables(updatedVarsForNextNode);
-    activeFlowVariablesRef.current = updatedVarsForNextNode;
+    flowVariablesRef.current = { ...updatedVarsForNextNode }; // Atualiza a ref
     console.log(`[TestChatPanel] processNode EXIT: nodeId: ${node.id}, vars passed to next step (or final state):`, JSON.parse(JSON.stringify(updatedVarsForNextNode)));
 
     setIsProcessingNode(false);
@@ -530,7 +552,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     }
   }, [activeWorkspace, getNodeById, findNextNodeId, substituteVariables, handleEndChatTest]);
 
-  const handleStartTest = useCallback(() => {
+  const handleStartTest = useCallback(async (triggerNameOverride?: string, initialVarsOverride?: Record<string, any>) => {
     if (!activeWorkspace || activeWorkspace.nodes.length === 0) {
       console.error('[TestChatPanel] Tentativa de iniciar teste sem fluxo ativo ou com fluxo vazio.');
       setMessages([{ id: uuidv4(), text: "Nenhum fluxo ativo ou o fluxo está vazio.", sender: 'bot' }]);
@@ -538,10 +560,9 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       return;
     }
     console.log('[TestChatPanel] handleStartTest iniciado. ID do Workspace:', activeWorkspace.id, 'Qtd. de Nós:', activeWorkspace.nodes.length);
-    const initialVars = {};
+    const initialVars = initialVarsOverride || {};
     setMessages([]);
-    setFlowVariables(initialVars); 
-    activeFlowVariablesRef.current = initialVars;
+    flowVariablesRef.current = initialVars;
     setAwaitingInputFor(null);
     setAwaitingInputType('text');
     setIsTesting(true);
@@ -550,12 +571,11 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     const startNode = activeWorkspace.nodes.find(n => n.type === 'start');
     if (startNode) {
       console.log('[TestChatPanel] Nó de início encontrado:', JSON.parse(JSON.stringify(startNode)));
-      if (startNode.triggers && startNode.triggers.length > 0) {
-        const firstTriggerHandle = startNode.triggers[0];
-        const nextNodeIdAfterStart = findNextNodeId(startNode.id, firstTriggerHandle);
-        processNode(nextNodeIdAfterStart, initialVars); 
+      const triggerToUse = triggerNameOverride || (startNode.triggers && startNode.triggers.length > 0 ? startNode.triggers[0] : null);
+      if (triggerToUse) {
+        await processNode(startNode.id, { ...initialVars, _triggerName: triggerToUse });
       } else {
-        setMessages([{ id: uuidv4(), text: "Nó de início não tem gatilhos configurados ou o primeiro gatilho não está conectado.", sender: 'bot' }]);
+        setMessages([{ id: uuidv4(), text: "Nó de início não tem gatilhos configurados, ou nenhum gatilho foi especificado para iniciar.", sender: 'bot' }]);
         handleEndChatTest();
       }
     } else {
@@ -563,7 +583,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       setMessages([{ id: uuidv4(), text: "Nenhum nó de 'Início do Fluxo' encontrado.", sender: 'bot' }]);
       setIsTesting(false);
     }
-  }, [activeWorkspace, processNode, findNextNodeId, handleEndChatTest]);
+  }, [activeWorkspace, processNode, handleEndChatTest]);
 
   const handleRestartTest = useCallback(() => {
     setIsTesting(false);
@@ -572,9 +592,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     setAwaitingInputType('text');
     setMessages([]);
     setInputValue('');
-    const initialVars = {};
-    setFlowVariables(initialVars);
-    activeFlowVariablesRef.current = initialVars;
+    flowVariablesRef.current = {};
     setIsProcessingNode(false);
   }, []);
 
@@ -586,24 +604,23 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     const userMessageText = inputValue;
     setMessages(prev => [...prev, { id: uuidv4(), text: userMessageText, sender: 'user' }]);
 
-    let varsForNextStep = { ...activeFlowVariablesRef.current }; 
+    let updatedVars = { ...flowVariablesRef.current }; 
     console.log('[TestChatPanel] awaitingInputFor (input node):', JSON.parse(JSON.stringify(awaitingInputFor)));
     
     if (awaitingInputFor.variableToSaveResponse && awaitingInputFor.variableToSaveResponse.trim() !== '') {
       const varName = awaitingInputFor.variableToSaveResponse as string;
       console.log(`[TestChatPanel] Saving input to variable: ${varName} = ${userMessageText}`);
-      varsForNextStep = { ...varsForNextStep, [varName]: userMessageText };
+      updatedVars = { ...updatedVars, [varName]: userMessageText };
     }
     
-    console.log('[TestChatPanel] flowVariables after input save:', JSON.parse(JSON.stringify(varsForNextStep)));
-    setFlowVariables(varsForNextStep); // Update React state
-    activeFlowVariablesRef.current = varsForNextStep; // Update ref immediately
+    flowVariablesRef.current = updatedVars;
+    console.log('[TestChatPanel] flowVariables after input save:', JSON.parse(JSON.stringify(updatedVars)));
     setInputValue('');
 
     const nextNodeIdAfterInput = findNextNodeId(awaitingInputFor.id, 'default');
     console.log('[TestChatPanel] nextNodeIdAfterInput found:', nextNodeIdAfterInput);
     setAwaitingInputFor(null);
-    await processNode(nextNodeIdAfterInput, varsForNextStep);
+    await processNode(nextNodeIdAfterInput, updatedVars);
   }, [inputValue, awaitingInputFor, awaitingInputType, isProcessingNode, findNextNodeId, processNode]);
 
   const handleOptionClick = useCallback(async (optionText: string) => {
@@ -613,23 +630,22 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     console.log('[TestChatPanel] handleOptionClick triggered. Option chosen:', optionText);
     setMessages(prev => [...prev, { id: uuidv4(), text: `Você escolheu: ${optionText}`, sender: 'user' }]);
 
-    let varsForNextStep = { ...activeFlowVariablesRef.current }; 
+    let updatedVars = { ...flowVariablesRef.current }; 
     if (awaitingInputFor.variableToSaveChoice && awaitingInputFor.variableToSaveChoice.trim() !== '') {
       const varName = awaitingInputFor.variableToSaveChoice as string;
       console.log(`[TestChatPanel] Saving choice to variable: ${varName} = ${optionText}`);
-      varsForNextStep = { ...varsForNextStep, [varName]: optionText };
+      updatedVars = { ...updatedVars, [varName]: optionText };
     }
     
-    console.log('[TestChatPanel] flowVariables after option save:', JSON.parse(JSON.stringify(varsForNextStep)));
-    setFlowVariables(varsForNextStep); 
-    activeFlowVariablesRef.current = varsForNextStep;
+    flowVariablesRef.current = updatedVars;
+    console.log('[TestChatPanel] flowVariables after option save:', JSON.parse(JSON.stringify(updatedVars)));
 
     const nextNodeIdAfterOption = findNextNodeId(awaitingInputFor.id, optionText);
     console.log('[TestChatPanel] nextNodeIdAfterOption found:', nextNodeIdAfterOption);
 
     setAwaitingInputFor(null);
     setAwaitingInputType('text'); 
-    await processNode(nextNodeIdAfterOption, varsForNextStep);
+    await processNode(nextNodeIdAfterOption, updatedVars);
   }, [awaitingInputFor, awaitingInputType, isProcessingNode, findNextNodeId, processNode]);
 
 
@@ -659,42 +675,21 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       return;
     }
 
-    handleRestartTest(); // Limpa o chat e as variáveis existentes
-    setIsTesting(true); // Inicia o modo de teste
-
+    handleRestartTest(); 
+    
     let initialVars = { [webhookVariableName]: parsedJson };
-    setFlowVariables(initialVars);
-    activeFlowVariablesRef.current = initialVars;
+    flowVariablesRef.current = initialVars; // Initialize ref as well
 
     setMessages(prev => [...prev, { id: uuidv4(), text: `Webhook simulado recebido. Payload salvo em {{${webhookVariableName}}}. Iniciando fluxo a partir do gatilho: "${selectedWebhookTrigger}".`, sender: 'bot' }]);
-
-    const startNode = activeWorkspace.nodes.find(n => n.type === 'start');
-    if (!startNode) {
-      toast({ title: "Erro", description: "Nenhum nó de início encontrado no fluxo.", variant: "destructive" });
-      handleEndChatTest();
-      return;
-    }
-    if (!startNode.triggers || !startNode.triggers.includes(selectedWebhookTrigger)) {
-      toast({ title: "Erro", description: `Gatilho "${selectedWebhookTrigger}" não encontrado no nó de início.`, variant: "destructive" });
-      handleEndChatTest();
-      return;
-    }
-
-    const nextNodeIdAfterTrigger = findNextNodeId(startNode.id, selectedWebhookTrigger);
-    if (!nextNodeIdAfterTrigger) {
-       toast({ title: "Atenção", description: `O gatilho "${selectedWebhookTrigger}" não está conectado a nenhum nó.`, variant: "default" });
-       handleEndChatTest();
-       return;
-    }
+    setIsTesting(true);
     
     setIsSimulateWebhookDialogOpen(false);
-    await processNode(nextNodeIdAfterTrigger, initialVars);
+    await handleStartTest(selectedWebhookTrigger, initialVars);
 
-  }, [activeWorkspace, selectedWebhookTrigger, webhookJsonInput, webhookVariableName, handleRestartTest, processNode, findNextNodeId, toast, handleEndChatTest]);
+  }, [activeWorkspace, selectedWebhookTrigger, webhookJsonInput, webhookVariableName, handleRestartTest, handleStartTest, toast]);
 
 
   useEffect(() => {
-    // Limpa os campos do diálogo de webhook ao reiniciar o teste (fechar o painel, mudar de workspace)
     if(!isTesting) {
         setSelectedWebhookTrigger('');
         setWebhookVariableName('webhook_payload');
@@ -711,7 +706,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     if (!isTesting) {
       return (
         <div className="flex w-full items-center space-x-2">
-          <Button onClick={handleStartTest} className="flex-1" disabled={!activeWorkspace || activeWorkspace.nodes.length === 0 || isProcessingNode}>
+          <Button onClick={() => handleStartTest()} className="flex-1" disabled={!activeWorkspace || activeWorkspace.nodes.length === 0 || isProcessingNode}>
             <Play className="mr-2 h-4 w-4" /> Iniciar Teste
           </Button>
           <Button 
@@ -756,15 +751,6 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         >
           <LogOut className="h-4 w-4 text-destructive" />
         </Button>
-         <Button 
-            variant="outline" 
-            size="icon" 
-            onClick={() => setIsSimulateWebhookDialogOpen(true)}
-            title="Simular Webhook Recebido"
-            disabled={!activeWorkspace || activeWorkspace.nodes.length === 0 || isProcessingNode}
-          >
-            <WebhookIcon className="h-4 w-4"/>
-          </Button>
       </div>
     );
   };
@@ -857,7 +843,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             <DialogHeader>
                 <DialogTitle>Simular Webhook Recebido</DialogTitle>
                 <DialogDescription>
-                    Inicie o fluxo a partir de um gatilho específico, simulando um webhook recebido da API Evolution.
+                    Inicie o fluxo a partir de um gatilho específico, simulando um webhook recebido.
                 </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -927,3 +913,4 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 };
 
 export default TestChatPanel;
+    
