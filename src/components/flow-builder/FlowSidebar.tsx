@@ -7,7 +7,7 @@ import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, 
-  Database, Rows, Search, Edit3, Trash, PlayCircle, StopCircle, PauseCircle
+  Database, Rows, Search, Edit3, Trash, PlayCircle, StopCircle
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -81,17 +81,6 @@ const FlowSidebar: React.FC<FlowSidebarProps> = () => {
         { type: "whatsapp-text", label: "Enviar Texto (WA)", icon: <BotMessageSquare {...iconProps} className="text-teal-600" />, defaultData: { textMessage: 'Olá!', instanceName: 'evolution_instance' } },
         { type: "whatsapp-media", label: "Enviar Mídia (WA)", icon: <ImageUp {...iconProps} className="text-indigo-600" />, defaultData: { mediaType: 'image', instanceName: 'evolution_instance', mediaUrl: 'https://placehold.co/300x200.png', dataAiHint: 'placeholder abstract' } },
         { type: "whatsapp-group", label: "Criar Grupo (WA)", icon: <UserPlus2 {...iconProps} className="text-pink-600" />, defaultData: { groupName: 'Novo Grupo', instanceName: 'evolution_instance' } },
-        { 
-          type: "whatsapp-webhook-wait", 
-          label: "Aguardar Webhook WA (Sim.)", 
-          icon: <PauseCircle {...iconProps} className="text-blue-600" />, 
-          defaultData: { 
-            promptTextWhileWaiting: 'Aguardando webhook simulado do WhatsApp...', 
-            receivedJsonVariable: 'webhook_whatsapp_json', 
-            extractTextToVariable: 'texto_recebido_wa', 
-            textPathInJson: 'message.text' 
-          } 
-        },
       ]
     }
   ];

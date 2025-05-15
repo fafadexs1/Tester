@@ -13,7 +13,7 @@ export type NodeType =
   | 'whatsapp-text' 
   | 'whatsapp-media' 
   | 'whatsapp-group'
-  | 'whatsapp-webhook-wait' // Novo tipo de nó
+  // | 'whatsapp-webhook-wait' // Removido
   | 'condition' 
   | 'set-variable' 
   | 'api-call' 
@@ -82,12 +82,6 @@ export interface NodeData {
   groupName?: string; 
   participants?: string; 
   
-  // Para whatsapp-webhook-wait
-  promptTextWhileWaiting?: string;
-  receivedJsonVariable?: string;
-  extractTextToVariable?: string;
-  textPathInJson?: string;
-
   conditionVariable?: string; 
   conditionOperator?: '==' | '!=' | '>' | '<' | 'contains' | 'startsWith' | 'endsWith' | 'isEmpty' | 'isNotEmpty'; 
   conditionValue?: string; 
