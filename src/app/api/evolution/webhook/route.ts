@@ -6,8 +6,20 @@ export async function POST(request: NextRequest) {
   console.log('[Evolution API Global Webhook] Received a POST request.');
 
   try {
-    const payload = await request.json();
-    console.log('[Evolution API Global Webhook] Received payload:', JSON.stringify(payload, null, 2));
+    // Try to parse as JSON first
+    let payload: any;
+    const contentType = request.headers.get('content-type');
+
+    if (contentType && contentType.includes('application/json')) {
+      payload = await request.json();
+      console.log('[Evolution API Global Webhook] Received JSON payload:', JSON.stringify(payload, null, 2));
+    } else {
+      // If not JSON, try to read as text (e.g., for form data or plain text)
+      const textPayload = await request.text();
+      payload = { raw_text: textPayload }; // Wrap in an object for consistent logging structure
+      console.log('[Evolution API Global Webhook] Received non-JSON payload (logged as raw_text):', textPayload);
+    }
+
 
     // Aqui seria o local para uma lógica mais avançada:
     // 1. Validar a origem da requisição (ex: usando um token secreto configurado na Evolution API).
@@ -27,10 +39,10 @@ export async function POST(request: NextRequest) {
     
     // Tentar ler o corpo como texto se o JSON.parse falhar, para fins de log
     try {
-        const rawBody = await request.text();
-        console.error('[Evolution API Global Webhook] Raw request body:', rawBody);
+        const rawBody = await request.text(); // This might be problematic if stream already read
+        console.error('[Evolution API Global Webhook] Raw request body (on error):', rawBody);
     } catch (textError) {
-        console.error('[Evolution API Global Webhook] Could not read raw request body.');
+        console.error('[Evolution API Global Webhook] Could not read raw request body on error.');
     }
 
     return NextResponse.json(
@@ -48,3 +60,4 @@ export async function GET(request: NextRequest) {
     { status: 200 }
   );
 }
+

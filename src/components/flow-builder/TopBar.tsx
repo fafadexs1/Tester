@@ -8,11 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, 
-  Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy
+  Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy,
+  TerminalSquare, ListOrdered
 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -57,8 +59,6 @@ interface TopBarProps {
   appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
-  // onZoom: (direction: 'in' | 'out' | 'reset') => void; // Removido se não for usar zoom
-  // currentZoomLevel: number; // Removido se não for usar zoom
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -71,12 +71,11 @@ const TopBar: React.FC<TopBarProps> = ({
   appName = "Flowise Lite",
   isChatPanelOpen,
   onToggleChatPanel,
-  // onZoom, // Removido se não for usar zoom
-  // currentZoomLevel, // Removido se não for usar zoom
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [activeSettingsCategory, setActiveSettingsCategory] = useState<SettingsCategory>('database');
+  const [isWebhookLogsDialogOpen, setIsWebhookLogsDialogOpen] = useState(false);
   
   const [supabaseUrl, setSupabaseUrl] = useState(''); 
   const [supabaseAnonKey, setSupabaseAnonKey] = useState(''); 
@@ -133,6 +132,7 @@ const TopBar: React.FC<TopBarProps> = ({
       const savedEvolutionApiKey = localStorage.getItem('evolutionApiKey') || '';
       const savedDefaultEvolutionInstanceName = localStorage.getItem('defaultEvolutionInstanceName') || '';
       const savedIsEvolutionApiEnabled = localStorage.getItem('isEvolutionApiEnabled') === 'true';
+
       setEvolutionApiUrl(savedEvolutionApiUrl);
       setEvolutionApiKey(savedEvolutionApiKey);
       setDefaultEvolutionInstanceName(savedDefaultEvolutionInstanceName);
@@ -266,6 +266,33 @@ const TopBar: React.FC<TopBarProps> = ({
             <span className="sr-only">Novo Fluxo</span>
           </Button>
           
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="icon"
+                className="hidden md:inline-flex"
+                aria-label="Console e Logs"
+              >
+                <TerminalSquare className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Console e Logs</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setIsWebhookLogsDialogOpen(true)}>
+                <ListOrdered className="mr-2 h-4 w-4" />
+                <span>Logs Webhook API Evolution</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                {/* <History className="mr-2 h-4 w-4" /> */}
+                <span>Logs de Execução do Fluxo</span>
+                <span className="ml-auto text-xs text-muted-foreground">(Em Breve)</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+
           <Button 
             onClick={handlePublishFlow} 
             variant="default" 
@@ -612,7 +639,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                     </Button>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-1 italic">
-                                  Nota: Os eventos recebidos neste webhook serão registrados no console do servidor. A execução de fluxos baseada nestes eventos requer implementação adicional.
+                                  Nota: Os eventos recebidos neste webhook são logados no console do servidor. A execução de fluxos baseada nestes eventos requer implementação adicional.
                                 </p>
                             </div>
                           </div>
@@ -631,9 +658,32 @@ const TopBar: React.FC<TopBarProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={isWebhookLogsDialogOpen} onOpenChange={setIsWebhookLogsDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Logs do Webhook da API Evolution</DialogTitle>
+            <DialogDescription>
+              Os payloads de webhook recebidos da API Evolution no endpoint 
+              <code className="mx-1 p-1 text-xs bg-muted rounded-sm">{globalWebhookUrl}</code> 
+              são atualmente registrados no console do seu servidor Next.js (onde você executa <code className="mx-1 p-1 text-xs bg-muted rounded-sm">npm run dev</code>).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 text-sm">
+            <p>Para visualizar os dados em tempo real aqui na interface, uma integração mais avançada (como WebSockets ou um sistema de logging dedicado) seria necessária.</p>
+            <p className="mt-2">
+              Verifique o terminal do seu servidor para ver os logs detalhados de cada webhook recebido.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsWebhookLogsDialogOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
 
 export default TopBar;
     
+
