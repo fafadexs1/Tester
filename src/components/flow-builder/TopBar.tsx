@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, 
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy,
-  TerminalSquare, ListOrdered
+  TerminalSquare, ListOrdered, ZoomIn, ZoomOut, RotateCcw as ResetZoomIcon
 } from 'lucide-react';
 import {
   Dialog,
@@ -34,6 +34,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/lib/constants';
+
 
 const SupabaseIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
@@ -59,6 +61,8 @@ interface TopBarProps {
   appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
+  currentZoomLevel: number;
+  onZoom: (direction: 'in' | 'out' | 'reset') => void;
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -71,6 +75,8 @@ const TopBar: React.FC<TopBarProps> = ({
   appName = "Flowise Lite",
   isChatPanelOpen,
   onToggleChatPanel,
+  currentZoomLevel,
+  onZoom,
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -90,7 +96,7 @@ const TopBar: React.FC<TopBarProps> = ({
   const [isPostgresEnabled, setIsPostgresEnabled] = useState(false);
 
   const [evolutionApiUrl, setEvolutionApiUrl] = useState('');
-  const [evolutionApiKey, setEvolutionApiKey] = useState('');
+  const [evolutionGlobalApiKey, setEvolutionGlobalApiKey] = useState('');
   const [defaultEvolutionInstanceName, setDefaultEvolutionInstanceName] = useState('');
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
 
@@ -129,12 +135,12 @@ const TopBar: React.FC<TopBarProps> = ({
       setIsPostgresEnabled(savedIsPostgresEnabled);
 
       const savedEvolutionApiUrl = localStorage.getItem('evolutionApiUrl') || '';
-      const savedEvolutionApiKey = localStorage.getItem('evolutionApiKey') || '';
+      const savedEvolutionGlobalApiKey = localStorage.getItem('evolutionApiKey') || '';
       const savedDefaultEvolutionInstanceName = localStorage.getItem('defaultEvolutionInstanceName') || '';
       const savedIsEvolutionApiEnabled = localStorage.getItem('isEvolutionApiEnabled') === 'true';
 
       setEvolutionApiUrl(savedEvolutionApiUrl);
-      setEvolutionApiKey(savedEvolutionApiKey);
+      setEvolutionGlobalApiKey(savedEvolutionGlobalApiKey);
       setDefaultEvolutionInstanceName(savedDefaultEvolutionInstanceName);
       setIsEvolutionApiEnabled(savedIsEvolutionApiEnabled);
     }
@@ -154,14 +160,14 @@ const TopBar: React.FC<TopBarProps> = ({
     localStorage.setItem('isPostgresEnabled', String(isPostgresEnabled));
 
     localStorage.setItem('evolutionApiUrl', evolutionApiUrl);
-    localStorage.setItem('evolutionApiKey', evolutionApiKey);
+    localStorage.setItem('evolutionApiKey', evolutionGlobalApiKey);
     localStorage.setItem('defaultEvolutionInstanceName', defaultEvolutionInstanceName);
     localStorage.setItem('isEvolutionApiEnabled', String(isEvolutionApiEnabled));
 
     console.log("Configurações Salvas:", { 
       supabase: { supabaseUrl, supabaseAnonKey, supabaseServiceKeyExists: supabaseServiceKey.length > 0, isSupabaseEnabled },
       postgresql: { postgresHost, postgresPort, postgresUser, postgresDatabase, isPostgresEnabled, postgresPasswordExists: postgresPassword.length > 0 },
-      evolutionApi: { evolutionApiUrl, evolutionApiKeyExists: evolutionApiKey.length > 0, defaultEvolutionInstanceName, isEvolutionApiEnabled }
+      evolutionApi: { evolutionApiUrl, evolutionApiKeyExists: evolutionGlobalApiKey.length > 0, defaultEvolutionInstanceName, isEvolutionApiEnabled }
     });
     toast({
       title: "Configurações Salvas!",
@@ -266,6 +272,16 @@ const TopBar: React.FC<TopBarProps> = ({
             <span className="sr-only">Novo Fluxo</span>
           </Button>
           
+          <Button variant="outline" size="icon" onClick={() => onZoom('in')} className="hidden md:inline-flex" aria-label="Aumentar Zoom">
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="icon" onClick={() => onZoom('reset')} className="hidden md:inline-flex px-3 text-xs w-auto" aria-label="Resetar Zoom">
+             <ResetZoomIcon className="h-4 w-4 mr-1.5" /> {Math.round(currentZoomLevel * 100)}%
+          </Button>
+          <Button variant="outline" size="icon" onClick={() => onZoom('out')} className="hidden md:inline-flex" aria-label="Diminuir Zoom">
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button 
@@ -607,8 +623,8 @@ const TopBar: React.FC<TopBarProps> = ({
                                     id="evolution-api-key"
                                     type="password"
                                     placeholder="Sua chave de API global, se configurada"
-                                    value={evolutionApiKey}
-                                    onChange={(e) => setEvolutionApiKey(e.target.value)}
+                                    value={evolutionGlobalApiKey}
+                                    onChange={(e) => setEvolutionGlobalApiKey(e.target.value)}
                                     className="bg-input text-foreground flex-1"
                                 />
                                </div>
@@ -665,7 +681,7 @@ const TopBar: React.FC<TopBarProps> = ({
             <DialogTitle>Logs do Webhook da API Evolution</DialogTitle>
             <DialogDescription>
               Os payloads de webhook recebidos da API Evolution no endpoint 
-              <code className="mx-1 p-1 text-xs bg-muted rounded-sm">{globalWebhookUrl}</code> 
+              <code className="mx-1 p-1 text-xs bg-muted rounded-sm break-all">{globalWebhookUrl}</code> 
               são atualmente registrados no console do seu servidor Next.js (onde você executa <code className="mx-1 p-1 text-xs bg-muted rounded-sm">npm run dev</code>).
             </DialogDescription>
           </DialogHeader>
