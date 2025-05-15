@@ -76,7 +76,26 @@ export async function sendWhatsAppMessageAction(
       body: JSON.stringify(body),
     });
 
-    const responseData: EvolutionApiResponse = await response.json();
+    // Tenta parsear como JSON, mas se falhar, trata como texto (para respostas não-JSON da Evolution API)
+    let responseData: EvolutionApiResponse;
+    try {
+      responseData = await response.json();
+    } catch (jsonError) {
+      // Se o parse JSON falhar, lê como texto. Isso pode acontecer se a API Evolution retornar
+      // uma string simples em caso de erro não formatado como JSON.
+      const textResponse = await response.text();
+      console.warn('[EvolutionAPI Action] Response was not valid JSON, read as text:', textResponse);
+      if (!response.ok) {
+         return {
+          success: false,
+          error: `Erro da API Evolution: ${response.status} - ${textResponse || response.statusText}`,
+          data: { rawResponse: textResponse } // Empacota a resposta de texto
+        };
+      }
+      // Se response.ok for true mas não for JSON, é um caso estranho, mas retornamos sucesso com a resposta crua.
+      responseData = { rawResponse: textResponse, message: "Success with non-JSON response" };
+    }
+
 
     if (!response.ok) {
       console.error('[EvolutionAPI Action] Error response:', responseData);

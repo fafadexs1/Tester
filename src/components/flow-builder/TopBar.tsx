@@ -34,7 +34,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/lib/constants';
+// import { MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/lib/constants';
 
 
 const SupabaseIcon = () => (
@@ -61,8 +61,8 @@ interface TopBarProps {
   appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
-  currentZoomLevel: number;
-  onZoom: (direction: 'in' | 'out' | 'reset') => void;
+  // currentZoomLevel: number; // Removido conforme solicitado
+  // onZoom: (direction: 'in' | 'out' | 'reset') => void; // Removido conforme solicitado
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -75,8 +75,8 @@ const TopBar: React.FC<TopBarProps> = ({
   appName = "Flowise Lite",
   isChatPanelOpen,
   onToggleChatPanel,
-  currentZoomLevel,
-  onZoom,
+  // currentZoomLevel, // Removido
+  // onZoom, // Removido
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -100,11 +100,12 @@ const TopBar: React.FC<TopBarProps> = ({
   const [defaultEvolutionInstanceName, setDefaultEvolutionInstanceName] = useState('');
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
 
-  const [globalWebhookUrl, setGlobalWebhookUrl] = useState('');
+  const [conceptualFlowiseWebSocketUrl, setConceptualFlowiseWebSocketUrl] = useState('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setGlobalWebhookUrl(`${window.location.origin}/api/evolution/webhook`);
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      setConceptualFlowiseWebSocketUrl(`${protocol}//${window.location.host}/api/evolution/ws`);
     }
   }, []);
 
@@ -200,7 +201,7 @@ const TopBar: React.FC<TopBarProps> = ({
 
   const handleCopyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
-      toast({ title: "URL Copiada!", description: "A URL do webhook foi copiada para a área de transferência." });
+      toast({ title: "URL Copiada!", description: "A URL foi copiada para a área de transferência." });
     }).catch(err => {
       toast({ title: "Erro ao Copiar", description: "Não foi possível copiar a URL.", variant: "destructive" });
       console.error('Erro ao copiar URL: ', err);
@@ -272,6 +273,7 @@ const TopBar: React.FC<TopBarProps> = ({
             <span className="sr-only">Novo Fluxo</span>
           </Button>
           
+          {/* Botões de Zoom Removidos 
           <Button variant="outline" size="icon" onClick={() => onZoom('in')} className="hidden md:inline-flex" aria-label="Aumentar Zoom">
             <ZoomIn className="h-4 w-4" />
           </Button>
@@ -281,6 +283,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <Button variant="outline" size="icon" onClick={() => onZoom('out')} className="hidden md:inline-flex" aria-label="Diminuir Zoom">
             <ZoomOut className="h-4 w-4" />
           </Button>
+          */}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -298,7 +301,7 @@ const TopBar: React.FC<TopBarProps> = ({
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setIsWebhookLogsDialogOpen(true)}>
                 <ListOrdered className="mr-2 h-4 w-4" />
-                <span>Logs Webhook API Evolution</span>
+                <span>Logs de Eventos API Evolution</span>
               </DropdownMenuItem>
               <DropdownMenuItem disabled>
                 {/* <History className="mr-2 h-4 w-4" /> */}
@@ -590,7 +593,7 @@ const TopBar: React.FC<TopBarProps> = ({
                         {isEvolutionApiEnabled && (
                           <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
                             <div>
-                              <Label htmlFor="evolution-api-url" className="text-card-foreground/90 text-sm">URL Base da API Evolution</Label>
+                              <Label htmlFor="evolution-api-url" className="text-card-foreground/90 text-sm">URL Base da API Evolution (para enviar mensagens)</Label>
                               <Input
                                 id="evolution-api-url"
                                 placeholder="http://localhost:8080"
@@ -598,9 +601,6 @@ const TopBar: React.FC<TopBarProps> = ({
                                 onChange={(e) => setEvolutionApiUrl(e.target.value)}
                                 className="bg-input text-foreground mt-1"
                               />
-                              <p className="text-xs text-muted-foreground mt-1">
-                                URL base da sua instância da API Evolution para chamadas REST (ex: envio de mensagens).
-                              </p>
                             </div>
                              <div>
                               <Label htmlFor="default-evolution-instance-name" className="text-card-foreground/90 text-sm">Nome da Instância Padrão</Label>
@@ -611,9 +611,6 @@ const TopBar: React.FC<TopBarProps> = ({
                                 onChange={(e) => setDefaultEvolutionInstanceName(e.target.value)}
                                 className="bg-input text-foreground mt-1"
                               />
-                               <p className="text-xs text-muted-foreground mt-1">
-                                Nome da instância padrão a ser usada se não especificado no nó.
-                              </p>
                             </div>
                             <div>
                               <Label htmlFor="evolution-api-key" className="text-card-foreground/90 text-sm">Chave de API Global da Evolution (Opcional)</Label>
@@ -628,34 +625,31 @@ const TopBar: React.FC<TopBarProps> = ({
                                     className="bg-input text-foreground flex-1"
                                 />
                                </div>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Necessária se sua API Evolution estiver protegida por uma chave de API global.
-                              </p>
                             </div>
                             <div className="pt-4 border-t border-border">
-                                <Label className="text-card-foreground/90 text-sm font-medium">Webhook para Recebimento de Eventos</Label>
+                                <Label className="text-card-foreground/90 text-sm font-medium">URL do WebSocket do Flowise Lite (para Evolution API conectar)</Label>
                                 <p className="text-xs text-muted-foreground mt-1 mb-2">
-                                  Configure esta URL no seu painel da API Evolution para que o Flowise Lite receba eventos (ex: novas mensagens).
+                                  Configure sua API Evolution para se conectar a este endpoint WebSocket para que o Flowise Lite possa (conceitualmente) receber eventos.
                                 </p>
                                 <div className="flex items-center space-x-2">
                                     <Input
-                                        id="global-evolution-webhook-url"
+                                        id="flowise-websocket-url"
                                         type="text"
-                                        value={globalWebhookUrl}
+                                        value={conceptualFlowiseWebSocketUrl}
                                         readOnly
                                         className="bg-input text-foreground flex-1 cursor-default"
                                     />
                                     <Button
                                         variant="outline"
                                         size="icon"
-                                        onClick={() => handleCopyToClipboard(globalWebhookUrl)}
-                                        title="Copiar URL do Webhook"
+                                        onClick={() => handleCopyToClipboard(conceptualFlowiseWebSocketUrl)}
+                                        title="Copiar URL do WebSocket"
                                     >
                                         <Copy className="w-4 h-4" />
                                     </Button>
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1 italic">
-                                  Nota: Os eventos recebidos neste webhook são logados no console do servidor. A execução de fluxos baseada nestes eventos requer implementação adicional.
+                                <p className="text-xs text-destructive mt-1 italic">
+                                  Nota: A implementação de um servidor WebSocket funcional no Flowise Lite para este endpoint requer desenvolvimento de backend adicional e não está incluída.
                                 </p>
                             </div>
                           </div>
@@ -678,17 +672,18 @@ const TopBar: React.FC<TopBarProps> = ({
       <Dialog open={isWebhookLogsDialogOpen} onOpenChange={setIsWebhookLogsDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Logs do Webhook da API Evolution</DialogTitle>
+            <DialogTitle>Logs de Eventos da API Evolution</DialogTitle>
             <DialogDescription>
-              Os payloads de webhook recebidos da API Evolution no endpoint 
-              <code className="mx-1 p-1 text-xs bg-muted rounded-sm break-all">{globalWebhookUrl}</code> 
-              são atualmente registrados no console do seu servidor Next.js (onde você executa <code className="mx-1 p-1 text-xs bg-muted rounded-sm">npm run dev</code>).
+              Os eventos da API Evolution (se configurados para um endpoint WebSocket do Flowise Lite)
+              seriam processados no backend. Atualmente, se você usou o endpoint HTTP de webhook legado 
+              (<code className="mx-1 p-1 text-xs bg-muted rounded-sm break-all">{typeof window !== 'undefined' ? `${window.location.origin}/api/evolution/info` : ''}</code>), 
+              os payloads são registrados no console do seu servidor Next.js.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 text-sm">
-            <p>Para visualizar os dados em tempo real aqui na interface, uma integração mais avançada (como WebSockets ou um sistema de logging dedicado) seria necessária.</p>
+            <p>Para visualizar eventos WebSocket em tempo real na interface, uma integração mais avançada seria necessária.</p>
             <p className="mt-2">
-              Verifique o terminal do seu servidor para ver os logs detalhados de cada webhook recebido.
+              Verifique o terminal do seu servidor para logs, caso esteja usando o endpoint de webhook legado.
             </p>
           </div>
           <DialogFooter>
