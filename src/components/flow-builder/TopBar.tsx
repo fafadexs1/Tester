@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, 
-  Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound
+  Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy
 } from 'lucide-react';
 import {
   Dialog,
@@ -57,6 +57,8 @@ interface TopBarProps {
   appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
+  // onZoom: (direction: 'in' | 'out' | 'reset') => void; // Removido se não for usar zoom
+  // currentZoomLevel: number; // Removido se não for usar zoom
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -69,6 +71,8 @@ const TopBar: React.FC<TopBarProps> = ({
   appName = "Flowise Lite",
   isChatPanelOpen,
   onToggleChatPanel,
+  // onZoom, // Removido se não for usar zoom
+  // currentZoomLevel, // Removido se não for usar zoom
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -90,6 +94,14 @@ const TopBar: React.FC<TopBarProps> = ({
   const [evolutionApiKey, setEvolutionApiKey] = useState('');
   const [defaultEvolutionInstanceName, setDefaultEvolutionInstanceName] = useState('');
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
+
+  const [globalWebhookUrl, setGlobalWebhookUrl] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setGlobalWebhookUrl(`${window.location.origin}/api/evolution/webhook`);
+    }
+  }, []);
 
   useEffect(() => {
     if (isSettingsDialogOpen) { 
@@ -179,6 +191,15 @@ const TopBar: React.FC<TopBarProps> = ({
     { id: 'database', label: 'Banco de Dados', icon: <Database className="w-5 h-5 mr-2" /> },
     { id: 'integrations', label: 'Integrações', icon: <PlugZap className="w-5 h-5 mr-2" /> },
   ];
+
+  const handleCopyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      toast({ title: "URL Copiada!", description: "A URL do webhook foi copiada para a área de transferência." });
+    }).catch(err => {
+      toast({ title: "Erro ao Copiar", description: "Não foi possível copiar a URL.", variant: "destructive" });
+      console.error('Erro ao copiar URL: ', err);
+    });
+  };
 
   return (
     <>
@@ -568,6 +589,32 @@ const TopBar: React.FC<TopBarProps> = ({
                                 Necessária se sua API Evolution estiver protegida por uma chave de API global.
                               </p>
                             </div>
+                            <div className="pt-4 border-t border-border">
+                                <Label className="text-card-foreground/90 text-sm font-medium">Webhook para Recebimento de Eventos</Label>
+                                <p className="text-xs text-muted-foreground mt-1 mb-2">
+                                  Configure esta URL no seu painel da API Evolution para que o Flowise Lite receba eventos (ex: novas mensagens).
+                                </p>
+                                <div className="flex items-center space-x-2">
+                                    <Input
+                                        id="global-evolution-webhook-url"
+                                        type="text"
+                                        value={globalWebhookUrl}
+                                        readOnly
+                                        className="bg-input text-foreground flex-1 cursor-default"
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={() => handleCopyToClipboard(globalWebhookUrl)}
+                                        title="Copiar URL do Webhook"
+                                    >
+                                        <Copy className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1 italic">
+                                  Nota: Os eventos recebidos neste webhook serão registrados no console do servidor. A execução de fluxos baseada nestes eventos requer implementação adicional.
+                                </p>
+                            </div>
                           </div>
                         )}
                       </AccordionContent>
@@ -589,5 +636,4 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
-
     
