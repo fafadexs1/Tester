@@ -1,8 +1,7 @@
 
 "use client";
 
-import type React from 'react';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { WorkspaceData } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -61,8 +60,8 @@ interface TopBarProps {
   appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
-  // currentZoomLevel: number; // Removido conforme solicitado
-  // onZoom: (direction: 'in' | 'out' | 'reset') => void; // Removido conforme solicitado
+  // currentZoomLevel: number; 
+  // onZoom: (direction: 'in' | 'out' | 'reset') => void; 
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -75,8 +74,8 @@ const TopBar: React.FC<TopBarProps> = ({
   appName = "Flowise Lite",
   isChatPanelOpen,
   onToggleChatPanel,
-  // currentZoomLevel, // Removido
-  // onZoom, // Removido
+  // currentZoomLevel, 
+  // onZoom, 
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -99,13 +98,13 @@ const TopBar: React.FC<TopBarProps> = ({
   const [evolutionGlobalApiKey, setEvolutionGlobalApiKey] = useState('');
   const [defaultEvolutionInstanceName, setDefaultEvolutionInstanceName] = useState('');
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
+  const [flowiseLiteWebSocketUrlForEvolution, setFlowiseLiteWebSocketUrlForEvolution] = useState('');
 
-  const [conceptualFlowiseWebSocketUrl, setConceptualFlowiseWebSocketUrl] = useState('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      setConceptualFlowiseWebSocketUrl(`${protocol}//${window.location.host}/api/evolution/ws`);
+      setFlowiseLiteWebSocketUrlForEvolution(`${protocol}//${window.location.host}/api/evolution/ws`);
     }
   }, []);
 
@@ -135,7 +134,7 @@ const TopBar: React.FC<TopBarProps> = ({
       setPostgresDatabase(savedPostgresDatabase);
       setIsPostgresEnabled(savedIsPostgresEnabled);
 
-      const savedEvolutionApiUrl = localStorage.getItem('evolutionApiUrl') || '';
+      const savedEvolutionApiUrl = localStorage.getItem('evolutionApiUrl') || ''; // This is for Flowise to SEND to Evolution
       const savedEvolutionGlobalApiKey = localStorage.getItem('evolutionApiKey') || '';
       const savedDefaultEvolutionInstanceName = localStorage.getItem('defaultEvolutionInstanceName') || '';
       const savedIsEvolutionApiEnabled = localStorage.getItem('isEvolutionApiEnabled') === 'true';
@@ -168,7 +167,7 @@ const TopBar: React.FC<TopBarProps> = ({
     console.log("Configurações Salvas:", { 
       supabase: { supabaseUrl, supabaseAnonKey, supabaseServiceKeyExists: supabaseServiceKey.length > 0, isSupabaseEnabled },
       postgresql: { postgresHost, postgresPort, postgresUser, postgresDatabase, isPostgresEnabled, postgresPasswordExists: postgresPassword.length > 0 },
-      evolutionApi: { evolutionApiUrl, evolutionApiKeyExists: evolutionGlobalApiKey.length > 0, defaultEvolutionInstanceName, isEvolutionApiEnabled }
+      evolutionApi: { evolutionApiUrl, evolutionApiKeyExists: evolutionGlobalApiKey.length > 0, defaultEvolutionInstanceName, isEvolutionApiEnabled, flowiseLiteWebSocketUrlForEvolution }
     });
     toast({
       title: "Configurações Salvas!",
@@ -199,14 +198,17 @@ const TopBar: React.FC<TopBarProps> = ({
     { id: 'integrations', label: 'Integrações', icon: <PlugZap className="w-5 h-5 mr-2" /> },
   ];
 
-  const handleCopyToClipboard = (text: string) => {
+  const handleCopyToClipboard = (text: string, type: string) => {
     navigator.clipboard.writeText(text).then(() => {
-      toast({ title: "URL Copiada!", description: "A URL foi copiada para a área de transferência." });
+      toast({ title: `${type} Copiada!`, description: `A ${type.toLowerCase()} foi copiada para a área de transferência.` });
     }).catch(err => {
-      toast({ title: "Erro ao Copiar", description: "Não foi possível copiar a URL.", variant: "destructive" });
-      console.error('Erro ao copiar URL: ', err);
+      toast({ title: `Erro ao Copiar ${type}`, description: `Não foi possível copiar a ${type.toLowerCase()}.`, variant: "destructive" });
+      console.error(`Erro ao copiar ${type}: `, err);
     });
   };
+  
+  const httpWebhookUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/evolution/webhook` : '';
+
 
   return (
     <>
@@ -273,7 +275,7 @@ const TopBar: React.FC<TopBarProps> = ({
             <span className="sr-only">Novo Fluxo</span>
           </Button>
           
-          {/* Botões de Zoom Removidos 
+          {/* 
           <Button variant="outline" size="icon" onClick={() => onZoom('in')} className="hidden md:inline-flex" aria-label="Aumentar Zoom">
             <ZoomIn className="h-4 w-4" />
           </Button>
@@ -518,7 +520,7 @@ const TopBar: React.FC<TopBarProps> = ({
                       <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
                         <div className="flex items-center space-x-3">
                           <PostgresIcon />
-                          <span className="font-medium text-card-foreground">PostgreSQL</span>
+                          <span className="font-medium text-card-foreground">PostgreSQL (Exemplo)</span>
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="px-4 pt-3 pb-4 border-t">
@@ -626,30 +628,30 @@ const TopBar: React.FC<TopBarProps> = ({
                                 />
                                </div>
                             </div>
-                            <div className="pt-4 border-t border-border">
+                             <div className="pt-4 border-t border-border">
                                 <Label className="text-card-foreground/90 text-sm font-medium">URL do WebSocket do Flowise Lite (para Evolution API conectar)</Label>
                                 <p className="text-xs text-muted-foreground mt-1 mb-2">
                                   Configure sua API Evolution para se conectar a este endpoint WebSocket para que o Flowise Lite possa (conceitualmente) receber eventos.
                                 </p>
                                 <div className="flex items-center space-x-2">
                                     <Input
-                                        id="flowise-websocket-url"
+                                        id="flowise-websocket-url-for-evolution"
                                         type="text"
-                                        value={conceptualFlowiseWebSocketUrl}
+                                        value={flowiseLiteWebSocketUrlForEvolution}
                                         readOnly
                                         className="bg-input text-foreground flex-1 cursor-default"
                                     />
                                     <Button
                                         variant="outline"
                                         size="icon"
-                                        onClick={() => handleCopyToClipboard(conceptualFlowiseWebSocketUrl)}
+                                        onClick={() => handleCopyToClipboard(flowiseLiteWebSocketUrlForEvolution, "URL do WebSocket")}
                                         title="Copiar URL do WebSocket"
                                     >
                                         <Copy className="w-4 h-4" />
                                     </Button>
                                 </div>
                                 <p className="text-xs text-destructive mt-1 italic">
-                                  Nota: A implementação de um servidor WebSocket funcional no Flowise Lite para este endpoint requer desenvolvimento de backend adicional e não está incluída.
+                                  Nota: Esta funcionalidade WebSocket é para <strong>desenvolvimento local</strong>. Para produção, um servidor WebSocket dedicado e uma configuração de backend robusta são necessários e não estão incluídos no Flowise Lite.
                                 </p>
                             </div>
                           </div>
@@ -674,17 +676,17 @@ const TopBar: React.FC<TopBarProps> = ({
           <DialogHeader>
             <DialogTitle>Logs de Eventos da API Evolution</DialogTitle>
             <DialogDescription>
-              Os eventos da API Evolution (se configurados para um endpoint WebSocket do Flowise Lite)
-              seriam processados no backend. Atualmente, se você usou o endpoint HTTP de webhook legado 
-              (<code className="mx-1 p-1 text-xs bg-muted rounded-sm break-all">{typeof window !== 'undefined' ? `${window.location.origin}/api/evolution/info` : ''}</code>), 
-              os payloads são registrados no console do seu servidor Next.js.
+              Se você configurou sua API Evolution para enviar eventos para o endpoint HTTP Webhook 
+              (<code className="mx-1 p-1 text-xs bg-muted rounded-sm break-all">{httpWebhookUrl}</code>),
+              os payloads serão registrados no console do seu servidor Next.js.
+              <br/><br/>
+              Se você está usando a integração WebSocket (DEV-ONLY), as mensagens recebidas no endpoint
+              (<code className="mx-1 p-1 text-xs bg-muted rounded-sm break-all">{flowiseLiteWebSocketUrlForEvolution}</code>)
+              também serão logadas no console do servidor Next.js.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 text-sm">
-            <p>Para visualizar eventos WebSocket em tempo real na interface, uma integração mais avançada seria necessária.</p>
-            <p className="mt-2">
-              Verifique o terminal do seu servidor para logs, caso esteja usando o endpoint de webhook legado.
-            </p>
+            <p>Verifique o terminal do seu servidor Next.js para visualizar os dados recebidos.</p>
           </div>
           <DialogFooter>
             <Button onClick={() => setIsWebhookLogsDialogOpen(false)}>Fechar</Button>
@@ -697,4 +699,3 @@ const TopBar: React.FC<TopBarProps> = ({
 
 export default TopBar;
     
-
