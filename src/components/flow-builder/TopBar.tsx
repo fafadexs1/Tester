@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, 
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy,
-  TerminalSquare, ListOrdered, ZoomIn, ZoomOut, RotateCcw as ResetZoomIcon
+  TerminalSquare, ListOrdered, RotateCcw as ResetZoomIcon, RefreshCw, AlertCircle, FileText
 } from 'lucide-react';
 import {
   Dialog,
@@ -33,7 +33,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/lib/constants';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 
 const SupabaseIcon = () => (
@@ -49,6 +49,11 @@ const PostgresIcon = () => (
 );
 
 type SettingsCategory = 'database' | 'integrations';
+interface WebhookLogEntry {
+  timestamp: string;
+  payload?: any;
+  error?: any;
+}
 
 interface TopBarProps {
   workspaces: WorkspaceData[];
@@ -60,8 +65,6 @@ interface TopBarProps {
   appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
-  currentZoomLevel: number; 
-  onZoom: (direction: 'in' | 'out' | 'reset') => void; 
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -74,13 +77,16 @@ const TopBar: React.FC<TopBarProps> = ({
   appName = "Flowise Lite",
   isChatPanelOpen,
   onToggleChatPanel,
-  currentZoomLevel, 
-  onZoom, 
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [activeSettingsCategory, setActiveSettingsCategory] = useState<SettingsCategory>('database');
+  
+  // States for Webhook Logs Dialog
   const [isWebhookLogsDialogOpen, setIsWebhookLogsDialogOpen] = useState(false);
+  const [evolutionWebhookLogEntries, setEvolutionWebhookLogEntries] = useState<WebhookLogEntry[]>([]);
+  const [isLoadingEvolutionLogs, setIsLoadingEvolutionLogs] = useState(false);
+  const [evolutionLogsError, setEvolutionLogsError] = useState<string | null>(null);
   
   const [supabaseUrl, setSupabaseUrl] = useState(''); 
   const [supabaseAnonKey, setSupabaseAnonKey] = useState(''); 
@@ -98,12 +104,12 @@ const TopBar: React.FC<TopBarProps> = ({
   const [evolutionGlobalApiKey, setEvolutionGlobalApiKey] = useState('');
   const [defaultEvolutionInstanceName, setDefaultEvolutionInstanceName] = useState('');
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
-  const [flowiseLiteWebhookUrlForEvolution, setFlowiseLiteWebhookUrlForEvolution] = useState('');
+  const [flowiseLiteGlobalWebhookUrl, setFlowiseLiteGlobalWebhookUrl] = useState('');
 
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setFlowiseLiteWebhookUrlForEvolution(`${window.location.origin}/api/evolution/webhook`);
+      setFlowiseLiteGlobalWebhookUrl(`${window.location.origin}/api/evolution/webhook`);
     }
   }, []);
 
@@ -166,7 +172,7 @@ const TopBar: React.FC<TopBarProps> = ({
     console.log("Configurações Salvas:", { 
       supabase: { supabaseUrl, supabaseAnonKey, supabaseServiceKeyExists: supabaseServiceKey.length > 0, isSupabaseEnabled },
       postgresql: { postgresHost, postgresPort, postgresUser, postgresDatabase, isPostgresEnabled, postgresPasswordExists: postgresPassword.length > 0 },
-      evolutionApi: { evolutionApiBaseUrl, evolutionApiKeyExists: evolutionGlobalApiKey.length > 0, defaultEvolutionInstanceName, isEvolutionApiEnabled, flowiseLiteWebhookUrlForEvolution }
+      evolutionApi: { evolutionApiBaseUrl, evolutionApiKeyExists: evolutionGlobalApiKey.length > 0, defaultEvolutionInstanceName, isEvolutionApiEnabled, flowiseLiteGlobalWebhookUrl }
     });
     toast({
       title: "Configurações Salvas!",
@@ -191,6 +197,32 @@ const TopBar: React.FC<TopBarProps> = ({
       variant: "default",
     });
   };
+
+  const fetchEvolutionWebhookLogs = async () => {
+    setIsLoadingEvolutionLogs(true);
+    setEvolutionLogsError(null);
+    try {
+      const response = await fetch('/api/evolution/webhook-logs');
+      if (!response.ok) {
+        throw new Error(`Erro ao buscar logs: ${response.statusText}`);
+      }
+      const data: WebhookLogEntry[] = await response.json();
+      setEvolutionWebhookLogEntries(data);
+    } catch (error: any) {
+      console.error("Erro ao buscar logs do webhook da Evolution API:", error);
+      setEvolutionLogsError(error.message || "Falha ao buscar logs.");
+      setEvolutionWebhookLogEntries([]);
+    } finally {
+      setIsLoadingEvolutionLogs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isWebhookLogsDialogOpen) {
+      fetchEvolutionWebhookLogs();
+    }
+  }, [isWebhookLogsDialogOpen]);
+
 
   const settingsCategories: { id: SettingsCategory; label: string; icon: React.ReactNode }[] = [
     { id: 'database', label: 'Banco de Dados', icon: <Database className="w-5 h-5 mr-2" /> },
@@ -271,16 +303,6 @@ const TopBar: React.FC<TopBarProps> = ({
             <span className="sr-only">Novo Fluxo</span>
           </Button>
           
-          <Button variant="outline" size="icon" onClick={() => onZoom('in')} className="hidden md:inline-flex" aria-label="Aumentar Zoom">
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="icon" onClick={() => onZoom('reset')} className="hidden md:inline-flex px-3 text-xs w-auto" aria-label="Resetar Zoom">
-             <ResetZoomIcon className="h-4 w-4 mr-1.5" /> {Math.round(currentZoomLevel * 100)}%
-          </Button>
-          <Button variant="outline" size="icon" onClick={() => onZoom('out')} className="hidden md:inline-flex" aria-label="Diminuir Zoom">
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button 
@@ -625,28 +647,25 @@ const TopBar: React.FC<TopBarProps> = ({
                              <div className="pt-4 border-t border-border">
                                 <Label className="text-card-foreground/90 text-sm font-medium">URL de Webhook do Flowise Lite (para Evolution API enviar eventos)</Label>
                                 <p className="text-xs text-muted-foreground mt-1 mb-2">
-                                  Configure sua instância da API Evolution para enviar eventos (webhooks) para esta URL.
+                                  Configure sua instância da API Evolution para enviar eventos (webhooks) para esta URL. Os payloads recebidos serão registrados e poderão ser visualizados no console da aplicação.
                                 </p>
                                 <div className="flex items-center space-x-2">
                                     <Input
                                         id="flowise-webhook-url-for-evolution"
                                         type="text"
-                                        value={flowiseLiteWebhookUrlForEvolution}
+                                        value={flowiseLiteGlobalWebhookUrl}
                                         readOnly
-                                        className="bg-input text-foreground flex-1 cursor-default"
+                                        className="bg-input text-foreground flex-1 cursor-default break-all"
                                     />
                                     <Button
                                         variant="outline"
                                         size="icon"
-                                        onClick={() => handleCopyToClipboard(flowiseLiteWebhookUrlForEvolution, "URL de Webhook")}
+                                        onClick={() => handleCopyToClipboard(flowiseLiteGlobalWebhookUrl, "URL de Webhook")}
                                         title="Copiar URL de Webhook"
                                     >
                                         <Copy className="w-4 h-4" />
                                     </Button>
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1 italic">
-                                  Os payloads recebidos neste endpoint serão logados no console do servidor Next.js.
-                                </p>
                             </div>
                           </div>
                         )}
@@ -666,20 +685,74 @@ const TopBar: React.FC<TopBarProps> = ({
       </Dialog>
 
       <Dialog open={isWebhookLogsDialogOpen} onOpenChange={setIsWebhookLogsDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Logs de Eventos da API Evolution</DialogTitle>
             <DialogDescription>
-              Se você configurou sua API Evolution para enviar eventos para o endpoint HTTP Webhook 
-              (<code className="mx-1 p-1 text-xs bg-muted rounded-sm break-all">{flowiseLiteWebhookUrlForEvolution}</code>),
-              os payloads serão registrados no console do seu servidor Next.js (onde você executa o comando de desenvolvimento).
+              Webhooks recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{flowiseLiteGlobalWebhookUrl}</code>.
+              Os logs são armazenados em memória e zerados ao reiniciar o servidor.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 text-sm">
-            <p>Verifique o terminal do seu servidor Next.js para visualizar os dados recebidos.</p>
+          
+          <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
+             <Button 
+                onClick={fetchEvolutionWebhookLogs} 
+                variant="outline"
+                size="sm"
+                className="self-start mb-2"
+                disabled={isLoadingEvolutionLogs}
+              >
+                <RefreshCw className={cn("mr-2 h-4 w-4", isLoadingEvolutionLogs && "animate-spin")} />
+                {isLoadingEvolutionLogs ? "Atualizando..." : "Atualizar Logs"}
+              </Button>
+            
+            {evolutionLogsError && (
+              <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm">
+                <div className="flex items-center gap-2 font-medium">
+                  <AlertCircle className="h-5 w-5"/> Erro ao carregar logs:
+                </div>
+                <p className="mt-1 text-xs">{evolutionLogsError}</p>
+              </div>
+            )}
+
+            {!isLoadingEvolutionLogs && !evolutionLogsError && evolutionWebhookLogEntries.length === 0 && (
+              <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4">
+                <FileText className="w-12 h-12 mb-3"/>
+                <p className="text-sm">Nenhum log de webhook da API Evolution encontrado.</p>
+                <p className="text-xs mt-1">Verifique se sua API Evolution está configurada para enviar webhooks para a URL correta.</p>
+              </div>
+            )}
+            
+            {!isLoadingEvolutionLogs && evolutionWebhookLogEntries.length > 0 && (
+              <ScrollArea className="flex-1 border rounded-md bg-muted/30">
+                <div className="p-3 space-y-3">
+                  {evolutionWebhookLogEntries.map((log, index) => (
+                    <details key={index} className="bg-background p-2.5 rounded shadow-sm text-xs">
+                      <summary className="cursor-pointer font-medium text-foreground/80 hover:text-foreground select-none">
+                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm text-primary/80 mr-2">
+                          {new Date(log.timestamp).toLocaleTimeString()}
+                        </span>
+                        {log.error ? (
+                            <span className="text-destructive font-semibold">Erro ao Processar Webhook</span>
+                        ) : log.payload?.event ? (
+                            <span className="text-accent font-semibold">{log.payload.event}</span>
+                        ) : log.payload?.type ? (
+                            <span className="text-accent font-semibold">{log.payload.type}</span>
+                        ) : (
+                            <span>Payload Recebido</span>
+                        )}
+                      </summary>
+                      <pre className="mt-2 p-2 bg-muted rounded-sm overflow-auto text-xs text-foreground/70 max-h-60">
+                        {JSON.stringify(log.payload || log.error, null, 2)}
+                      </pre>
+                    </details>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
           </div>
           <DialogFooter>
-            <Button onClick={() => setIsWebhookLogsDialogOpen(false)}>Fechar</Button>
+            <Button variant="outline" onClick={() => setIsWebhookLogsDialogOpen(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
