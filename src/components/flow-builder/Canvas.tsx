@@ -1,6 +1,7 @@
 
 "use client";
 import React, { useRef, useEffect, useMemo } from 'react';
+import type { DropTargetMonitor } from 'react-dnd';
 import { useDrop } from 'react-dnd';
 import { motion } from 'framer-motion';
 import NodeCard from './NodeCard';
@@ -20,7 +21,8 @@ interface CanvasProps {
   connections: Connection[];
   drawingLine: DrawingLineData | null;
   canvasOffset: CanvasOffset;
-  onDropNode: (item: DraggableBlockItemData, viewportOffset: { x: number; y: number }) => void;
+  zoomLevel: number;
+  onDropNode: (item: DraggableBlockItemData, logicalDropCoords: { x: number; y: number }) => void;
   onUpdateNode: (id: string, changes: Partial<NodeData>) => void;
   onStartConnection: (event: React.MouseEvent, fromNodeData: NodeData, sourceHandleId?: string) => void;
   onDeleteNode: (id: string) => void;
@@ -32,52 +34,57 @@ interface CanvasProps {
 }
 
 const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasProps>(({
-  nodes, connections, drawingLine, canvasOffset,
+  nodes, connections, drawingLine, canvasOffset, zoomLevel,
   onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDeleteConnection,
   onCanvasMouseDown, highlightedConnectionId, setHighlightedConnectionId,
   definedVariablesInFlow
 }, ref) => {
   const localCanvasRef = useRef<HTMLDivElement>(null);
-  const canvasOffsetRef = useRef(canvasOffset);
+  const flowContentWrapperRef = useRef<HTMLDivElement>(null);
 
-  // Use the forwarded ref if available, otherwise use the local ref
+  // Use the forwarded ref if available (for the outer canvas div), otherwise use the local ref
   const canvasElementRef = (ref || localCanvasRef) as React.RefObject<HTMLDivElement>;
 
-
-  // Atualiza ref se canvasOffset mudar
-  useEffect(() => {
-    canvasOffsetRef.current = canvasOffset;
-  }, [canvasOffset]);
-
-  // Hook DnD sem dependências mutáveis
-  const [, drop] = useDrop(() => ({
+  const [{ isOver, canDrop: dndCanDrop }, drop] = useDrop(() => ({
     accept: ITEM_TYPE_BLOCK,
-    drop: (item: DraggableBlockItemData, monitor) => {
+    drop: (item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
       const clientOffset = monitor.getClientOffset();
+      console.log('[Canvas] Drop event triggered (target: canvasElementRef)', { item, clientOffset });
       if (clientOffset && canvasElementRef.current) {
         const canvasRect = canvasElementRef.current.getBoundingClientRect();
-        const xRelative = clientOffset.x - canvasRect.left;
-        const yRelative = clientOffset.y - canvasRect.top;
+        const xOnCanvas = clientOffset.x - canvasRect.left;
+        const yOnCanvas = clientOffset.y - canvasRect.top;
+
+        // Convert visual coords on the main canvas to logical coords for the transformed content
+        const logicalX = (xOnCanvas - canvasOffset.x) / zoomLevel;
+        const logicalY = (yOnCanvas - canvasOffset.y) / zoomLevel;
         
-        // Ajustar pelas coordenadas do canvasOffset usando a ref para o valor mais atual
-        const logicalX = xRelative - canvasOffsetRef.current.x;
-        const logicalY = yRelative - canvasOffsetRef.current.y;
-        
-        console.log('[Canvas] Drop event (using ref for offset):', { item, clientOffset, canvasRect, currentOffset: canvasOffsetRef.current, logicalX, logicalY });
+        console.log('[Canvas] Drop coords (logical):', { logicalX, logicalY, xOnCanvas, yOnCanvas, canvasOffset, zoomLevel });
         onDropNode(item, { x: logicalX, y: logicalY });
       } else {
          console.warn('[Canvas] Drop failed: clientOffset or canvasElementRef.current is null', {clientOffset, canvasElementRefCurrent: canvasElementRef.current});
       }
-    }
-  }), [onDropNode]); // canvasOffsetRef.current é estável
+    },
+    collect: (monitor) => ({
+      isOver: !!monitor.isOver(),
+      canDrop: !!monitor.canDrop(),
+    }),
+  }), [onDropNode, canvasOffset, zoomLevel]); // Added canvasOffset and zoomLevel as dependencies
 
   useEffect(() => {
     if (canvasElementRef.current) {
-      drop(canvasElementRef);
+      console.log('[Canvas] Attaching drop target to ref:', canvasElementRef.current);
+      drop(canvasElementRef.current);
+    } else {
+      console.warn('[Canvas] Attaching drop target: canvasElementRef.current is null.');
     }
   }, [drop, canvasElementRef]);
 
-  // Bezier Path
+  useEffect(() => {
+    console.log('[Canvas] Monitored props: isOver:', isOver, 'canDrop:', dndCanDrop);
+  }, [isOver, dndCanDrop]);
+
+
   const drawBezierPath = (x1: number, y1: number, x2: number, y2: number) => {
     const dx = Math.abs(x2 - x1) * 0.5;
     const c1x = x1 + dx;
@@ -91,21 +98,17 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     return map;
   }, [nodes]);
 
-
-  // Memoize nodes/connections for perf
   const renderedNodes = useMemo(() => (
     nodes.map((node) => {
-      const renderX = node.x + canvasOffset.x;
-      const renderY = node.y + canvasOffset.y;
       return (
         <motion.div
           key={node.id}
-          className="absolute z-20" // Nodes acima das conexões
-          style={{ left: renderX, top: renderY, width: NODE_WIDTH }}
+          className="absolute z-20 pointer-events-auto" 
+          style={{ left: node.x, top: node.y, width: NODE_WIDTH }} 
           initial={{ scale: 0.95, opacity: 0.8 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
-          // layout // Framer Motion layout pode ser pesado com muitos nós, remover se causar lag
+          // layout // Framer Motion layout can be heavy; remove if causing lag during drag
         >
           <NodeCard
             node={node}
@@ -117,7 +120,8 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
         </motion.div>
       );
     })
-  ), [nodes, canvasOffset, onUpdateNode, onStartConnection, onDeleteNode, definedVariablesInFlow]);
+  ), [nodes, onUpdateNode, onStartConnection, onDeleteNode, definedVariablesInFlow]);
+
 
   const renderedConnections = useMemo(() => (
     connections.map((conn) => {
@@ -143,10 +147,10 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
         else if (conn.sourceHandle === 'false') sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (2/3) + 6;
       }
 
-      const x1 = sourceNode.x + NODE_WIDTH + canvasOffset.x;
-      const y1 = sourceNode.y + sourceHandleYOffset + canvasOffset.y;
-      const x2 = targetNode.x + canvasOffset.x;
-      const y2 = targetNode.y + NODE_HEADER_CONNECTOR_Y_OFFSET + canvasOffset.y;
+      const x1 = sourceNode.x + NODE_WIDTH;
+      const y1 = sourceNode.y + sourceHandleYOffset;
+      const x2 = targetNode.x;
+      const y2 = targetNode.y + NODE_HEADER_CONNECTOR_Y_OFFSET;
       const isHighlighted = highlightedConnectionId === conn.id;
       const strokeColor = isHighlighted ? 'var(--flow-connection-highlight)' : 'var(--flow-connection)';
 
@@ -169,61 +173,67 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
         </g>
       );
     })
-  ), [connections, nodeMap, canvasOffset, highlightedConnectionId, onDeleteConnection, setHighlightedConnectionId]);
+  ), [connections, nodeMap, highlightedConnectionId, onDeleteConnection, setHighlightedConnectionId]);
   
   console.log("[Canvas] Rendering with nodes:", nodes);
 
   return (
     <div
-      ref={canvasElementRef} // Usar a ref apropriada
+      ref={canvasElementRef} 
       className="relative flex-1 bg-background overflow-hidden"
       onMouseDown={onCanvasMouseDown}
       style={{
         cursor: 'grab',
-        backgroundImage: `radial-gradient(hsl(var(--flow-grid-dots)) 0.5px, transparent 0.5px)`,
-        backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
-        backgroundPosition: `${canvasOffset.x % GRID_SIZE}px ${canvasOffset.y % GRID_SIZE}px`,
-        userSelect: 'none', // Adicionado para previnir seleção de texto
-        touchAction: 'none'  // Adicionado para previnir ações de toque padrão
+        backgroundImage: `radial-gradient(hsl(var(--flow-grid-dots)) ${0.5 * zoomLevel}px, transparent ${0.5 * zoomLevel}px)`,
+        backgroundSize: `${GRID_SIZE * zoomLevel}px ${GRID_SIZE * zoomLevel}px`,
+        backgroundPosition: `${canvasOffset.x % (GRID_SIZE * zoomLevel)}px ${canvasOffset.y % (GRID_SIZE * zoomLevel)}px`,
+        userSelect: 'none', 
+        touchAction: 'none'  
       }}
-      tabIndex={0} // Para permitir foco, se necessário para interações de teclado
+      tabIndex={0} 
     >
-      {/* SVG para conexões (z-10, abaixo dos nós) */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
-        <defs>
-          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="8.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
-            <polygon points="0 0, 10 3.5, 0 7" fill="var(--flow-connection)" />
-          </marker>
-          <marker id="arrowhead-highlight" markerWidth="10" markerHeight="7" refX="8.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
-            <polygon points="0 0, 10 3.5, 0 7" fill="var(--flow-connection-highlight)" />
-          </marker>
-        </defs>
-        {renderedConnections}
-        {drawingLine && (
-          <path
-            d={drawBezierPath(
-              drawingLine.startX + canvasOffset.x, drawingLine.startY + canvasOffset.y,
-              drawingLine.currentX, drawingLine.currentY // currentX e currentY já são relativos ao canvas
-            )}
-            stroke="hsl(var(--accent))"
-            strokeOpacity="0.8"
-            strokeWidth={2.5}
-            fill="none"
-            strokeDasharray="7,3" // Ajustado para melhor visibilidade
-            markerEnd="url(#arrowhead)"
-          />
-        )}
-      </svg>
-
-      {/* Contêiner para os nós (z-20, acima das conexões) */}
-      {/* Este div pode ser usado para aplicar transformações de zoom/pan se necessário */}
-      <div className="absolute inset-0 z-20 pointer-events-none"> 
-        {/*
-          Os nós são renderizados aqui. 
-          Eles precisam ter pointer-events habilitado individualmente para serem interativos.
-          Isso é feito dentro do NodeCard e nos conectores.
-          A div que os envolve aqui tem pointer-events-none para permitir cliques no SVG por baixo, se necessário.
-        */}
+      <div 
+        ref={flowContentWrapperRef}
+        id="flow-content-wrapper"
+        className="absolute top-0 left-0" // Ensures transform-origin is top-left for the wrapper
+        style={{
+          transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
+          transformOrigin: 'top left',
+          pointerEvents: 'auto', // Allow drop target events
+        }}
+      >
+        <svg 
+          className="absolute top-0 left-0 pointer-events-none z-10"
+          // Define a very large SVG canvas or make it dynamically size to fit content
+          // For simplicity, using a large fixed size. Adjust if necessary.
+          style={{ width: '10000px', height: '10000px' }} 
+        >
+          <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="8.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
+              <polygon points="0 0, 10 3.5, 0 7" fill="var(--flow-connection)" />
+            </marker>
+            <marker id="arrowhead-highlight" markerWidth="10" markerHeight="7" refX="8.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
+              <polygon points="0 0, 10 3.5, 0 7" fill="var(--flow-connection-highlight)" />
+            </marker>
+          </defs>
+          {renderedConnections}
+          {drawingLine && (
+            <path
+              d={drawBezierPath(
+                drawingLine.startX, drawingLine.startY, // These are logical
+                (drawingLine.currentX - canvasOffset.x) / zoomLevel, // Convert visual mouse to logical
+                (drawingLine.currentY - canvasOffset.y) / zoomLevel  // Convert visual mouse to logical
+              )}
+              stroke="hsl(var(--accent))"
+              strokeOpacity="0.8"
+              strokeWidth={2.5}
+              fill="none"
+              strokeDasharray="7,3" 
+              markerEnd="url(#arrowhead)"
+            />
+          )}
+        </svg>
+        {/* Nodes are rendered here, positioned absolutely within this transformed div */}
         {renderedNodes}
       </div>
     </div>
@@ -231,3 +241,5 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
 });
 Canvas.displayName = 'Canvas';
 export default Canvas;
+
+    
