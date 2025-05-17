@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
@@ -77,8 +77,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           .then(result => {
             if (result.error) {
               setSupabaseSchemaError(result.error);
+              console.error(`[NodeCard - ${node.id}] Supabase error fetching tables:`, result.error);
               setSupabaseTables([]);
             } else if (result.data) {
+              console.log(`[NodeCard - ${node.id}] Supabase tables fetched:`, result.data);
               setSupabaseTables(result.data);
               if (node.supabaseTableName && !result.data.some(t => t.name === node.supabaseTableName)) {
                 onUpdate(node.id, { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseColumnsToSelect: '*' });
@@ -89,7 +91,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           })
           .catch(err => {
             setSupabaseSchemaError('Falha ao comunicar com o servidor para buscar tabelas.');
-             setSupabaseTables([]);
+            console.error(`[NodeCard - ${node.id}] Supabase exception fetching tables:`, err);
+            setSupabaseTables([]);
           })
           .finally(() => {
             setIsLoadingSupabaseTables(false);
@@ -119,18 +122,22 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           .then(result => {
             if (result.error) {
               setSupabaseSchemaError(result.error);
+              console.error(`[NodeCard - ${node.id}] Supabase error fetching columns for ${node.supabaseTableName}:`, result.error);
               setSupabaseColumns([]);
             } else if (result.data) {
+              console.log(`[NodeCard - ${node.id}] Columns for ${node.supabaseTableName} fetched:`, result.data);
               setSupabaseColumns(result.data);
               if (node.supabaseIdentifierColumn && !result.data.some(c => c.name === node.supabaseIdentifierColumn)) {
                 onUpdate(node.id, { supabaseIdentifierColumn: '' });
               }
+              // Manter supabaseColumnsToSelect não deve ser resetado aqui, apenas o supabaseIdentifierColumn
             } else {
               setSupabaseColumns([]);
             }
           })
            .catch(err => {
             setSupabaseSchemaError(`Falha ao comunicar com o servidor para buscar colunas da tabela ${node.supabaseTableName}.`);
+            console.error(`[NodeCard - ${node.id}] Supabase exception fetching columns for ${node.supabaseTableName}:`, err);
             setSupabaseColumns([]);
           })
           .finally(() => {
@@ -156,6 +163,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         target.closest('[data-no-drag="true"]') || 
         target.closest('[role="dialog"]') || 
         target.closest('[data-radix-popover-content]') || 
+        target.closest('[data-radix-scroll-area-viewport]') || // Evitar drag ao usar scrollbars internas
         (target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target))
     ) {
       return;
@@ -521,7 +529,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         </>
       );
     }
-    // Para todos os outros nós que não são 'end-flow'
+    
     if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow') {
         return (
           <div 
@@ -544,108 +552,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     }
     return null; 
   };
-
-  const renderWhatsAppToggle = (): React.ReactNode => {
-    if (node.type !== 'message' && node.type !== 'media-display') {
-      return null;
-    }
-    return (
-      <div className="mt-3 pt-3 border-t border-border" data-no-drag="true">
-        <div className="flex items-center space-x-2 mb-2">
-          <Switch
-            id={`${node.id}-sendViaWhatsApp`}
-            checked={node.sendViaWhatsApp || false}
-            onCheckedChange={(checked) => onUpdate(node.id, { sendViaWhatsApp: checked })}
-            aria-label="Enviar via WhatsApp"
-          />
-          <Label htmlFor={`${node.id}-sendViaWhatsApp`} className="flex items-center cursor-pointer">
-            <BotMessageSquare className="w-4 h-4 mr-2 text-green-600" />
-            Enviar via WhatsApp
-          </Label>
-        </div>
-        {node.sendViaWhatsApp && (
-          <div className="space-y-2 pl-2 ml-4 border-l-2 border-green-500 animate-in fade-in-0 slide-in-from-top-2 duration-200">
-            <div className="mt-2">
-              <Label htmlFor={`${node.id}-whatsappInstanceName`}>Nome da Instância WhatsApp</Label>
-               <div className="relative">
-                <Input 
-                  id={`${node.id}-whatsappInstanceName`} 
-                  placeholder="evolution_instance" 
-                  value={node.instanceName || ''} 
-                  onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} 
-                  className="pr-8"
-                />
-                {renderVariableInserter(node.instanceName, (newText) => onUpdate(node.id, { instanceName: newText }))}
-              </div>
-            </div>
-            <div>
-              <Label htmlFor={`${node.id}-whatsappTargetPhone`}>Telefone Destino (WhatsApp)</Label>
-              <div className="relative">
-                <Input 
-                  id={`${node.id}-whatsappTargetPhone`} 
-                  placeholder="55119xxxxxxxx (ou {{variavel_tel}})" 
-                  value={node.whatsappTargetPhoneNumber || ''} 
-                  onChange={(e) => onUpdate(node.id, { whatsappTargetPhoneNumber: e.target.value })} 
-                  className="pr-8"
-                />
-                {renderVariableInserter(node.whatsappTargetPhoneNumber, (newText) => onUpdate(node.id, { whatsappTargetPhoneNumber: newText }))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-
-  const renderKeyValueList = (
-    listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList',
-    list: Array<{ id: string; key: string; value: string }> | undefined,
-    keyPlaceholder: string,
-    valuePlaceholder: string,
-    addButtonLabel: string
-  ) => (
-    <div className="space-y-2" data-no-drag="true">
-      {(list || []).map((item) => (
-        <div key={item.id} className="flex items-center space-x-2">
-          <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          <div className="relative flex-grow">
-            <Input
-              type="text"
-              placeholder={keyPlaceholder}
-              value={item.key}
-              onChange={(e) => handleListItemChange(listName, item.id, 'key', e.target.value)}
-              className="pr-8"
-            />
-             {renderVariableInserter(item.key, (newText) => handleListItemChange(listName, item.id, 'key', newText))}
-          </div>
-           <div className="relative flex-grow">
-            <Input
-              type="text"
-              placeholder={valuePlaceholder}
-              value={item.value}
-              onChange={(e) => handleListItemChange(listName, item.id, 'value', e.target.value)}
-              className="pr-8"
-            />
-            {renderVariableInserter(item.value, (newText) => handleListItemChange(listName, item.id, 'value', newText))}
-          </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => handleRemoveListItem(listName, item.id)}
-            className="text-destructive hover:text-destructive/80 w-8 h-8 flex-shrink-0"
-            aria-label={`Remover ${listName.includes('Header') ? 'Header' : listName.includes('Query') ? 'Parâmetro' : 'Campo'}`}
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
-      ))}
-      <Button variant="outline" size="sm" onClick={() => handleAddListItem(listName)} className="mt-2">
-        <PlusCircle className="w-4 h-4 mr-1" /> {addButtonLabel}
-      </Button>
-    </div>
-  );
-
 
   const renderNodeContent = (): React.ReactNode => {
     switch (node.type) {
@@ -753,7 +659,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               <Textarea placeholder="Mensagem do bot..." value={node.text || ''} onChange={(e) => onUpdate(node.id, { text: e.target.value })} className="resize-none text-sm pr-8" rows={3} />
               {renderVariableInserter(node.text, (newText) => onUpdate(node.id, { text: newText }), true)}
             </div>
-            {renderWhatsAppToggle()}
           </div>
         );
       case 'input':
@@ -806,17 +711,17 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-instance`}>Instância</Label>
+              <Label htmlFor={`${node.id}-instance`}>Instância (Opcional - usa padrão global)</Label>
               <div className="relative">
-                <Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
+                <Input id={`${node.id}-instance`} placeholder="ex: evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
                 {renderVariableInserter(node.instanceName, (newText) => onUpdate(node.id, { instanceName: newText }))}
               </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-phone`}>Telefone</Label>
+                <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{var_tel}}"})</Label>
                 <div className="relative">
                     <Input id={`${node.id}-phone`} placeholder="55119... ou {{variavel_tel}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.phoneNumber, (newText) => onUpdate(node.id, { phoneNumber: newText }))}
+                     {renderVariableInserter(node.phoneNumber, (newText) => onUpdate(node.id, { phoneNumber: newText }))}
                 </div>
             </div>
             <div>
@@ -832,21 +737,21 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-instance`}>Instância</Label>
+              <Label htmlFor={`${node.id}-instance`}>Instância (Opcional - usa padrão global)</Label>
               <div className="relative">
-                <Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
+                <Input id={`${node.id}-instance`} placeholder="ex: evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
                 {renderVariableInserter(node.instanceName, (newText) => onUpdate(node.id, { instanceName: newText }))}
               </div>
             </div>
              <div>
-                <Label htmlFor={`${node.id}-phone`}>Telefone</Label>
+                <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{var_tel}}"})</Label>
                 <div className="relative">
                     <Input id={`${node.id}-phone`} placeholder="55119... ou {{variavel_tel}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8"/>
                      {renderVariableInserter(node.phoneNumber, (newText) => onUpdate(node.id, { phoneNumber: newText }))}
                 </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-mediaurl`}>URL da Mídia</Label>
+                <Label htmlFor={`${node.id}-mediaurl`}>URL da Mídia (Ex: https://... ou {"{{url_midia}}"})</Label>
                 <div className="relative">
                     <Input id={`${node.id}-mediaurl`} placeholder="https://... ou {{url_midia}}" value={node.mediaUrl || ''} onChange={(e) => onUpdate(node.id, { mediaUrl: e.target.value })} className="pr-8"/>
                     {renderVariableInserter(node.mediaUrl, (newText) => onUpdate(node.id, { mediaUrl: newText }))}
@@ -862,7 +767,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               </Select>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-caption`}>Legenda/Nome do Arquivo</Label>
+                <Label htmlFor={`${node.id}-caption`}>Legenda/Nome do Arquivo (Opcional)</Label>
                 <div className="relative">
                     <Input id={`${node.id}-caption`} value={node.caption || ''} onChange={(e) => onUpdate(node.id, { caption: e.target.value })} className="pr-8"/>
                     {renderVariableInserter(node.caption, (newText) => onUpdate(node.id, { caption: newText }))}
@@ -874,9 +779,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
          return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-instance`}>Instância</Label>
+              <Label htmlFor={`${node.id}-instance`}>Instância (Opcional - usa padrão global)</Label>
               <div className="relative">
-                <Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
+                <Input id={`${node.id}-instance`} placeholder="ex: evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
                 {renderVariableInserter(node.instanceName, (newText) => onUpdate(node.id, { instanceName: newText }))}
               </div>
             </div>
@@ -888,7 +793,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-participants`}>Participantes (IDs separados por vírgula)</Label>
+                <Label htmlFor={`${node.id}-participants`}>Participantes (IDs separados por vírgula, ex: 5511...,5521...)</Label>
                 <div className="relative">
                     <Textarea id={`${node.id}-participants`} value={node.participants || ''} onChange={(e) => onUpdate(node.id, { participants: e.target.value })} rows={2} className="pr-8"/>
                     {renderVariableInserter(node.participants, (newText) => onUpdate(node.id, { participants: newText }), true)}
@@ -1139,7 +1044,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 </div>
               </div>
             </div>
-            {renderWhatsAppToggle()}
           </div>
         );
       case 'log-console':
@@ -1408,7 +1312,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length > 0 && (
                 <Select 
                     value={node.supabaseTableName || ''} 
-                    onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value, supabaseIdentifierColumn: ''})}
+                    onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value, supabaseIdentifierColumn: '', supabaseColumnsToSelect: '*' })}
                 >
                   <SelectTrigger id={`${node.id}-tableName`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
                   <SelectContent>
@@ -1452,7 +1356,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             )}
             
             {isReadOp && (
-              <>
                  <div>
                     <Label htmlFor={`${node.id}-columnsToSelectRead`}>Colunas a Selecionar (ex: *, nome, email)</Label>
                     <div className="relative">
@@ -1460,7 +1363,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                         {renderVariableInserter(node.supabaseColumnsToSelect, (newText) => onUpdate(node.id, { supabaseColumnsToSelect: newText }))}
                     </div>
                 </div>
-              </>
             )}
 
             {needsDataJson && (
@@ -1505,6 +1407,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             target.closest('[data-no-drag="true"]') || 
             target.closest('[role="dialog"]') ||
             target.closest('[data-radix-popover-content]') ||
+            target.closest('[data-radix-scroll-area-viewport]') ||
             target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target) ||
             target.closest('[role="tablist"]') || 
             target.closest('[role="tabpanel"]') ||
@@ -1610,4 +1513,3 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-

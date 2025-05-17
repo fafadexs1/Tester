@@ -13,7 +13,6 @@ export type NodeType =
   | 'whatsapp-text' 
   | 'whatsapp-media' 
   | 'whatsapp-group'
-  // | 'whatsapp-webhook-wait' // Removido
   | 'condition' 
   | 'set-variable' 
   | 'api-call' 
@@ -55,6 +54,14 @@ export interface ApiFormDataEntry {
   value: string;
 }
 
+export interface StartNodeTrigger {
+  id: string;
+  name: string;
+  type: 'manual' | 'webhook';
+  webhookId?: string; 
+  webhookPayloadVariable?: string; 
+}
+
 export interface NodeData {
   id: string;
   type: NodeType;
@@ -63,16 +70,20 @@ export interface NodeData {
   y: number;
   dataAiHint?: string; 
   
+  // Message Node
   text?: string; 
   
+  // Input Node
   promptText?: string; 
   inputType?: 'text' | 'email' | 'phone' | 'number';
   variableToSaveResponse?: string;
 
+  // Option Node
   questionText?: string;
   optionsList?: string; 
   variableToSaveChoice?: string;
 
+  // WhatsApp Nodes
   instanceName?: string; 
   phoneNumber?: string; 
   textMessage?: string; 
@@ -82,13 +93,16 @@ export interface NodeData {
   groupName?: string; 
   participants?: string; 
   
+  // Condition Node
   conditionVariable?: string; 
   conditionOperator?: '==' | '!=' | '>' | '<' | 'contains' | 'startsWith' | 'endsWith' | 'isEmpty' | 'isNotEmpty'; 
   conditionValue?: string; 
   
+  // Set Variable Node
   variableName?: string; 
   variableValue?: string; 
   
+  // API Call Node
   apiUrl?: string; 
   apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'; 
   apiAuthType?: 'none' | 'bearer' | 'basic';
@@ -103,61 +117,73 @@ export interface NodeData {
   apiBodyRaw?: string; 
   apiOutputVariable?: string;
   
+  // Delay Node
   delayDuration?: number; 
 
+  // Date Input Node
   dateInputLabel?: string;
   variableToSaveDate?: string;
 
+  // Redirect Node
   redirectUrl?: string;
 
+  // Typing Emulation Node
   typingDuration?: number; 
 
+  // Media Display Node
   mediaDisplayType?: 'image' | 'video' | 'audio';
   mediaDisplayUrl?: string;
   mediaDisplayText?: string; 
 
+  // Log Console Node
   logMessage?: string;
 
+  // Code Execution Node
   codeSnippet?: string;
   codeOutputVariable?: string;
 
+  // JSON Transform Node
   inputJson?: string;
   jsonataExpression?: string;
   jsonOutputVariable?: string;
 
+  // File Upload Node
   uploadPromptText?: string;
   fileTypeFilter?: string;
   maxFileSizeMB?: number;
   fileUrlVariable?: string;
 
+  // Rating Input Node
   ratingQuestionText?: string;
   maxRatingValue?: number;
   ratingIconType?: 'star' | 'heart' | 'number';
   ratingOutputVariable?: string;
 
+  // AI Text Generation Node
   aiPromptText?: string;
-  aiModelName?: string;
+  aiModelName?: string; // e.g., gemini-1.5-flash
   aiOutputVariable?: string;
   
+  // Send Email Node
   emailTo?: string;
   emailSubject?: string;
   emailBody?: string;
-  emailFrom?: string;
+  emailFrom?: string; // Optional
 
+  // Google Sheets Append Node
   googleSheetId?: string;
-  googleSheetName?: string;
-  googleSheetRowData?: string;
+  googleSheetName?: string; // e.g., "Página1"
+  googleSheetRowData?: string; // JSON string array, e.g., '["{{val1}}", "valor2"]'
 
+  // Intelligent Agent Node
   agentName?: string;
   agentSystemPrompt?: string;
-  userInputVariable?: string; 
-  agentResponseVariable?: string; 
-  maxConversationTurns?: number;
-  temperature?: number; 
+  userInputVariable?: string; // Variable holding the user's current message to the agent
+  agentResponseVariable?: string; // Variable to store the agent's response
+  maxConversationTurns?: number; // Optional: To limit conversation length for state management
+  temperature?: number; // Optional: For LLM creativity
 
-  sendViaWhatsApp?: boolean;
-  whatsappTargetPhoneNumber?: string; 
-
+  // Supabase Nodes
   supabaseTableName?: string;
   supabaseIdentifierColumn?: string; 
   supabaseIdentifierValue?: string; 
@@ -165,7 +191,8 @@ export interface NodeData {
   supabaseColumnsToSelect?: string; 
   supabaseResultVariable?: string; 
   
-  triggers?: string[];
+  // Start Node
+  triggers?: StartNodeTrigger[];
 }
 
 export interface Connection {
@@ -177,11 +204,11 @@ export interface Connection {
 
 export interface DrawingLineData {
   fromId: string;
-  sourceHandleId: string;
-  startX: number;
-  startY: number;
-  currentX: number;
-  currentY: number;
+  sourceHandleId: string; // 'default', trigger name, or option text
+  startX: number; // Logical X
+  startY: number; // Logical Y
+  currentX: number; // Logical X of mouse
+  currentY: number; // Logical Y of mouse
 }
 
 export interface CanvasOffset {

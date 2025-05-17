@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, WorkspaceData } from '@/lib/types';
+import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, WorkspaceData, StartNodeTrigger } from '@/lib/types';
 import { 
   NODE_WIDTH, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX, GRID_SIZE,
   START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y,
@@ -353,9 +353,9 @@ export default function FlowBuilderClient() {
       return;
     }
 
-    const currentWksp = workspaces.find(ws => ws.id === activeWorkspaceId); // Renomeado para evitar conflito
+    const currentWksp = workspaces.find(ws => ws.id === activeWorkspaceId); 
     const existingVariableNames: string[] = [];
-    if (currentWksp) { // Usar a variável renomeada
+    if (currentWksp) { 
       currentWksp.nodes.forEach(node => {
         VARIABLE_DEFINING_FIELDS.forEach(field => {
           const varName = node[field] as string | undefined;
@@ -413,12 +413,11 @@ export default function FlowBuilderClient() {
       redirectUrl: '', dateInputLabel: '', variableToSaveDate: '',
       emailTo: '', emailSubject: '', emailBody: '', emailFrom: '',
       googleSheetId: '', googleSheetName: '', googleSheetRowData: '',
-      instanceName: 'evolution_instance', phoneNumber: '', textMessage: '', mediaUrl: '', mediaType: 'image', caption: '', groupName: '', participants: '',
-      sendViaWhatsApp: false, whatsappTargetPhoneNumber: '',
+      instanceName: '', phoneNumber: '', textMessage: '', mediaUrl: '', mediaType: 'image', caption: '', groupName: '', participants: '',
       aiPromptText: '', aiModelName: '', aiOutputVariable: '',
       agentName: 'Agente Inteligente Padrão', agentSystemPrompt: 'Você é um assistente IA. Responda às perguntas do usuário de forma concisa e prestativa.',
       userInputVariable: '{{entrada_usuario}}', agentResponseVariable: 'resposta_do_agente', maxConversationTurns: 5, temperature: 0.7,
-      triggers: [], 
+      triggers: [{ id: uuidv4(), name: 'Gatilho Inicial', type: 'manual' }], 
       supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseDataJson: '', supabaseColumnsToSelect: '*', supabaseResultVariable: '',
     };
 
@@ -436,7 +435,7 @@ export default function FlowBuilderClient() {
       const updatedNodes = [...ws.nodes, newNode];
       return { ...ws, nodes: updatedNodes };
     });
-  }, [activeWorkspaceId, updateActiveWorkspace, workspaces]); // workspaces é necessário para existingVariableNames
+  }, [activeWorkspaceId, updateActiveWorkspace, workspaces]); 
 
   const updateNode = useCallback((id: string, changes: Partial<NodeData>) => {
     updateActiveWorkspace(ws => ({
@@ -459,17 +458,17 @@ export default function FlowBuilderClient() {
         console.warn('[FlowBuilderClient] handleStartConnection: canvasRef.current is null.');
         return;
       }
-      const currentCanvasOffset = canvasOffsetCbRef.current; // Usa a ref
-      const currentZoomLevel = zoomLevelCbRef.current;     // Usa a ref
+      const currentCanvasOffset = canvasOffsetCbRef.current; 
+      const currentZoomLevel = zoomLevelCbRef.current;     
       const canvasRect = canvasRef.current.getBoundingClientRect();
 
       let startYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET; 
-      if (fromNode.type === 'start' && fromNode.triggers && sourceHandleId) {
+      if (fromNode.type === 'start' && Array.isArray(fromNode.triggers) && sourceHandleId) {
           const triggerIndex = fromNode.triggers.findIndex(t => t.name === sourceHandleId);
           if (triggerIndex !== -1) {
               startYOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET + (triggerIndex * START_NODE_TRIGGER_SPACING_Y);
           }
-      } else if (fromNode.type === 'option' && fromNode.optionsList && sourceHandleId) {
+      } else if (fromNode.type === 'option' && typeof fromNode.optionsList === 'string' && sourceHandleId) {
           const options = (fromNode.optionsList || '').split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
           const optionIndex = options.indexOf(sourceHandleId);
           if (optionIndex !== -1) {
@@ -488,8 +487,8 @@ export default function FlowBuilderClient() {
       
       const mouseXOnCanvas = event.clientX - canvasRect.left;
       const mouseYOnCanvas = event.clientY - canvasRect.top;
-      const lineCurrentX = (mouseXOnCanvas - currentCanvasOffset.x) / currentZoomLevel; // Convertido para lógico
-      const lineCurrentY = (mouseYOnCanvas - currentCanvasOffset.y) / currentZoomLevel; // Convertido para lógico
+      const lineCurrentX = (mouseXOnCanvas - currentCanvasOffset.x) / currentZoomLevel; 
+      const lineCurrentY = (mouseYOnCanvas - currentCanvasOffset.y) / currentZoomLevel; 
 
       setDrawingLine({
         fromId: fromNode.id,
@@ -500,7 +499,7 @@ export default function FlowBuilderClient() {
         currentY: lineCurrentY, 
       });
     },
-    [canvasRef] // setDrawingLine é estável, refs são usadas para offset/zoom.
+    [canvasRef] 
   ); 
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -510,7 +509,7 @@ export default function FlowBuilderClient() {
       initialCanvasOffsetOnPanStart.current = { ...canvasOffsetCbRef.current };
       if (e.currentTarget) e.currentTarget.style.cursor = 'grabbing';
     }
-  }, []); // Não depende de canvasOffset diretamente, usa ref
+  }, []); 
 
   const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -522,10 +521,11 @@ export default function FlowBuilderClient() {
       });
     } else if (drawingLine) {
       if (!canvasRef.current) {
+        console.warn('[FlowBuilderClient] handleGlobalMouseMove (drawingLine): canvasRef.current is null.');
         return;
       }
-      const currentCanvasOffset = canvasOffsetCbRef.current; // Usa ref
-      const currentZoomLevel = zoomLevelCbRef.current;     // Usa ref
+      const currentCanvasOffset = canvasOffsetCbRef.current; 
+      const currentZoomLevel = zoomLevelCbRef.current;     
       const canvasRect = canvasRef.current.getBoundingClientRect();
       
       const mouseXOnCanvas = e.clientX - canvasRect.left;
@@ -540,7 +540,7 @@ export default function FlowBuilderClient() {
         };
       });
     }
-  }, [drawingLine]); // setCanvasOffset, setDrawingLine são estáveis. drawingLine é a dependência que muda.
+  }, [drawingLine, canvasRef]); 
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -596,7 +596,7 @@ export default function FlowBuilderClient() {
       }
       setDrawingLine(null);
     }
-  }, [drawingLine, activeWorkspaceId, updateActiveWorkspace]); // setDrawingLine é estável
+  }, [drawingLine, activeWorkspaceId, updateActiveWorkspace, canvasRef]); 
 
   const deleteConnection = useCallback((connectionIdToDelete: string) => {
     updateActiveWorkspace(ws => ({
@@ -604,7 +604,7 @@ export default function FlowBuilderClient() {
         connections: ws.connections.filter(conn => conn.id !== connectionIdToDelete)
     }));
     setHighlightedConnectionId(null);
-  }, [updateActiveWorkspace]); // setHighlightedConnectionId é estável
+  }, [updateActiveWorkspace]); 
 
   useEffect(() => {
     document.addEventListener('mousemove', handleGlobalMouseMove);
@@ -629,7 +629,7 @@ export default function FlowBuilderClient() {
       document.removeEventListener('mouseup', handleGlobalMouseUp);
       document.body.removeEventListener('mouseleave', handleMouseLeaveWindow);
     };
-  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine]); // drawingLine e setDrawingLine são as deps relevantes
+  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine]); 
   
 
   const handleZoom = useCallback((direction: 'in' | 'out' | 'reset') => {
@@ -665,7 +665,7 @@ export default function FlowBuilderClient() {
     setZoomLevel(newZoomLevel);
     setCanvasOffset({ x: newOffsetX, y: newOffsetY });
 
-  }, [setZoomLevel, setCanvasOffset]); // setZoomLevel, setCanvasOffset são estáveis
+  }, [setZoomLevel, setCanvasOffset, canvasRef]);
 
   return (
     <DndProvider backend={HTML5Backend}>
