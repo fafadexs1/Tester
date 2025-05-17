@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage, 
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash, 
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, ZoomIn, ZoomOut
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -130,7 +130,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               if (node.supabaseIdentifierColumn && !result.data.some(c => c.name === node.supabaseIdentifierColumn)) {
                 onUpdate(node.id, { supabaseIdentifierColumn: '' });
               }
-              // Manter supabaseColumnsToSelect não deve ser resetado aqui, apenas o supabaseIdentifierColumn
             } else {
               setSupabaseColumns([]);
             }
@@ -163,7 +162,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         target.closest('[data-no-drag="true"]') || 
         target.closest('[role="dialog"]') || 
         target.closest('[data-radix-popover-content]') || 
-        target.closest('[data-radix-scroll-area-viewport]') || // Evitar drag ao usar scrollbars internas
+        target.closest('[data-radix-scroll-area-viewport]') || 
         (target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target))
     ) {
       return;
@@ -236,6 +235,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       }
       if (field === 'type' && value === 'manual') {
          delete currentTriggers[triggerIndex].webhookId;
+         delete currentTriggers[triggerIndex].webhookPayloadVariable;
       }
       onUpdate(node.id, { triggers: currentTriggers });
     }
@@ -301,7 +301,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     }
 
     let requestBody: BodyInit | null = null;
-    if (node.apiMethod !== 'GET' && node.apiMethod !== 'DELETE') { 
+    if (node.apiMethod !== 'GET' && node.apiMethod !== 'HEAD' && node.apiMethod !== 'DELETE') { 
         if (node.apiBodyType === 'json' && node.apiBodyJson) {
           requestBody = node.apiBodyJson;
           if (!requestHeaders.has('Content-Type')) {
@@ -347,7 +347,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       if (!response.ok) {
         toast({
           title: `Erro na API: ${response.status}`,
-          description: typeof responseBodyContent === 'string' ? responseBodyContent : JSON.stringify(responseBodyContent, null, 2),
+          description: typeof responseBodyContent === 'string' ? responseBodyContent.substring(0, 100) + '...' : JSON.stringify(responseBodyContent, null, 2).substring(0,100)+'...',
           variant: "destructive",
         });
       } else {
@@ -370,21 +370,47 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   };
 
   const handleVariableInsert = (
-    currentValue: string | undefined,
+    fieldName: keyof NodeData,
     variableName: string,
-    updateCallback: (newText: string) => void,
+    isListItem: boolean = false,
+    itemId?: string,
+    itemKeyOrValue?: 'key' | 'value'
   ) => {
-    const newText = `${currentValue || ''}{{${variableName}}}`;
-    updateCallback(newText);
+    if (isListItem && itemId && itemKeyOrValue && (fieldName === 'apiHeadersList' || fieldName === 'apiQueryParamsList' || fieldName === 'apiBodyFormDataList')) {
+      const currentList = (node[fieldName] as any[] || []);
+      const updatedList = currentList.map(item => {
+        if (item.id === itemId) {
+          return { ...item, [itemKeyOrValue]: (item[itemKeyOrValue] || '') + `{{${variableName}}}` };
+        }
+        return item;
+      });
+      onUpdate(node.id, { [fieldName]: updatedList } as Partial<NodeData>);
+    } else if (!isListItem) {
+      const currentValue = (node[fieldName] as string | undefined) || '';
+      onUpdate(node.id, { [fieldName]: currentValue + `{{${variableName}}}` } as Partial<NodeData>);
+    }
   };
 
 
   const renderVariableInserter = (
-    currentValue: string | undefined,
-    updateCallback: (newText: string) => void,
-    isTextarea: boolean = false
+    fieldName: keyof NodeData,
+    isTextarea: boolean = false,
+    isListItem: boolean = false,
+    itemId?: string,
+    itemKeyOrValue?: 'key' | 'value'
   ) => {
     if (!definedVariablesInFlow || definedVariablesInFlow.length === 0) return null;
+    
+    const currentValueForInsertion = () => {
+        if (isListItem && itemId && itemKeyOrValue && (fieldName === 'apiHeadersList' || fieldName === 'apiQueryParamsList' || fieldName === 'apiBodyFormDataList')) {
+            const list = (node[fieldName] as any[] || []);
+            const item = list.find(i => i.id === itemId);
+            return item ? item[itemKeyOrValue] : '';
+        }
+        return (node[fieldName] as string | undefined) || '';
+    };
+
+
     return (
       <Popover>
         <PopoverTrigger asChild>
@@ -405,7 +431,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 key={varName}
                 variant="ghost"
                 className="w-full justify-start h-7 px-2 text-xs"
-                onClick={() => handleVariableInsert(currentValue, varName, updateCallback)}
+                onClick={() => handleVariableInsert(fieldName, varName, isListItem, itemId, itemKeyOrValue)}
               >
                 {varName}
               </Button>
@@ -413,6 +439,53 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           </ScrollArea>
         </PopoverContent>
       </Popover>
+    );
+  };
+
+  const renderKeyValueList = (
+    listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList',
+    list: ApiHeader[] | ApiQueryParam[] | ApiFormDataEntry[] | undefined,
+    keyPlaceholder: string,
+    valuePlaceholder: string,
+    addButtonLabel: string
+  ) => {
+    return (
+      <div className="space-y-2">
+        {(list || []).map((item, index) => (
+          <div key={item.id} className="flex items-center space-x-2">
+            <div className="relative flex-1">
+              <Input
+                placeholder={keyPlaceholder}
+                value={item.key}
+                onChange={(e) => handleListItemChange(listName, item.id, 'key', e.target.value)}
+                className="text-xs h-8 pr-8"
+              />
+              {renderVariableInserter(listName, false, true, item.id, 'key')}
+            </div>
+            <div className="relative flex-1">
+              <Input
+                placeholder={valuePlaceholder}
+                value={item.value}
+                onChange={(e) => handleListItemChange(listName, item.id, 'value', e.target.value)}
+                className="text-xs h-8 pr-8"
+              />
+              {renderVariableInserter(listName, false, true, item.id, 'value')}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleRemoveListItem(listName, item.id)}
+              className="text-destructive hover:text-destructive/80 w-7 h-7"
+              aria-label={`Remover ${listName.replace('List','')} item`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        ))}
+        <Button onClick={() => handleAddListItem(listName)} variant="outline" size="sm" className="text-xs h-8">
+          <PlusCircle className="w-3.5 h-3.5 mr-1" /> {addButtonLabel}
+        </Button>
+      </div>
     );
   };
 
@@ -459,47 +532,54 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       return null; 
     }
     if (node.type === 'start') {
-      return (node.triggers || []).map((trigger, index) => (
-        <div
-          key={trigger.id} 
-          className="absolute -right-2.5 z-10 flex items-center"
-          style={{ top: `${START_NODE_TRIGGER_INITIAL_Y_OFFSET + index * START_NODE_TRIGGER_SPACING_Y - 10}px` }} 
-          title={`Gatilho: ${trigger.name}`}
-        >
-          <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
+      return (node.triggers || []).map((trigger, index) => {
+        // console.log(`[NodeCard] Rendering start trigger connector: ${trigger.id} (name: ${trigger.name})`); // Log para chaves
+        return (
           <div
-            className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
-            data-connector="true"
-            data-handle-type="source"
-            data-handle-id={trigger.name}
+            key={trigger.id} // Chave baseada no ID único do trigger
+            className="absolute -right-2.5 z-10 flex items-center"
+            style={{ top: `${START_NODE_TRIGGER_INITIAL_Y_OFFSET + index * START_NODE_TRIGGER_SPACING_Y - 10}px` }} 
+            title={`Gatilho: ${trigger.name}`}
           >
-            <Hash className="w-3 h-3 text-accent-foreground" />
+            <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
+            <div
+              className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+              onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
+              data-connector="true"
+              data-handle-type="source"
+              data-handle-id={trigger.name}
+            >
+              <Hash className="w-3 h-3 text-accent-foreground" />
+            </div>
           </div>
-        </div>
-      ));
+        );
+      });
     }
     if (node.type === 'option') {
       const options = (node.optionsList || '').split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
-      return options.map((optionText, index) => (
-        <div
-          key={`option-${node.id}-${optionText.replace(/\s+/g, '-')}-${index}`}
-          className="absolute -right-2.5 z-10 flex items-center"
-          style={{ top: `${OPTION_NODE_HANDLE_INITIAL_Y_OFFSET + index * OPTION_NODE_HANDLE_SPACING_Y - 10}px` }}
-          title={`Opção: ${optionText}`}
-        >
-          <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{optionText}</span>
+      return options.map((optionText, index) => {
+        const key = `option-connector-${node.id}-${index}`; // Chave mais simples e estável
+        // console.log(`[NodeCard] Rendering option connector: ${key} (text: ${optionText})`); // Log para chaves
+        return (
           <div
-            className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, optionText); }}
-            data-connector="true"
-            data-handle-type="source"
-            data-handle-id={optionText}
+            key={key}
+            className="absolute -right-2.5 z-10 flex items-center"
+            style={{ top: `${OPTION_NODE_HANDLE_INITIAL_Y_OFFSET + index * OPTION_NODE_HANDLE_SPACING_Y - 10}px` }}
+            title={`Opção: ${optionText}`}
           >
-            <Hash className="w-3 h-3 text-accent-foreground" />
+            <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{optionText}</span>
+            <div
+              className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+              onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, optionText); }}
+              data-connector="true"
+              data-handle-type="source"
+              data-handle-id={optionText}
+            >
+              <Hash className="w-3 h-3 text-accent-foreground" />
+            </div>
           </div>
-        </div>
-      ));
+        );
+      });
     }
     if (node.type === 'condition') {
       return (
@@ -597,13 +677,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                           size="icon" 
                           className="h-7 w-7"
                           onClick={() => {
-                            if (typeof window !== 'undefined') {
-                              navigator.clipboard.writeText(`${window.location.origin}/api/webhook/${trigger.webhookId || ''}`)
+                            if (typeof window !== 'undefined' && trigger.webhookId) {
+                              navigator.clipboard.writeText(`${window.location.origin}/api/webhook/${trigger.webhookId}`)
                                 .then(() => toast({ title: "URL Copiada!", description: "URL do Webhook copiada para a área de transferência."}))
                                 .catch(() => toast({ title: "Erro", description: "Não foi possível copiar a URL.", variant: "destructive"}));
                             }
                           }}
                           title="Copiar URL"
+                          disabled={!trigger.webhookId}
                         >
                           <Copy className="w-3 h-3"/>
                         </Button>
@@ -617,7 +698,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                           onChange={(e) => handleStartTriggerChange(trigger.id, 'webhookPayloadVariable', e.target.value)}
                           className="h-7 text-xs pr-8"
                         />
-                         {renderVariableInserter(trigger.webhookPayloadVariable, (newText) => handleStartTriggerChange(trigger.id, 'webhookPayloadVariable', newText))}
+                         {renderVariableInserter('triggers', true, true, trigger.id, 'webhookPayloadVariable' as any)}
                       </div>
                     </div>
                   )}
@@ -657,7 +738,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           <div data-no-drag="true">
             <div className="relative">
               <Textarea placeholder="Mensagem do bot..." value={node.text || ''} onChange={(e) => onUpdate(node.id, { text: e.target.value })} className="resize-none text-sm pr-8" rows={3} />
-              {renderVariableInserter(node.text, (newText) => onUpdate(node.id, { text: newText }), true)}
+              {renderVariableInserter('text', true)}
             </div>
           </div>
         );
@@ -668,7 +749,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               <Label htmlFor={`${node.id}-prompttext`}>Texto da Pergunta</Label>
               <div className="relative">
                 <Textarea id={`${node.id}-prompttext`} placeholder="Digite sua pergunta aqui..." value={node.promptText || ''} onChange={(e) => onUpdate(node.id, { promptText: e.target.value })} rows={2} className="pr-8"/>
-                {renderVariableInserter(node.promptText, (newText) => onUpdate(node.id, { promptText: newText }), true)}
+                {renderVariableInserter('promptText', true)}
               </div>
             </div>
             <div><Label htmlFor={`${node.id}-inputtype`}>Tipo de Entrada</Label>
@@ -693,7 +774,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               <Label htmlFor={`${node.id}-optionqtext`}>Texto da Pergunta</Label>
               <div className="relative">
                 <Textarea id={`${node.id}-optionqtext`} placeholder="Qual sua escolha?" value={node.questionText || ''} onChange={(e) => onUpdate(node.id, { questionText: e.target.value })} rows={2} className="pr-8"/>
-                {renderVariableInserter(node.questionText, (newText) => onUpdate(node.id, { questionText: newText }), true)}
+                {renderVariableInserter('questionText', true)}
               </div>
             </div>
             <div>
@@ -714,21 +795,21 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               <Label htmlFor={`${node.id}-instance`}>Instância (Opcional - usa padrão global)</Label>
               <div className="relative">
                 <Input id={`${node.id}-instance`} placeholder="ex: evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
-                {renderVariableInserter(node.instanceName, (newText) => onUpdate(node.id, { instanceName: newText }))}
+                {renderVariableInserter('instanceName')}
               </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{var_tel}}"})</Label>
                 <div className="relative">
                     <Input id={`${node.id}-phone`} placeholder="55119... ou {{variavel_tel}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8"/>
-                     {renderVariableInserter(node.phoneNumber, (newText) => onUpdate(node.id, { phoneNumber: newText }))}
+                     {renderVariableInserter('phoneNumber')}
                 </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-watext`}>Mensagem</Label>
                 <div className="relative">
                     <Textarea id={`${node.id}-watext`} value={node.textMessage || ''} onChange={(e) => onUpdate(node.id, { textMessage: e.target.value })} rows={2} className="pr-8"/>
-                    {renderVariableInserter(node.textMessage, (newText) => onUpdate(node.id, { textMessage: newText }), true)}
+                    {renderVariableInserter('textMessage', true)}
                 </div>
             </div>
           </div>
@@ -740,21 +821,21 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               <Label htmlFor={`${node.id}-instance`}>Instância (Opcional - usa padrão global)</Label>
               <div className="relative">
                 <Input id={`${node.id}-instance`} placeholder="ex: evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
-                {renderVariableInserter(node.instanceName, (newText) => onUpdate(node.id, { instanceName: newText }))}
+                {renderVariableInserter('instanceName')}
               </div>
             </div>
              <div>
                 <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{var_tel}}"})</Label>
                 <div className="relative">
                     <Input id={`${node.id}-phone`} placeholder="55119... ou {{variavel_tel}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8"/>
-                     {renderVariableInserter(node.phoneNumber, (newText) => onUpdate(node.id, { phoneNumber: newText }))}
+                     {renderVariableInserter('phoneNumber')}
                 </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-mediaurl`}>URL da Mídia (Ex: https://... ou {"{{url_midia}}"})</Label>
                 <div className="relative">
                     <Input id={`${node.id}-mediaurl`} placeholder="https://... ou {{url_midia}}" value={node.mediaUrl || ''} onChange={(e) => onUpdate(node.id, { mediaUrl: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.mediaUrl, (newText) => onUpdate(node.id, { mediaUrl: newText }))}
+                    {renderVariableInserter('mediaUrl')}
                 </div>
             </div>
             <div><Label htmlFor={`${node.id}-mediatype`}>Tipo</Label>
@@ -770,7 +851,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-caption`}>Legenda/Nome do Arquivo (Opcional)</Label>
                 <div className="relative">
                     <Input id={`${node.id}-caption`} value={node.caption || ''} onChange={(e) => onUpdate(node.id, { caption: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.caption, (newText) => onUpdate(node.id, { caption: newText }))}
+                    {renderVariableInserter('caption')}
                 </div>
             </div>
           </div>
@@ -782,21 +863,21 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               <Label htmlFor={`${node.id}-instance`}>Instância (Opcional - usa padrão global)</Label>
               <div className="relative">
                 <Input id={`${node.id}-instance`} placeholder="ex: evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
-                {renderVariableInserter(node.instanceName, (newText) => onUpdate(node.id, { instanceName: newText }))}
+                {renderVariableInserter('instanceName')}
               </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-groupname`}>Nome do Grupo</Label>
                 <div className="relative">
                     <Input id={`${node.id}-groupname`} value={node.groupName || ''} onChange={(e) => onUpdate(node.id, { groupName: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.groupName, (newText) => onUpdate(node.id, { groupName: newText }))}
+                    {renderVariableInserter('groupName')}
                 </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-participants`}>Participantes (IDs separados por vírgula, ex: 5511...,5521...)</Label>
                 <div className="relative">
                     <Textarea id={`${node.id}-participants`} value={node.participants || ''} onChange={(e) => onUpdate(node.id, { participants: e.target.value })} rows={2} className="pr-8"/>
-                    {renderVariableInserter(node.participants, (newText) => onUpdate(node.id, { participants: newText }), true)}
+                    {renderVariableInserter('participants', true)}
                 </div>
             </div>
           </div>
@@ -808,7 +889,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-condvar`}>Variável (ex: {"{{variavel}}"})</Label>
                 <div className="relative">
                     <Input id={`${node.id}-condvar`} placeholder="{{variavel}}" value={node.conditionVariable || ''} onChange={(e) => onUpdate(node.id, { conditionVariable: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.conditionVariable, (newText) => onUpdate(node.id, { conditionVariable: newText }))}
+                    {renderVariableInserter('conditionVariable')}
                 </div>
             </div>
             <div><Label htmlFor={`${node.id}-condop`}>Operador</Label>
@@ -828,7 +909,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-condval`}>Valor para Comparar (se aplicável)</Label>
                 <div className="relative">
                     <Input id={`${node.id}-condval`} placeholder="Valor ou {{outra_var}}" value={node.conditionValue || ''} onChange={(e) => onUpdate(node.id, { conditionValue: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.conditionValue, (newText) => onUpdate(node.id, { conditionValue: newText }))}
+                    {renderVariableInserter('conditionValue')}
                 </div>
             </div>
           </div>
@@ -844,7 +925,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-varval`}>Valor (pode usar {"{{outra_var}}"})</Label>
                 <div className="relative">
                     <Input id={`${node.id}-varval`} placeholder="Valor ou {{outra_var}}" value={node.variableValue || ''} onChange={(e) => onUpdate(node.id, { variableValue: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.variableValue, (newText) => onUpdate(node.id, { variableValue: newText }))}
+                    {renderVariableInserter('variableValue')}
                 </div>
             </div>
           </div>
@@ -856,7 +937,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               <Label htmlFor={`${node.id}-apiurl`}>URL da Requisição</Label>
               <div className="relative">
                 <Input id={`${node.id}-apiurl`} placeholder="https://api.example.com/data" value={node.apiUrl || ''} onChange={(e) => onUpdate(node.id, { apiUrl: e.target.value })} className="pr-8"/>
-                {renderVariableInserter(node.apiUrl, (newText) => onUpdate(node.id, { apiUrl: newText }))}
+                {renderVariableInserter('apiUrl')}
               </div>
             </div>
             <div>
@@ -895,7 +976,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                     <Label htmlFor={`${node.id}-apiauthbearertoken`}>Bearer Token</Label>
                      <div className="relative">
                         <Input id={`${node.id}-apiauthbearertoken`} placeholder="Seu token aqui..." value={node.apiAuthBearerToken || ''} onChange={(e) => onUpdate(node.id, { apiAuthBearerToken: e.target.value })} className="pr-8"/>
-                        {renderVariableInserter(node.apiAuthBearerToken, (newText) => onUpdate(node.id, { apiAuthBearerToken: newText }))}
+                        {renderVariableInserter('apiAuthBearerToken')}
                     </div>
                   </div>
                 )}
@@ -905,14 +986,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                       <Label htmlFor={`${node.id}-apiauthbasicuser`}>Usuário</Label>
                        <div className="relative">
                             <Input id={`${node.id}-apiauthbasicuser`} placeholder="Nome de usuário" value={node.apiAuthBasicUser || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicUser: e.target.value })} className="pr-8"/>
-                            {renderVariableInserter(node.apiAuthBasicUser, (newText) => onUpdate(node.id, { apiAuthBasicUser: newText }))}
+                            {renderVariableInserter('apiAuthBasicUser')}
                         </div>
                     </div>
                     <div>
                       <Label htmlFor={`${node.id}-apiauthbasicpassword`}>Senha</Label>
                        <div className="relative">
                             <Input id={`${node.id}-apiauthbasicpassword`} type="password" placeholder="Senha" value={node.apiAuthBasicPassword || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicPassword: e.target.value })} className="pr-8"/>
-                            {renderVariableInserter(node.apiAuthBasicPassword, (newText) => onUpdate(node.id, { apiAuthBasicPassword: newText }))}
+                            {renderVariableInserter('apiAuthBasicPassword')}
                         </div>
                     </div>
                   </>
@@ -944,7 +1025,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                     <Label htmlFor={`${node.id}-apibodyjson`}>Corpo JSON</Label>
                     <div className="relative">
                         <Textarea id={`${node.id}-apibodyjson`} placeholder='{ "chave": "valor" }' value={node.apiBodyJson || ''} onChange={(e) => onUpdate(node.id, { apiBodyJson: e.target.value })} rows={4} className="pr-8"/>
-                        {renderVariableInserter(node.apiBodyJson, (newText) => onUpdate(node.id, { apiBodyJson: newText }), true)}
+                        {renderVariableInserter('apiBodyJson', true)}
                     </div>
                   </div>
                 )}
@@ -959,7 +1040,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                     <Label htmlFor={`${node.id}-apibodyraw`}>Corpo Raw (Texto)</Label>
                     <div className="relative">
                         <Textarea id={`${node.id}-apibodyraw`} placeholder="Conteúdo do corpo em texto puro..." value={node.apiBodyRaw || ''} onChange={(e) => onUpdate(node.id, { apiBodyRaw: e.target.value })} rows={4} className="pr-8"/>
-                        {renderVariableInserter(node.apiBodyRaw, (newText) => onUpdate(node.id, { apiBodyRaw: newText }), true)}
+                        {renderVariableInserter('apiBodyRaw', true)}
                     </div>
                   </div>
                 )}
@@ -989,7 +1070,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-datelabel`}>Texto da Pergunta</Label>
                 <div className="relative">
                     <Input id={`${node.id}-datelabel`} placeholder="Ex: Qual sua data de nascimento?" value={node.dateInputLabel || ''} onChange={(e) => onUpdate(node.id, {dateInputLabel: e.target.value})} className="pr-8"/>
-                    {renderVariableInserter(node.dateInputLabel, (newText) => onUpdate(node.id, { dateInputLabel: newText }))}
+                    {renderVariableInserter('dateInputLabel')}
                 </div>
             </div>
             <div>
@@ -1004,7 +1085,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <Label htmlFor={`${node.id}-redirecturl`}>URL para Redirecionamento</Label>
             <div className="relative">
                 <Input id={`${node.id}-redirecturl`} placeholder="https://exemplo.com/{{id_usuario}}" value={node.redirectUrl || ''} onChange={(e) => onUpdate(node.id, { redirectUrl: e.target.value })} className="pr-8"/>
-                {renderVariableInserter(node.redirectUrl, (newText) => onUpdate(node.id, { redirectUrl: newText }))}
+                {renderVariableInserter('redirectUrl')}
             </div>
           </div>
         );
@@ -1033,14 +1114,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-mediadisplayurl`}>URL da Mídia</Label>
                 <div className="relative">
                     <Input id={`${node.id}-mediadisplayurl`} placeholder="https://... ou {{url_da_imagem}}" value={node.mediaDisplayUrl || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayUrl: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.mediaDisplayUrl, (newText) => onUpdate(node.id, { mediaDisplayUrl: newText }))}
+                    {renderVariableInserter('mediaDisplayUrl')}
                 </div>
               </div>
               <div>
                 <Label htmlFor={`${node.id}-mediadisplaytext`}>Texto Alternativo/Legenda</Label>
                 <div className="relative">
                     <Input id={`${node.id}-mediadisplaytext`} placeholder="Descrição da mídia" value={node.mediaDisplayText || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayText: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.mediaDisplayText, (newText) => onUpdate(node.id, { mediaDisplayText: newText }))}
+                    {renderVariableInserter('mediaDisplayText')}
                 </div>
               </div>
             </div>
@@ -1052,7 +1133,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <Label htmlFor={`${node.id}-logmsg`}>Mensagem para Log</Label>
             <div className="relative">
                 <Textarea id={`${node.id}-logmsg`} placeholder="Ex: Status: {{input.status}}, Usuário: {{user.id}}" value={node.logMessage || ''} onChange={(e) => onUpdate(node.id, { logMessage: e.target.value })} rows={2} className="pr-8"/>
-                {renderVariableInserter(node.logMessage, (newText) => onUpdate(node.id, { logMessage: newText }), true)}
+                {renderVariableInserter('logMessage', true)}
             </div>
           </div>
         );
@@ -1063,7 +1144,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               <Label htmlFor={`${node.id}-codesnippet`}>Trecho de Código (JavaScript)</Label>
               <div className="relative">
                 <Textarea id={`${node.id}-codesnippet`} placeholder="async (input, variables) => {\n  // input é o valor do nó anterior, se conectado\n  // variables é um objeto com as variáveis do fluxo\n  // Ex: const nome = variables.nome_usuario;\n  // return { resultado: 1 + 1, nome_modificado: nome.toUpperCase() };\n}" value={node.codeSnippet || ''} onChange={(e) => onUpdate(node.id, { codeSnippet: e.target.value })} rows={6} className="pr-8"/>
-                {renderVariableInserter(node.codeSnippet, (newText) => onUpdate(node.id, { codeSnippet: newText }), true)}
+                {renderVariableInserter('codeSnippet', true)}
               </div>
             </div>
             <div>
@@ -1080,14 +1161,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-inputjson`}>JSON de Entrada (objeto ou {"{{variavel}}"})</Label>
                 <div className="relative">
                     <Textarea id={`${node.id}-inputjson`} placeholder='{ "chave": "valor" } ou {{dados_api}}' value={node.inputJson || ''} onChange={(e) => onUpdate(node.id, { inputJson: e.target.value })} rows={3} className="pr-8"/>
-                    {renderVariableInserter(node.inputJson, (newText) => onUpdate(node.id, { inputJson: newText }), true)}
+                    {renderVariableInserter('inputJson', true)}
                 </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-jsonata`}>Expressão JSONata</Label>
                 <div className="relative">
                     <Input id={`${node.id}-jsonata`} placeholder="$.chave.outraChave[0]" value={node.jsonataExpression || ''} onChange={(e) => onUpdate(node.id, { jsonataExpression: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.jsonataExpression, (newText) => onUpdate(node.id, { jsonataExpression: newText }))}
+                    {renderVariableInserter('jsonataExpression')}
                 </div>
             </div>
             <div>
@@ -1103,7 +1184,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-uploadprompt`}>Texto do Prompt de Upload</Label>
                 <div className="relative">
                     <Input id={`${node.id}-uploadprompt`} placeholder="Por favor, envie seu documento." value={node.uploadPromptText || ''} onChange={(e) => onUpdate(node.id, { uploadPromptText: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.uploadPromptText, (newText) => onUpdate(node.id, { uploadPromptText: newText }))}
+                    {renderVariableInserter('uploadPromptText')}
                 </div>
             </div>
             <div>
@@ -1112,7 +1193,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             </div>
             <div>
                 <Label htmlFor={`${node.id}-maxsize`}>Tam. Máx. Arquivo (MB)</Label>
-                <Input id={`${node.id}-maxsize`} type="number" placeholder="5" value={node.maxFileSizeMB ?? ''} onChange={(e) => onUpdate(node.id, { maxFileSizeMB: parseInt(e.target.value, 10) || undefined })} />
+                <Input id={`${node.id}-maxsize`} type="number" placeholder="5" value={node.maxFileSizeMB ?? ''} onChange={(e) => onUpdate(node.id, { maxFileSizeMB: e.target.value ? parseInt(e.target.value, 10) : undefined })} />
             </div>
             <div>
                 <Label htmlFor={`${node.id}-fileurlvar`}>Salvar URL do Arquivo na Variável</Label>
@@ -1127,7 +1208,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-ratingq`}>Pergunta da Avaliação</Label>
                 <div className="relative">
                     <Input id={`${node.id}-ratingq`} placeholder="Como você nos avalia?" value={node.ratingQuestionText || ''} onChange={(e) => onUpdate(node.id, { ratingQuestionText: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.ratingQuestionText, (newText) => onUpdate(node.id, { ratingQuestionText: newText }))}
+                    {renderVariableInserter('ratingQuestionText')}
                 </div>
             </div>
             <div>
@@ -1155,14 +1236,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-aiprompt`}>Prompt para IA</Label>
                 <div className="relative">
                     <Textarea id={`${node.id}-aiprompt`} placeholder="Gere uma descrição para um produto chamado {{input.nome_produto}}." value={node.aiPromptText || ''} onChange={(e) => onUpdate(node.id, { aiPromptText: e.target.value })} rows={4} className="pr-8"/>
-                    {renderVariableInserter(node.aiPromptText, (newText) => onUpdate(node.id, { aiPromptText: newText }), true)}
+                    {renderVariableInserter('aiPromptText', true)}
                 </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional)</Label>
                 <div className="relative">
                     <Input id={`${node.id}-aimodel`} placeholder="gemini-2.0-flash (padrão)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.aiModelName, (newText) => onUpdate(node.id, { aiModelName: newText }))}
+                    {renderVariableInserter('aiModelName')}
                 </div>
             </div>
             <div>
@@ -1179,28 +1260,28 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-emailto`}>Para (E-mail ou {"{{variavel}}"})</Label>
                 <div className="relative">
                     <Input id={`${node.id}-emailto`} type="email" placeholder="destinatario@exemplo.com ou {{email_cliente}}" value={node.emailTo || ''} onChange={(e) => onUpdate(node.id, { emailTo: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.emailTo, (newText) => onUpdate(node.id, { emailTo: newText }))}
+                    {renderVariableInserter('emailTo')}
                 </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-emailsubject`}>Assunto</Label>
                 <div className="relative">
                     <Input id={`${node.id}-emailsubject`} placeholder="Assunto do seu e-mail" value={node.emailSubject || ''} onChange={(e) => onUpdate(node.id, { emailSubject: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.emailSubject, (newText) => onUpdate(node.id, { emailSubject: newText }))}
+                    {renderVariableInserter('emailSubject')}
                 </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-emailbody`}>Corpo do E-mail (HTML ou Texto)</Label>
                 <div className="relative">
                     <Textarea id={`${node.id}-emailbody`} placeholder="Olá {{input.nome_cliente}},\n\nSua mensagem aqui." value={node.emailBody || ''} onChange={(e) => onUpdate(node.id, { emailBody: e.target.value })} rows={4} className="pr-8"/>
-                    {renderVariableInserter(node.emailBody, (newText) => onUpdate(node.id, { emailBody: newText }), true)}
+                    {renderVariableInserter('emailBody', true)}
                 </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-emailfrom`}>De (E-mail - opcional)</Label>
                 <div className="relative">
                     <Input id={`${node.id}-emailfrom`} type="email" placeholder="remetente@exemplo.com" value={node.emailFrom || ''} onChange={(e) => onUpdate(node.id, { emailFrom: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.emailFrom, (newText) => onUpdate(node.id, { emailFrom: newText }))}
+                    {renderVariableInserter('emailFrom')}
                 </div>
             </div>
           </div>
@@ -1212,21 +1293,21 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-gsheetid`}>ID da Planilha Google</Label>
                 <div className="relative">
                     <Input id={`${node.id}-gsheetid`} placeholder="abc123xyz789" value={node.googleSheetId || ''} onChange={(e) => onUpdate(node.id, { googleSheetId: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.googleSheetId, (newText) => onUpdate(node.id, { googleSheetId: newText }))}
+                    {renderVariableInserter('googleSheetId')}
                 </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-gsheetname`}>Nome da Aba (Planilha)</Label>
                 <div className="relative">
                     <Input id={`${node.id}-gsheetname`} placeholder="Página1" value={node.googleSheetName || ''} onChange={(e) => onUpdate(node.id, { googleSheetName: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.googleSheetName, (newText) => onUpdate(node.id, { googleSheetName: newText }))}
+                    {renderVariableInserter('googleSheetName')}
                 </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-gsheetdata`}>Dados da Linha (JSON array de strings)</Label>
                 <div className="relative">
                     <Textarea id={`${node.id}-gsheetdata`} placeholder='["{{input.valor1}}", "{{input.valor2}}", "texto fixo"]' value={node.googleSheetRowData || ''} onChange={(e) => onUpdate(node.id, { googleSheetRowData: e.target.value })} rows={2} className="pr-8"/>
-                    {renderVariableInserter(node.googleSheetRowData, (newText) => onUpdate(node.id, { googleSheetRowData: newText }), true)}
+                    {renderVariableInserter('googleSheetRowData', true)}
                 </div>
             </div>
             <p className="text-xs text-muted-foreground">Certifique-se que a API do Google Sheets está habilitada e as credenciais configuradas no servidor.</p>
@@ -1239,21 +1320,21 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-agentname`}>Nome do Agente</Label>
                  <div className="relative">
                     <Input id={`${node.id}-agentname`} placeholder="Agente de Suporte N1" value={node.agentName || ''} onChange={(e) => onUpdate(node.id, { agentName: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.agentName, (newText) => onUpdate(node.id, { agentName: newText }))}
+                    {renderVariableInserter('agentName')}
                 </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-agentsystemprompt`}>Prompt do Sistema / Instruções</Label>
                 <div className="relative">
                     <Textarea id={`${node.id}-agentsystemprompt`} placeholder="Você é um assistente virtual especializado em {{area_especializacao}}." value={node.agentSystemPrompt || ''} onChange={(e) => onUpdate(node.id, { agentSystemPrompt: e.target.value })} rows={4} className="pr-8"/>
-                    {renderVariableInserter(node.agentSystemPrompt, (newText) => onUpdate(node.id, { agentSystemPrompt: newText }), true)}
+                    {renderVariableInserter('agentSystemPrompt', true)}
                 </div>
             </div>
             <div>
               <Label htmlFor={`${node.id}-userinputvar`}>Variável com Entrada do Usuário (ex: {"{{pergunta_usuario}}"})</Label>
               <div className="relative">
                 <Input id={`${node.id}-userinputvar`} placeholder="{{pergunta_usuario}}" value={node.userInputVariable || ''} onChange={(e) => onUpdate(node.id, { userInputVariable: e.target.value })} className="pr-8"/>
-                {renderVariableInserter(node.userInputVariable, (newText) => onUpdate(node.id, { userInputVariable: newText }))}
+                {renderVariableInserter('userInputVariable')}
               </div>
             </div>
             <div>
@@ -1264,7 +1345,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional, ex: gemini-1.5-flash)</Label>
                 <div className="relative">
                     <Input id={`${node.id}-aimodel`} placeholder="gemini-2.0-flash (padrão Genkit)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter(node.aiModelName, (newText) => onUpdate(node.id, { aiModelName: newText }))}
+                    {renderVariableInserter('aiModelName')}
                 </div>
             </div>
             <div>
@@ -1312,7 +1393,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length > 0 && (
                 <Select 
                     value={node.supabaseTableName || ''} 
-                    onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value, supabaseIdentifierColumn: '', supabaseColumnsToSelect: '*' })}
+                    onValueChange={(value) => {
+                      onUpdate(node.id, { 
+                        supabaseTableName: value, 
+                        supabaseIdentifierColumn: '', // Reset column when table changes
+                        supabaseColumnsToSelect: '*' // Reset columns to select
+                      });
+                    }}
                 >
                   <SelectTrigger id={`${node.id}-tableName`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
                   <SelectContent>
@@ -1349,7 +1436,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                     <Label htmlFor={`${node.id}-identifierVal`}>Valor do Identificador (Filtro)</Label>
                     <div className="relative">
                         <Input id={`${node.id}-identifierVal`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} className="pr-8"/>
-                        {renderVariableInserter(node.supabaseIdentifierValue, (newText) => onUpdate(node.id, { supabaseIdentifierValue: newText }))}
+                        {renderVariableInserter('supabaseIdentifierValue')}
                     </div>
                 </div>
               </>
@@ -1360,7 +1447,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                     <Label htmlFor={`${node.id}-columnsToSelectRead`}>Colunas a Selecionar (ex: *, nome, email)</Label>
                     <div className="relative">
                         <Input id={`${node.id}-columnsToSelectRead`} placeholder="*, nome, email_principal" value={node.supabaseColumnsToSelect || '*'} onChange={(e) => onUpdate(node.id, { supabaseColumnsToSelect: e.target.value })} className="pr-8"/>
-                        {renderVariableInserter(node.supabaseColumnsToSelect, (newText) => onUpdate(node.id, { supabaseColumnsToSelect: newText }))}
+                        {renderVariableInserter('supabaseColumnsToSelect')}
                     </div>
                 </div>
             )}
@@ -1370,7 +1457,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                   <Label htmlFor={`${node.id}-dataJson`}>{isCreateOp ? 'Dados da Nova Linha (JSON)' : 'Dados para Atualizar (JSON)'}</Label>
                   <div className="relative">
                       <Textarea id={`${node.id}-dataJson`} placeholder='{ "coluna1": "valor1", "coluna2": "{{variavel_col2}}" }' value={node.supabaseDataJson || ''} onChange={(e) => onUpdate(node.id, { supabaseDataJson: e.target.value })} rows={3} className="pr-8"/>
-                      {renderVariableInserter(node.supabaseDataJson, (newText) => onUpdate(node.id, { supabaseDataJson: newText }), true)}
+                      {renderVariableInserter('supabaseDataJson', true)}
                   </div>
               </div>
             )}
@@ -1378,7 +1465,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             {(isReadOp || isCreateOp) && (
               <div>
                 <Label htmlFor={`${node.id}-resultVar`}>Salvar Resultado na Variável</Label>
-                <Input id={`${node.id}-resultVar`} placeholder={isReadOp ? (node.supabaseResultVariable || "dados_supabase") : (node.supabaseResultVariable || "id_linha_criada_supabase")} value={node.supabaseResultVariable || ''} onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} />
+                <Input 
+                    id={`${node.id}-resultVar`} 
+                    placeholder={isReadOp ? (node.supabaseResultVariable || "dados_supabase") : (node.supabaseResultVariable || "id_linha_criada_supabase")} 
+                    value={node.supabaseResultVariable || ''} 
+                    onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} 
+                />
               </div>
             )}
             <p className="text-xs text-muted-foreground">Requer Supabase habilitado e configurado nas Configurações Globais, e que as funções SQL \`get_public_tables\` e \`get_table_columns\` existam no seu banco.</p>
@@ -1408,7 +1500,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             target.closest('[role="dialog"]') ||
             target.closest('[data-radix-popover-content]') ||
             target.closest('[data-radix-scroll-area-viewport]') ||
-            target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target) ||
+            (target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target)) ||
             target.closest('[role="tablist"]') || 
             target.closest('[role="tabpanel"]') ||
             target.closest('.rc-select-dropdown') 
@@ -1445,7 +1537,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         </CardContent>
       </Card>
       
-      {node.type !== 'start' && node.type !== 'end-flow' && (
+      {node.type !== 'start' && (
          <div 
             className="absolute -left-2.5 z-10 flex items-center justify-center"
             style={{ 
@@ -1513,3 +1605,4 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
