@@ -13,7 +13,8 @@ import {
   ITEM_TYPE_BLOCK, NODE_WIDTH, GRID_SIZE,
   NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX,
   START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y,
-  OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y
+  OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y,
+  MIN_ZOOM, MAX_ZOOM, ZOOM_STEP
 } from '@/lib/constants';
 
 interface CanvasProps {
@@ -45,45 +46,54 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
   // Use the forwarded ref if available (for the outer canvas div), otherwise use the local ref
   const canvasElementRef = (ref || localCanvasRef) as React.RefObject<HTMLDivElement>;
 
+  const onDropNodeRef = useRef(onDropNode);
+  useEffect(() => {
+    onDropNodeRef.current = onDropNode;
+  }, [onDropNode]);
+
+  const stableOnDropNode = useCallback((item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
+    const clientOffset = monitor.getClientOffset();
+    console.log('[Canvas] Drop event triggered (target: flowContentWrapperRef, using stable ref)', { item, clientOffset });
+
+    if (clientOffset && flowContentWrapperRef.current) {
+      const wrapperRect = flowContentWrapperRef.current.getBoundingClientRect();
+      
+      // Coordenadas do mouse relativas ao flowContentWrapperRef
+      const xOnWrapper = clientOffset.x - wrapperRect.left;
+      const yOnWrapper = clientOffset.y - wrapperRect.top;
+
+      // Converter para coordenadas lógicas (desfazendo o zoom do wrapper)
+      const logicalX = xOnWrapper / zoomLevel;
+      const logicalY = yOnWrapper / zoomLevel;
+
+      console.log('[Canvas] Drop coords (logical within wrapper):', { logicalX, logicalY, xOnWrapper, yOnWrapper, zoomLevel });
+      onDropNodeRef.current(item, { x: logicalX, y: logicalY });
+    } else {
+      console.warn('[Canvas] Drop failed: clientOffset or flowContentWrapperRef.current is null', { clientOffset, flowContentWrapperRefCurrent: flowContentWrapperRef.current });
+    }
+  }, [zoomLevel]); // zoomLevel is needed here as it's used in calculation
+
   const [{ isOver, canDrop: dndCanDrop }, drop] = useDrop(() => ({
     accept: ITEM_TYPE_BLOCK,
-    drop: (item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
-      const clientOffset = monitor.getClientOffset();
-      console.log('[Canvas] Drop event triggered (target: canvasElementRef)', { item, clientOffset });
-      if (clientOffset && canvasElementRef.current) {
-        const canvasRect = canvasElementRef.current.getBoundingClientRect();
-        const xOnCanvas = clientOffset.x - canvasRect.left;
-        const yOnCanvas = clientOffset.y - canvasRect.top;
-
-        // Convert visual coords on the main canvas to logical coords for the transformed content
-        const logicalX = (xOnCanvas - canvasOffset.x) / zoomLevel;
-        const logicalY = (yOnCanvas - canvasOffset.y) / zoomLevel;
-        
-        console.log('[Canvas] Drop coords (logical):', { logicalX, logicalY, xOnCanvas, yOnCanvas, canvasOffset, zoomLevel });
-        onDropNode(item, { x: logicalX, y: logicalY });
-      } else {
-         console.warn('[Canvas] Drop failed: clientOffset or canvasElementRef.current is null', {clientOffset, canvasElementRefCurrent: canvasElementRef.current});
-      }
-    },
+    drop: stableOnDropNode,
     collect: (monitor) => ({
       isOver: !!monitor.isOver(),
       canDrop: !!monitor.canDrop(),
     }),
-  }), [onDropNode, canvasOffset, zoomLevel]); // Added canvasOffset and zoomLevel as dependencies
+  }), [stableOnDropNode]); // Depend on the stable callback
 
   useEffect(() => {
-    if (canvasElementRef.current) {
-      console.log('[Canvas] Attaching drop target to ref:', canvasElementRef.current);
-      drop(canvasElementRef.current);
+    if (flowContentWrapperRef.current) {
+      console.log('[Canvas] Attaching drop target to ref:', flowContentWrapperRef.current);
+      drop(flowContentWrapperRef.current);
     } else {
-      console.warn('[Canvas] Attaching drop target: canvasElementRef.current is null.');
+      console.warn('[Canvas] Attaching drop target: flowContentWrapperRef.current is null.');
     }
-  }, [drop, canvasElementRef]);
+  }, [drop]);
 
   useEffect(() => {
     console.log('[Canvas] Monitored props: isOver:', isOver, 'canDrop:', dndCanDrop);
   }, [isOver, dndCanDrop]);
-
 
   const drawBezierPath = (x1: number, y1: number, x2: number, y2: number) => {
     const dx = Math.abs(x2 - x1) * 0.5;
@@ -98,6 +108,8 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     return map;
   }, [nodes]);
 
+  console.log("[Canvas] Rendering with nodes:", nodes);
+
   const renderedNodes = useMemo(() => (
     nodes.map((node) => {
       return (
@@ -108,7 +120,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
           initial={{ scale: 0.95, opacity: 0.8 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
-          // layout // Framer Motion layout can be heavy; remove if causing lag during drag
+          // layout prop removed for performance during drag
         >
           <NodeCard
             node={node}
@@ -152,7 +164,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
       const x2 = targetNode.x;
       const y2 = targetNode.y + NODE_HEADER_CONNECTOR_Y_OFFSET;
       const isHighlighted = highlightedConnectionId === conn.id;
-      const strokeColor = isHighlighted ? 'var(--flow-connection-highlight)' : 'var(--flow-connection)';
+      const strokeColor = isHighlighted ? 'hsl(var(--flow-connection-highlight))' : 'hsl(var(--flow-connection))';
 
       return (
         <g key={conn.id} className="cursor-pointer"
@@ -175,8 +187,6 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     })
   ), [connections, nodeMap, highlightedConnectionId, onDeleteConnection, setHighlightedConnectionId]);
   
-  console.log("[Canvas] Rendering with nodes:", nodes);
-
   return (
     <div
       ref={canvasElementRef} 
@@ -195,34 +205,33 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
       <div 
         ref={flowContentWrapperRef}
         id="flow-content-wrapper"
-        className="absolute top-0 left-0" // Ensures transform-origin is top-left for the wrapper
+        className="absolute top-0 left-0" 
         style={{
           transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
           transformOrigin: 'top left',
-          pointerEvents: 'auto', // Allow drop target events
+          pointerEvents: 'auto', 
         }}
       >
         <svg 
           className="absolute top-0 left-0 pointer-events-none z-10"
-          // Define a very large SVG canvas or make it dynamically size to fit content
-          // For simplicity, using a large fixed size. Adjust if necessary.
           style={{ width: '10000px', height: '10000px' }} 
         >
           <defs>
             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="8.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
-              <polygon points="0 0, 10 3.5, 0 7" fill="var(--flow-connection)" />
+              <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--flow-connection))" />
             </marker>
             <marker id="arrowhead-highlight" markerWidth="10" markerHeight="7" refX="8.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
-              <polygon points="0 0, 10 3.5, 0 7" fill="var(--flow-connection-highlight)" />
+              <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--flow-connection-highlight))" />
             </marker>
           </defs>
           {renderedConnections}
           {drawingLine && (
             <path
               d={drawBezierPath(
-                drawingLine.startX, drawingLine.startY, // These are logical
-                (drawingLine.currentX - canvasOffset.x) / zoomLevel, // Convert visual mouse to logical
-                (drawingLine.currentY - canvasOffset.y) / zoomLevel  // Convert visual mouse to logical
+                drawingLine.startX, 
+                drawingLine.startY, 
+                (drawingLine.currentX - canvasOffset.x) / zoomLevel, 
+                (drawingLine.currentY - canvasOffset.y) / zoomLevel  
               )}
               stroke="hsl(var(--accent))"
               strokeOpacity="0.8"
@@ -233,7 +242,6 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
             />
           )}
         </svg>
-        {/* Nodes are rendered here, positioned absolutely within this transformed div */}
         {renderedNodes}
       </div>
     </div>
