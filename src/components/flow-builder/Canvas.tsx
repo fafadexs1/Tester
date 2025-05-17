@@ -42,52 +42,67 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
   const localCanvasRef = useRef<HTMLDivElement>(null);
   const flowContentWrapperRef = useRef<HTMLDivElement>(null);
 
-  const canvasElementRef = (ref || localCanvasRef) as React.RefObject<HTMLDivElement>;
-
   const onDropNodeRef = useRef(onDropNode);
   useEffect(() => {
     onDropNodeRef.current = onDropNode;
   }, [onDropNode]);
 
+  const canvasElementRef = (ref || localCanvasRef) as React.RefObject<HTMLDivElement>;
+
+  // Refs para zoomLevel e canvasOffset para estabilizar o stableOnDropNode
+  const zoomLevelRef = useRef(zoomLevel);
+  const canvasOffsetRef = useRef(canvasOffset);
+
+  useEffect(() => {
+    zoomLevelRef.current = zoomLevel;
+  }, [zoomLevel]);
+
+  useEffect(() => {
+    canvasOffsetRef.current = canvasOffset;
+  }, [canvasOffset]);
+
   const stableOnDropNode = useCallback((item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
-    const clientOffset = monitor.getClientOffset();
-    if (clientOffset && canvasElementRef.current) { 
-      const canvasRect = canvasElementRef.current.getBoundingClientRect();
+    const clientOffset = monitor.getClientOffset(); // Coordenadas do mouse relativas à viewport
+    if (clientOffset && canvasElementRef.current) {
+      const canvasRect = canvasElementRef.current.getBoundingClientRect(); // Retângulo do canvas EXTERNO
       
       const xOnCanvas = clientOffset.x - canvasRect.left;
       const yOnCanvas = clientOffset.y - canvasRect.top;
 
-      const logicalX = (xOnCanvas - canvasOffset.x) / zoomLevel;
-      const logicalY = (yOnCanvas - canvasOffset.y) / zoomLevel;
+      // Usar refs para zoomLevel e canvasOffset atuais
+      const currentZoom = zoomLevelRef.current;
+      const currentOffset = canvasOffsetRef.current;
 
-      console.log('[Canvas] Drop event triggered (target: flowContentWrapper, using stable ref)', { item, clientOffset, logicalX, logicalY });
+      const logicalX = (xOnCanvas - currentOffset.x) / currentZoom;
+      const logicalY = (yOnCanvas - currentOffset.y) / currentZoom;
+
+      console.log('[Canvas] Drop event triggered (target: canvasElementRef, using stable ref, with zoom/offset refs)', { item, clientOffset, logicalX, logicalY });
       onDropNodeRef.current(item, { x: logicalX, y: logicalY });
     } else {
       console.warn('[Canvas] Drop failed: clientOffset or canvasElementRef.current is null');
     }
-  }, [zoomLevel, canvasOffset, canvasElementRef]); 
+  }, [onDropNodeRef, canvasElementRef]); // Dependências estáveis: onDropNodeRef (ref), canvasElementRef (ref)
 
   const [{ isOver, canDrop: dndCanDrop }, drop] = useDrop(() => ({
     accept: ITEM_TYPE_BLOCK,
-    drop: stableOnDropNode,
+    drop: stableOnDropNode, // stableOnDropNode agora é muito estável
     collect: (monitor) => ({
       isOver: !!monitor.isOver(),
       canDrop: !!monitor.canDrop(),
     }),
-  }), [stableOnDropNode]);
+  }), [stableOnDropNode]); // A dependência aqui é a referência de stableOnDropNode, que agora é estável
 
   useEffect(() => {
-    // Attach drop to the content wrapper if zoom/pan model is used, otherwise to canvasElementRef
-    const targetRef = flowContentWrapperRef.current ? flowContentWrapperRef : canvasElementRef;
-    if (targetRef.current) {
-      console.log('[Canvas] Attaching drop target to ref:', targetRef.current);
-      drop(targetRef.current);
+    if (canvasElementRef.current) {
+      console.log('[Canvas] Attaching drop target to ref (canvasElementRef):', canvasElementRef.current);
+      drop(canvasElementRef.current);
     } else {
-      console.warn('[Canvas] Attaching drop target: targetRef.current is null.');
+      console.warn('[Canvas] Attaching drop target: canvasElementRef.current is null.');
     }
-  }, [drop, canvasElementRef, flowContentWrapperRef]); // Add flowContentWrapperRef if it can be the target
+  }, [drop, canvasElementRef]);
   
   useEffect(() => {
+    // Este log é útil para depurar o comportamento do dnd
     console.log('[Canvas] Monitored props: isOver:', isOver, 'canDrop:', dndCanDrop);
   }, [isOver, dndCanDrop]);
 
@@ -104,7 +119,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     return map;
   }, [nodes]);
 
-  // console.log("[Canvas] Rendering with nodes:", nodes); // Kept for general node checking
+  // console.log("[Canvas] Rendering with nodes:", nodes);
 
   const renderedNodes = useMemo(() => (
     nodes.map((node) => {
@@ -113,7 +128,6 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
           key={node.id}
           className="absolute z-20 pointer-events-auto" 
           style={{ left: node.x, top: node.y, width: NODE_WIDTH }} 
-          // layout prop removida para performance
           initial={{ scale: 0.95, opacity: 0.8 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
@@ -223,17 +237,17 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
           {renderedConnections}
           {drawingLine && (
             <>
-              {console.log('[Canvas] Drawing line active. Data:', JSON.parse(JSON.stringify(drawingLine)), 'Offset:', JSON.parse(JSON.stringify(canvasOffset)), 'Zoom:', zoomLevel)}
+              {/* console.log('[Canvas] Drawing line active. Data:', JSON.parse(JSON.stringify(drawingLine)), 'Offset:', JSON.parse(JSON.stringify(canvasOffsetRef.current)), 'Zoom:', zoomLevelRef.current) */}
               <path
                 d={drawBezierPath(
                   drawingLine.startX, 
                   drawingLine.startY,
-                  (drawingLine.currentX - canvasOffset.x) / zoomLevel, 
-                  (drawingLine.currentY - canvasOffset.y) / zoomLevel
+                  drawingLine.currentX, // Já é lógico
+                  drawingLine.currentY  // Já é lógico
                 )}
                 stroke="hsl(var(--accent))"
                 strokeOpacity="0.8"
-                strokeWidth={2.5 / zoomLevel} 
+                strokeWidth={2.5 / zoomLevelRef.current} 
                 fill="none"
                 strokeDasharray="7,3" 
                 markerEnd="url(#arrowhead)"
