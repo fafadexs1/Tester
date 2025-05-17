@@ -28,12 +28,16 @@ async function storeRequestDetails(request: NextRequest) {
   console.log(`[Evolution API Webhook Store] IP: ${ip}, Geo: ${JSON.stringify(geo)}, Content-Type: ${contentType}`);
 
   let payload: any = { message: "Payload not processed or not applicable for this request method." };
+  let bodyAsText: string | null = null;
 
   // Try to read body for methods that typically have one
   if (method !== 'GET' && method !== 'HEAD') {
     try {
-      const bodyAsText = await request.text(); 
-      if (bodyAsText) {
+      console.log(`[Evolution API Webhook Store] Attempting to read request body as text for ${method}...`);
+      bodyAsText = await request.text(); 
+
+      if (bodyAsText && bodyAsText.trim() !== '') {
+        console.log(`[Evolution API Webhook Store] Successfully read body as text. Length: ${bodyAsText.length}. Content-Type: ${contentType}`);
         if (contentType && contentType.includes('application/json')) {
           try {
             payload = JSON.parse(bodyAsText);
@@ -43,17 +47,23 @@ async function storeRequestDetails(request: NextRequest) {
             payload = { raw_text: bodyAsText, parse_error: jsonError.message, original_content_type: contentType };
           }
         } else {
-          // Store as raw text if not explicitly JSON or if content type is missing
+          // Store as raw text if not explicitly JSON or if content type is missing/different
           payload = { raw_text: bodyAsText, original_content_type: contentType || 'N/A' };
           console.log(`[Evolution API Webhook Store] Stored non-JSON payload as raw_text for ${method}. Content-Type: ${contentType || 'N/A'}`);
         }
       } else {
-        payload = { message: `Request body was empty for ${method}.`, original_content_type: contentType || 'N/A' };
-        console.log(`[Evolution API Webhook Store] Request body was empty for ${method}. Content-Type: ${contentType || 'N/A'}`);
+        payload = { message: `Request body was empty or whitespace for ${method}.`, original_content_type: contentType || 'N/A' };
+        console.log(`[Evolution API Webhook Store] Request body was empty or whitespace for ${method}. Content-Type: ${contentType || 'N/A'}`);
       }
     } catch (error: any) {
-      console.error(`[Evolution API Webhook Store] Error reading request body for ${method}:`, error.message);
-      payload = { error_reading_body: error.message, original_content_type: contentType || 'N/A' };
+      console.error(`[Evolution API Webhook Store] Error reading/processing request body for ${method}:`, error.message);
+      // Log a preview of the body if it was partially read before an error, or state that it couldn't be read
+      const bodyPreview = bodyAsText ? (bodyAsText.substring(0, 200) + (bodyAsText.length > 200 ? '...' : '')) : "Could not read body text before error.";
+      payload = { 
+        error_reading_processing_body: error.message, 
+        original_content_type: contentType || 'N/A',
+        body_preview_on_error: bodyPreview
+      };
     }
   } else {
      console.log(`[Evolution API Webhook Store] No payload processed for ${method} request (e.g., GET, HEAD).`);
@@ -104,7 +114,6 @@ export async function DELETE(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   // Log the GET request details if it's intended to be an event
-  // For now, this GET is informative, but we'll log it for completeness as requested.
   await storeRequestDetails(request);
   
   // Respond that the GET request was logged
