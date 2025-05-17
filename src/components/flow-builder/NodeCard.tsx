@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import {
   MessageSquareText, Type as InputIcon, ListChecks, Trash2, BotMessageSquare,
-  ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2,
+  ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage, 
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash, 
   Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle
@@ -47,7 +47,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   const isDraggingNode = useRef(false);
   
   const [newTriggerName, setNewTriggerName] = useState('');
-  const [newTriggerType, setNewTriggerType] = useState<'manual' | 'webhook'>('manual');
+  const [newTriggerType, setNewTriggerType] = useState<StartNodeTrigger['type']>('manual');
 
 
   const [isTestResponseModalOpen, setIsTestResponseModalOpen] = useState(false);
@@ -77,13 +77,11 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           .then(result => {
             if (result.error) {
               setSupabaseSchemaError(result.error);
-              // console.error(`[NodeCard - ${node.id}] Error fetching Supabase tables:`, result.error);
               setSupabaseTables([]);
             } else if (result.data) {
               setSupabaseTables(result.data);
-              // console.log(`[NodeCard - ${node.id}] Supabase tables fetched:`, result.data);
               if (node.supabaseTableName && !result.data.some(t => t.name === node.supabaseTableName)) {
-                onUpdate(node.id, { supabaseTableName: '', supabaseIdentifierColumn: '' });
+                onUpdate(node.id, { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseColumnsToSelect: '*' });
               }
             } else {
               setSupabaseTables([]); 
@@ -91,7 +89,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           })
           .catch(err => {
             setSupabaseSchemaError('Falha ao comunicar com o servidor para buscar tabelas.');
-            // console.error(`[NodeCard - ${node.id}] Network/exception fetching Supabase tables:`, err);
              setSupabaseTables([]);
           })
           .finally(() => {
@@ -122,11 +119,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           .then(result => {
             if (result.error) {
               setSupabaseSchemaError(result.error);
-              // console.error(`[NodeCard - ${node.id}] Error fetching columns for ${node.supabaseTableName}:`, result.error);
               setSupabaseColumns([]);
             } else if (result.data) {
               setSupabaseColumns(result.data);
-              // console.log(`[NodeCard - ${node.id}] Columns for ${node.supabaseTableName} fetched:`, result.data);
               if (node.supabaseIdentifierColumn && !result.data.some(c => c.name === node.supabaseIdentifierColumn)) {
                 onUpdate(node.id, { supabaseIdentifierColumn: '' });
               }
@@ -136,7 +131,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           })
            .catch(err => {
             setSupabaseSchemaError(`Falha ao comunicar com o servidor para buscar colunas da tabela ${node.supabaseTableName}.`);
-            // console.error(`[NodeCard - ${node.id}] Network/exception fetching columns for ${node.supabaseTableName}:`, err);
             setSupabaseColumns([]);
           })
           .finally(() => {
@@ -209,7 +203,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       id: uuidv4(),
       name: newTriggerName.trim(),
       type: newTriggerType,
-      webhookPayloadVariable: 'webhook_payload', // Padrão
+      webhookPayloadVariable: 'webhook_payload', 
     };
     if (newTriggerType === 'webhook') {
       newTrigger.webhookId = uuidv4();
@@ -224,16 +218,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     onUpdate(node.id, { triggers: currentTriggers.filter(t => t.id !== triggerIdToRemove) });
   };
 
-  const handleStartTriggerChange = (triggerIdToChange: string, field: keyof StartNodeTrigger, value: string) => {
+  const handleStartTriggerChange = (triggerIdToChange: string, field: keyof StartNodeTrigger, value: string | boolean) => {
     const currentTriggers = [...(node.triggers || [])];
     const triggerIndex = currentTriggers.findIndex(t => t.id === triggerIdToChange);
     if (triggerIndex !== -1) {
       (currentTriggers[triggerIndex] as any)[field] = value;
-       // Se o tipo mudar para webhook e não houver webhookId, gere um.
       if (field === 'type' && value === 'webhook' && !currentTriggers[triggerIndex].webhookId) {
         currentTriggers[triggerIndex].webhookId = uuidv4();
       }
-       // Se mudar para manual, limpe o webhookId (opcional, mas bom para consistência)
       if (field === 'type' && value === 'manual') {
          delete currentTriggers[triggerIndex].webhookId;
       }
@@ -266,7 +258,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   };
 
   const handleTestApiCall = async () => {
-    // console.log('[NodeCard] handleTestApiCall triggered for node:', node.id, 'with URL:', node.apiUrl);
     if (!node.apiUrl || node.apiUrl.trim() === '' || !node.apiUrl.trim().startsWith('http')) {
       toast({
         title: "URL da API ausente ou inválida",
@@ -275,7 +266,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       });
       return;
     }
-
+    console.log('[NodeCard] handleTestApiCall triggered for node:', node.id, 'with URL:', node.apiUrl);
     setIsTestingApi(true);
     setTestResponseData(null);
     setTestResponseError(null);
@@ -358,7 +349,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         });
       }
     } catch (error: any) {
-      // console.error("Erro ao testar API:", error);
       setTestResponseError(`Erro ao conectar à API: ${error.message}`);
       setIsTestResponseModalOpen(true);
       toast({
@@ -434,7 +424,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       'api-call': <Webhook {...iconProps} className="text-red-500" />,
       'delay': <Timer {...iconProps} className="text-yellow-500" />,
       'date-input': <CalendarDays {...iconProps} className="text-sky-500" />,
-      'redirect': <ExternalLink {...iconProps} className="text-lime-500" />,
+      'redirect': <ExternalLink {...iconProps} className="text-lime-600" />,
       'typing-emulation': <MoreHorizontal {...iconProps} className="text-gray-500" />,
       'media-display': <FileImage {...iconProps} className="text-blue-500" />,
       'log-console': <TerminalSquare {...iconProps} className="text-slate-500" />,
@@ -534,7 +524,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     // Para todos os outros nós que não são 'end-flow'
     if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow') {
         return (
-          <div className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">
+          <div 
+            className="absolute -right-2.5 z-10 flex items-center justify-center"
+            style={{ 
+              top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`, 
+              transform: 'translateY(-50%)',
+            }}
+          >
             <div
               className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
               onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}
@@ -672,7 +668,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
-                  <Select value={trigger.type} onValueChange={(value) => handleStartTriggerChange(trigger.id, 'type', value as 'manual' | 'webhook')}>
+                  <Select value={trigger.type} onValueChange={(value) => handleStartTriggerChange(trigger.id, 'type', value as StartNodeTrigger['type'])}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Tipo de Gatilho" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="manual">Manual (Teste)</SelectItem>
@@ -694,20 +690,29 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                           variant="outline" 
                           size="icon" 
                           className="h-7 w-7"
-                          onClick={() => navigator.clipboard.writeText(`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhook/${trigger.webhookId || ''}`)}
+                          onClick={() => {
+                            if (typeof window !== 'undefined') {
+                              navigator.clipboard.writeText(`${window.location.origin}/api/webhook/${trigger.webhookId || ''}`)
+                                .then(() => toast({ title: "URL Copiada!", description: "URL do Webhook copiada para a área de transferência."}))
+                                .catch(() => toast({ title: "Erro", description: "Não foi possível copiar a URL.", variant: "destructive"}));
+                            }
+                          }}
                           title="Copiar URL"
                         >
                           <Copy className="w-3 h-3"/>
                         </Button>
                       </div>
                       <Label htmlFor={`${node.id}-${trigger.id}-webhookPayloadVar`} className="text-xs">Salvar Payload em:</Label>
-                      <Input 
-                        id={`${node.id}-${trigger.id}-webhookPayloadVar`}
-                        placeholder="webhook_payload"
-                        value={trigger.webhookPayloadVariable || 'webhook_payload'}
-                        onChange={(e) => handleStartTriggerChange(trigger.id, 'webhookPayloadVariable', e.target.value)}
-                        className="h-7 text-xs"
-                      />
+                       <div className="relative">
+                        <Input 
+                          id={`${node.id}-${trigger.id}-webhookPayloadVar`}
+                          placeholder="webhook_payload"
+                          value={trigger.webhookPayloadVariable || 'webhook_payload'}
+                          onChange={(e) => handleStartTriggerChange(trigger.id, 'webhookPayloadVariable', e.target.value)}
+                          className="h-7 text-xs pr-8"
+                        />
+                         {renderVariableInserter(trigger.webhookPayloadVariable, (newText) => handleStartTriggerChange(trigger.id, 'webhookPayloadVariable', newText))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -727,7 +732,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               </div>
               <div className="space-y-1">
                 <Label htmlFor={`${node.id}-newTriggerType`} className="text-xs">Tipo</Label>
-                <Select value={newTriggerType} onValueChange={(value) => setNewTriggerType(value as 'manual' | 'webhook')}>
+                <Select value={newTriggerType} onValueChange={(value) => setNewTriggerType(value as StartNodeTrigger['type'])}>
                     <SelectTrigger id={`${node.id}-newTriggerType`} className="h-8 text-xs w-[100px]"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="manual">Manual</SelectItem>
@@ -741,7 +746,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             </div>
           </div>
         );
-      // ... (outros cases)
       case 'message':
         return (
           <div data-no-drag="true">
@@ -771,7 +775,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 </SelectContent>
               </Select>
             </div>
-            <div><Label htmlFor={`${node.id}-varsave`}>Salvar Resposta na Variável</Label><Input id={`${node.id}-varsave`} placeholder="nome_da_variavel" value={node.variableToSaveResponse || ''} onChange={(e) => onUpdate(node.id, { variableToSaveResponse: e.target.value })} /></div>
+            <div>
+                <Label htmlFor={`${node.id}-varsave`}>Salvar Resposta na Variável</Label>
+                <Input id={`${node.id}-varsave`} placeholder="nome_da_variavel" value={node.variableToSaveResponse || ''} onChange={(e) => onUpdate(node.id, { variableToSaveResponse: e.target.value })} />
+            </div>
           </div>
         );
       case 'option':
@@ -788,7 +795,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Label htmlFor={`${node.id}-optionslist`}>Opções (uma por linha)</Label>
                 <Textarea id={`${node.id}-optionslist`} placeholder="Opção 1\nOpção 2" value={node.optionsList || ''} onChange={(e) => onUpdate(node.id, { optionsList: e.target.value })} rows={3}/>
             </div>
-            <div><Label htmlFor={`${node.id}-varsavechoice`}>Salvar Escolha na Variável (opcional)</Label><Input id={`${node.id}-varsavechoice`} placeholder="variavel_escolha" value={node.variableToSaveChoice || ''} onChange={(e) => onUpdate(node.id, { variableToSaveChoice: e.target.value })} /></div>
+            <div>
+                <Label htmlFor={`${node.id}-varsavechoice`}>Salvar Escolha na Variável (opcional)</Label>
+                <Input id={`${node.id}-varsavechoice`} placeholder="variavel_escolha" value={node.variableToSaveChoice || ''} onChange={(e) => onUpdate(node.id, { variableToSaveChoice: e.target.value })} />
+            </div>
             <p className="text-xs text-muted-foreground italic pt-1">Cada opção na lista acima terá um conector de saída dedicado.</p>
           </div>
         );
@@ -852,7 +862,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               </Select>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-caption`}>Legenda</Label>
+                <Label htmlFor={`${node.id}-caption`}>Legenda/Nome do Arquivo</Label>
                 <div className="relative">
                     <Input id={`${node.id}-caption`} value={node.caption || ''} onChange={(e) => onUpdate(node.id, { caption: e.target.value })} className="pr-8"/>
                     {renderVariableInserter(node.caption, (newText) => onUpdate(node.id, { caption: newText }))}
@@ -921,7 +931,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       case 'set-variable':
         return (
           <div className="space-y-3" data-no-drag="true">
-            <div><Label htmlFor={`${node.id}-varname`}>Nome da Variável</Label><Input id={`${node.id}-varname`} placeholder="minhaVariavel" value={node.variableName || ''} onChange={(e) => onUpdate(node.id, { variableName: e.target.value })} /></div>
+            <div>
+                <Label htmlFor={`${node.id}-varname`}>Nome da Variável</Label>
+                <Input id={`${node.id}-varname`} placeholder="minhaVariavel" value={node.variableName || ''} onChange={(e) => onUpdate(node.id, { variableName: e.target.value })} />
+            </div>
             <div>
                 <Label htmlFor={`${node.id}-varval`}>Valor (pode usar {"{{outra_var}}"})</Label>
                 <div className="relative">
@@ -1074,7 +1087,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                     {renderVariableInserter(node.dateInputLabel, (newText) => onUpdate(node.id, { dateInputLabel: newText }))}
                 </div>
             </div>
-            <div><Label htmlFor={`${node.id}-varsavedate`}>Salvar Data na Variável</Label><Input id={`${node.id}-varsavedate`} placeholder="data_nascimento" value={node.variableToSaveDate || ''} onChange={(e) => onUpdate(node.id, { variableToSaveDate: e.target.value })} /></div>
+            <div>
+                <Label htmlFor={`${node.id}-varsavedate`}>Salvar Data na Variável</Label>
+                <Input id={`${node.id}-varsavedate`} placeholder="data_nascimento" value={node.variableToSaveDate || ''} onChange={(e) => onUpdate(node.id, { variableToSaveDate: e.target.value })} />
+            </div>
           </div>
         );
       case 'redirect':
@@ -1146,7 +1162,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 {renderVariableInserter(node.codeSnippet, (newText) => onUpdate(node.id, { codeSnippet: newText }), true)}
               </div>
             </div>
-            <div><Label htmlFor={`${node.id}-codeoutputvar`}>Salvar Saída (objeto) na Variável</Label><Input id={`${node.id}-codeoutputvar`} placeholder="resultado_codigo (ex: resultado_codigo.resultado)" value={node.codeOutputVariable || ''} onChange={(e) => onUpdate(node.id, { codeOutputVariable: e.target.value })} /></div>
+            <div>
+                <Label htmlFor={`${node.id}-codeoutputvar`}>Salvar Saída (objeto) na Variável</Label>
+                <Input id={`${node.id}-codeoutputvar`} placeholder="resultado_codigo (ex: resultado_codigo.resultado)" value={node.codeOutputVariable || ''} onChange={(e) => onUpdate(node.id, { codeOutputVariable: e.target.value })} />
+            </div>
             <p className="text-xs text-muted-foreground">Nota: O código é executado em um ambiente sandbox no servidor.</p>
           </div>
         );
@@ -1167,7 +1186,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                     {renderVariableInserter(node.jsonataExpression, (newText) => onUpdate(node.id, { jsonataExpression: newText }))}
                 </div>
             </div>
-            <div><Label htmlFor={`${node.id}-jsonoutputvar`}>Salvar JSON Transformado na Variável</Label><Input id={`${node.id}-jsonoutputvar`} placeholder="json_transformado" value={node.jsonOutputVariable || ''} onChange={(e) => onUpdate(node.id, { jsonOutputVariable: e.target.value })} /></div>
+            <div>
+                <Label htmlFor={`${node.id}-jsonoutputvar`}>Salvar JSON Transformado na Variável</Label>
+                <Input id={`${node.id}-jsonoutputvar`} placeholder="json_transformado" value={node.jsonOutputVariable || ''} onChange={(e) => onUpdate(node.id, { jsonOutputVariable: e.target.value })} />
+            </div>
           </div>
         );
       case 'file-upload':
@@ -1180,9 +1202,18 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                     {renderVariableInserter(node.uploadPromptText, (newText) => onUpdate(node.id, { uploadPromptText: newText }))}
                 </div>
             </div>
-            <div><Label htmlFor={`${node.id}-filefilter`}>Filtro de Tipo de Arquivo (ex: image/*, .pdf)</Label><Input id={`${node.id}-filefilter`} placeholder="image/*, .pdf, .docx" value={node.fileTypeFilter || ''} onChange={(e) => onUpdate(node.id, { fileTypeFilter: e.target.value })} /></div>
-            <div><Label htmlFor={`${node.id}-maxsize`}>Tam. Máx. Arquivo (MB)</Label><Input id={`${node.id}-maxsize`} type="number" placeholder="5" value={node.maxFileSizeMB ?? ''} onChange={(e) => onUpdate(node.id, { maxFileSizeMB: parseInt(e.target.value, 10) || undefined })} /></div>
-            <div><Label htmlFor={`${node.id}-fileurlvar`}>Salvar URL do Arquivo na Variável</Label><Input id={`${node.id}-fileurlvar`} placeholder="url_do_arquivo" value={node.fileUrlVariable || ''} onChange={(e) => onUpdate(node.id, { fileUrlVariable: e.target.value })} /></div>
+            <div>
+                <Label htmlFor={`${node.id}-filefilter`}>Filtro de Tipo de Arquivo (ex: image/*, .pdf)</Label>
+                <Input id={`${node.id}-filefilter`} placeholder="image/*, .pdf, .docx" value={node.fileTypeFilter || ''} onChange={(e) => onUpdate(node.id, { fileTypeFilter: e.target.value })} />
+            </div>
+            <div>
+                <Label htmlFor={`${node.id}-maxsize`}>Tam. Máx. Arquivo (MB)</Label>
+                <Input id={`${node.id}-maxsize`} type="number" placeholder="5" value={node.maxFileSizeMB ?? ''} onChange={(e) => onUpdate(node.id, { maxFileSizeMB: parseInt(e.target.value, 10) || undefined })} />
+            </div>
+            <div>
+                <Label htmlFor={`${node.id}-fileurlvar`}>Salvar URL do Arquivo na Variável</Label>
+                <Input id={`${node.id}-fileurlvar`} placeholder="url_do_arquivo" value={node.fileUrlVariable || ''} onChange={(e) => onUpdate(node.id, { fileUrlVariable: e.target.value })} />
+            </div>
           </div>
         );
       case 'rating-input':
@@ -1195,7 +1226,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                     {renderVariableInserter(node.ratingQuestionText, (newText) => onUpdate(node.id, { ratingQuestionText: newText }))}
                 </div>
             </div>
-            <div><Label htmlFor={`${node.id}-maxrating`}>Avaliação Máxima</Label><Input id={`${node.id}-maxrating`} type="number" placeholder="5" value={node.maxRatingValue ?? ''} onChange={(e) => onUpdate(node.id, { maxRatingValue: parseInt(e.target.value, 10) || 5 })} /></div>
+            <div>
+                <Label htmlFor={`${node.id}-maxrating`}>Avaliação Máxima</Label>
+                <Input id={`${node.id}-maxrating`} type="number" placeholder="5" value={node.maxRatingValue ?? ''} onChange={(e) => onUpdate(node.id, { maxRatingValue: parseInt(e.target.value, 10) || 5 })} />
+            </div>
             <div><Label htmlFor={`${node.id}-ratingicon`}>Ícone de Avaliação</Label>
               <Select value={node.ratingIconType || 'star'} onValueChange={(value) => onUpdate(node.id, { ratingIconType: value as NodeData['ratingIconType'] })}>
                 <SelectTrigger id={`${node.id}-ratingicon`}><SelectValue placeholder="Selecione o ícone" /></SelectTrigger>
@@ -1204,7 +1238,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 </SelectContent>
               </Select>
             </div>
-            <div><Label htmlFor={`${node.id}-ratingoutputvar`}>Salvar Avaliação na Variável</Label><Input id={`${node.id}-ratingoutputvar`} placeholder="avaliacao_usuario" value={node.ratingOutputVariable || ''} onChange={(e) => onUpdate(node.id, { ratingOutputVariable: e.target.value })} /></div>
+            <div>
+                <Label htmlFor={`${node.id}-ratingoutputvar`}>Salvar Avaliação na Variável</Label>
+                <Input id={`${node.id}-ratingoutputvar`} placeholder="avaliacao_usuario" value={node.ratingOutputVariable || ''} onChange={(e) => onUpdate(node.id, { ratingOutputVariable: e.target.value })} />
+            </div>
           </div>
         );
       case 'ai-text-generation':
@@ -1224,7 +1261,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                     {renderVariableInserter(node.aiModelName, (newText) => onUpdate(node.id, { aiModelName: newText }))}
                 </div>
             </div>
-            <div><Label htmlFor={`${node.id}-aioutputvar`}>Salvar Resposta da IA na Variável</Label><Input id={`${node.id}-aioutputvar`} placeholder="resposta_ia" value={node.aiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { aiOutputVariable: e.target.value })} /></div>
+            <div>
+                <Label htmlFor={`${node.id}-aioutputvar`}>Salvar Resposta da IA na Variável</Label>
+                <Input id={`${node.id}-aioutputvar`} placeholder="resposta_ia" value={node.aiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { aiOutputVariable: e.target.value })} />
+            </div>
              <p className="text-xs text-muted-foreground">Esta integração usa Genkit. Configure seu modelo em `src/ai/genkit.ts`.</p>
           </div>
         );
@@ -1312,7 +1352,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 {renderVariableInserter(node.userInputVariable, (newText) => onUpdate(node.id, { userInputVariable: newText }))}
               </div>
             </div>
-            <div><Label htmlFor={`${node.id}-agentresponsevar`}>Salvar Resposta na Variável</Label><Input id={`${node.id}-agentresponsevar`} placeholder="resposta_agente" value={node.agentResponseVariable || ''} onChange={(e) => onUpdate(node.id, { agentResponseVariable: e.target.value })} /></div>
+            <div>
+                <Label htmlFor={`${node.id}-agentresponsevar`}>Salvar Resposta na Variável</Label>
+                <Input id={`${node.id}-agentresponsevar`} placeholder="resposta_agente" value={node.agentResponseVariable || ''} onChange={(e) => onUpdate(node.id, { agentResponseVariable: e.target.value })} />
+            </div>
             <div>
                 <Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional, ex: gemini-1.5-flash)</Label>
                 <div className="relative">
@@ -1320,7 +1363,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                     {renderVariableInserter(node.aiModelName, (newText) => onUpdate(node.id, { aiModelName: newText }))}
                 </div>
             </div>
-            <div><Label htmlFor={`${node.id}-maxturns`}>Máx. Turnos de Conversa (opcional)</Label><Input id={`${node.id}-maxturns`} type="number" placeholder="5" value={node.maxConversationTurns ?? ''} onChange={(e) => onUpdate(node.id, { maxConversationTurns: e.target.value ? parseInt(e.target.value, 10) : undefined })} /></div>
+            <div>
+                <Label htmlFor={`${node.id}-maxturns`}>Máx. Turnos de Conversa (opcional)</Label>
+                <Input id={`${node.id}-maxturns`} type="number" placeholder="5" value={node.maxConversationTurns ?? ''} onChange={(e) => onUpdate(node.id, { maxConversationTurns: e.target.value ? parseInt(e.target.value, 10) : undefined })} />
+            </div>
             <div>
               <Label htmlFor={`${node.id}-temperature`}>Temperatura (0-1, opcional)</Label>
               <div className="flex items-center space-x-2">
@@ -1362,7 +1408,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length > 0 && (
                 <Select 
                     value={node.supabaseTableName || ''} 
-                    onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value, supabaseIdentifierColumn: '', supabaseColumnsToSelect: '*' })}
+                    onValueChange={(value) => onUpdate(node.id, { supabaseTableName: value, supabaseIdentifierColumn: ''})}
                 >
                   <SelectTrigger id={`${node.id}-tableName`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
                   <SelectContent>
