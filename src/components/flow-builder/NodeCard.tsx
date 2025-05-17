@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry } from '@/lib/types';
+import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -26,7 +26,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
-import { START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y, OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y, NODE_HEADER_HEIGHT_APPROX } from '@/lib/constants';
+import { 
+  START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y, 
+  OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y, 
+  NODE_HEADER_HEIGHT_APPROX, NODE_HEADER_CONNECTOR_Y_OFFSET 
+} from '@/lib/constants';
 import { fetchSupabaseTablesAction, fetchSupabaseTableColumnsAction } from '@/lib/supabase/actions';
 
 
@@ -41,7 +45,10 @@ interface NodeCardProps {
 const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartConnection, onDeleteNode, definedVariablesInFlow }) => {
   const { toast } = useToast();
   const isDraggingNode = useRef(false);
+  
   const [newTriggerName, setNewTriggerName] = useState('');
+  const [newTriggerType, setNewTriggerType] = useState<'manual' | 'webhook'>('manual');
+
 
   const [isTestResponseModalOpen, setIsTestResponseModalOpen] = useState(false);
   const [testResponseData, setTestResponseData] = useState<{ status: number; headers: Record<string, string>; body: any } | null>(null);
@@ -70,11 +77,11 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           .then(result => {
             if (result.error) {
               setSupabaseSchemaError(result.error);
-              console.error(`[NodeCard - ${node.id}] Error fetching Supabase tables:`, result.error);
+              // console.error(`[NodeCard - ${node.id}] Error fetching Supabase tables:`, result.error);
               setSupabaseTables([]);
             } else if (result.data) {
               setSupabaseTables(result.data);
-              console.log(`[NodeCard - ${node.id}] Supabase tables fetched:`, result.data);
+              // console.log(`[NodeCard - ${node.id}] Supabase tables fetched:`, result.data);
               if (node.supabaseTableName && !result.data.some(t => t.name === node.supabaseTableName)) {
                 onUpdate(node.id, { supabaseTableName: '', supabaseIdentifierColumn: '' });
               }
@@ -84,7 +91,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           })
           .catch(err => {
             setSupabaseSchemaError('Falha ao comunicar com o servidor para buscar tabelas.');
-            console.error(`[NodeCard - ${node.id}] Network/exception fetching Supabase tables:`, err);
+            // console.error(`[NodeCard - ${node.id}] Network/exception fetching Supabase tables:`, err);
              setSupabaseTables([]);
           })
           .finally(() => {
@@ -115,11 +122,11 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           .then(result => {
             if (result.error) {
               setSupabaseSchemaError(result.error);
-              console.error(`[NodeCard - ${node.id}] Error fetching columns for ${node.supabaseTableName}:`, result.error);
+              // console.error(`[NodeCard - ${node.id}] Error fetching columns for ${node.supabaseTableName}:`, result.error);
               setSupabaseColumns([]);
             } else if (result.data) {
               setSupabaseColumns(result.data);
-              console.log(`[NodeCard - ${node.id}] Columns for ${node.supabaseTableName} fetched:`, result.data);
+              // console.log(`[NodeCard - ${node.id}] Columns for ${node.supabaseTableName} fetched:`, result.data);
               if (node.supabaseIdentifierColumn && !result.data.some(c => c.name === node.supabaseIdentifierColumn)) {
                 onUpdate(node.id, { supabaseIdentifierColumn: '' });
               }
@@ -129,7 +136,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           })
            .catch(err => {
             setSupabaseSchemaError(`Falha ao comunicar com o servidor para buscar colunas da tabela ${node.supabaseTableName}.`);
-            console.error(`[NodeCard - ${node.id}] Network/exception fetching columns for ${node.supabaseTableName}:`, err);
+            // console.error(`[NodeCard - ${node.id}] Network/exception fetching columns for ${node.supabaseTableName}:`, err);
             setSupabaseColumns([]);
           })
           .finally(() => {
@@ -188,28 +195,52 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     onDeleteNode(node.id);
   }, [node.id, onDeleteNode]);
 
-  const handleAddTrigger = () => {
-    if (newTriggerName.trim() === '') return;
+  const handleAddStartTrigger = () => {
+    if (newTriggerName.trim() === '') {
+      toast({ title: "Erro", description: "O nome do gatilho não pode ser vazio.", variant: "destructive" });
+      return;
+    }
     const currentTriggers = node.triggers || [];
-    if (currentTriggers.includes(newTriggerName.trim())) {
+    if (currentTriggers.some(t => t.name === newTriggerName.trim())) {
         toast({ title: "Erro", description: "Nome do gatilho já existe.", variant: "destructive" });
         return;
     }
-    onUpdate(node.id, { triggers: [...currentTriggers, newTriggerName.trim()] });
+    const newTrigger: StartNodeTrigger = {
+      id: uuidv4(),
+      name: newTriggerName.trim(),
+      type: newTriggerType,
+      webhookPayloadVariable: 'webhook_payload', // Padrão
+    };
+    if (newTriggerType === 'webhook') {
+      newTrigger.webhookId = uuidv4();
+    }
+    onUpdate(node.id, { triggers: [...currentTriggers, newTrigger] });
     setNewTriggerName('');
+    setNewTriggerType('manual');
   };
 
-  const handleRemoveTrigger = (indexToRemove: number) => {
+  const handleRemoveStartTrigger = (triggerIdToRemove: string) => {
     const currentTriggers = node.triggers || [];
-    onUpdate(node.id, { triggers: currentTriggers.filter((_, index) => index !== indexToRemove) });
+    onUpdate(node.id, { triggers: currentTriggers.filter(t => t.id !== triggerIdToRemove) });
   };
 
-  const handleTriggerNameChange = (indexToChange: number, newName: string) => {
+  const handleStartTriggerChange = (triggerIdToChange: string, field: keyof StartNodeTrigger, value: string) => {
     const currentTriggers = [...(node.triggers || [])];
-    currentTriggers[indexToChange] = newName;
-    onUpdate(node.id, { triggers: currentTriggers });
+    const triggerIndex = currentTriggers.findIndex(t => t.id === triggerIdToChange);
+    if (triggerIndex !== -1) {
+      (currentTriggers[triggerIndex] as any)[field] = value;
+       // Se o tipo mudar para webhook e não houver webhookId, gere um.
+      if (field === 'type' && value === 'webhook' && !currentTriggers[triggerIndex].webhookId) {
+        currentTriggers[triggerIndex].webhookId = uuidv4();
+      }
+       // Se mudar para manual, limpe o webhookId (opcional, mas bom para consistência)
+      if (field === 'type' && value === 'manual') {
+         delete currentTriggers[triggerIndex].webhookId;
+      }
+      onUpdate(node.id, { triggers: currentTriggers });
+    }
   };
-
+  
   const handleAddListItem = (listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList') => {
     const currentList = (node[listName] as any[] || []);
     onUpdate(node.id, { [listName]: [...currentList, { id: uuidv4(), key: '', value: '' }] });
@@ -235,7 +266,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   };
 
   const handleTestApiCall = async () => {
-    console.log('[NodeCard] handleTestApiCall triggered for node:', node.id, 'with URL:', node.apiUrl);
+    // console.log('[NodeCard] handleTestApiCall triggered for node:', node.id, 'with URL:', node.apiUrl);
     if (!node.apiUrl || node.apiUrl.trim() === '' || !node.apiUrl.trim().startsWith('http')) {
       toast({
         title: "URL da API ausente ou inválida",
@@ -327,7 +358,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         });
       }
     } catch (error: any) {
-      console.error("Erro ao testar API:", error);
+      // console.error("Erro ao testar API:", error);
       setTestResponseError(`Erro ao conectar à API: ${error.message}`);
       setIsTestResponseModalOpen(true);
       toast({
@@ -398,7 +429,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       'whatsapp-text': <BotMessageSquare {...iconProps} className="text-teal-500" />,
       'whatsapp-media': <ImageUp {...iconProps} className="text-indigo-500" />,
       'whatsapp-group': <UserPlus2 {...iconProps} className="text-pink-500" />,
-      // 'whatsapp-webhook-wait' Removido
       'condition': <GitFork {...iconProps} className="text-orange-500" />,
       'set-variable': <Variable {...iconProps} className="text-cyan-500" />,
       'api-call': <Webhook {...iconProps} className="text-red-500" />,
@@ -431,20 +461,20 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       return null; 
     }
     if (node.type === 'start') {
-      return (node.triggers || []).map((triggerName, index) => (
+      return (node.triggers || []).map((trigger, index) => (
         <div
-          key={`trigger-${node.id}-${triggerName.replace(/\s+/g, '-')}-${index}`} 
+          key={trigger.id} 
           className="absolute -right-2.5 z-10 flex items-center"
           style={{ top: `${START_NODE_TRIGGER_INITIAL_Y_OFFSET + index * START_NODE_TRIGGER_SPACING_Y - 10}px` }} 
-          title={`Gatilho: ${triggerName}`}
+          title={`Gatilho: ${trigger.name}`}
         >
-          <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{triggerName}</span>
+          <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
           <div
             className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, triggerName); }}
+            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
             data-connector="true"
             data-handle-type="source"
-            data-handle-id={triggerName}
+            data-handle-id={trigger.name}
           >
             <Hash className="w-3 h-3 text-accent-foreground" />
           </div>
@@ -501,6 +531,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
         </>
       );
     }
+    // Para todos os outros nós que não são 'end-flow'
     if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow') {
         return (
           <div className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-10">
@@ -544,7 +575,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 <Input 
                   id={`${node.id}-whatsappInstanceName`} 
                   placeholder="evolution_instance" 
-                  value={node.instanceName || 'evolution_instance'} 
+                  value={node.instanceName || ''} 
                   onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} 
                   className="pr-8"
                 />
@@ -624,38 +655,93 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
     switch (node.type) {
       case 'start':
         return (
-          <div className="space-y-2" data-no-drag="true">
+          <div className="space-y-3" data-no-drag="true">
             <Label className="text-sm font-medium">Gatilhos de Início</Label>
-            {(node.triggers || []).map((trigger, index) => (
-              <div key={`trigger-input-${node.id}-${index}`} className="flex items-center space-x-2">
+            <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+              {(node.triggers || []).map((trigger) => (
+                <div key={trigger.id} className="p-2.5 border rounded-md bg-muted/30 space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Input
+                      type="text"
+                      value={trigger.name}
+                      onChange={(e) => handleStartTriggerChange(trigger.id, 'name', e.target.value)}
+                      placeholder="Nome do Gatilho"
+                      className="flex-grow h-8 text-xs"
+                    />
+                    <Button variant="ghost" size="icon" onClick={() => handleRemoveStartTrigger(trigger.id)} className="text-destructive hover:text-destructive/80 w-7 h-7" aria-label={`Remover gatilho ${trigger.name}`}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                  <Select value={trigger.type} onValueChange={(value) => handleStartTriggerChange(trigger.id, 'type', value as 'manual' | 'webhook')}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Tipo de Gatilho" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual">Manual (Teste)</SelectItem>
+                      <SelectItem value="webhook">Webhook</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {trigger.type === 'webhook' && (
+                    <div className='space-y-1.5 text-xs'>
+                      <Label htmlFor={`${node.id}-${trigger.id}-webhookUrl`} className="text-xs">URL do Webhook:</Label>
+                      <div className="flex items-center space-x-1.5">
+                        <Input 
+                          id={`${node.id}-${trigger.id}-webhookUrl`} 
+                          type="text" 
+                          readOnly 
+                          value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhook/${trigger.webhookId || ''}`} 
+                          className="bg-input/50 h-7 text-xs"
+                        />
+                        <Button 
+                          variant="outline" 
+                          size="icon" 
+                          className="h-7 w-7"
+                          onClick={() => navigator.clipboard.writeText(`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhook/${trigger.webhookId || ''}`)}
+                          title="Copiar URL"
+                        >
+                          <Copy className="w-3 h-3"/>
+                        </Button>
+                      </div>
+                      <Label htmlFor={`${node.id}-${trigger.id}-webhookPayloadVar`} className="text-xs">Salvar Payload em:</Label>
+                      <Input 
+                        id={`${node.id}-${trigger.id}-webhookPayloadVar`}
+                        placeholder="webhook_payload"
+                        value={trigger.webhookPayloadVariable || 'webhook_payload'}
+                        onChange={(e) => handleStartTriggerChange(trigger.id, 'webhookPayloadVariable', e.target.value)}
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="flex items-end space-x-2 pt-2 border-t mt-2">
+              <div className="flex-grow space-y-1">
+                <Label htmlFor={`${node.id}-newTriggerName`} className="text-xs">Novo Nome</Label>
                 <Input
+                  id={`${node.id}-newTriggerName`}
                   type="text"
-                  value={trigger}
-                  onChange={(e) => handleTriggerNameChange(index, e.target.value)}
-                  placeholder={`Nome do Gatilho ${index + 1}`}
-                  className="flex-grow"
+                  value={newTriggerName}
+                  onChange={(e) => setNewTriggerName(e.target.value)}
+                  placeholder="Nome do gatilho"
+                  className="h-8 text-xs"
                 />
-                <Button variant="ghost" size="icon" onClick={() => handleRemoveTrigger(index)} className="text-destructive hover:text-destructive/80 w-8 h-8" aria-label={`Remover gatilho ${trigger}`}>
-                  <Trash2 className="w-4 h-4" />
-                </Button>
               </div>
-            ))}
-            <div className="flex items-center space-x-2 pt-2">
-              <Input
-                type="text"
-                value={newTriggerName}
-                onChange={(e) => setNewTriggerName(e.target.value)}
-                placeholder="Novo nome de gatilho"
-                className="flex-grow"
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTrigger();}}}
-              />
-              <Button onClick={handleAddTrigger} size="sm" variant="outline">
-                <PlusCircle className="w-4 h-4 mr-1" /> Adicionar
+              <div className="space-y-1">
+                <Label htmlFor={`${node.id}-newTriggerType`} className="text-xs">Tipo</Label>
+                <Select value={newTriggerType} onValueChange={(value) => setNewTriggerType(value as 'manual' | 'webhook')}>
+                    <SelectTrigger id={`${node.id}-newTriggerType`} className="h-8 text-xs w-[100px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual">Manual</SelectItem>
+                      <SelectItem value="webhook">Webhook</SelectItem>
+                    </SelectContent>
+                  </Select>
+              </div>
+              <Button onClick={handleAddStartTrigger} size="sm" variant="outline" className="h-8">
+                <PlusCircle className="w-3.5 h-3.5 mr-1" /> Adicionar
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground italic pt-1">Cada gatilho pode iniciar um caminho diferente no fluxo.</p>
           </div>
         );
+      // ... (outros cases)
       case 'message':
         return (
           <div data-no-drag="true">
@@ -712,7 +798,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <div>
               <Label htmlFor={`${node.id}-instance`}>Instância</Label>
               <div className="relative">
-                <Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || 'evolution_instance'} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
+                <Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
                 {renderVariableInserter(node.instanceName, (newText) => onUpdate(node.id, { instanceName: newText }))}
               </div>
             </div>
@@ -738,7 +824,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <div>
               <Label htmlFor={`${node.id}-instance`}>Instância</Label>
               <div className="relative">
-                <Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || 'evolution_instance'} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
+                <Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
                 {renderVariableInserter(node.instanceName, (newText) => onUpdate(node.id, { instanceName: newText }))}
               </div>
             </div>
@@ -780,7 +866,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <div>
               <Label htmlFor={`${node.id}-instance`}>Instância</Label>
               <div className="relative">
-                <Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || 'evolution_instance'} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
+                <Input id={`${node.id}-instance`} placeholder="evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
                 {renderVariableInserter(node.instanceName, (newText) => onUpdate(node.id, { instanceName: newText }))}
               </div>
             </div>
@@ -1344,7 +1430,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             {(isReadOp || isCreateOp) && (
               <div>
                 <Label htmlFor={`${node.id}-resultVar`}>Salvar Resultado na Variável</Label>
-                <Input id={`${node.id}-resultVar`} placeholder={isReadOp ? (node.supabaseResultVariable || "dados_lidos_supabase") : (node.supabaseResultVariable || "id_linha_criada_supabase")} value={node.supabaseResultVariable || ''} onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} />
+                <Input id={`${node.id}-resultVar`} placeholder={isReadOp ? (node.supabaseResultVariable || "dados_supabase") : (node.supabaseResultVariable || "id_linha_criada_supabase")} value={node.supabaseResultVariable || ''} onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} />
               </div>
             )}
             <p className="text-xs text-muted-foreground">Requer Supabase habilitado e configurado nas Configurações Globais, e que as funções SQL \`get_public_tables\` e \`get_table_columns\` existam no seu banco.</p>
@@ -1405,13 +1491,19 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
         </CardHeader>
-        <CardContent className="p-3.5 text-sm" data-no-drag={node.type === 'api-call' || node.type === 'start' || node.type === 'option' || node.type.startsWith('supabase-') || node.type === 'end-flow'}>
+        <CardContent className="p-3.5 text-sm">
           {renderNodeContent()}
         </CardContent>
       </Card>
       
       {node.type !== 'start' && node.type !== 'end-flow' && (
-        <div className="absolute -left-2.5 top-1/2 -translate-y-1/2 z-10">
+         <div 
+            className="absolute -left-2.5 z-10 flex items-center justify-center"
+            style={{ 
+              top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`, 
+              transform: 'translateY(-50%)',
+            }}
+          >
           <div
               title="Conecte aqui"
               className="w-5 h-5 bg-muted hover:bg-muted-foreground/50 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
@@ -1472,3 +1564,4 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
