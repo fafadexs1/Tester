@@ -20,5 +20,6 @@ export async function GET() {
   }
   
   console.log(`[Evolution API Webhook Logs Route] GET request for logs. Returning ${global.evolutionWebhookLogs.length} log entries.`);
+  // console.log('[Evolution API Webhook Logs Route] Current log content:', JSON.stringify(global.evolutionWebhookLogs, null, 2));
   return NextResponse.json(global.evolutionWebhookLogs, { status: 200 });
 }

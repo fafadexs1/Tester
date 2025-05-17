@@ -24,40 +24,37 @@ async function storeRequestDetails(request: NextRequest) {
   const ip = request.ip || 'unknown IP';
   const geo = request.geo || 'unknown geo';
 
-  console.log(`[Evolution API Webhook Store] ${currentTimestamp} - Received ${method} for ${url}`);
-  console.log(`[Evolution API Webhook Store] IP: ${ip}, Geo: ${JSON.stringify(geo)}, Content-Type: ${contentType}`);
+  console.log(`[Evolution API Webhook Store ENTRY] ${currentTimestamp} - Received ${method} for ${url}`);
+  console.log(`[Evolution API Webhook Store DETAILS] IP: ${ip}, Geo: ${JSON.stringify(geo)}, Content-Type: ${contentType}`);
 
   let payload: any = { message: "Payload not processed or not applicable for this request method." };
   let bodyAsText: string | null = null;
 
-  // Try to read body for methods that typically have one
   if (method !== 'GET' && method !== 'HEAD') {
     try {
       console.log(`[Evolution API Webhook Store] Attempting to read request body as text for ${method}...`);
       bodyAsText = await request.text(); 
 
       if (bodyAsText && bodyAsText.trim() !== '') {
-        console.log(`[Evolution API Webhook Store] Successfully read body as text. Length: ${bodyAsText.length}. Content-Type: ${contentType}`);
+        console.log(`[Evolution API Webhook Store] Successfully read body as text. Length: ${bodyAsText.length}.`);
         if (contentType && contentType.includes('application/json')) {
           try {
             payload = JSON.parse(bodyAsText);
             console.log(`[Evolution API Webhook Store] Parsed JSON payload for ${method}.`);
           } catch (jsonError: any) {
-            console.warn(`[Evolution API Webhook Store] Failed to parse body as JSON for ${method}, storing as raw text. Error: ${jsonError.message}. Content-Type: ${contentType}`);
+            console.warn(`[Evolution API Webhook Store] Failed to parse body as JSON for ${method}, storing as raw text. Error: ${jsonError.message}.`);
             payload = { raw_text: bodyAsText, parse_error: jsonError.message, original_content_type: contentType };
           }
         } else {
-          // Store as raw text if not explicitly JSON or if content type is missing/different
           payload = { raw_text: bodyAsText, original_content_type: contentType || 'N/A' };
-          console.log(`[Evolution API Webhook Store] Stored non-JSON payload as raw_text for ${method}. Content-Type: ${contentType || 'N/A'}`);
+          console.log(`[Evolution API Webhook Store] Stored non-JSON payload as raw_text for ${method}.`);
         }
       } else {
         payload = { message: `Request body was empty or whitespace for ${method}.`, original_content_type: contentType || 'N/A' };
-        console.log(`[Evolution API Webhook Store] Request body was empty or whitespace for ${method}. Content-Type: ${contentType || 'N/A'}`);
+        console.log(`[Evolution API Webhook Store] Request body was empty or whitespace for ${method}.`);
       }
     } catch (error: any) {
       console.error(`[Evolution API Webhook Store] Error reading/processing request body for ${method}:`, error.message);
-      // Log a preview of the body if it was partially read before an error, or state that it couldn't be read
       const bodyPreview = bodyAsText ? (bodyAsText.substring(0, 200) + (bodyAsText.length > 200 ? '...' : '')) : "Could not read body text before error.";
       payload = { 
         error_reading_processing_body: error.message, 
@@ -84,12 +81,16 @@ async function storeRequestDetails(request: NextRequest) {
     console.warn('[Evolution API Webhook Store] global.evolutionWebhookLogs was not an array. Re-initializing.');
     global.evolutionWebhookLogs = [];
   }
-
+  
+  console.log(`[Evolution API Webhook Store] Current logs count BEFORE unshift: ${global.evolutionWebhookLogs.length}`);
   global.evolutionWebhookLogs.unshift(logEntry);
+  console.log(`[Evolution API Webhook Store] Log entry unshifted. New logs count: ${global.evolutionWebhookLogs.length}`);
+
   if (global.evolutionWebhookLogs.length > MAX_LOG_ENTRIES) {
     global.evolutionWebhookLogs.pop();
+    console.log(`[Evolution API Webhook Store] Popped oldest log entry. Logs count: ${global.evolutionWebhookLogs.length}`);
   }
-  console.log(`[Evolution API Webhook Store] Log entry stored. Total logs: ${global.evolutionWebhookLogs.length}`);
+  console.log(`[Evolution API Webhook Store EXIT] Request logged. Total logs in global store: ${global.evolutionWebhookLogs.length}`);
 }
 
 export async function POST(request: NextRequest) {
@@ -113,16 +114,26 @@ export async function DELETE(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  // Log the GET request details if it's intended to be an event
-  await storeRequestDetails(request);
+  // Log the GET request details if it's intended to be an event, e.g. from a test
+  if (request.nextUrl.searchParams.get('logEvent') === 'true') {
+      await storeRequestDetails(request);
+      return NextResponse.json(
+        {
+          status: "received_and_logged",
+          message: "Webhook GET event logged as per 'logEvent=true' query parameter.",
+        },
+        { status: 200 }
+      );
+  }
   
-  // Respond that the GET request was logged
+  // Default GET response for informational purposes
   return NextResponse.json(
     {
-      status: "received",
-      message: "Webhook GET event logged. View logs in the application console or server output.",
-      note: "This endpoint now logs GET requests. For detailed endpoint usage, refer to documentation or previous informational responses if available.",
+      message: "Flowise Lite Webhook Endpoint. Configured to receive Evolution API events via POST.",
+      note: "To view received webhook logs, use the 'Console' -> 'Logs de Eventos da API Evolution' in the Flowise Lite application.",
+      testInstructions: "You can send POST requests to this endpoint. GET requests to this specific URL are informational unless 'logEvent=true' query parameter is used."
     },
     { status: 200 }
   );
 }
+
