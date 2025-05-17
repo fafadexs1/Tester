@@ -2,13 +2,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import type { WorkspaceData } from '@/lib/types';
+import type { WorkspaceData, StartNodeTrigger } from '@/lib/types'; // Adicionado StartNodeTrigger
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, 
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy,
-  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText
+  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon // Adicionado WebhookIcon
 } from 'lucide-react';
 import {
   Dialog,
@@ -55,7 +55,9 @@ interface WebhookLogEntry {
   url?: string;
   headers?: Record<string, string>;
   payload?: any;
-  error?: any; // Kept if the original error logging in webhook receiver is to be used
+  ip?: string;
+  geo?: any;
+  extractedMessage?: string;
 }
 
 interface TopBarProps {
@@ -68,6 +70,8 @@ interface TopBarProps {
   appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
+  onZoom: (direction: 'in' | 'out' | 'reset') => void;
+  currentZoomLevel: number;
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -80,6 +84,8 @@ const TopBar: React.FC<TopBarProps> = ({
   appName = "Flowise Lite",
   isChatPanelOpen,
   onToggleChatPanel,
+  onZoom,
+  currentZoomLevel,
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -107,6 +113,17 @@ const TopBar: React.FC<TopBarProps> = ({
   const [defaultEvolutionInstanceName, setDefaultEvolutionInstanceName] = useState('');
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
   const [flowiseLiteGlobalWebhookUrl, setFlowiseLiteGlobalWebhookUrl] = useState('');
+  const [evolutionWebhookStartTrigger, setEvolutionWebhookStartTrigger] = useState('');
+  const [evolutionWebhookPayloadVariable, setEvolutionWebhookPayloadVariable] = useState('webhook_evolution_payload');
+  const [evolutionMessageJsonPath, setEvolutionMessageJsonPath] = useState('data.message.conversation');
+  const [evolutionReceivedMessageVariable, setEvolutionReceivedMessageVariable] = useState('mensagem_whatsapp');
+
+  const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
+  const startNodeTriggers = useMemo(() => {
+    if (!activeWorkspace) return [];
+    const startNode = activeWorkspace.nodes.find(node => node.type === 'start');
+    return startNode?.triggers?.map(t => t.name) || [];
+  }, [activeWorkspace]);
 
 
   useEffect(() => {
@@ -117,48 +134,40 @@ const TopBar: React.FC<TopBarProps> = ({
 
   useEffect(() => {
     if (isSettingsDialogOpen) { 
-      const savedSupabaseUrl = localStorage.getItem('supabaseUrl') || '';
-      const savedSupabaseAnonKey = localStorage.getItem('supabaseAnonKey') || '';
-      const savedSupabaseServiceKey = localStorage.getItem('supabaseServiceKey') || '';
-      const savedIsSupabaseEnabled = localStorage.getItem('isSupabaseEnabled') === 'true';
-      
-      setSupabaseUrl(savedSupabaseUrl);
-      setSupabaseAnonKey(savedSupabaseAnonKey);
-      setSupabaseServiceKey(savedSupabaseServiceKey);
-      setIsSupabaseEnabled(savedIsSupabaseEnabled);
+      // Supabase
+      setSupabaseUrl(localStorage.getItem('supabaseUrl') || '');
+      setSupabaseAnonKey(localStorage.getItem('supabaseAnonKey') || '');
+      setSupabaseServiceKey(localStorage.getItem('supabaseServiceKey') || '');
+      setIsSupabaseEnabled(localStorage.getItem('isSupabaseEnabled') === 'true');
 
-      const savedPostgresHost = localStorage.getItem('postgresHost') || '';
-      const savedPostgresPort = localStorage.getItem('postgresPort') || '';
-      const savedPostgresUser = localStorage.getItem('postgresUser') || '';
-      const savedPostgresPassword = localStorage.getItem('postgresPassword') || '';
-      const savedPostgresDatabase = localStorage.getItem('postgresDatabase') || '';
-      const savedIsPostgresEnabled = localStorage.getItem('isPostgresEnabled') === 'true';
+      // PostgreSQL
+      setPostgresHost(localStorage.getItem('postgresHost') || '');
+      setPostgresPort(localStorage.getItem('postgresPort') || '');
+      setPostgresUser(localStorage.getItem('postgresUser') || '');
+      setPostgresPassword(localStorage.getItem('postgresPassword') || '');
+      setPostgresDatabase(localStorage.getItem('postgresDatabase') || '');
+      setIsPostgresEnabled(localStorage.getItem('isPostgresEnabled') === 'true');
 
-      setPostgresHost(savedPostgresHost);
-      setPostgresPort(savedPostgresPort);
-      setPostgresUser(savedPostgresUser);
-      setPostgresPassword(savedPostgresPassword);
-      setPostgresDatabase(savedPostgresDatabase);
-      setIsPostgresEnabled(savedIsPostgresEnabled);
-
-      const savedEvolutionApiBaseUrl = localStorage.getItem('evolutionApiBaseUrl') || '';
-      const savedEvolutionGlobalApiKey = localStorage.getItem('evolutionApiKey') || '';
-      const savedDefaultEvolutionInstanceName = localStorage.getItem('defaultEvolutionInstanceName') || '';
-      const savedIsEvolutionApiEnabled = localStorage.getItem('isEvolutionApiEnabled') === 'true';
-
-      setEvolutionApiBaseUrl(savedEvolutionApiBaseUrl);
-      setEvolutionGlobalApiKey(savedEvolutionGlobalApiKey);
-      setDefaultEvolutionInstanceName(savedDefaultEvolutionInstanceName);
-      setIsEvolutionApiEnabled(savedIsEvolutionApiEnabled);
+      // Evolution API
+      setEvolutionApiBaseUrl(localStorage.getItem('evolutionApiBaseUrl') || '');
+      setEvolutionGlobalApiKey(localStorage.getItem('evolutionApiKey') || '');
+      setDefaultEvolutionInstanceName(localStorage.getItem('defaultEvolutionInstanceName') || '');
+      setIsEvolutionApiEnabled(localStorage.getItem('isEvolutionApiEnabled') === 'true');
+      setEvolutionWebhookStartTrigger(localStorage.getItem('evolutionWebhookStartTrigger') || '');
+      setEvolutionWebhookPayloadVariable(localStorage.getItem('evolutionWebhookPayloadVariable') || 'webhook_evolution_payload');
+      setEvolutionMessageJsonPath(localStorage.getItem('evolutionMessageJsonPath') || 'data.message.conversation');
+      setEvolutionReceivedMessageVariable(localStorage.getItem('evolutionReceivedMessageVariable') || 'mensagem_whatsapp');
     }
   }, [isSettingsDialogOpen]);
 
   const handleSaveSettings = () => {
+    // Supabase
     localStorage.setItem('supabaseUrl', supabaseUrl);
     localStorage.setItem('supabaseAnonKey', supabaseAnonKey);
     localStorage.setItem('supabaseServiceKey', supabaseServiceKey);
     localStorage.setItem('isSupabaseEnabled', String(isSupabaseEnabled));
 
+    // PostgreSQL
     localStorage.setItem('postgresHost', postgresHost);
     localStorage.setItem('postgresPort', postgresPort);
     localStorage.setItem('postgresUser', postgresUser);
@@ -166,15 +175,30 @@ const TopBar: React.FC<TopBarProps> = ({
     localStorage.setItem('postgresDatabase', postgresDatabase);
     localStorage.setItem('isPostgresEnabled', String(isPostgresEnabled));
 
+    // Evolution API
     localStorage.setItem('evolutionApiBaseUrl', evolutionApiBaseUrl);
     localStorage.setItem('evolutionApiKey', evolutionGlobalApiKey);
     localStorage.setItem('defaultEvolutionInstanceName', defaultEvolutionInstanceName);
     localStorage.setItem('isEvolutionApiEnabled', String(isEvolutionApiEnabled));
+    localStorage.setItem('evolutionWebhookStartTrigger', evolutionWebhookStartTrigger);
+    localStorage.setItem('evolutionWebhookPayloadVariable', evolutionWebhookPayloadVariable);
+    localStorage.setItem('evolutionMessageJsonPath', evolutionMessageJsonPath);
+    localStorage.setItem('evolutionReceivedMessageVariable', evolutionReceivedMessageVariable);
 
     console.log("Configurações Salvas:", { 
-      supabase: { supabaseUrl, supabaseAnonKey, supabaseServiceKeyExists: supabaseServiceKey.length > 0, isSupabaseEnabled },
+      supabase: { supabaseUrl, supabaseAnonKeyExists: supabaseAnonKey.length > 0, supabaseServiceKeyExists: supabaseServiceKey.length > 0, isSupabaseEnabled },
       postgresql: { postgresHost, postgresPort, postgresUser, postgresDatabase, isPostgresEnabled, postgresPasswordExists: postgresPassword.length > 0 },
-      evolutionApi: { evolutionApiBaseUrl, evolutionApiKeyExists: evolutionGlobalApiKey.length > 0, defaultEvolutionInstanceName, isEvolutionApiEnabled, flowiseLiteGlobalWebhookUrl }
+      evolutionApi: { 
+        evolutionApiBaseUrl, 
+        evolutionApiKeyExists: evolutionGlobalApiKey.length > 0, 
+        defaultEvolutionInstanceName, 
+        isEvolutionApiEnabled, 
+        flowiseLiteGlobalWebhookUrl,
+        evolutionWebhookStartTrigger,
+        evolutionWebhookPayloadVariable,
+        evolutionMessageJsonPath,
+        evolutionReceivedMessageVariable
+      }
     });
     toast({
       title: "Configurações Salvas!",
@@ -194,19 +218,20 @@ const TopBar: React.FC<TopBarProps> = ({
     }
     const currentWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
     toast({
-      title: "Publicar Fluxo",
-      description: `O fluxo "${currentWorkspace?.name || 'Selecionado'}" seria colocado em produção. (Funcionalidade de placeholder)`,
+      title: "Publicar Fluxo (Simulado)",
+      description: `O fluxo "${currentWorkspace?.name || 'Selecionado'}" seria colocado em produção.`,
       variant: "default",
     });
   };
 
-  const fetchEvolutionWebhookLogs = async () => {
+  const fetchEvolutionWebhookLogs = useCallback(async () => {
     setIsLoadingEvolutionLogs(true);
     setEvolutionLogsError(null);
     try {
       const response = await fetch('/api/evolution/webhook-logs');
       if (!response.ok) {
-        throw new Error(`Erro ao buscar logs: ${response.statusText}`);
+        const errorData = await response.text();
+        throw new Error(`Erro ao buscar logs: ${response.status} - ${errorData}`);
       }
       const data: WebhookLogEntry[] = await response.json();
       setEvolutionWebhookLogEntries(data);
@@ -217,13 +242,13 @@ const TopBar: React.FC<TopBarProps> = ({
     } finally {
       setIsLoadingEvolutionLogs(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (isWebhookLogsDialogOpen) {
       fetchEvolutionWebhookLogs();
     }
-  }, [isWebhookLogsDialogOpen]);
+  }, [isWebhookLogsDialogOpen, fetchEvolutionWebhookLogs]);
 
 
   const settingsCategories: { id: SettingsCategory; label: string; icon: React.ReactNode }[] = [
@@ -324,13 +349,12 @@ const TopBar: React.FC<TopBarProps> = ({
                 <span>Logs de Eventos da API Evolution</span>
               </DropdownMenuItem>
               <DropdownMenuItem disabled>
-                {/* <History className="mr-2 h-4 w-4" /> */}
+                <FileText className="mr-2 h-4 w-4" />
                 <span>Logs de Execução do Fluxo</span>
                 <span className="ml-auto text-xs text-muted-foreground">(Em Breve)</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-
 
           <Button 
             onClick={handlePublishFlow} 
@@ -425,7 +449,7 @@ const TopBar: React.FC<TopBarProps> = ({
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setActiveSettingsCategory('database'); setIsSettingsDialogOpen(true); }}>
                 <Settings className="mr-2 h-4 w-4" />
-                <span>Configurações</span>
+                <span>Configurações Globais</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem>
@@ -440,7 +464,7 @@ const TopBar: React.FC<TopBarProps> = ({
       <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
         <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl bg-card max-h-[85vh] flex flex-col p-0">
           <DialogHeader className="px-6 py-4 border-b">
-            <DialogTitle className="text-xl">Configurações da Aplicação</DialogTitle>
+            <DialogTitle className="text-xl">Configurações Globais</DialogTitle>
           </DialogHeader>
           
           <div className="flex flex-1 overflow-hidden">
@@ -464,7 +488,7 @@ const TopBar: React.FC<TopBarProps> = ({
             <main className="flex-1 p-6 overflow-y-auto space-y-6">
               {activeSettingsCategory === 'database' && (
                 <section>
-                  <h3 className="text-lg font-semibold text-card-foreground mb-4">Configurações de Banco de Dados</h3>
+                  <h3 className="text-lg font-semibold text-card-foreground mb-4">Banco de Dados</h3>
                   <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={isSupabaseEnabled ? 'supabase' : (isPostgresEnabled ? 'postgresql' : undefined) }>
                     <AccordionItem value="supabase" className="border rounded-lg shadow-sm">
                       <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
@@ -509,7 +533,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                 />
                                </div>
                               <p className="text-xs text-muted-foreground mt-1">
-                                Usada para acesso público e RLS (Row Level Security).
+                                Usada para acesso no lado do cliente, respeitando RLS.
                               </p>
                             </div>
                              <div>
@@ -526,7 +550,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                 />
                                </div>
                               <p className="text-xs text-muted-foreground mt-1">
-                                Usada para operações de backend que bypassam RLS (ex: buscar schema). Mantenha em segredo.
+                                Usada para operações de backend (Server Actions) que bypassam RLS. Mantenha em segredo e use apenas no servidor.
                               </p>
                             </div>
                           </div>
@@ -549,7 +573,7 @@ const TopBar: React.FC<TopBarProps> = ({
                             onCheckedChange={setIsPostgresEnabled}
                             aria-label="Habilitar Integração PostgreSQL"
                           />
-                          <Label htmlFor="enable-postgres" className="text-sm font-medium">Habilitar Integração PostgreSQL</Label>
+                          <Label htmlFor="enable-postgres" className="text-sm font-medium">Habilitar Integração PostgreSQL (Placeholder)</Label>
                         </div>
                         {isPostgresEnabled && (
                           <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
@@ -591,7 +615,7 @@ const TopBar: React.FC<TopBarProps> = ({
 
               {activeSettingsCategory === 'integrations' && (
                  <section>
-                  <h3 className="text-lg font-semibold text-card-foreground mb-4">Configurações de Integrações</h3>
+                  <h3 className="text-lg font-semibold text-card-foreground mb-4">Integrações de Plataformas</h3>
                   <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={isEvolutionApiEnabled ? 'evolution-api' : undefined}>
                     <AccordionItem value="evolution-api" className="border rounded-lg shadow-sm">
                       <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
@@ -623,10 +647,10 @@ const TopBar: React.FC<TopBarProps> = ({
                               />
                             </div>
                              <div>
-                              <Label htmlFor="default-evolution-instance-name" className="text-card-foreground/90 text-sm">Nome da Instância Padrão</Label>
+                              <Label htmlFor="default-evolution-instance-name" className="text-card-foreground/90 text-sm">Nome da Instância Padrão (Opcional)</Label>
                               <Input
                                 id="default-evolution-instance-name"
-                                placeholder="evolution_instance_padrao"
+                                placeholder="minha_instancia_padrao"
                                 value={defaultEvolutionInstanceName}
                                 onChange={(e) => setDefaultEvolutionInstanceName(e.target.value)}
                                 className="bg-input text-foreground mt-1"
@@ -646,10 +670,11 @@ const TopBar: React.FC<TopBarProps> = ({
                                 />
                                </div>
                             </div>
-                             <div className="pt-4 border-t border-border">
-                                <Label className="text-card-foreground/90 text-sm font-medium">URL de Webhook do Flowise Lite (para Evolution API enviar eventos)</Label>
+                            
+                            <div className="pt-4 border-t border-border space-y-2">
+                                <Label className="text-card-foreground/90 text-sm font-medium">Recepção de Webhooks da API Evolution</Label>
                                 <p className="text-xs text-muted-foreground mt-1 mb-2">
-                                  Configure sua instância da API Evolution para enviar eventos (webhooks) para esta URL. Os payloads recebidos serão registrados e poderão ser visualizados no console da aplicação.
+                                  Para que o Flowise Lite receba eventos da sua instância da API Evolution (ex: novas mensagens), configure o seguinte URL de Webhook no seu painel da API Evolution:
                                 </p>
                                 <div className="flex items-center space-x-2">
                                     <Input
@@ -668,7 +693,68 @@ const TopBar: React.FC<TopBarProps> = ({
                                         <Copy className="w-4 h-4" />
                                     </Button>
                                 </div>
+                                <p className="text-xs text-muted-foreground mt-1">Os payloads recebidos neste endpoint serão registrados e visíveis no "Console" (menu da TopBar).</p>
                             </div>
+
+                            <div className="pt-3 border-t border-border space-y-2 mt-3">
+                                <Label className="text-card-foreground/90 text-sm font-medium">Configuração de Processamento de Webhook (para Testes)</Label>
+                                 <p className="text-xs text-muted-foreground mt-1 mb-2">
+                                  Define como o Flowise Lite deve (simuladamente) tratar os webhooks recebidos para iniciar fluxos no painel de teste.
+                                </p>
+                                <div>
+                                  <Label htmlFor="evolution-webhook-start-trigger" className="text-sm">Gatilho de Início para Webhooks desta Instância</Label>
+                                  <Select 
+                                    value={evolutionWebhookStartTrigger} 
+                                    onValueChange={setEvolutionWebhookStartTrigger}
+                                    disabled={startNodeTriggers.length === 0}
+                                  >
+                                    <SelectTrigger id="evolution-webhook-start-trigger" className="mt-1">
+                                      <SelectValue placeholder={startNodeTriggers.length > 0 ? "Selecione um gatilho de início" : "Nenhum gatilho no fluxo ativo"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {startNodeTriggers.map(triggerName => (
+                                        <SelectItem key={triggerName} value={triggerName}>{triggerName}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                   {activeWorkspace && startNodeTriggers.length === 0 && (
+                                    <p className="text-xs text-destructive mt-1">
+                                      Nenhum gatilho encontrado no nó "Início do Fluxo" do workspace "{activeWorkspace.name}". Adicione gatilhos para usar esta funcionalidade.
+                                    </p>
+                                  )}
+                                </div>
+                                <div>
+                                  <Label htmlFor="evolution-webhook-payload-variable" className="text-sm">Salvar Payload Completo do Webhook na Variável</Label>
+                                  <Input
+                                    id="evolution-webhook-payload-variable"
+                                    value={evolutionWebhookPayloadVariable}
+                                    onChange={(e) => setEvolutionWebhookPayloadVariable(e.target.value)}
+                                    placeholder="webhook_evolution_payload"
+                                    className="mt-1"
+                                  />
+                                </div>
+                                <div>
+                                  <Label htmlFor="evolution-message-json-path" className="text-sm">Caminho para Extrair Mensagem do Usuário no JSON</Label>
+                                  <Input
+                                    id="evolution-message-json-path"
+                                    value={evolutionMessageJsonPath}
+                                    onChange={(e) => setEvolutionMessageJsonPath(e.target.value)}
+                                    placeholder="data.message.conversation"
+                                    className="mt-1"
+                                  />
+                                </div>
+                                <div>
+                                  <Label htmlFor="evolution-received-message-variable" className="text-sm">Salvar Mensagem Extraída na Variável</Label>
+                                  <Input
+                                    id="evolution-received-message-variable"
+                                    value={evolutionReceivedMessageVariable}
+                                    onChange={(e) => setEvolutionReceivedMessageVariable(e.target.value)}
+                                    placeholder="mensagem_whatsapp"
+                                    className="mt-1"
+                                  />
+                                </div>
+                            </div>
+
                           </div>
                         )}
                       </AccordionContent>
@@ -691,8 +777,8 @@ const TopBar: React.FC<TopBarProps> = ({
           <DialogHeader>
             <DialogTitle>Logs de Eventos da API Evolution</DialogTitle>
             <DialogDescription>
-              Webhooks recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{flowiseLiteGlobalWebhookUrl}</code>.
-              Os logs são armazenados em memória e zerados ao reiniciar o servidor.
+              Webhooks HTTP recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{flowiseLiteGlobalWebhookUrl}</code>.
+              Os logs são armazenados em memória no servidor e zerados ao reiniciar o servidor.
             </DialogDescription>
           </DialogHeader>
           
@@ -721,7 +807,7 @@ const TopBar: React.FC<TopBarProps> = ({
               <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4">
                 <FileText className="w-12 h-12 mb-3"/>
                 <p className="text-sm">Nenhum log de webhook da API Evolution encontrado.</p>
-                <p className="text-xs mt-1">Verifique se sua API Evolution está configurada para enviar webhooks para a URL correta.</p>
+                <p className="text-xs mt-1">Verifique se sua API Evolution está configurada para enviar webhooks para a URL correta e se o servidor Flowise Lite recebeu algum evento.</p>
               </div>
             )}
             
@@ -735,23 +821,24 @@ const TopBar: React.FC<TopBarProps> = ({
                           {new Date(log.timestamp).toLocaleTimeString()}
                         </span>
                         <span className="font-semibold mr-1">
-                          {log.method || 'POST'}
+                          {log.method || 'N/A'}
                         </span>
-                        {log.error ? (
-                            <span className="text-destructive font-semibold">Erro ao Processar Webhook</span>
-                        ) : log.payload?.event ? (
+                        {log.payload?.event ? (
                             <span className="text-accent font-semibold">{log.payload.event}</span>
                         ) : log.payload?.type ? (
                             <span className="text-accent font-semibold">{log.payload.type}</span>
+                        ) : log.extractedMessage ? (
+                           <span className="text-slate-500 italic">Msg: "{log.extractedMessage.substring(0,30)}{log.extractedMessage.length > 30 ? '...' : ''}"</span>
                         ) : (
                             <span>Evento Recebido</span>
                         )}
                       </summary>
                       <div className="mt-2 p-2 bg-muted rounded-sm overflow-auto text-xs text-foreground/70 space-y-2">
-                        {log.url && (
-                          <div>
-                            <strong>URL:</strong> <span className="break-all">{log.url}</span>
-                          </div>
+                        {log.method && log.url && (
+                          <div><strong>Endpoint:</strong> {log.method} {log.url}</div>
+                        )}
+                        {log.ip && (
+                           <div><strong>IP Origem:</strong> {log.ip} {log.geo?.city && `(${log.geo.city}, ${log.geo.country})`}</div>
                         )}
                         {log.headers && (
                           <div>
@@ -761,10 +848,13 @@ const TopBar: React.FC<TopBarProps> = ({
                             </pre>
                           </div>
                         )}
+                         {log.extractedMessage && (
+                           <div><strong>Mensagem Extraída:</strong> <span className="text-accent">{log.extractedMessage}</span></div>
+                        )}
                         <div>
-                          <strong>Payload:</strong>
+                          <strong>Payload Completo:</strong>
                           <pre className="mt-1 p-1 bg-background/50 rounded text-xs max-h-60 overflow-y-auto">
-                            {JSON.stringify(log.payload || log.error, null, 2)}
+                            {JSON.stringify(log.payload, null, 2)}
                           </pre>
                         </div>
                       </div>
