@@ -137,7 +137,6 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
         transition={{ type: "spring", stiffness: 400, damping: 25, mass: 0.7 }}
-        // layout // Removido para performance
       >
         <NodeCard
           node={node}
@@ -263,8 +262,8 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
               d={drawBezierPath(
                 drawingLine.startX,    // Lógico
                 drawingLine.startY,    // Lógico
-                drawingLine.currentX,  // Lógico (definido pelo FlowBuilderClient)
-                drawingLine.currentY   // Lógico (definido pelo FlowBuilderClient)
+                drawingLine.currentX,  // Já é Lógico (definido pelo FlowBuilderClient)
+                drawingLine.currentY   // Já é Lógico (definido pelo FlowBuilderClient)
               )}
               stroke="hsl(var(--accent))"
               strokeOpacity="0.8"
@@ -282,5 +281,3 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
 });
 Canvas.displayName = 'Canvas';
 export default Canvas;
-
-    
