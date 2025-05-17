@@ -1,15 +1,15 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import type { WorkspaceData, StartNodeTrigger } from '@/lib/types'; // Adicionado StartNodeTrigger
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import type { WorkspaceData, StartNodeTrigger } from '@/lib/types'; 
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard, 
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy,
-  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon // Adicionado WebhookIcon
-} from 'lucide-react';
+  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, ZoomIn, ZoomOut
+} from 'lucide-react'; // Removido ResetSearch daqui
 import {
   Dialog,
   DialogContent,
@@ -74,6 +74,14 @@ interface TopBarProps {
   currentZoomLevel: number;
 }
 
+const ResetZoomIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-4 h-4">
+    <path d="M7.99999 2.66667C6.07999 2.66667 4.24666 3.40001 2.92666 4.72001L2.66666 5.00001L3.66666 6.00001L4.79332 4.87334C5.77999 3.89334 7.09999 3.33334 8.49999 3.33334C9.63332 3.33334 10.7133 3.68001 11.5867 4.34001C12.48 5.01334 13.1067 5.93334 13.3 6.94667L13.3333 7.33334H12C11.8233 7.33334 11.6533 7.26001 11.5267 7.13334C11.4 7.00667 11.3267 6.83667 11.3267 6.66001L11.3333 6.66667C11.06 5.76001 10.4267 4.99334 9.58666 4.50667C8.74666 4.02001 7.76666 3.84667 6.83332 4.02001C5.89332 4.18667 5.03999 4.68667 4.40666 5.43334L2.66666 7.17334V2.66667H7.99999Z" fill="currentColor"/>
+    <path d="M7.99999 13.3333C9.91999 13.3333 11.7533 12.6 13.0733 11.28L13.3333 11L12.3333 10L11.2067 11.1267C10.22 12.1067 8.90002 12.6667 7.50002 12.6667C6.36669 12.6667 5.28669 12.32 4.41335 11.66C3.52002 10.9867 2.89335 10.0667 2.70002 9.05333L2.66669 8.66666H4.00002C4.17669 8.66666 4.34669 8.74 4.47335 8.86666C4.60002 8.99333 4.67335 9.16333 4.67335 9.34L4.66669 9.33333C4.94002 10.24 5.57335 11.0067 6.41335 11.4933C7.25335 11.98 8.23335 12.1533 9.16669 11.98C10.1067 11.8133 10.96 11.3133 11.5933 10.5667L13.3333 8.82666V13.3333H7.99999Z" fill="currentColor"/>
+  </svg>
+);
+
+
 const TopBar: React.FC<TopBarProps> = ({
   workspaces,
   activeWorkspaceId,
@@ -113,12 +121,15 @@ const TopBar: React.FC<TopBarProps> = ({
   const [defaultEvolutionInstanceName, setDefaultEvolutionInstanceName] = useState('');
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
   const [flowiseLiteGlobalWebhookUrl, setFlowiseLiteGlobalWebhookUrl] = useState('');
+  
   const [evolutionWebhookStartTrigger, setEvolutionWebhookStartTrigger] = useState('');
   const [evolutionWebhookPayloadVariable, setEvolutionWebhookPayloadVariable] = useState('webhook_evolution_payload');
   const [evolutionMessageJsonPath, setEvolutionMessageJsonPath] = useState('data.message.conversation');
   const [evolutionReceivedMessageVariable, setEvolutionReceivedMessageVariable] = useState('mensagem_whatsapp');
 
+
   const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
+  
   const startNodeTriggers = useMemo(() => {
     if (!activeWorkspace) return [];
     const startNode = activeWorkspace.nodes.find(node => node.type === 'start');
@@ -153,6 +164,7 @@ const TopBar: React.FC<TopBarProps> = ({
       setEvolutionGlobalApiKey(localStorage.getItem('evolutionApiKey') || '');
       setDefaultEvolutionInstanceName(localStorage.getItem('defaultEvolutionInstanceName') || '');
       setIsEvolutionApiEnabled(localStorage.getItem('isEvolutionApiEnabled') === 'true');
+
       setEvolutionWebhookStartTrigger(localStorage.getItem('evolutionWebhookStartTrigger') || '');
       setEvolutionWebhookPayloadVariable(localStorage.getItem('evolutionWebhookPayloadVariable') || 'webhook_evolution_payload');
       setEvolutionMessageJsonPath(localStorage.getItem('evolutionMessageJsonPath') || 'data.message.conversation');
@@ -216,10 +228,10 @@ const TopBar: React.FC<TopBarProps> = ({
       });
       return;
     }
-    const currentWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
+    const currentWorkspaceToPublish = workspaces.find(ws => ws.id === activeWorkspaceId);
     toast({
       title: "Publicar Fluxo (Simulado)",
-      description: `O fluxo "${currentWorkspace?.name || 'Selecionado'}" seria colocado em produção.`,
+      description: `O fluxo "${currentWorkspaceToPublish?.name || 'Selecionado'}" seria colocado em produção.`,
       variant: "default",
     });
   };
@@ -330,12 +342,25 @@ const TopBar: React.FC<TopBarProps> = ({
             <span className="sr-only">Novo Fluxo</span>
           </Button>
           
+          <div className="flex items-center space-x-1">
+            <Button onClick={() => onZoom('in')} variant="outline" size="icon" aria-label="Aumentar Zoom" className="h-9 w-9">
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+            <Button onClick={() => onZoom('reset')} variant="outline" size="icon" aria-label="Resetar Zoom" className="h-9 w-9 px-2 min-w-[50px] text-xs">
+              <ResetZoomIcon />
+              {Math.round(currentZoomLevel * 100)}%
+            </Button>
+            <Button onClick={() => onZoom('out')} variant="outline" size="icon" aria-label="Diminuir Zoom" className="h-9 w-9">
+              <ZoomOut className="h-4 w-4" />
+            </Button>
+          </div>
+          
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button 
                 variant="outline" 
                 size="icon"
-                className="hidden md:inline-flex"
+                className="hidden md:inline-flex h-9 w-9"
                 aria-label="Console e Logs"
               >
                 <TerminalSquare className="h-4 w-4" />
@@ -360,7 +385,7 @@ const TopBar: React.FC<TopBarProps> = ({
             onClick={handlePublishFlow} 
             variant="default" 
             size="sm"
-            className="bg-teal-600 hover:bg-teal-700 text-white hidden md:inline-flex"
+            className="bg-teal-600 hover:bg-teal-700 text-white hidden md:inline-flex h-9"
             disabled={!activeWorkspaceId}
           >
             <Rocket className="mr-2 h-4 w-4" /> Publicar
@@ -369,7 +394,7 @@ const TopBar: React.FC<TopBarProps> = ({
             onClick={handlePublishFlow} 
             variant="default" 
             size="icon"
-            className="bg-teal-600 hover:bg-teal-700 text-white md:hidden"
+            className="bg-teal-600 hover:bg-teal-700 text-white md:hidden h-9 w-9"
             disabled={!activeWorkspaceId}
             aria-label="Publicar Fluxo"
           >
@@ -381,7 +406,7 @@ const TopBar: React.FC<TopBarProps> = ({
             variant="outline"
             size="sm"
             disabled={!activeWorkspaceId}
-            className="hidden md:inline-flex"
+            className="hidden md:inline-flex h-9"
           >
             <Save className="mr-2 h-4 w-4" /> Salvar
           </Button>
@@ -390,7 +415,7 @@ const TopBar: React.FC<TopBarProps> = ({
             variant="outline" 
             size="icon"
             disabled={!activeWorkspaceId}
-            className="md:hidden"
+            className="md:hidden h-9 w-9"
             aria-label="Salvar Fluxos"
           >
             <Save className="h-4 w-4" />
@@ -401,7 +426,7 @@ const TopBar: React.FC<TopBarProps> = ({
             variant="destructive" 
             size="sm"
             disabled={!activeWorkspaceId}
-            className="hidden md:inline-flex"
+            className="hidden md:inline-flex h-9"
           >
             <Undo2 className="mr-2 h-4 w-4" /> Descartar
           </Button>
@@ -410,7 +435,7 @@ const TopBar: React.FC<TopBarProps> = ({
             variant="destructive" 
             size="icon"
             disabled={!activeWorkspaceId}
-            className="md:hidden"
+            className="md:hidden h-9 w-9"
             aria-label="Descartar Alterações"
           >
             <Undo2 className="h-4 w-4" />
@@ -421,14 +446,14 @@ const TopBar: React.FC<TopBarProps> = ({
             variant="outline"
             size="icon"
             aria-label={isChatPanelOpen ? "Fechar painel de chat" : "Abrir painel de chat"}
-            className="ml-1 md:ml-2"
+            className="ml-1 md:ml-2 h-9 w-9"
           >
             {isChatPanelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full ml-1 md:ml-2">
+              <Button variant="ghost" size="icon" className="rounded-full ml-1 md:ml-2 h-9 w-9">
                 <Avatar className="h-8 w-8">
                   <AvatarImage src="https://placehold.co/40x40.png?text=UE" alt="@usuarioexemplo" data-ai-hint="user avatar"/>
                   <AvatarFallback>UE</AvatarFallback>
@@ -533,7 +558,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                 />
                                </div>
                               <p className="text-xs text-muted-foreground mt-1">
-                                Usada para acesso no lado do cliente, respeitando RLS.
+                                Usada para acesso no lado do cliente (ex: no chat de teste), respeitando RLS.
                               </p>
                             </div>
                              <div>
@@ -550,7 +575,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                 />
                                </div>
                               <p className="text-xs text-muted-foreground mt-1">
-                                Usada para operações de backend (Server Actions) que bypassam RLS. Mantenha em segredo e use apenas no servidor.
+                                Usada para Server Actions que buscam schema (tabelas/colunas). Mantenha em segredo.
                               </p>
                             </div>
                           </div>
@@ -646,7 +671,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                 className="bg-input text-foreground mt-1"
                               />
                             </div>
-                             <div>
+                            <div>
                               <Label htmlFor="default-evolution-instance-name" className="text-card-foreground/90 text-sm">Nome da Instância Padrão (Opcional)</Label>
                               <Input
                                 id="default-evolution-instance-name"
@@ -657,7 +682,7 @@ const TopBar: React.FC<TopBarProps> = ({
                               />
                             </div>
                             <div>
-                              <Label htmlFor="evolution-api-key" className="text-card-foreground/90 text-sm">Chave de API Global da Evolution (Opcional)</Label>
+                              <Label htmlFor="evolution-api-key" className="text-card-foreground/90 text-sm">Chave de API Global da Evolution (Opcional, para enviar)</Label>
                                <div className="flex items-center space-x-2 mt-1">
                                 <KeyRound className="w-4 h-4 text-muted-foreground" />
                                 <Input
@@ -674,7 +699,7 @@ const TopBar: React.FC<TopBarProps> = ({
                             <div className="pt-4 border-t border-border space-y-2">
                                 <Label className="text-card-foreground/90 text-sm font-medium">Recepção de Webhooks da API Evolution</Label>
                                 <p className="text-xs text-muted-foreground mt-1 mb-2">
-                                  Para que o Flowise Lite receba eventos da sua instância da API Evolution (ex: novas mensagens), configure o seguinte URL de Webhook no seu painel da API Evolution:
+                                  Configure a URL abaixo no seu painel da API Evolution para que o Flowise Lite receba eventos (ex: novas mensagens):
                                 </p>
                                 <div className="flex items-center space-x-2">
                                     <Input
@@ -689,20 +714,21 @@ const TopBar: React.FC<TopBarProps> = ({
                                         size="icon"
                                         onClick={() => handleCopyToClipboard(flowiseLiteGlobalWebhookUrl, "URL de Webhook")}
                                         title="Copiar URL de Webhook"
+                                        className="h-9 w-9"
                                     >
                                         <Copy className="w-4 h-4" />
                                     </Button>
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">Os payloads recebidos neste endpoint serão registrados e visíveis no "Console" (menu da TopBar).</p>
+                                <p className="text-xs text-muted-foreground mt-1">Os payloads recebidos neste endpoint serão registrados e visíveis no "Console" do Flowise Lite (menu da TopBar) e no console do servidor Next.js.</p>
                             </div>
 
                             <div className="pt-3 border-t border-border space-y-2 mt-3">
-                                <Label className="text-card-foreground/90 text-sm font-medium">Configuração de Processamento de Webhook (para Testes)</Label>
+                                <Label className="text-card-foreground/90 text-sm font-medium">Configuração de Processamento de Webhook (para Simulação no Chat de Teste)</Label>
                                  <p className="text-xs text-muted-foreground mt-1 mb-2">
-                                  Define como o Flowise Lite deve (simuladamente) tratar os webhooks recebidos para iniciar fluxos no painel de teste.
+                                  Estas configurações definem como o Chat de Teste (Simular Webhook Recebido) deve tratar os payloads para iniciar fluxos.
                                 </p>
                                 <div>
-                                  <Label htmlFor="evolution-webhook-start-trigger" className="text-sm">Gatilho de Início para Webhooks desta Instância</Label>
+                                  <Label htmlFor="evolution-webhook-start-trigger" className="text-sm">Gatilho de Início para Webhooks (Simulação)</Label>
                                   <Select 
                                     value={evolutionWebhookStartTrigger} 
                                     onValueChange={setEvolutionWebhookStartTrigger}
@@ -719,12 +745,12 @@ const TopBar: React.FC<TopBarProps> = ({
                                   </Select>
                                    {activeWorkspace && startNodeTriggers.length === 0 && (
                                     <p className="text-xs text-destructive mt-1">
-                                      Nenhum gatilho encontrado no nó "Início do Fluxo" do workspace "{activeWorkspace.name}". Adicione gatilhos para usar esta funcionalidade.
+                                      Nenhum gatilho (tipo manual ou webhook) encontrado no nó "Início do Fluxo" do workspace "{activeWorkspace.name}".
                                     </p>
                                   )}
                                 </div>
                                 <div>
-                                  <Label htmlFor="evolution-webhook-payload-variable" className="text-sm">Salvar Payload Completo do Webhook na Variável</Label>
+                                  <Label htmlFor="evolution-webhook-payload-variable" className="text-sm">Salvar Payload Completo na Variável (Simulação)</Label>
                                   <Input
                                     id="evolution-webhook-payload-variable"
                                     value={evolutionWebhookPayloadVariable}
@@ -734,7 +760,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                   />
                                 </div>
                                 <div>
-                                  <Label htmlFor="evolution-message-json-path" className="text-sm">Caminho para Extrair Mensagem do Usuário no JSON</Label>
+                                  <Label htmlFor="evolution-message-json-path" className="text-sm">Caminho para Extrair Mensagem do Usuário no JSON (Simulação)</Label>
                                   <Input
                                     id="evolution-message-json-path"
                                     value={evolutionMessageJsonPath}
@@ -744,7 +770,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                   />
                                 </div>
                                 <div>
-                                  <Label htmlFor="evolution-received-message-variable" className="text-sm">Salvar Mensagem Extraída na Variável</Label>
+                                  <Label htmlFor="evolution-received-message-variable" className="text-sm">Salvar Mensagem Extraída na Variável (Simulação)</Label>
                                   <Input
                                     id="evolution-received-message-variable"
                                     value={evolutionReceivedMessageVariable}
@@ -787,7 +813,7 @@ const TopBar: React.FC<TopBarProps> = ({
                 onClick={fetchEvolutionWebhookLogs} 
                 variant="outline"
                 size="sm"
-                className="self-start mb-2"
+                className="self-start mb-2 h-9"
                 disabled={isLoadingEvolutionLogs}
               >
                 <RefreshCw className={cn("mr-2 h-4 w-4", isLoadingEvolutionLogs && "animate-spin")} />
@@ -875,3 +901,5 @@ const TopBar: React.FC<TopBarProps> = ({
 
 export default TopBar;
     
+
+      
