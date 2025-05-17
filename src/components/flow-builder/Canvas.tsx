@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useCallback } from 'react';
 import type { DropTargetMonitor } from 'react-dnd';
 import { useDrop } from 'react-dnd';
 import { motion } from 'framer-motion';
@@ -120,7 +120,6 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
           initial={{ scale: 0.95, opacity: 0.8 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
-          // layout prop removed for performance during drag
         >
           <NodeCard
             node={node}
@@ -250,4 +249,3 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
 Canvas.displayName = 'Canvas';
 export default Canvas;
 
-    
