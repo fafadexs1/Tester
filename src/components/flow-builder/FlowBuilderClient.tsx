@@ -6,8 +6,8 @@ import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBloc
 import { 
   NODE_WIDTH, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX, GRID_SIZE,
   START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y,
-  OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y
-  // MIN_ZOOM, MAX_ZOOM, ZOOM_STEP // Não são mais usados aqui se os botões de zoom forem removidos
+  OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y,
+  MIN_ZOOM, MAX_ZOOM, ZOOM_STEP
 } from '@/lib/constants';
 import FlowSidebar from './FlowSidebar';
 import Canvas from './Canvas';
@@ -65,22 +65,33 @@ export default function FlowBuilderClient() {
   const [highlightedConnectionId, setHighlightedConnectionId] = useState<string | null>(null);
 
   const [canvasOffset, setCanvasOffset] = useState<CanvasOffset>({ x: GRID_SIZE * 2, y: GRID_SIZE * 2 });
-  const [zoomLevel, setZoomLevel] = useState(1); // Mantido para lógica interna do Canvas, mesmo sem botões
+  const [zoomLevel, setZoomLevel] = useState(1);
   
   const isPanning = useRef(false);
   const panStartMousePosition = useRef({ x: 0, y: 0 });
   const initialCanvasOffsetOnPanStart = useRef({ x: 0, y: 0 });
   
-  const mainContentRef = useRef<HTMLDivElement>(null); 
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const [isChatPanelOpen, setIsChatPanelOpen] = useState(true);
   const [hasMounted, setHasMounted] = useState(false);
   const [definedVariablesInFlow, setDefinedVariablesInFlow] = useState<string[]>([]);
 
+  // Refs for stable callbacks that depend on canvasOffset or zoomLevel
+  const canvasOffsetCbRef = useRef(canvasOffset);
+  const zoomLevelCbRef = useRef(zoomLevel);
+
   useEffect(() => {
     setHasMounted(true);
   }, []);
+
+  useEffect(() => {
+    canvasOffsetCbRef.current = canvasOffset;
+  }, [canvasOffset]);
+
+  useEffect(() => {
+    zoomLevelCbRef.current = zoomLevel;
+  }, [zoomLevel]);
 
   const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
   const currentNodes = activeWorkspace ? activeWorkspace.nodes : [];
@@ -96,6 +107,13 @@ export default function FlowBuilderClient() {
             variables.add(varName.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
           }
         });
+         if (n.type === 'start' && n.triggers) {
+          n.triggers.forEach(trigger => {
+            if (trigger.type === 'webhook' && trigger.webhookPayloadVariable) {
+              variables.add(trigger.webhookPayloadVariable.replace(/\{\{/g, '').replace(/\}\}/g, ''));
+            }
+          });
+        }
       });
       
       setDefinedVariablesInFlow(prevDefinedVars => {
@@ -142,7 +160,6 @@ export default function FlowBuilderClient() {
 
   useEffect(() => {
     if (!hasMounted) return;
-    console.log('[FlowBuilderClient] Initializing: Attempting to load workspaces from localStorage.');
     const savedWorkspacesStr = localStorage.getItem(LOCAL_STORAGE_KEY_WORKSPACES);
     let loadedWorkspaces: WorkspaceData[] = [];
 
@@ -159,7 +176,6 @@ export default function FlowBuilderClient() {
             )
         ) {
           loadedWorkspaces = parsedData;
-          console.log('[FlowBuilderClient] Successfully parsed workspaces from localStorage:', loadedWorkspaces.length, 'workspaces');
         } else {
           console.warn("[FlowBuilderClient] Loaded workspaces from localStorage is not a valid WorkspaceData[] array or has invalid structure. Resetting.");
           loadedWorkspaces = [];
@@ -172,8 +188,6 @@ export default function FlowBuilderClient() {
         localStorage.removeItem(LOCAL_STORAGE_KEY_WORKSPACES);
         localStorage.removeItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE);
       }
-    } else {
-        console.log('[FlowBuilderClient] No workspaces found in localStorage.');
     }
 
     if (loadedWorkspaces.length > 0) {
@@ -181,13 +195,10 @@ export default function FlowBuilderClient() {
       const savedActiveId = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE);
       if (savedActiveId && loadedWorkspaces.some(ws => ws.id === savedActiveId)) {
         setActiveWorkspaceId(savedActiveId);
-        console.log('[FlowBuilderClient] Active workspace ID set from localStorage:', savedActiveId);
       } else {
         setActiveWorkspaceId(loadedWorkspaces[0].id);
-        console.log('[FlowBuilderClient] Active workspace ID set to first loaded workspace:', loadedWorkspaces[0].id);
       }
     } else {
-      console.log('[FlowBuilderClient] No valid workspaces loaded or found. Creating an initial workspace.');
       const initialId = uuidv4();
       const initialWorkspace: WorkspaceData = {
         id: initialId,
@@ -200,7 +211,6 @@ export default function FlowBuilderClient() {
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify([initialWorkspace]));
         localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, initialId);
-        console.log('[FlowBuilderClient] Initial workspace created and saved to localStorage. ID:', initialId);
       } catch (e) {
         console.error("[FlowBuilderClient] Failed to save initial workspace to localStorage", e);
       }
@@ -211,7 +221,6 @@ export default function FlowBuilderClient() {
     if (!hasMounted || !activeWorkspaceId) return;
     try {
         localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, activeWorkspaceId);
-        console.log('[FlowBuilderClient] Active workspace ID saved to localStorage:', activeWorkspaceId);
     } catch (e) {
         console.error("[FlowBuilderClient] Failed to save active workspace ID to localStorage", e);
     }
@@ -221,7 +230,6 @@ export default function FlowBuilderClient() {
     if (!hasMounted) return;
     try {
       localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify(workspaces));
-      console.log('[FlowBuilderClient] Workspaces explicitly saved to localStorage. Count:', workspaces.length);
       toast({
         title: "Sucesso!",
         description: "Todos os fluxos foram salvos.",
@@ -239,7 +247,6 @@ export default function FlowBuilderClient() {
 
   const handleDiscardChanges = useCallback(() => {
     if (!hasMounted) return;
-    console.log('[FlowBuilderClient] Discarding changes: Attempting to load workspaces from localStorage.');
     const savedWorkspacesStr = localStorage.getItem(LOCAL_STORAGE_KEY_WORKSPACES);
     if (savedWorkspacesStr) {
       try {
@@ -254,7 +261,6 @@ export default function FlowBuilderClient() {
             )
         ) {
           setWorkspaces(parsedData);
-          console.log('[FlowBuilderClient] Workspaces reloaded from localStorage. Count:', parsedData.length);
           toast({
             title: "Alterações Descartadas",
             description: "Fluxos recarregados a partir do último salvamento.",
@@ -285,7 +291,6 @@ export default function FlowBuilderClient() {
         });
       }
     } else {
-      console.log('[FlowBuilderClient] (Discard) No workspaces found in localStorage to revert to.');
       toast({
         title: "Nenhum Dado Salvo",
         description: "Não há dados salvos no localStorage para reverter.",
@@ -306,13 +311,11 @@ export default function FlowBuilderClient() {
     const updatedWorkspaces = [...workspaces, newWorkspace];
     setWorkspaces(updatedWorkspaces);
     setActiveWorkspaceId(newWorkspaceId);
-    console.log('[FlowBuilderClient] Workspace added. New ID:', newWorkspaceId);
     
     if (hasMounted) { 
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY_WORKSPACES, JSON.stringify(updatedWorkspaces));
         localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE, newWorkspaceId);
-        console.log('[FlowBuilderClient] New workspace and active ID saved to localStorage.');
         toast({
           title: "Novo Fluxo Criado",
           description: `${newWorkspace.name} foi criado e salvo.`,
@@ -330,7 +333,6 @@ export default function FlowBuilderClient() {
 
   const switchWorkspace = useCallback((workspaceId: string) => {
     setActiveWorkspaceId(workspaceId);
-    console.log('[FlowBuilderClient] Switched to workspace ID:', workspaceId);
   }, []);
   
   const updateActiveWorkspace = useCallback((updater: (workspace: WorkspaceData) => WorkspaceData) => {
@@ -346,22 +348,28 @@ export default function FlowBuilderClient() {
   }, [activeWorkspaceId]);
 
   const handleDropNode = useCallback((item: DraggableBlockItemData, logicalDropCoords: { x: number, y: number }) => {
-    console.log('[FlowBuilderClient] handleDropNode called with:', { item, logicalDropCoords: JSON.parse(JSON.stringify(logicalDropCoords)), activeWorkspaceId });
     if (!activeWorkspaceId) {
       console.error('[FlowBuilderClient] No activeWorkspaceId, cannot add node.');
       return;
     }
 
-    const currentWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
+    const currentWksp = workspaces.find(ws => ws.id === activeWorkspaceId); // Renomeado para evitar conflito
     const existingVariableNames: string[] = [];
-    if (currentWorkspace) {
-      currentWorkspace.nodes.forEach(node => {
+    if (currentWksp) { // Usar a variável renomeada
+      currentWksp.nodes.forEach(node => {
         VARIABLE_DEFINING_FIELDS.forEach(field => {
           const varName = node[field] as string | undefined;
           if (varName && varName.trim() !== '') {
             existingVariableNames.push(varName.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
           }
         });
+         if (node.type === 'start' && node.triggers) {
+          node.triggers.forEach(trigger => {
+            if (trigger.type === 'webhook' && trigger.webhookPayloadVariable) {
+              existingVariableNames.push(trigger.webhookPayloadVariable.replace(/\{\{/g, '').replace(/\}\}/g, ''));
+            }
+          });
+        }
       });
     }
     
@@ -380,7 +388,6 @@ export default function FlowBuilderClient() {
       }
     });
 
-
     const baseNodeData: Omit<NodeData, 'id' | 'type' | 'title' | 'x' | 'y'> = {
       text: '', promptText: '', inputType: 'text', variableToSaveResponse: '',
       questionText: '', optionsList: '', variableToSaveChoice: '',
@@ -390,7 +397,6 @@ export default function FlowBuilderClient() {
       logMessage: '', codeSnippet: '', codeOutputVariable: '', inputJson: '', jsonataExpression: '', jsonOutputVariable: '',
       uploadPromptText: '', fileTypeFilter: '', maxFileSizeMB: 5, fileUrlVariable: '',
       ratingQuestionText: '', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: '',
-      
       apiUrl: '', 
       apiMethod: 'GET', 
       apiAuthType: 'none',
@@ -404,7 +410,6 @@ export default function FlowBuilderClient() {
       apiBodyFormDataList: [],
       apiBodyRaw: '',
       apiOutputVariable: '',
-
       redirectUrl: '', dateInputLabel: '', variableToSaveDate: '',
       emailTo: '', emailSubject: '', emailBody: '', emailFrom: '',
       googleSheetId: '', googleSheetName: '', googleSheetRowData: '',
@@ -426,22 +431,18 @@ export default function FlowBuilderClient() {
       x: logicalDropCoords.x - NODE_WIDTH / 2, 
       y: logicalDropCoords.y - NODE_HEADER_HEIGHT_APPROX / 2, 
     };
-    console.log('[FlowBuilderClient] New node created:', JSON.parse(JSON.stringify(newNode)));
     
     updateActiveWorkspace(ws => {
-      console.log('[FlowBuilderClient] Updating active workspace. Current nodes count:', ws.nodes.length);
       const updatedNodes = [...ws.nodes, newNode];
-      console.log('[FlowBuilderClient] Nodes after adding new node. New count:', updatedNodes.length, JSON.parse(JSON.stringify(updatedNodes)));
       return { ...ws, nodes: updatedNodes };
     });
-  }, [activeWorkspaceId, updateActiveWorkspace, workspaces]);
+  }, [activeWorkspaceId, updateActiveWorkspace, workspaces]); // workspaces é necessário para existingVariableNames
 
   const updateNode = useCallback((id: string, changes: Partial<NodeData>) => {
     updateActiveWorkspace(ws => ({
       ...ws,
       nodes: ws.nodes.map(n => (n.id === id ? { ...n, ...changes } : n)),
     }));
-    console.log('[FlowBuilderClient] Node updated:', { id, changes: JSON.parse(JSON.stringify(changes)) });
   }, [updateActiveWorkspace]);
 
   const deleteNode = useCallback((nodeIdToDelete: string) => {
@@ -450,62 +451,66 @@ export default function FlowBuilderClient() {
       nodes: ws.nodes.filter(node => node.id !== nodeIdToDelete),
       connections: ws.connections.filter(conn => conn.from !== nodeIdToDelete && conn.to !== nodeIdToDelete),
     }));
-    console.log('[FlowBuilderClient] Node deleted:', nodeIdToDelete);
   }, [updateActiveWorkspace]);
 
-  const handleStartConnection = useCallback((e: React.MouseEvent, fromNode: NodeData, sourceHandleId = 'default') => {
-    if (!canvasRef.current) {
-      console.warn('[FlowBuilderClient] handleStartConnection: canvasRef.current is null.');
-      return;
-    }
-    const canvasRect = canvasRef.current.getBoundingClientRect();
+  const handleStartConnection = useCallback(
+    (event: React.MouseEvent, fromNode: NodeData, sourceHandleId = 'default') => {
+      if (!canvasRef.current) {
+        console.warn('[FlowBuilderClient] handleStartConnection: canvasRef.current is null.');
+        return;
+      }
+      const currentCanvasOffset = canvasOffsetCbRef.current; // Usa a ref
+      const currentZoomLevel = zoomLevelCbRef.current;     // Usa a ref
+      const canvasRect = canvasRef.current.getBoundingClientRect();
 
-    let startYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET; 
-    if (fromNode.type === 'start' && fromNode.triggers && sourceHandleId) {
-        const triggerIndex = fromNode.triggers.indexOf(sourceHandleId);
-        if (triggerIndex !== -1) {
-            startYOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET + (triggerIndex * START_NODE_TRIGGER_SPACING_Y);
-        }
-    } else if (fromNode.type === 'option' && fromNode.optionsList && sourceHandleId) {
-        const options = (fromNode.optionsList || '').split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
-        const optionIndex = options.indexOf(sourceHandleId);
-        if (optionIndex !== -1) {
-            startYOffset = OPTION_NODE_HANDLE_INITIAL_Y_OFFSET + (optionIndex * OPTION_NODE_HANDLE_SPACING_Y);
-        }
-    } else if (fromNode.type === 'condition') {
-        if (sourceHandleId === 'true') startYOffset = NODE_HEADER_HEIGHT_APPROX * (1/3) + 6;
-        else if (sourceHandleId === 'false') startYOffset = NODE_HEADER_HEIGHT_APPROX * (2/3) + 6;
-    }
+      let startYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET; 
+      if (fromNode.type === 'start' && fromNode.triggers && sourceHandleId) {
+          const triggerIndex = fromNode.triggers.findIndex(t => t.name === sourceHandleId);
+          if (triggerIndex !== -1) {
+              startYOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET + (triggerIndex * START_NODE_TRIGGER_SPACING_Y);
+          }
+      } else if (fromNode.type === 'option' && fromNode.optionsList && sourceHandleId) {
+          const options = (fromNode.optionsList || '').split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
+          const optionIndex = options.indexOf(sourceHandleId);
+          if (optionIndex !== -1) {
+              startYOffset = OPTION_NODE_HANDLE_INITIAL_Y_OFFSET + (optionIndex * OPTION_NODE_HANDLE_SPACING_Y);
+          }
+      } else if (fromNode.type === 'condition') {
+          if (sourceHandleId === 'true') startYOffset = NODE_HEADER_HEIGHT_APPROX * (1/3) + 6;
+          else if (sourceHandleId === 'false') startYOffset = NODE_HEADER_HEIGHT_APPROX * (2/3) + 6;
+      }
 
-    // Convert visual node position (relative to canvas div after transforms) to logical position
-    const logicalNodeX = fromNode.x;
-    const logicalNodeY = fromNode.y;
-    
-    const lineStartX = logicalNodeX + NODE_WIDTH; 
-    const lineStartY = logicalNodeY + startYOffset; 
-    
-    const lineCurrentX = (e.clientX - canvasRect.left - canvasOffset.x) / zoomLevel;
-    const lineCurrentY = (e.clientY - canvasRect.top - canvasOffset.y) / zoomLevel;
+      const logicalNodeX = fromNode.x;
+      const logicalNodeY = fromNode.y;
+      
+      const lineStartX = logicalNodeX + NODE_WIDTH; 
+      const lineStartY = logicalNodeY + startYOffset; 
+      
+      const mouseXOnCanvas = event.clientX - canvasRect.left;
+      const mouseYOnCanvas = event.clientY - canvasRect.top;
+      const lineCurrentX = (mouseXOnCanvas - currentCanvasOffset.x) / currentZoomLevel; // Convertido para lógico
+      const lineCurrentY = (mouseYOnCanvas - currentCanvasOffset.y) / currentZoomLevel; // Convertido para lógico
 
-    setDrawingLine({
-      fromId: fromNode.id,
-      sourceHandleId,
-      startX: lineStartX, 
-      startY: lineStartY, 
-      currentX: lineCurrentX, 
-      currentY: lineCurrentY, 
-    });
-  }, [zoomLevel, canvasOffset]); 
+      setDrawingLine({
+        fromId: fromNode.id,
+        sourceHandleId,
+        startX: lineStartX, 
+        startY: lineStartY, 
+        currentX: lineCurrentX, 
+        currentY: lineCurrentY, 
+      });
+    },
+    [canvasRef] // setDrawingLine é estável, refs são usadas para offset/zoom.
+  ); 
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) { 
-      // e.preventDefault(); // Removido para testar se interfere no drag-and-drop
+    if (e.target === e.currentTarget || (e.target as HTMLElement).id === 'flow-content-wrapper') { 
       isPanning.current = true;
       panStartMousePosition.current = { x: e.clientX, y: e.clientY };
-      initialCanvasOffsetOnPanStart.current = { ...canvasOffset };
+      initialCanvasOffsetOnPanStart.current = { ...canvasOffsetCbRef.current };
       if (e.currentTarget) e.currentTarget.style.cursor = 'grabbing';
     }
-  }, [canvasOffset]);
+  }, []); // Não depende de canvasOffset diretamente, usa ref
 
   const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -517,20 +522,25 @@ export default function FlowBuilderClient() {
       });
     } else if (drawingLine) {
       if (!canvasRef.current) {
-        console.warn("[FlowBuilderClient] handleGlobalMouseMove (drawingLine): canvasRef.current is null.");
         return;
       }
+      const currentCanvasOffset = canvasOffsetCbRef.current; // Usa ref
+      const currentZoomLevel = zoomLevelCbRef.current;     // Usa ref
       const canvasRect = canvasRef.current.getBoundingClientRect();
+      
+      const mouseXOnCanvas = e.clientX - canvasRect.left;
+      const mouseYOnCanvas = e.clientY - canvasRect.top;
+
       setDrawingLine((prev) => {
         if (!prev) return null;
         return {
           ...prev,
-          currentX: (e.clientX - canvasRect.left - canvasOffset.x) / zoomLevel,
-          currentY: (e.clientY - canvasRect.top - canvasOffset.y) / zoomLevel,
+          currentX: (mouseXOnCanvas - currentCanvasOffset.x) / currentZoomLevel,
+          currentY: (mouseYOnCanvas - currentCanvasOffset.y) / currentZoomLevel,
         };
       });
     }
-  }, [drawingLine, zoomLevel, canvasOffset]); 
+  }, [drawingLine]); // setCanvasOffset, setDrawingLine são estáveis. drawingLine é a dependência que muda.
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -544,7 +554,7 @@ export default function FlowBuilderClient() {
       let toId = null;
       if (targetHandleElement) {
           toId = targetHandleElement.closest('[data-node-id]')?.getAttribute('data-node-id');
-      } else if (targetNodeElement) { 
+      } else if (targetNodeElement && !targetNodeElement.closest('[data-connector="true"]')) { 
           toId = targetNodeElement.getAttribute('data-node-id');
       }
 
@@ -562,7 +572,6 @@ export default function FlowBuilderClient() {
                 to: toId as string,
                 sourceHandle: drawingLine.sourceHandleId,
             };
-            console.log("[FlowBuilderClient] Attempting to add connection:", JSON.parse(JSON.stringify(newConnection)));
 
             const isDuplicate = newConnectionsArray.some(
                 c => c.from === newConnection.from && 
@@ -575,22 +584,19 @@ export default function FlowBuilderClient() {
             );
 
             if (isDuplicate) {
-                console.log("[FlowBuilderClient] Duplicate connection prevented (same from, to, and handle).");
+                // No action
             } else if (existingConnectionFromThisSourceHandle) {
-                
                 newConnectionsArray = newConnectionsArray.filter(c => c.id !== existingConnectionFromThisSourceHandle.id);
                 newConnectionsArray.push(newConnection);
-                console.log("[FlowBuilderClient] Replaced existing connection from this specific source handle.");
             } else {
                 newConnectionsArray.push(newConnection);
-                console.log("[FlowBuilderClient] Added new connection.");
             }
             return { ...ws, connections: newConnectionsArray };
         });
       }
       setDrawingLine(null);
     }
-  }, [drawingLine, activeWorkspaceId, updateActiveWorkspace]);
+  }, [drawingLine, activeWorkspaceId, updateActiveWorkspace]); // setDrawingLine é estável
 
   const deleteConnection = useCallback((connectionIdToDelete: string) => {
     updateActiveWorkspace(ws => ({
@@ -598,22 +604,21 @@ export default function FlowBuilderClient() {
         connections: ws.connections.filter(conn => conn.id !== connectionIdToDelete)
     }));
     setHighlightedConnectionId(null);
-    console.log('[FlowBuilderClient] Connection deleted:', connectionIdToDelete);
-  }, [updateActiveWorkspace]);
+  }, [updateActiveWorkspace]); // setHighlightedConnectionId é estável
 
   useEffect(() => {
     document.addEventListener('mousemove', handleGlobalMouseMove);
     document.addEventListener('mouseup', handleGlobalMouseUp);
     
-    const drawingLineRef = React.createRef<DrawingLineData | null>();
-    drawingLineRef.current = drawingLine;
+    const currentDrawingLineRef = React.createRef<DrawingLineData | null>(); 
+    currentDrawingLineRef.current = drawingLine;
 
     const handleMouseLeaveWindow = () => {
       if (isPanning.current) {
         isPanning.current = false;
         if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
       }
-      if (drawingLineRef.current) { 
+      if (currentDrawingLineRef.current) { 
         setDrawingLine(null);
       }
     };
@@ -624,8 +629,44 @@ export default function FlowBuilderClient() {
       document.removeEventListener('mouseup', handleGlobalMouseUp);
       document.body.removeEventListener('mouseleave', handleMouseLeaveWindow);
     };
-  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine]); 
+  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine]); // drawingLine e setDrawingLine são as deps relevantes
   
+
+  const handleZoom = useCallback((direction: 'in' | 'out' | 'reset') => {
+    if (!canvasRef.current) return;
+
+    const currentZoom = zoomLevelCbRef.current;
+    const currentOffset = canvasOffsetCbRef.current;
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    
+    const viewportCenterX = canvasRect.width / 2;
+    const viewportCenterY = canvasRect.height / 2;
+
+    let newZoomLevel: number;
+
+    if (direction === 'reset') {
+      newZoomLevel = 1;
+    } else {
+      const zoomFactor = direction === 'in' ? 1 + ZOOM_STEP : 1 - ZOOM_STEP;
+      newZoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoom * zoomFactor));
+    }
+
+    if (newZoomLevel === currentZoom && direction !== 'reset') return;
+
+    const logicalCenterXBeforeZoom = (viewportCenterX - currentOffset.x) / currentZoom;
+    const logicalCenterYBeforeZoom = (viewportCenterY - currentOffset.y) / currentZoom;
+
+    const visualXOfLogicalCenterAfterZoom = logicalCenterXBeforeZoom * newZoomLevel;
+    const visualYOfLogicalCenterAfterZoom = logicalCenterYBeforeZoom * newZoomLevel;
+    
+    const newOffsetX = viewportCenterX - visualXOfLogicalCenterAfterZoom;
+    const newOffsetY = viewportCenterY - visualYOfLogicalCenterAfterZoom;
+    
+    setZoomLevel(newZoomLevel);
+    setCanvasOffset({ x: newOffsetX, y: newOffsetY });
+
+  }, [setZoomLevel, setCanvasOffset]); // setZoomLevel, setCanvasOffset são estáveis
+
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="flex flex-col h-screen bg-background font-sans select-none overflow-hidden">
@@ -639,20 +680,19 @@ export default function FlowBuilderClient() {
           appName="Flowise Lite"
           isChatPanelOpen={isChatPanelOpen}
           onToggleChatPanel={toggleChatPanel}
-          // As props de zoom foram removidas do TopBar,
-          // mas a lógica de zoom permanece no FlowBuilderClient e Canvas
-          // para o caso de reintroduzirmos controles de zoom futuramente.
+          onZoom={handleZoom}
+          currentZoomLevel={zoomLevel}
         />
-        <div className="flex flex-1 overflow-hidden" ref={mainContentRef}>
+        <div className="flex flex-1 overflow-hidden relative" >
           <FlowSidebar />
-          <div className="flex-1 flex relative overflow-hidden"> {/* Removido flex-col daqui */}
+          <div className="flex-1 flex relative overflow-hidden">
             <Canvas
-              ref={canvasRef} // Passa a ref para o Canvas
+              ref={canvasRef}
               nodes={currentNodes}
               connections={currentConnections}
               drawingLine={drawingLine}
               canvasOffset={canvasOffset}
-              zoomLevel={zoomLevel} // Passa o zoomLevel
+              zoomLevel={zoomLevel}
               onDropNode={handleDropNode}
               onUpdateNode={updateNode}
               onStartConnection={handleStartConnection}
@@ -674,5 +714,3 @@ export default function FlowBuilderClient() {
     </DndProvider>
   );
 }
-
-    

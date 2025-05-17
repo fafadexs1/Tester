@@ -49,19 +49,36 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     onDropNodeCbRef.current = onDropNode;
   }, [onDropNode]);
 
+  // Refs for zoomLevel and canvasOffset to use in stableOnDropNode
+  const zoomLevelRef = useRef(zoomLevel);
+  const canvasOffsetRef = useRef(canvasOffset);
+
+  useEffect(() => {
+    zoomLevelRef.current = zoomLevel;
+  }, [zoomLevel]);
+
+  useEffect(() => {
+    canvasOffsetRef.current = canvasOffset;
+  }, [canvasOffset]);
+
   const stableOnDropNode = useCallback((item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
     const clientOffset = monitor.getClientOffset();
-    if (clientOffset && canvasElementRef.current) {
+    if (clientOffset && canvasElementRef.current) { 
+      const currentZoom = zoomLevelRef.current;
+      const currentCanvasOffset = canvasOffsetRef.current;
       const canvasRect = canvasElementRef.current.getBoundingClientRect();
+      
       const xOnCanvasElement = clientOffset.x - canvasRect.left;
       const yOnCanvasElement = clientOffset.y - canvasRect.top;
-      const logicalX = (xOnCanvasElement - canvasOffset.x) / zoomLevel;
-      const logicalY = (yOnCanvasElement - canvasOffset.y) / zoomLevel;
+      
+      const logicalX = (xOnCanvasElement - currentCanvasOffset.x) / currentZoom;
+      const logicalY = (yOnCanvasElement - currentCanvasOffset.y) / currentZoom;
+      
       onDropNodeCbRef.current(item, { x: logicalX, y: logicalY });
     } else {
-      console.warn('[Canvas] Drop failed: clientOffset or canvasElementRef.current is null');
+      // console.warn('[Canvas] Drop failed: clientOffset or canvasElementRef.current is null');
     }
-  }, [zoomLevel, canvasOffset.x, canvasOffset.y, canvasElementRef]);
+  }, [canvasElementRef, onDropNodeCbRef]); 
 
   const [{ isOver, canDrop: dndCanDrop }, drop] = useDrop(() => ({
     accept: ITEM_TYPE_BLOCK,
@@ -70,10 +87,10 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
       isOver: !!monitor.isOver(),
       canDrop: !!monitor.canDrop(),
     }),
-  }), [stableOnDropNode]);
+  }), [stableOnDropNode]); 
 
   useEffect(() => {
-    const currentCanvasElement = canvasElementRef.current;
+    const currentCanvasElement = canvasElementRef.current; 
     if (currentCanvasElement) {
       drop(currentCanvasElement);
     }
@@ -104,6 +121,8 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     return map;
   }, [nodes]);
 
+  // console.log("[Canvas] Rendering with nodes count:", nodes.length);
+
   const renderedNodes = useMemo(() => (
     nodes.map((node) => (
       <motion.div
@@ -118,6 +137,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
         transition={{ type: "spring", stiffness: 400, damping: 25, mass: 0.7 }}
+        // layout // Removido para performance
       >
         <NodeCard
           node={node}
@@ -167,7 +187,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
       const y2 = targetNode.y + NODE_HEADER_CONNECTOR_Y_OFFSET;
 
       const isHighlighted = highlightedConnectionId === conn.id;
-      const strokeColor = isHighlighted ? 'hsl(var(--destructive))' : 'hsl(var(--accent))'; // Use direct HSL values
+      const strokeColor = isHighlighted ? 'hsl(var(--destructive))' : 'hsl(var(--accent))'; 
 
       const baseStrokeWidth = isHighlighted ? 2.5 : 2;
       const calculatedStrokeWidth = Math.max(0.5, baseStrokeWidth / Math.max(zoomLevel, 0.1));
@@ -192,12 +212,12 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
       );
     })
   ), [connections, nodeMap, highlightedConnectionId, onDeleteConnection, setHighlightedConnectionId, zoomLevel, drawBezierPath]);
-
-  useEffect(() => {
-    if (drawingLine) {
-      // console.log('[Canvas] Drawing line active. Data:', drawingLine, 'Offset:', canvasOffset, 'Zoom:', zoomLevel);
-    }
-  }, [drawingLine, canvasOffset, zoomLevel]);
+  
+  // useEffect(() => {
+  //   if (drawingLine) {
+  //      // console.log('[Canvas] Drawing line active. Data:', JSON.parse(JSON.stringify(drawingLine)), 'Offset:', JSON.parse(JSON.stringify(canvasOffset)), 'Zoom:', zoomLevel);
+  //   }
+  // }, [drawingLine, canvasOffset, zoomLevel]);
 
   const gridDotSize = Math.max(0.2, 0.5 * zoomLevel);
   const gridSpacing = GRID_SIZE * zoomLevel;
@@ -241,10 +261,10 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
           {drawingLine && (
             <path
               d={drawBezierPath(
-                drawingLine.startX,
-                drawingLine.startY,
-                drawingLine.currentX, // Already logical
-                drawingLine.currentY  // Already logical
+                drawingLine.startX,    // Lógico
+                drawingLine.startY,    // Lógico
+                drawingLine.currentX,  // Lógico (definido pelo FlowBuilderClient)
+                drawingLine.currentY   // Lógico (definido pelo FlowBuilderClient)
               )}
               stroke="hsl(var(--accent))"
               strokeOpacity="0.8"

@@ -15,3 +15,8 @@ export const START_NODE_TRIGGER_AREA_MIN_HEIGHT = 50; // Altura mínima da área
 // Constantes para o nó de Múltipla Escolha com handles dinâmicos
 export const OPTION_NODE_HANDLE_INITIAL_Y_OFFSET = 65; // Offset Y do primeiro handle de opção (considerando o campo de pergunta)
 export const OPTION_NODE_HANDLE_SPACING_Y = 30;      // Espaçamento vertical entre os conectores de opção
+
+// Constantes de Zoom
+export const MIN_ZOOM = 0.2;
+export const MAX_ZOOM = 2.5;
+export const ZOOM_STEP = 0.1;
