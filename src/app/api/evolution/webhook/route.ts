@@ -18,49 +18,56 @@ const MAX_LOG_ENTRIES = 50;
 
 async function storeRequestDetails(request: NextRequest) {
   const currentTimestamp = new Date().toISOString();
-  console.log(`[Evolution API Webhook Store] ${currentTimestamp} - Received ${request.method} for ${request.url}`);
+  const { method, url } = request;
+  const headers = Object.fromEntries(request.headers.entries());
+  const contentType = request.headers.get('content-type');
+  const ip = request.ip || 'unknown IP';
+  const geo = request.geo || 'unknown geo';
+
+  console.log(`[Evolution API Webhook Store] ${currentTimestamp} - Received ${method} for ${url}`);
+  console.log(`[Evolution API Webhook Store] IP: ${ip}, Geo: ${JSON.stringify(geo)}, Content-Type: ${contentType}`);
 
   let payload: any = { message: "Payload not processed or not applicable for this request method." };
-  const contentType = request.headers.get('content-type');
 
   // Try to read body for methods that typically have one
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
+  if (method !== 'GET' && method !== 'HEAD') {
     try {
       const bodyAsText = await request.text(); 
       if (bodyAsText) {
         if (contentType && contentType.includes('application/json')) {
           try {
             payload = JSON.parse(bodyAsText);
-            console.log(`[Evolution API Webhook Store] Parsed JSON payload for ${request.method}.`);
+            console.log(`[Evolution API Webhook Store] Parsed JSON payload for ${method}.`);
           } catch (jsonError: any) {
-            console.warn(`[Evolution API Webhook Store] Failed to parse body as JSON for ${request.method}, storing as raw text. Error: ${jsonError.message}`);
+            console.warn(`[Evolution API Webhook Store] Failed to parse body as JSON for ${method}, storing as raw text. Error: ${jsonError.message}. Content-Type: ${contentType}`);
             payload = { raw_text: bodyAsText, parse_error: jsonError.message, original_content_type: contentType };
           }
         } else {
-          payload = { raw_text: bodyAsText, original_content_type: contentType };
-          console.log(`[Evolution API Webhook Store] Stored non-JSON payload as raw_text for ${request.method}.`);
+          // Store as raw text if not explicitly JSON or if content type is missing
+          payload = { raw_text: bodyAsText, original_content_type: contentType || 'N/A' };
+          console.log(`[Evolution API Webhook Store] Stored non-JSON payload as raw_text for ${method}. Content-Type: ${contentType || 'N/A'}`);
         }
       } else {
-        payload = { message: `Request body was empty for ${request.method}.` };
-        console.log(`[Evolution API Webhook Store] Request body was empty for ${request.method}.`);
+        payload = { message: `Request body was empty for ${method}.`, original_content_type: contentType || 'N/A' };
+        console.log(`[Evolution API Webhook Store] Request body was empty for ${method}. Content-Type: ${contentType || 'N/A'}`);
       }
     } catch (error: any) {
-      console.error(`[Evolution API Webhook Store] Error reading request body for ${request.method}:`, error.message);
-      payload = { error_reading_body: error.message };
+      console.error(`[Evolution API Webhook Store] Error reading request body for ${method}:`, error.message);
+      payload = { error_reading_body: error.message, original_content_type: contentType || 'N/A' };
     }
   } else {
-     console.log(`[Evolution API Webhook Store] No payload processed for ${request.method} request.`);
+     console.log(`[Evolution API Webhook Store] No payload processed for ${method} request (e.g., GET, HEAD).`);
   }
 
 
   const logEntry = {
     timestamp: currentTimestamp,
-    method: request.method,
-    url: request.url,
-    headers: Object.fromEntries(request.headers.entries()),
+    method: method,
+    url: url,
+    headers: headers,
     payload: payload,
-    ip: request.ip || 'unknown IP',
-    geo: request.geo || 'unknown geo',
+    ip: ip,
+    geo: geo,
   };
 
   if (!Array.isArray(global.evolutionWebhookLogs)) {
@@ -96,7 +103,8 @@ export async function DELETE(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  // Log the GET request details
+  // Log the GET request details if it's intended to be an event
+  // For now, this GET is informative, but we'll log it for completeness as requested.
   await storeRequestDetails(request);
   
   // Respond that the GET request was logged
