@@ -20,34 +20,38 @@ async function storeRequestDetails(request: NextRequest) {
   const currentTimestamp = new Date().toISOString();
   console.log(`[Evolution API Webhook Store] ${currentTimestamp} - Received ${request.method} for ${request.url}`);
 
-  let payload: any = { message: "Payload not processed or not applicable." };
+  let payload: any = { message: "Payload not processed or not applicable for this request method." };
   const contentType = request.headers.get('content-type');
 
+  // Try to read body for methods that typically have one
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     try {
-      const bodyAsText = await request.text(); // Read as text first
+      const bodyAsText = await request.text(); 
       if (bodyAsText) {
         if (contentType && contentType.includes('application/json')) {
           try {
             payload = JSON.parse(bodyAsText);
-            console.log(`[Evolution API Webhook Store] Parsed JSON payload.`);
+            console.log(`[Evolution API Webhook Store] Parsed JSON payload for ${request.method}.`);
           } catch (jsonError: any) {
-            console.warn(`[Evolution API Webhook Store] Failed to parse body as JSON, storing as raw text. Error: ${jsonError.message}`);
+            console.warn(`[Evolution API Webhook Store] Failed to parse body as JSON for ${request.method}, storing as raw text. Error: ${jsonError.message}`);
             payload = { raw_text: bodyAsText, parse_error: jsonError.message, original_content_type: contentType };
           }
         } else {
           payload = { raw_text: bodyAsText, original_content_type: contentType };
-          console.log(`[Evolution API Webhook Store] Stored non-JSON payload as raw_text.`);
+          console.log(`[Evolution API Webhook Store] Stored non-JSON payload as raw_text for ${request.method}.`);
         }
       } else {
-        payload = { message: "Request body was empty." };
-        console.log(`[Evolution API Webhook Store] Request body was empty.`);
+        payload = { message: `Request body was empty for ${request.method}.` };
+        console.log(`[Evolution API Webhook Store] Request body was empty for ${request.method}.`);
       }
     } catch (error: any) {
       console.error(`[Evolution API Webhook Store] Error reading request body for ${request.method}:`, error.message);
       payload = { error_reading_body: error.message };
     }
+  } else {
+     console.log(`[Evolution API Webhook Store] No payload processed for ${request.method} request.`);
   }
+
 
   const logEntry = {
     timestamp: currentTimestamp,
@@ -55,9 +59,10 @@ async function storeRequestDetails(request: NextRequest) {
     url: request.url,
     headers: Object.fromEntries(request.headers.entries()),
     payload: payload,
+    ip: request.ip || 'unknown IP',
+    geo: request.geo || 'unknown geo',
   };
 
-  // Defensive check and initialization for global.evolutionWebhookLogs
   if (!Array.isArray(global.evolutionWebhookLogs)) {
     console.warn('[Evolution API Webhook Store] global.evolutionWebhookLogs was not an array. Re-initializing.');
     global.evolutionWebhookLogs = [];
@@ -90,17 +95,16 @@ export async function DELETE(request: NextRequest) {
   return NextResponse.json({ status: "received", message: "Webhook DELETE event logged." }, { status: 200 });
 }
 
-// Informational GET handler - This does NOT store to global.evolutionWebhookLogs
 export async function GET(request: NextRequest) {
-  const { protocol, host, pathname } = request.nextUrl;
-  console.log(`[Evolution API Webhook INFO] Informational GET request to ${pathname} from ${request.ip || 'unknown IP'}`);
+  // Log the GET request details
+  await storeRequestDetails(request);
   
+  // Respond that the GET request was logged
   return NextResponse.json(
     {
-      message: "Flowise Lite - Evolution API Webhook Endpoint Information",
-      usage: `Send POST, PUT, PATCH, or DELETE requests to this endpoint (${protocol}//${host}${pathname}) to log webhook events.`,
-      log_access_note: `View stored logs (in-memory, development/testing only) by sending a GET request to the route defined in /api/evolution/webhook-logs/route.ts (typically ${protocol}//${host}/api/evolution/webhook-logs).`,
-      status: "Endpoint is active. This GET request provides informational data only and is not logged as a webhook event."
+      status: "received",
+      message: "Webhook GET event logged. View logs in the application console or server output.",
+      note: "This endpoint now logs GET requests. For detailed endpoint usage, refer to documentation or previous informational responses if available.",
     },
     { status: 200 }
   );
