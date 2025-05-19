@@ -7,7 +7,7 @@ import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, 
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle, Trash // Added Trash here
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -122,3 +122,4 @@ const FlowSidebar = React.memo(FlowSidebarComponent);
 FlowSidebar.displayName = 'FlowSidebar'; // Adicionando displayName para o componente memoizado
 
 export default FlowSidebar;
+
