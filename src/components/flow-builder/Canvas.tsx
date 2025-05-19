@@ -35,9 +35,9 @@ interface CanvasProps {
 
 const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasProps>(({
   nodes, connections, drawingLine, canvasOffset, zoomLevel,
-  onDropNode, onUpdateNode, onStartConnection, onDeleteNode, 
-  onDeleteConnection, onCanvasMouseDown, highlightedConnectionId, 
-  setHighlightedConnectionId, definedVariablesInFlow
+  onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDeleteConnection,
+  onCanvasMouseDown, highlightedConnectionId, setHighlightedConnectionId,
+  definedVariablesInFlow
 }, ref) => {
   const localCanvasRef = useRef<HTMLDivElement>(null);
   const flowContentWrapperRef = useRef<HTMLDivElement>(null);
@@ -54,9 +54,16 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     zoomLevelRef.current = zoomLevel;
   }, [zoomLevel]);
   
+  const canvasOffsetRef = useRef(canvasOffset);
+  useEffect(() => {
+    canvasOffsetRef.current = canvasOffset;
+  }, [canvasOffset]);
+
   const stableOnDropNode = useCallback(
-    (item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
+    (draggedItem: { type: string; itemData: DraggableBlockItemData }, monitor: DropTargetMonitor) => {
+      const item = draggedItem.itemData; // Correção: itemData é o objeto DraggableBlockItemData
       const clientOffset = monitor.getClientOffset();
+
       if (clientOffset && flowContentWrapperRef.current) {
         const flowWrapperRect = flowContentWrapperRef.current.getBoundingClientRect();
         const xOnFlowWrapper = clientOffset.x - flowWrapperRect.left;
@@ -73,7 +80,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
         // console.warn('[Canvas] Drop failed: clientOffset or flowContentWrapperRef.current is null');
       }
     },
-    [onDropNodeCbRef, zoomLevelRef] // Depende apenas de refs estáveis
+    [onDropNodeCbRef, zoomLevelRef, flowContentWrapperRef] 
   );
 
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
@@ -81,7 +88,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     drop: stableOnDropNode,
     collect: (monitor) => {
       const canActuallyDrop = monitor.canDrop();
-      // if (monitor.isOver() || monitor.canDrop()) { // Log only when relevant
+      // if (monitor.isOver() || monitor.canDrop()) {
       //  console.log(`[Canvas] Monitored props: isOver=${monitor.isOver()}, canDrop=${canActuallyDrop}`);
       // }
       return {
@@ -89,22 +96,19 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
         canDrop: canActuallyDrop, 
       };
     },
-  }), [stableOnDropNode]); 
+  }), [stableOnDropNode]);
 
   useEffect(() => {
     const currentFlowContentWrapper = flowContentWrapperRef.current;
     if (currentFlowContentWrapper) {
-      // console.log('[Canvas] Attaching drop target to flowContentWrapperRef:', currentFlowContentWrapper);
       drop(currentFlowContentWrapper);
-    } else {
-      // console.warn('[Canvas] Attaching drop target: flowContentWrapperRef.current is null.');
     }
     return () => {
       if (flowContentWrapperRef.current) { 
         drop(null); 
       }
     };
-  }, [drop]); 
+  }, [drop]);
 
   const drawBezierPath = useCallback((x1: number, y1: number, x2: number, y2: number) => {
     const dx = Math.abs(x2 - x1) * 0.5;
@@ -117,14 +121,12 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
   
   const nodeMap = useMemo(() => {
     const map = new Map<string, NodeData>();
-    (nodes || []).forEach(node => map.set(node.id, node)); // Adicionado fallback para nodes
+    (nodes || []).forEach(node => map.set(node.id, node));
     return map;
   }, [nodes]);
 
-  // console.log("[Canvas] Rendering with nodes count:", nodes?.length);
-
   const renderedNodes = useMemo(() => (
-    (nodes || []).map((node) => ( // Adicionado fallback para nodes
+    (nodes || []).map((node) => (
       <motion.div
         key={node.id}
         className="absolute z-20"
@@ -150,7 +152,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
   ), [nodes, onUpdateNode, onStartConnection, onDeleteNode, definedVariablesInFlow]);
 
   const renderedConnections = useMemo(() => (
-    (connections || []).map((conn) => { // Adicionado fallback para connections
+    (connections || []).map((conn) => {
       const sourceNode = nodeMap.get(conn.from);
       const targetNode = nodeMap.get(conn.to);
 
@@ -261,7 +263,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
               )}
               stroke="hsl(var(--accent))"
               strokeOpacity="0.8"
-              strokeWidth={Math.max(0.5, 2.5 / Math.max(zoomLevel, 0.1))}
+              strokeWidth={Math.max(0.5, 2.5 / Math.max(zoomLevelRef.current, 0.1))}
               fill="none"
               strokeDasharray="7,3" 
               markerEnd="url(#arrowhead)"
@@ -275,3 +277,5 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
 });
 Canvas.displayName = 'Canvas';
 export default Canvas;
+
+    
