@@ -23,14 +23,12 @@ async function initializeDatabase(): Promise<void> {
   console.log('[DB Actions] initializeDatabase: Starting schema initialization...');
   let client;
   try {
-    // Para garantir que estamos usando o pool que será criado ou já existe
-    const tempPool = getDbPoolInternal(false); // Chama uma versão interna que não tenta inicializar
+    const tempPool = getDbPoolInternal(false); 
     client = await tempPool.connect();
     console.log('[DB Actions] initializeDatabase: Connected to DB for schema setup.');
 
     await client.query('BEGIN');
 
-    // Função para atualizar 'updated_at'
     await client.query(`
       CREATE OR REPLACE FUNCTION trigger_set_timestamp()
       RETURNS TRIGGER AS $$
@@ -42,7 +40,6 @@ async function initializeDatabase(): Promise<void> {
     `);
     console.log('[DB Actions] initializeDatabase: "trigger_set_timestamp" function checked/created.');
 
-    // Tabela 'workspaces'
     await client.query(`
       CREATE TABLE IF NOT EXISTS workspaces (
         id TEXT PRIMARY KEY,
@@ -55,7 +52,6 @@ async function initializeDatabase(): Promise<void> {
     `);
     console.log('[DB Actions] initializeDatabase: "workspaces" table checked/created.');
 
-    // Trigger para 'workspaces'
     await client.query(`
       DROP TRIGGER IF EXISTS set_workspaces_timestamp ON workspaces;
       CREATE TRIGGER set_workspaces_timestamp
@@ -65,7 +61,6 @@ async function initializeDatabase(): Promise<void> {
     `);
     console.log('[DB Actions] initializeDatabase: Trigger for "workspaces" checked/created.');
     
-    // Função para atualizar 'last_interaction_at' em flow_sessions
     await client.query(`
       CREATE OR REPLACE FUNCTION trigger_set_session_interaction_timestamp()
       RETURNS TRIGGER AS $$
@@ -77,7 +72,6 @@ async function initializeDatabase(): Promise<void> {
     `);
     console.log('[DB Actions] initializeDatabase: "trigger_set_session_interaction_timestamp" function checked/created.');
 
-    // Tabela 'flow_sessions'
     await client.query(`
       CREATE TABLE IF NOT EXISTS flow_sessions (
         session_id TEXT PRIMARY KEY,
@@ -90,7 +84,6 @@ async function initializeDatabase(): Promise<void> {
     `);
     console.log('[DB Actions] initializeDatabase: "flow_sessions" table checked/created.');
 
-    // Trigger para 'flow_sessions'
     await client.query(`
       DROP TRIGGER IF EXISTS set_flow_sessions_timestamp ON flow_sessions;
       CREATE TRIGGER set_flow_sessions_timestamp
@@ -102,22 +95,24 @@ async function initializeDatabase(): Promise<void> {
 
     await client.query('COMMIT');
     console.log('[DB Actions] initializeDatabase: Database schema initialized successfully.');
-    (globalThis as any).__db_initialized = true; // Define o flag global
+    (globalThis as any).__db_initialized = true; 
   } catch (error: any) {
     if (client) {
       try {
         await client.query('ROLLBACK');
+        console.error('[DB Actions] initializeDatabase: ROLLBACK successful due to error.');
       } catch (rollbackError) {
         console.error('[DB Actions] initializeDatabase: Error during ROLLBACK:', rollbackError);
       }
     }
     console.error('[DB Actions] initializeDatabase: Error initializing database schema:', error);
-    (globalThis as any).__db_initialized = false; // Garante que tentemos novamente se falhar
-    throw error; // Re-throw para que a chamada de ensureDbInitialized saiba da falha
+    (globalThis as any).__db_initialized = false; 
+    dbInitializationPromise = null; // Reset promise on failure to allow retry
+    throw error; 
   } finally {
     if (client) {
       client.release();
-      console.log('[DB Actions] initializeDatabase: DB client released.');
+      // console.log('[DB Actions] initializeDatabase: DB client released.');
     }
   }
 }
@@ -134,27 +129,24 @@ function getDbPoolInternal(logCreation: boolean = true): Pool {
       database: process.env.POSTGRES_DATABASE,
       ssl: useSSL ? { rejectUnauthorized: false } : false,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000, // Aumentado para 10s
+      connectionTimeoutMillis: 10000, 
     });
 
     pool.on('error', (err, client) => {
       console.error('[DB Actions] getDbPoolInternal: PostgreSQL Pool Error - Idle client error', err.message, err.stack);
-      // Considerar resetar o pool ou tomar alguma ação de recuperação aqui
-      pool = null; // Força a recriação do pool na próxima chamada
+      pool = null; 
     });
-    if(logCreation) console.log('[DB Actions] getDbPoolInternal: PostgreSQL connection pool configured.');
-
-    // Teste de conexão inicial
-    if(logCreation){ // Só loga o teste se for uma criação "normal" do pool
-        pool.connect()
-            .then(client => {
-                console.log('[DB Actions] getDbPoolInternal: PostgreSQL pool test connection successful.');
-                client.release();
-            })
-            .catch(err => {
-                console.error('[DB Actions] getDbPoolInternal: PostgreSQL pool test connection failed:', err);
-                pool = null; // Invalida o pool se o teste falhar
-            });
+    if(logCreation) {
+      console.log('[DB Actions] getDbPoolInternal: PostgreSQL connection pool configured. Testing connection...');
+      pool.connect()
+          .then(client => {
+              console.log('[DB Actions] getDbPoolInternal: PostgreSQL pool test connection successful.');
+              client.release();
+          })
+          .catch(err => {
+              console.error('[DB Actions] getDbPoolInternal: PostgreSQL pool test connection failed:', err.message);
+              // pool = null; // Invalidate pool if test fails, but this might be too aggressive if it's a transient issue
+          });
     }
   }
   return pool;
@@ -168,22 +160,28 @@ async function ensureDbInitialized(): Promise<void> {
   }
 
   if (!dbInitializationPromise) {
-    console.log('[DB Actions] ensureDbInitialized: First call. Starting DB schema initialization process...');
+    console.log('[DB Actions] ensureDbInitialized: First call or previous attempt failed. Starting DB schema initialization process...');
     dbInitializationPromise = initializeDatabase()
       .then(() => {
         console.log('[DB Actions] ensureDbInitialized: Database schema initialization completed successfully.');
         (globalThis as any).__db_initialized = true;
       })
       .catch((error) => {
-        console.error('[DB Actions] ensureDbInitialized: Database schema initialization failed. Will retry on next relevant DB action.', error.message);
-        (globalThis as any).__db_initialized = false; // Permite nova tentativa
-        dbInitializationPromise = null; // Limpa a promessa para permitir nova tentativa
-        throw error; // Re-throw para que a chamada original saiba da falha
+        console.error('[DB Actions] ensureDbInitialized: Database schema initialization FAILED. Will retry on next relevant DB action.', error.message);
+        (globalThis as any).__db_initialized = false; 
+        dbInitializationPromise = null; // Reset promise to allow a new attempt
+        // Do not re-throw here, let the calling DB action handle its own failure
       });
   } else {
-    console.log('[DB Actions] ensureDbInitialized: Database initialization already in progress or completed. Waiting for it to settle...');
+    // console.log('[DB Actions] ensureDbInitialized: Database initialization already in progress or completed/failed. Waiting for it to settle...');
   }
-  await dbInitializationPromise;
+  // Always await, even if it might fail, so subsequent operations don't run prematurely
+  try {
+    await dbInitializationPromise;
+  } catch (e) {
+    // The error is already logged by the promise. We just catch it here to prevent unhandled rejection if the promise was already rejected.
+    console.warn('[DB Actions] ensureDbInitialized: Caught error while awaiting dbInitializationPromise, this is expected if initialization failed previously.');
+  }
 }
 
 
@@ -191,15 +189,9 @@ async function getDbPool(): Promise<Pool> {
   // console.log('[DB Actions] getDbPool: Called.');
   if (!(globalThis as any).__db_initialized) {
       // console.log('[DB Actions] getDbPool: Database not marked as initialized. Ensuring initialization...');
-      try {
-        await ensureDbInitialized();
-      } catch (initError) {
-        console.error('[DB Actions] getDbPool: Initialization failed during getDbPool. Returning potentially uninitialized pool or erroring out.', initError);
-        // Mesmo se a inicialização falhar, tentamos retornar o pool interno,
-        // pois ele pode ter sido criado, e a operação subsequente falhará se as tabelas não existirem.
-        // Ou, poderíamos lançar o erro aqui para interromper mais cedo.
-        // Por agora, vamos deixar a operação seguinte tentar.
-      }
+      await ensureDbInitialized(); // This will attempt initialization if needed.
+      // If ensureDbInitialized failed, __db_initialized will still be false, but we proceed to get the pool.
+      // The subsequent DB operation will then likely fail if tables are missing, which is desired behavior.
   }
   return getDbPoolInternal();
 }
@@ -209,6 +201,10 @@ async function getDbPool(): Promise<Pool> {
 export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{ success: boolean; error?: string }> {
   let client;
   try {
+    await ensureDbInitialized(); // Ensure DB is ready before connecting
+    if (!(globalThis as any).__db_initialized) {
+      throw new Error("Database schema is not initialized. Cannot save workspace.");
+    }
     const poolInstance = await getDbPool();
     client = await poolInstance.connect();
     console.log(`[DB Actions] saveWorkspaceToDB: Saving workspace to DB: ${workspaceData.id}`);
@@ -224,17 +220,18 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
     await client.query(query, [
       workspaceData.id,
       workspaceData.name,
-      JSON.stringify(workspaceData.nodes || []), // Garante que não seja null
-      JSON.stringify(workspaceData.connections || []), // Garante que não seja null
+      JSON.stringify(workspaceData.nodes || []), 
+      JSON.stringify(workspaceData.connections || []), 
     ]);
+    console.log(`[DB Actions] saveWorkspaceToDB: Query executed for workspace ${workspaceData.id}. Success presumed by pg driver unless an error was caught.`);
     return { success: true };
   } catch (error: any) {
     console.error(`[DB Actions] saveWorkspaceToDB: Error saving workspace ${workspaceData.id}:`, error.message);
-    console.error('[DB Actions] Full error object saving workspace:', error); // Log completo do erro
-    const pgError = error as { code?: string; detail?: string; hint?: string };
+    console.error('[DB Actions] Full error object saving workspace:', error); 
+    const pgError = error as { code?: string; detail?: string; hint?: string; message?: string };
     return { 
       success: false, 
-      error: `Erro PG: ${error.message} (Código: ${pgError.code || 'N/A'}, Detalhe: ${pgError.detail || 'N/A'}, Dica: ${pgError.hint || 'N/A'})` 
+      error: `PG Error: ${pgError.message || 'Unknown DB error'} (Code: ${pgError.code || 'N/A'}, Detail: ${pgError.detail || 'N/A'}, Hint: ${pgError.hint || 'N/A'})` 
     };
   } finally {
     if (client) client.release();
@@ -244,6 +241,11 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
 export async function loadWorkspaceFromDB(workspaceId: string): Promise<WorkspaceData | null> {
   let client;
   try {
+    await ensureDbInitialized();
+     if (!(globalThis as any).__db_initialized) {
+      console.warn("[DB Actions] loadWorkspaceFromDB: Database schema not initialized. Returning null.");
+      return null;
+    }
     const poolInstance = await getDbPool();
     client = await poolInstance.connect();
     console.log(`[DB Actions] loadWorkspaceFromDB: Loading workspace from DB: ${workspaceId}`);
@@ -268,6 +270,11 @@ export async function loadWorkspaceFromDB(workspaceId: string): Promise<Workspac
 export async function loadAllWorkspacesFromDB(): Promise<Pick<WorkspaceData, 'id' | 'name'>[]> {
   let client;
   try {
+    await ensureDbInitialized();
+    if (!(globalThis as any).__db_initialized) {
+      console.warn("[DB Actions] loadAllWorkspacesFromDB: Database schema not initialized. Returning empty array.");
+      return [];
+    }
     const poolInstance = await getDbPool();
     client = await poolInstance.connect();
     console.log('[DB Actions] loadAllWorkspacesFromDB: Loading all workspace names from DB...');
@@ -286,6 +293,10 @@ export async function loadAllWorkspacesFromDB(): Promise<Pick<WorkspaceData, 'id
 export async function deleteWorkspaceFromDB(workspaceId: string): Promise<{ success: boolean; error?: string }> {
   let client;
   try {
+    await ensureDbInitialized();
+    if (!(globalThis as any).__db_initialized) {
+      throw new Error("Database schema is not initialized. Cannot delete workspace.");
+    }
     const poolInstance = await getDbPool();
     client = await poolInstance.connect();
     console.log(`[DB Actions] deleteWorkspaceFromDB: Deleting workspace from DB: ${workspaceId}`);
@@ -303,6 +314,10 @@ export async function deleteWorkspaceFromDB(workspaceId: string): Promise<{ succ
 export async function saveSessionToDB(sessionId: string, sessionData: Omit<FlowSession, 'session_id' | 'last_interaction_at' | 'created_at'>): Promise<{ success: boolean; error?: string }> {
   let client;
   try {
+    await ensureDbInitialized();
+    if (!(globalThis as any).__db_initialized) {
+      throw new Error("Database schema is not initialized. Cannot save session.");
+    }
     const poolInstance = await getDbPool();
     client = await poolInstance.connect();
     console.log(`[DB Actions] saveSessionToDB: Saving session to DB: ${sessionId}`);
@@ -333,6 +348,11 @@ export async function saveSessionToDB(sessionId: string, sessionData: Omit<FlowS
 export async function loadSessionFromDB(sessionId: string): Promise<FlowSession | null> {
   let client;
   try {
+    await ensureDbInitialized();
+     if (!(globalThis as any).__db_initialized) {
+       console.warn("[DB Actions] loadSessionFromDB: Database schema not initialized. Returning null.");
+       return null;
+     }
     const poolInstance = await getDbPool();
     client = await poolInstance.connect();
     console.log(`[DB Actions] loadSessionFromDB: Loading session from DB: ${sessionId}`);
@@ -359,6 +379,10 @@ export async function loadSessionFromDB(sessionId: string): Promise<FlowSession 
 export async function deleteSessionFromDB(sessionId: string): Promise<{ success: boolean; error?: string }> {
   let client;
   try {
+    await ensureDbInitialized();
+    if (!(globalThis as any).__db_initialized) {
+      throw new Error("Database schema is not initialized. Cannot delete session.");
+    }
     const poolInstance = await getDbPool();
     client = await poolInstance.connect();
     console.log(`[DB Actions] deleteSessionFromDB: Deleting session from DB: ${sessionId}`);
@@ -389,6 +413,10 @@ export async function clientSideSaveWorkspacesAction(workspaces: WorkspaceData[]
 
 export async function clientSideLoadWorkspacesAction(): Promise<WorkspaceData[]> {
   console.log(`[DB Actions Client] Attempting to load all workspaces from DB.`);
+  // Primeiro, carrega a lista de sumários (ID e nome) para evitar carregar todos os dados desnecessariamente
+  // se o usuário só quiser listar os workspaces.
+  // Para este cliente, que provavelmente precisa dos dados completos, vamos carregar um por um.
+  // Em uma UI mais complexa, você poderia ter um loadAllWorkspaceSummaries e depois um loadFullWorkspace(id).
   const summaryList = await loadAllWorkspacesFromDB();
   const fullWorkspaces: WorkspaceData[] = [];
   for (const summary of summaryList) {
@@ -396,6 +424,7 @@ export async function clientSideLoadWorkspacesAction(): Promise<WorkspaceData[]>
     if (fullWs) {
       fullWorkspaces.push(fullWs);
     } else {
+      // Logar um aviso se um workspace da lista de sumário não puder ser carregado completamente
       console.warn(`[DB Actions Client] Failed to load full details for workspace ID: ${summary.id}`);
     }
   }
@@ -405,16 +434,15 @@ export async function clientSideLoadWorkspacesAction(): Promise<WorkspaceData[]>
 console.log('[DB Actions] databaseActions.ts loaded. POSTGRES_HOST:', process.env.POSTGRES_HOST ? 'Set' : 'Not Set', 'POSTGRES_USER:', process.env.POSTGRES_USER ? 'Set' : 'Not Set');
 
 // Eagerly try to initialize the DB when this module is first loaded in a server context
-// This helps ensure tables are ready for the first actual DB operation.
-if (process.env.NODE_ENV === 'development') { // Or some other condition to run only once
+if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') { // Check for process to ensure server-side
   (async () => {
     try {
       console.log('[DB Actions] Eagerly ensuring DB is initialized on module load...');
       await ensureDbInitialized();
-    } catch (e) {
-      console.error('[DB Actions] Eager DB initialization failed on module load:', e);
+    } catch (e: any) {
+      console.error('[DB Actions] Eager DB initialization failed on module load:', e.message);
+      // Não re-throw, pois a falha será tratada nas chamadas de ação individuais
     }
   })();
 }
-
     
