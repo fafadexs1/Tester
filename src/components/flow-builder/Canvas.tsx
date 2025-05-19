@@ -61,28 +61,25 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
 
   const stableOnDropNode = useCallback(
     (item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
-      const clientOffset = monitor.getClientOffset(); // Coordenadas do mouse relativas ao viewport
-      if (clientOffset && canvasElementRef.current) {
-        const canvasRect = canvasElementRef.current.getBoundingClientRect(); // Posição do Canvas (externo) na tela
-
-        // Coordenadas do drop relativas ao canto superior esquerdo do canvasElementRef (o drop target)
-        const xOnCanvasElement = clientOffset.x - canvasRect.left;
-        const yOnCanvasElement = clientOffset.y - canvasRect.top;
-
-        const currentZoom = zoomLevelRef.current;
-        const currentCanvasOffset = canvasOffsetRef.current;
-
-        // Transformar para coordenadas lógicas do fluxo (dentro do flowContentWrapper)
-        const logicalX = (xOnCanvasElement - currentCanvasOffset.x) / currentZoom;
-        const logicalY = (yOnCanvasElement - currentCanvasOffset.y) / currentZoom;
+      const clientOffset = monitor.getClientOffset();
+      if (clientOffset && flowContentWrapperRef.current) {
+        const flowWrapperRect = flowContentWrapperRef.current.getBoundingClientRect();
         
-        // console.log('[Canvas] Drop event (target: canvasElementRef)', { itemType: item.type, clientOffset, canvasRect, xOnCanvasElement, yOnCanvasElement, canvasOffsetX: currentCanvasOffset.x, canvasOffsetY: currentCanvasOffset.y, zoomLevel: currentZoom, logicalX, logicalY });
+        const xOnFlowWrapper = clientOffset.x - flowWrapperRect.left;
+        const yOnFlowWrapper = clientOffset.y - flowWrapperRect.top;
+        
+        const currentZoom = zoomLevelRef.current;
+        
+        const logicalX = xOnFlowWrapper / currentZoom;
+        const logicalY = yOnFlowWrapper / currentZoom;
+        
+        // console.log('[Canvas] Drop event (target: flowContentWrapperRef)', { itemType: item.type, clientOffset, flowWrapperRect, xOnFlowWrapper, yOnFlowWrapper, currentZoom, logicalX, logicalY });
         onDropNodeCbRef.current(item, { x: logicalX, y: logicalY });
       } else {
-        // console.warn('[Canvas] Drop failed: clientOffset or canvasElementRef.current is null');
+        // console.warn('[Canvas] Drop failed: clientOffset or flowContentWrapperRef.current is null');
       }
     },
-    [onDropNodeCbRef, zoomLevelRef, canvasOffsetRef, canvasElementRef] 
+    [onDropNodeCbRef, zoomLevelRef, flowContentWrapperRef] 
   );
 
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
@@ -101,20 +98,20 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   }), [stableOnDropNode]);
 
   useEffect(() => {
-    const currentCanvasElement = canvasElementRef.current;
-    if (currentCanvasElement) {
-      // console.log('[Canvas] Attaching drop target to canvasElementRef:', currentCanvasElement);
-      drop(currentCanvasElement);
+    const currentFlowContentWrapper = flowContentWrapperRef.current;
+    if (currentFlowContentWrapper) {
+      // console.log('[Canvas] Attaching drop target to flowContentWrapperRef:', currentFlowContentWrapper);
+      drop(currentFlowContentWrapper);
     } else {
-      // console.warn('[Canvas] Attaching drop target: canvasElementRef.current is null.');
+      // console.warn('[Canvas] Attaching drop target: flowContentWrapperRef.current is null.');
     }
     return () => {
-      if (canvasElementRef.current) { 
+      if (flowContentWrapperRef.current) { 
         drop(null);
-        // console.log('[Canvas] Cleanup drop target from canvasElementRef');
+        // console.log('[Canvas] Cleanup drop target from flowContentWrapperRef');
       }
     };
-  }, [drop, canvasElementRef]); // Re-run if drop function or ref object changes
+  }, [drop]);
 
   const drawBezierPath = useCallback((x1: number, y1: number, x2: number, y2: number) => {
     const dx = Math.abs(x2 - x1) * 0.5;
@@ -131,7 +128,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
     return map;
   }, [nodes]);
 
-  // console.log("[Canvas] Rendering with nodes count:", nodes.length);
+  // console.log("[Canvas] Rendering with nodes count:", (nodes || []).length);
 
   const renderedNodes = useMemo(() => (
     (nodes || []).map((node) => (
@@ -239,10 +236,8 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
       <div 
         ref={flowContentWrapperRef}
         id="flow-content-wrapper"
-        className="absolute top-0 left-0"
+        className="absolute top-0 left-0 w-full h-full" // Adicionado w-full h-full
         style={{
-          width: '100%', 
-          height: '100%', 
           transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
           transformOrigin: 'top left',
         }}
@@ -253,10 +248,10 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
           className="absolute top-0 left-0 pointer-events-none z-10 overflow-visible"
         >
           <defs>
-            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="8.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
+            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
               <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--accent))" />
             </marker>
-            <marker id="arrowhead-highlight" markerWidth="10" markerHeight="7" refX="8.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
+            <marker id="arrowhead-highlight" markerWidth="10" markerHeight="7" refX="9.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
               <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--destructive))" />
             </marker>
           </defs>
@@ -266,10 +261,10 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
               {/* console.log('[Canvas] Drawing line active. Data:', JSON.parse(JSON.stringify(drawingLine)), 'Offset:', JSON.parse(JSON.stringify(canvasOffset)), 'Zoom:', zoomLevel) */}
               <path
                 d={drawBezierPath(
-                  drawingLine.startX,    
-                  drawingLine.startY,    
-                  drawingLine.currentX,      
-                  drawingLine.currentY       
+                  drawingLine.startX,    // Lógico
+                  drawingLine.startY,    // Lógico
+                  drawingLine.currentX,  // Já é lógico (definido no FlowBuilderClient)
+                  drawingLine.currentY   // Já é lógico (definido no FlowBuilderClient)
                 )}
                 stroke="hsl(var(--accent))" 
                 strokeOpacity="0.8"
@@ -289,3 +284,6 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
 
 Canvas.displayName = 'Canvas';
 export default Canvas;
+
+
+    
