@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useRef, useEffect, useMemo, useCallback, forwardRef } from 'react';
 import type { DropTargetMonitor } from 'react-dnd';
 import { useDrop } from 'react-dnd';
 import { motion } from 'framer-motion';
@@ -33,7 +33,7 @@ interface CanvasProps {
   definedVariablesInFlow: string[];
 }
 
-const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasProps>(({
+const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   nodes, connections, drawingLine, canvasOffset, zoomLevel,
   onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDeleteConnection,
   onCanvasMouseDown, highlightedConnectionId, setHighlightedConnectionId,
@@ -53,7 +53,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
   useEffect(() => {
     zoomLevelRef.current = zoomLevel;
   }, [zoomLevel]);
-  
+
   const canvasOffsetRef = useRef(canvasOffset);
   useEffect(() => {
     canvasOffsetRef.current = canvasOffset;
@@ -61,57 +61,60 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
 
   const stableOnDropNode = useCallback(
     (item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
-      const clientOffset = monitor.getClientOffset();
+      const clientOffset = monitor.getClientOffset(); // Coordenadas do mouse relativas ao viewport
+      if (clientOffset && canvasElementRef.current) {
+        const canvasRect = canvasElementRef.current.getBoundingClientRect(); // Posição do Canvas (externo) na tela
 
-      if (clientOffset && flowContentWrapperRef.current) {
-        const flowWrapperRect = flowContentWrapperRef.current.getBoundingClientRect();
-        const xOnFlowWrapper = clientOffset.x - flowWrapperRect.left;
-        const yOnFlowWrapper = clientOffset.y - flowWrapperRect.top;
-        
-        const currentZoom = zoomLevelRef.current; 
-        
-        const logicalX = xOnFlowWrapper / currentZoom;
-        const logicalY = yOnFlowWrapper / currentZoom;
+        // Coordenadas do drop relativas ao canto superior esquerdo do canvasElementRef (o drop target)
+        const xOnCanvasElement = clientOffset.x - canvasRect.left;
+        const yOnCanvasElement = clientOffset.y - canvasRect.top;
 
-        // console.debug('[Canvas] Drop event (target: flowContentWrapperRef)', { itemType: item.type, clientOffset, flowWrapperRect, xOnFlowWrapper, yOnFlowWrapper, currentZoom, logicalX, logicalY, item });
+        const currentZoom = zoomLevelRef.current;
+        const currentCanvasOffset = canvasOffsetRef.current;
+
+        // Transformar para coordenadas lógicas do fluxo (dentro do flowContentWrapper)
+        const logicalX = (xOnCanvasElement - currentCanvasOffset.x) / currentZoom;
+        const logicalY = (yOnCanvasElement - currentCanvasOffset.y) / currentZoom;
+        
+        // console.log('[Canvas] Drop event (target: canvasElementRef)', { itemType: item.type, clientOffset, canvasRect, xOnCanvasElement, yOnCanvasElement, canvasOffsetX: currentCanvasOffset.x, canvasOffsetY: currentCanvasOffset.y, zoomLevel: currentZoom, logicalX, logicalY });
         onDropNodeCbRef.current(item, { x: logicalX, y: logicalY });
       } else {
-        // console.warn('[Canvas] Drop failed: clientOffset or flowContentWrapperRef.current is null', { clientOffset, flowContentWrapperRefExists: !!flowContentWrapperRef.current });
+        // console.warn('[Canvas] Drop failed: clientOffset or canvasElementRef.current is null');
       }
     },
-    [onDropNodeCbRef, zoomLevelRef, flowContentWrapperRef] 
+    [onDropNodeCbRef, zoomLevelRef, canvasOffsetRef, canvasElementRef] 
   );
 
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
     accept: ITEM_TYPE_BLOCK,
     drop: stableOnDropNode,
     collect: (monitor) => {
-      const canActuallyDrop = monitor.canDrop();
+      // const canActuallyDrop = monitor.canDrop();
       // if (monitor.isOver() || monitor.canDrop() || monitor.getItem()) { 
       //  console.debug(`[Canvas] Monitored props: isOver=${monitor.isOver()}, canDrop=${canActuallyDrop}, itemType=${monitor.getItemType()}, item=${JSON.stringify(monitor.getItem())}`);
       // }
       return {
         isOver: !!monitor.isOver(),
-        canDrop: canActuallyDrop, 
+        canDrop: !!monitor.canDrop(),
       };
     },
   }), [stableOnDropNode]);
 
   useEffect(() => {
-    const currentFlowContentWrapper = flowContentWrapperRef.current;
-    if (currentFlowContentWrapper) {
-      drop(currentFlowContentWrapper);
-      // console.log('[Canvas] Applied drop to flowContentWrapperRef');
+    const currentCanvasElement = canvasElementRef.current;
+    if (currentCanvasElement) {
+      // console.log('[Canvas] Attaching drop target to canvasElementRef:', currentCanvasElement);
+      drop(currentCanvasElement);
     } else {
-      // console.warn('[Canvas] flowContentWrapperRef.current is null in drop effect');
+      // console.warn('[Canvas] Attaching drop target: canvasElementRef.current is null.');
     }
     return () => {
-      if (flowContentWrapperRef.current) { // Use the ref directly in cleanup
-         drop(null);
-        // console.log('[Canvas] Cleanup drop target from flowContentWrapperRef');
+      if (canvasElementRef.current) { 
+        drop(null);
+        // console.log('[Canvas] Cleanup drop target from canvasElementRef');
       }
     };
-  }, [drop]);
+  }, [drop, canvasElementRef]); // Re-run if drop function or ref object changes
 
   const drawBezierPath = useCallback((x1: number, y1: number, x2: number, y2: number) => {
     const dx = Math.abs(x2 - x1) * 0.5;
@@ -128,7 +131,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     return map;
   }, [nodes]);
 
-  // console.log("[Canvas] Rendering with nodes:", nodes); // Log para verificar os nós recebidos
+  // console.log("[Canvas] Rendering with nodes count:", nodes.length);
 
   const renderedNodes = useMemo(() => (
     (nodes || []).map((node) => (
@@ -218,12 +221,6 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     })
   ), [connections, nodeMap, highlightedConnectionId, onDeleteConnection, setHighlightedConnectionId, zoomLevel, drawBezierPath]);
   
-  // useEffect(() => {
-  //   if (drawingLine) {
-  //     console.log('[Canvas] Drawing line active. Data:', JSON.parse(JSON.stringify(drawingLine)), 'Zoom:', zoomLevel);
-  //   }
-  // }, [drawingLine, zoomLevel]);
-
   const visualGridSpacing = GRID_SIZE * zoomLevel;
 
   return (
@@ -266,7 +263,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
           {renderedConnections}
           {drawingLine && (
             <>
-              {/* {console.log('[Canvas] Drawing line active. Data:', JSON.parse(JSON.stringify(drawingLine)), 'Zoom:', zoomLevel)} */}
+              {/* console.log('[Canvas] Drawing line active. Data:', JSON.parse(JSON.stringify(drawingLine)), 'Offset:', JSON.parse(JSON.stringify(canvasOffset)), 'Zoom:', zoomLevel) */}
               <path
                 d={drawBezierPath(
                   drawingLine.startX,    
