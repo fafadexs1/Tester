@@ -35,7 +35,7 @@ interface CanvasProps {
 
 const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasProps>(({
   nodes, connections, drawingLine, canvasOffset, zoomLevel,
-  onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDeleteConnection,
+  onDropNode, onUpdateNode, onStartConnection, onDeleteConnection,
   onCanvasMouseDown, highlightedConnectionId, setHighlightedConnectionId,
   definedVariablesInFlow
 }, ref) => {
@@ -44,7 +44,6 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
 
   const canvasElementRef = (ref || localCanvasRef) as React.RefObject<HTMLDivElement>;
 
-  // Refs for props that change often, to stabilize stableOnDropNode
   const onDropNodeCbRef = useRef(onDropNode);
   useEffect(() => {
     onDropNodeCbRef.current = onDropNode;
@@ -54,11 +53,6 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
   useEffect(() => {
     zoomLevelRef.current = zoomLevel;
   }, [zoomLevel]);
-
-  const canvasOffsetActualRef = useRef(canvasOffset); // Renomeado para evitar conflito com a prop
-   useEffect(() => {
-    canvasOffsetActualRef.current = canvasOffset;
-  }, [canvasOffset]);
 
   const stableOnDropNode = useCallback((item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
     const clientOffset = monitor.getClientOffset(); // Mouse coords relative to viewport
@@ -79,34 +73,35 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     } else {
         console.warn('[Canvas] Drop failed: clientOffset or flowContentWrapperRef.current is null');
     }
-  }, [onDropNodeCbRef, zoomLevelRef]); // Dependencies are refs, so stableOnDropNode is stable.
+  }, [onDropNodeCbRef, zoomLevelRef]); // Only depend on stable refs
 
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
     accept: ITEM_TYPE_BLOCK,
-    drop: stableOnDropNode, // stableOnDropNode's reference is stable
+    drop: stableOnDropNode, 
     collect: (monitor) => ({
       isOver: !!monitor.isOver(),
-      canDrop: !!monitor.canDrop(), // Will be true if accept matches and isOver is true (or no canDrop fn)
+      canDrop: !!monitor.canDrop(), 
     }),
-  }), [stableOnDropNode]); // stableOnDropNode's reference is stable, so useDrop runs its setup once.
+  }), [stableOnDropNode]); 
 
   useEffect(() => {
     const elementToDropOn = flowContentWrapperRef.current;
     if (elementToDropOn) {
       // console.log('[Canvas] Attaching drop target to flowContentWrapperRef:', elementToDropOn);
       drop(elementToDropOn);
-    } else {
-      // console.warn('[Canvas] Attaching drop target: flowContentWrapperRef.current is null.');
     }
     return () => {
-      // Use the ref's current value at the time of cleanup
-      // This ensures we are trying to unregister the correct element if the ref itself was somehow reassigned (unlikely for DOM elements)
-      // or if the component unmounts.
       if (flowContentWrapperRef.current) { 
+        // console.log('[Canvas] Detaching drop target from flowContentWrapperRef:', flowContentWrapperRef.current);
         drop(null); 
       }
     };
-  }, [drop]); // `drop`'s reference is stable due to stableOnDropNode being stable.
+  }, [drop]); 
+
+  // For debugging
+  // useEffect(() => {
+  //   console.log('[Canvas] Monitored props: isOver:', isOver, 'canDrop:', canDrop);
+  // }, [isOver, canDrop]);
 
   const drawBezierPath = useCallback((x1: number, y1: number, x2: number, y2: number) => {
     const dx = Math.abs(x2 - x1) * 0.5;
@@ -122,8 +117,6 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     nodes.forEach(node => map.set(node.id, node));
     return map;
   }, [nodes]);
-
-  // console.log("[Canvas] Rendering. Is Over:", isOver, "Can Drop:", canDrop);
 
   const renderedNodes = useMemo(() => (
     nodes.map((node) => (
@@ -231,10 +224,10 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
       <div 
         ref={flowContentWrapperRef}
         id="flow-content-wrapper"
-        className="absolute top-0 left-0" // pointer-events-auto is default for div
+        className="absolute top-0 left-0"
         style={{
           width: '100%', 
-          height: '100%', // Crucial for making it a reliable drop target
+          height: '100%', 
           transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
           transformOrigin: 'top left',
         }}
@@ -260,8 +253,8 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
               d={drawBezierPath(
                 drawingLine.startX,    
                 drawingLine.startY,    
-                drawingLine.currentX,  // Already logical
-                drawingLine.currentY   // Already logical
+                drawingLine.currentX,  // Já é lógico
+                drawingLine.currentY   // Já é lógico
               )}
               stroke="hsl(var(--accent))"
               strokeOpacity="0.8"
