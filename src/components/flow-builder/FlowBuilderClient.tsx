@@ -18,9 +18,8 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import { 
-  loadAllWorkspacesFromDB,
-  saveWorkspaceToDB,
-  // deleteWorkspaceFromDB // Certifique-se de que esta função existe e é importada se for usá-la
+  clientSideLoadWorkspacesAction,
+  clientSideSaveWorkspacesAction,
 } from '@/app/actions/databaseActions';
 
 
@@ -100,8 +99,9 @@ export default function FlowBuilderClient() {
   }, [zoomLevel]);
 
   const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
-  const currentNodes = activeWorkspace ? activeWorkspace.nodes : [];
-  const currentConnections = activeWorkspace ? activeWorkspace.connections : [];
+  const currentNodes = activeWorkspace?.nodes || [];
+  const currentConnections = activeWorkspace?.connections || [];
+
 
   useEffect(() => {
     if (activeWorkspace?.nodes) {
@@ -155,23 +155,25 @@ export default function FlowBuilderClient() {
     
     async function loadData() {
       try {
-        const loadedWorkspacesFromDB = await loadAllWorkspacesFromDB();
+        const loadedWorkspacesFromDB = await clientSideLoadWorkspacesAction();
         console.log("[FlowBuilderClient] Workspaces loaded from DB count:", loadedWorkspacesFromDB.length);
 
         if (loadedWorkspacesFromDB && loadedWorkspacesFromDB.length > 0) {
           setWorkspaces(loadedWorkspacesFromDB);
-          // Prioritize o mais recente do DB como ativo inicialmente, ou o último salvo na UI se existir no DB
+          
+          // Prioritize o mais recente do DB (já ordenado pela action) ou o último salvo na UI se existir no DB
+          let newActiveId = loadedWorkspacesFromDB[0].id; // Default to the first (most recent from DB)
           const lastActiveIdFromStorage = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI);
-          let newActiveId = loadedWorkspacesFromDB[0].id; // Default to the most recent from DB
 
           if (lastActiveIdFromStorage && loadedWorkspacesFromDB.some(ws => ws.id === lastActiveIdFromStorage)) {
             newActiveId = lastActiveIdFromStorage;
             console.log("[FlowBuilderClient] Active workspace ID set from localStorage (and exists in DB):", newActiveId);
           } else {
-            console.log("[FlowBuilderClient] Active workspace ID set to most recent from DB (or last UI active not found in DB):", newActiveId);
+            console.log("[FlowBuilderClient] Active workspace ID set to most recent from DB (or last UI active not found/valid in DB):", newActiveId);
           }
           setActiveWorkspaceId(newActiveId);
           localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, newActiveId);
+
         } else {
           console.log("[FlowBuilderClient] No workspaces in DB, creating initial one.");
           const initialId = uuidv4();
@@ -181,7 +183,7 @@ export default function FlowBuilderClient() {
             nodes: [],
             connections: [],
           };
-          const saveResult = await saveWorkspaceToDB(initialWorkspace);
+          const saveResult = await clientSideSaveWorkspacesAction([initialWorkspace]);
           console.log('[FlowBuilderClient] Result from saving initial workspace to DB:', saveResult);
           
           if (saveResult.success) {
@@ -190,8 +192,10 @@ export default function FlowBuilderClient() {
             setActiveWorkspaceId(initialId);
             localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, initialId);
           } else {
-            console.error("[FlowBuilderClient] Failed to save initial workspace to DB:", saveResult.error);
-            const errorMsg = typeof saveResult.error === 'string' ? saveResult.error : JSON.stringify(saveResult.error);
+            console.error("[FlowBuilderClient] Failed to save initial workspace to DB:", saveResult.errors);
+            const errorMsg = saveResult.errors && saveResult.errors.length > 0 
+              ? `ID: ${saveResult.errors[0].workspaceId}, Erro: ${typeof saveResult.errors[0].error === 'string' ? saveResult.errors[0].error : JSON.stringify(saveResult.errors[0].error)}`
+              : "Erro desconhecido ao salvar.";
             toast({ 
               title: "Erro ao Salvar Fluxo Inicial", 
               description: `Falha ao salvar no banco de dados. Detalhe: ${errorMsg}`, 
@@ -208,6 +212,7 @@ export default function FlowBuilderClient() {
           variant: "destructive",
           duration: 9000
         });
+        // Fallback para um workspace em memória para não quebrar a UI completamente
         const fallbackId = uuidv4();
         setWorkspaces([{ id: fallbackId, name: 'Fluxo de Fallback (Erro DB)', nodes: [], connections: [] }]);
         setActiveWorkspaceId(fallbackId);
@@ -227,28 +232,25 @@ export default function FlowBuilderClient() {
   }, [activeWorkspaceId, hasMounted]);
 
   const handleSaveWorkspaces = useCallback(async () => {
-    if (!hasMounted || !workspaces || workspaces.length === 0) return;
+    if (!hasMounted || !workspaces || workspaces.length === 0) {
+      console.warn("[FlowBuilderClient] No workspaces to save or component not mounted.");
+      return;
+    }
     console.log("[FlowBuilderClient] Attempting to save workspaces to DB:", workspaces.length);
     
-    let allSuccessful = true;
-    const errors = [];
-    for (const ws of workspaces) {
-      const result = await saveWorkspaceToDB(ws); 
-      if (!result.success) {
-        allSuccessful = false;
-        errors.push({ workspaceId: ws.id, error: result.error });
-      }
-    }
-    console.log('[FlowBuilderClient] Result from handleSaveWorkspaces:', { success: allSuccessful, errors });
+    const result = await clientSideSaveWorkspacesAction(workspaces); 
+    console.log('[FlowBuilderClient] Result from handleSaveWorkspaces:', result);
 
-    if (allSuccessful) {
+    if (result.success) {
       toast({
         title: "Fluxos Salvos!",
         description: "Seus fluxos foram salvos no banco de dados.",
       });
     } else {
-      console.error("[FlowBuilderClient] Failed to save some workspaces to DB", errors);
-      const errorDetail = errors.map(err => `ID: ${err.workspaceId}, Erro: ${typeof err.error === 'string' ? err.error : JSON.stringify(err.error)}`).join('; ');
+      console.error("[FlowBuilderClient] Failed to save some workspaces to DB", result.errors);
+      const errorDetail = result.errors && result.errors.length > 0 
+        ? result.errors.map(err => `ID: ${err.workspaceId}, Erro: ${typeof err.error === 'string' ? err.error : JSON.stringify(err.error)}`).join('; ')
+        : "Erro desconhecido ao salvar.";
       toast({
         title: "Erro ao Salvar Alguns Fluxos",
         description: `Nem todos os fluxos foram salvos. Detalhe: ${errorDetail}`,
@@ -264,12 +266,18 @@ export default function FlowBuilderClient() {
     setIsLoading(true);
     console.log("[FlowBuilderClient] (Discard) Attempting to reload workspaces from DB.");
     try {
-      const loadedWorkspacesFromDB = await loadAllWorkspacesFromDB();
+      const loadedWorkspacesFromDB = await clientSideLoadWorkspacesAction();
       if (loadedWorkspacesFromDB && loadedWorkspacesFromDB.length > 0) {
         setWorkspaces(loadedWorkspacesFromDB);
-        const currentActiveStillExists = activeWorkspaceId && loadedWorkspacesFromDB.some(ws => ws.id === activeWorkspaceId);
-        const newActiveId = currentActiveStillExists ? activeWorkspaceId : loadedWorkspacesFromDB[0].id;
+        
+        let newActiveId = loadedWorkspacesFromDB[0].id; // Default to the most recent from DB
+        const lastActiveIdFromStorage = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI);
+        if (lastActiveIdFromStorage && loadedWorkspacesFromDB.some(ws => ws.id === lastActiveIdFromStorage)) {
+            newActiveId = lastActiveIdFromStorage;
+        }
         setActiveWorkspaceId(newActiveId);
+        localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, newActiveId);
+
         toast({
           title: "Alterações Descartadas",
           description: "Fluxos recarregados do banco de dados.",
@@ -279,15 +287,18 @@ export default function FlowBuilderClient() {
         console.log("[FlowBuilderClient] No workspaces in DB after discard, creating initial one.");
         const initialId = uuidv4();
         const initialWorkspace: WorkspaceData = { id: initialId, name: 'Meu Primeiro Fluxo (DB)', nodes: [], connections: [] };
-        const saveResult = await saveWorkspaceToDB(initialWorkspace);
+        const saveResult = await clientSideSaveWorkspacesAction([initialWorkspace]);
         console.log('[FlowBuilderClient] Result from saving initial workspace after discard (DB was empty):', saveResult);
         if(saveResult.success){
             setWorkspaces([initialWorkspace]);
             setActiveWorkspaceId(initialId);
+            localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, initialId);
             toast({ title: "Nenhum Fluxo no DB", description: "Um novo fluxo inicial foi criado e salvo.", variant: "default" });
         } else {
-            console.error("[FlowBuilderClient] Failed to save initial workspace after discard:", saveResult.error);
-            const errorMsg = typeof saveResult.error === 'string' ? saveResult.error : JSON.stringify(saveResult.error);
+            console.error("[FlowBuilderClient] Failed to save initial workspace after discard:", saveResult.errors);
+            const errorMsg = saveResult.errors && saveResult.errors.length > 0
+              ? `ID: ${saveResult.errors[0].workspaceId}, Erro: ${typeof saveResult.errors[0].error === 'string' ? saveResult.errors[0].error : JSON.stringify(saveResult.errors[0].error)}`
+              : "Erro desconhecido ao salvar.";
             toast({ 
               title: "Erro ao Salvar Fluxo Inicial Pós-Descarte", 
               description: `Falha ao salvar no banco de dados. Detalhe: ${errorMsg}`, 
@@ -307,7 +318,7 @@ export default function FlowBuilderClient() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast, hasMounted, activeWorkspaceId]);
+  }, [toast, hasMounted]);
 
   const addWorkspace = useCallback(async () => {
     if (!hasMounted) return;
@@ -319,40 +330,50 @@ export default function FlowBuilderClient() {
       connections: [],
     };
     
-    console.log("[FlowBuilderClient] New workspace created locally, attempting to save to DB.");
-    const saveResult = await saveWorkspaceToDB(newWorkspace); 
-    console.log('[FlowBuilderClient] Result from saving new workspace to DB:', saveResult);
+    const updatedWorkspaces = [...workspaces, newWorkspace];
+    setWorkspaces(updatedWorkspaces);
+    setActiveWorkspaceId(newWorkspaceId); 
+    localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, newWorkspaceId);
+
+    console.log("[FlowBuilderClient] New workspace created locally, attempting to save all workspaces to DB.");
+    const saveResult = await clientSideSaveWorkspacesAction(updatedWorkspaces); 
+    console.log('[FlowBuilderClient] Result from saving new workspace (and others) to DB:', saveResult);
 
     if (saveResult.success) {
-        const updatedWorkspaces = [...workspaces, newWorkspace];
-        setWorkspaces(updatedWorkspaces);
-        setActiveWorkspaceId(newWorkspaceId); 
         toast({
           title: "Novo Fluxo Criado",
           description: `${newWorkspace.name} foi adicionado e salvo no DB.`,
         });
       } else {
-          console.error("[FlowBuilderClient] Failed to save new workspace to DB", saveResult.error);
-          const errorMsg = typeof saveResult.error === 'string' ? saveResult.error : JSON.stringify(saveResult.error);
+          console.error("[FlowBuilderClient] Failed to save new workspace to DB", saveResult.errors);
+          const errorMsg = saveResult.errors && saveResult.errors.length > 0
+            ? `ID: ${saveResult.errors[0].workspaceId}, Erro: ${typeof saveResult.errors[0].error === 'string' ? saveResult.errors[0].error : JSON.stringify(saveResult.errors[0].error)}`
+            : "Erro desconhecido ao salvar.";
           toast({
             title: "Erro ao Salvar Novo Fluxo",
             description: `Não foi possível salvar o novo fluxo no banco de dados. Detalhe: ${errorMsg}`,
             variant: "destructive",
             duration: 9000
           });
+          // Reverter a adição local se o salvamento no DB falhar
+          setWorkspaces(prev => prev.filter(ws => ws.id !== newWorkspaceId));
+          if(workspaces.length > 0) setActiveWorkspaceId(workspaces[0].id); else setActiveWorkspaceId(null);
       }
   }, [workspaces, toast, hasMounted]);
 
   const switchWorkspace = useCallback((workspaceId: string) => {
     if (workspaces.find(ws => ws.id === workspaceId)) {
         setActiveWorkspaceId(workspaceId); 
+        localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, workspaceId);
     } else {
         console.warn(`[FlowBuilderClient] Attempted to switch to non-existent workspace ID: ${workspaceId}`);
         if (workspaces.length > 0) {
             const firstId = workspaces[0].id;
             setActiveWorkspaceId(firstId);
+            localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, firstId);
         } else {
             setActiveWorkspaceId(null); 
+            localStorage.removeItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI);
         }
     }
   }, [workspaces]);
@@ -375,10 +396,11 @@ export default function FlowBuilderClient() {
       return;
     }
     
-    const currentWksp = workspaces.find(ws => ws.id === activeWorkspaceId); 
+    // Recalcula as variáveis existentes com base no estado ATUAL de workspaces e activeWorkspaceId
+    const currentActiveWksp = workspaces.find(ws => ws.id === activeWorkspaceId);
     const existingVariableNames: string[] = [];
-    if (currentWksp) { 
-      currentWksp.nodes.forEach(node => {
+    if (currentActiveWksp?.nodes) { 
+      currentActiveWksp.nodes.forEach(node => {
         VARIABLE_DEFINING_FIELDS.forEach(field => {
           const varName = node[field] as string | undefined;
           if (varName && varName.trim() !== '') {
@@ -453,24 +475,27 @@ export default function FlowBuilderClient() {
       y: Math.round((logicalDropCoords.y - NODE_HEADER_HEIGHT_APPROX / 2) / GRID_SIZE) * GRID_SIZE, 
     };
     
+    console.log("[FlowBuilderClient] New node created:", JSON.parse(JSON.stringify(newNode)));
     updateActiveWorkspace(ws => {
-      const updatedNodes = [...ws.nodes, newNode];
+      const updatedNodes = [...(ws.nodes || []), newNode]; // Garante que ws.nodes seja um array
+      console.log("[FlowBuilderClient] Nodes after adding new node. New count:", updatedNodes.length, "Nodes:", JSON.parse(JSON.stringify(updatedNodes)));
       return { ...ws, nodes: updatedNodes };
     });
   }, [activeWorkspaceId, updateActiveWorkspace, workspaces]); 
 
   const updateNode = useCallback((id: string, changes: Partial<NodeData>) => {
+    console.log("[FlowBuilderClient] Node updated:", {id, changes });
     updateActiveWorkspace(ws => ({
       ...ws,
-      nodes: ws.nodes.map(n => (n.id === id ? { ...n, ...changes } : n)),
+      nodes: (ws.nodes || []).map(n => (n.id === id ? { ...n, ...changes } : n)),
     }));
   }, [updateActiveWorkspace]);
 
   const deleteNode = useCallback((nodeIdToDelete: string) => {
     updateActiveWorkspace(ws => ({
       ...ws,
-      nodes: ws.nodes.filter(node => node.id !== nodeIdToDelete),
-      connections: ws.connections.filter(conn => conn.from !== nodeIdToDelete && conn.to !== nodeIdToDelete),
+      nodes: (ws.nodes || []).filter(node => node.id !== nodeIdToDelete),
+      connections: (ws.connections || []).filter(conn => conn.from !== nodeIdToDelete && conn.to !== nodeIdToDelete),
     }));
   }, [updateActiveWorkspace]);
 
@@ -509,16 +534,14 @@ export default function FlowBuilderClient() {
       
       const mouseXOnCanvasVisual = event.clientX - canvasRect.left;
       const mouseYOnCanvasVisual = event.clientY - canvasRect.top;
-      const lineCurrentXLogical = (mouseXOnCanvasVisual - currentCanvasOffset.x) / currentZoomLevel; 
-      const lineCurrentYLogical = (mouseYOnCanvasVisual - currentCanvasOffset.y) / currentZoomLevel; 
 
       setDrawingLine({
         fromId: fromNodeData.id,
         sourceHandleId,
         startX: lineStartX,       
         startY: lineStartY,       
-        currentX: lineCurrentXLogical,
-        currentY: lineCurrentYLogical, 
+        currentX: mouseXOnCanvasVisual, // Estas são visuais relativas ao canvasRef
+        currentY: mouseYOnCanvasVisual,  // Estas são visuais relativas ao canvasRef
       });
     },
     [canvasRef, setDrawingLine] 
@@ -532,7 +555,7 @@ export default function FlowBuilderClient() {
       initialCanvasOffsetOnPanStart.current = { ...canvasOffsetCbRef.current };
       if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
     }
-  }, [canvasRef]); // canvasOffsetCbRef é uma ref, então é estável. canvasRef também.
+  }, [canvasRef, canvasOffsetCbRef]);
 
   const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -543,26 +566,21 @@ export default function FlowBuilderClient() {
         y: initialCanvasOffsetOnPanStart.current.y + dy,
       });
     } else if (drawingLine && canvasRef.current) {
-      const currentCanvasOffset = canvasOffsetCbRef.current;
-      const currentZoomLevel = zoomLevelCbRef.current;    
       const canvasRect = canvasRef.current.getBoundingClientRect();
       
       const mouseXOnCanvasVisual = e.clientX - canvasRect.left;
       const mouseYOnCanvasVisual = e.clientY - canvasRect.top;
 
-      const logicalMouseX = (mouseXOnCanvasVisual - currentCanvasOffset.x) / currentZoomLevel;
-      const logicalMouseY = (mouseYOnCanvasVisual - currentCanvasOffset.y) / currentZoomLevel;
-
       setDrawingLine((prev) => {
         if (!prev) return null;
         return {
           ...prev,
-          currentX: logicalMouseX,
-          currentY: logicalMouseY,
+          currentX: mouseXOnCanvasVisual, // Continuam visuais relativas ao canvasRef
+          currentY: mouseYOnCanvasVisual,
         };
       });
     }
-  }, [drawingLine, setDrawingLine, setCanvasOffset]); // canvasRef, canvasOffsetCbRef, zoomLevelCbRef são refs/estáveis
+  }, [drawingLine, setDrawingLine, setCanvasOffset, canvasRef, canvasOffsetCbRef, zoomLevelCbRef]); 
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -582,11 +600,13 @@ export default function FlowBuilderClient() {
 
       if (toId && drawingLine.fromId !== toId) {
         if (!activeWorkspaceId) {
+            console.warn("[FlowBuilderClient] No activeWorkspaceId, cannot add connection.");
             setDrawingLine(null);
             return;
         }
+        console.log("[FlowBuilderClient] Attempting to add connection:", {id: uuidv4(), from: drawingLine.fromId, to: toId as string, sourceHandle: drawingLine.sourceHandleId});
         updateActiveWorkspace(ws => {
-            let newConnectionsArray = [...ws.connections];
+            let newConnectionsArray = [...(ws.connections || [])]; // Garante que ws.connections seja um array
             const newConnection: Connection = {
                 id: uuidv4(),
                 from: drawingLine.fromId,
@@ -605,9 +625,9 @@ export default function FlowBuilderClient() {
             );
 
             if (isDuplicate) {
-                // console.log("[FlowBuilderClient] Duplicate connection prevented.");
+                console.log("[FlowBuilderClient] Duplicate connection prevented (same from, to, and handle).");
             } else if (existingConnectionFromThisSourceHandle) {
-                // console.log("[FlowBuilderClient] Replacing existing connection from same source handle.");
+                console.log("[FlowBuilderClient] Replacing existing connection from same source handle.");
                 newConnectionsArray = newConnectionsArray.filter(c => c.id !== existingConnectionFromThisSourceHandle.id);
                 newConnectionsArray.push(newConnection);
             } else {
@@ -618,19 +638,19 @@ export default function FlowBuilderClient() {
       }
       setDrawingLine(null);
     }
-  }, [drawingLine, activeWorkspaceId, updateActiveWorkspace, setDrawingLine]); // canvasRef é estável
+  }, [drawingLine, activeWorkspaceId, updateActiveWorkspace, setDrawingLine, canvasRef]); 
 
   const deleteConnection = useCallback((connectionIdToDelete: string) => {
     updateActiveWorkspace(ws => ({
         ...ws,
-        connections: ws.connections.filter(conn => conn.id !== connectionIdToDelete)
+        connections: (ws.connections || []).filter(conn => conn.id !== connectionIdToDelete)
     }));
     setHighlightedConnectionId(null); 
   }, [updateActiveWorkspace, setHighlightedConnectionId]); 
 
   useEffect(() => {
     if (!hasMounted) return;
-    const currentCanvasRefVal = canvasRef.current; 
+    const currentCanvasVal = canvasRef.current; // Capture para o cleanup
     
     document.addEventListener('mousemove', handleGlobalMouseMove);
     document.addEventListener('mouseup', handleGlobalMouseUp);
@@ -638,7 +658,7 @@ export default function FlowBuilderClient() {
     const handleMouseLeaveWindow = () => {
       if (isPanning.current) {
         isPanning.current = false;
-        if (currentCanvasRefVal) currentCanvasRefVal.style.cursor = 'grab';
+        if (currentCanvasVal) currentCanvasVal.style.cursor = 'grab';
       }
       if (drawingLine) { 
         setDrawingLine(null);
@@ -651,11 +671,14 @@ export default function FlowBuilderClient() {
       document.removeEventListener('mouseup', handleGlobalMouseUp);
       document.body.removeEventListener('mouseleave', handleMouseLeaveWindow);
     };
-  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine, hasMounted, setDrawingLine]); // canvasRef removido pois é estável
+  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine, hasMounted, setDrawingLine, canvasRef]); // canvasRef aqui é estável
   
 
   const handleZoom = useCallback((direction: 'in' | 'out' | 'reset') => {
-    if (!canvasRef.current) return; 
+    if (!canvasRef.current) {
+        console.warn("[FlowBuilderClient] handleZoom: canvasRef.current is null.");
+        return; 
+    }
 
     const currentZoom = zoomLevelCbRef.current;
     const currentOffset = canvasOffsetCbRef.current;
@@ -687,7 +710,7 @@ export default function FlowBuilderClient() {
     setZoomLevel(newZoomLevel);
     setCanvasOffset({ x: newOffsetX, y: newOffsetY });
 
-  }, [setZoomLevel, setCanvasOffset]); // canvasRef, zoomLevelCbRef, canvasOffsetCbRef são refs/estáveis
+  }, [setZoomLevel, setCanvasOffset, canvasRef, zoomLevelCbRef, canvasOffsetCbRef]); 
 
 
   if (isLoading && hasMounted) {
@@ -712,7 +735,7 @@ export default function FlowBuilderClient() {
         />
         <div className="flex-1 flex relative overflow-hidden"> 
           <FlowSidebar />
-          <div className="flex-1 flex relative overflow-hidden"> 
+          <div className="flex-1 flex relative overflow-hidden" > 
             <Canvas
               ref={canvasRef} 
               nodes={currentNodes}
@@ -742,4 +765,3 @@ export default function FlowBuilderClient() {
   );
 }
 
-    
