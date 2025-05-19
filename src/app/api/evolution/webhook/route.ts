@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getProperty } from 'dot-prop';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
+import { simpleChatReply, UserMessageInput } from '@/ai/flows/simple-chat-reply-flow';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -47,7 +48,7 @@ async function storeRequestDetails(request: NextRequest): Promise<StoredLogEntry
   let bodyAsText: string | null = null;
   let extractedMessage: string | null = null;
   let webhookRemoteJid: string | null = null;
-  let parsedBodyForExtraction: any = null; // To store the parsed JSON if successful
+  let parsedBodyForExtraction: any = null; 
 
   if (method !== 'GET' && method !== 'HEAD') {
     try {
@@ -60,13 +61,10 @@ async function storeRequestDetails(request: NextRequest): Promise<StoredLogEntry
           try {
             if (contentType.includes('application/json')) {
               parsedBodyForExtraction = JSON.parse(bodyAsText);
-              payload = parsedBodyForExtraction; // Use parsed body for the main payload
+              payload = parsedBodyForExtraction; 
               console.log(`[Evolution API Webhook Store] Parsed JSON payload for ${method}.`);
             } else {
               payload = { raw_text_form_urlencoded: bodyAsText, original_content_type: contentType };
-              // For form-urlencoded, we might still want to try extracting from a known structure if it's common
-              // but generally, it's less structured than JSON. For now, we keep it simple.
-              // If specific form fields were expected, one could parse bodyAsText with URLSearchParams.
               console.log(`[Evolution API Webhook Store] Stored form-urlencoded payload as raw_text for ${method}.`);
             }
           } catch (jsonError: any) {
@@ -94,43 +92,47 @@ async function storeRequestDetails(request: NextRequest): Promise<StoredLogEntry
     console.log(`[Evolution API Webhook Store] No payload processed for ${method} request (e.g., GET, HEAD).`);
   }
 
-  // Try to extract message and remoteJid if we have a parsed JSON body
   if (parsedBodyForExtraction && typeof parsedBodyForExtraction === 'object') {
+    let actualPayloadToExtractFrom = parsedBodyForExtraction;
+    if (Array.isArray(parsedBodyForExtraction) && parsedBodyForExtraction.length === 1 && typeof parsedBodyForExtraction[0] === 'object') {
+      actualPayloadToExtractFrom = parsedBodyForExtraction[0];
+      console.log('[Evolution API Webhook Store] Payload is an array with one object, using the inner object for extraction.');
+    }
+
     const commonMessagePaths = [
-      'data.message.conversation',
-      'message.body',
-      'message.message.conversation',
-      'body.textMessage.text',
-      'text',
-      'data.message.extendedTextMessage.text',
+      'data.message.conversation', 'message.body', 'message.message.conversation',
+      'textMessage.text', 'text', 'data.message.extendedTextMessage.text',
+      'body.data.message.conversation', // For array-wrapped payloads
+      'body.message.body',
+      'body.data.message.extendedTextMessage.text',
     ];
     for (const path of commonMessagePaths) {
-      const msg = getProperty(parsedBodyForExtraction, path);
+      const msg = getProperty(actualPayloadToExtractFrom, path);
       if (typeof msg === 'string' && msg.trim() !== '') {
         extractedMessage = msg.trim();
-        console.log(`[Evolution API Webhook Store] Extracted message using path "${path}": "${extractedMessage}"`);
+        console.log(`[Evolution API Webhook Store] Extracted message using path "${path}" from actualPayload: "${extractedMessage}"`);
         break;
       }
     }
     if (!extractedMessage) {
-      console.log(`[Evolution API Webhook Store] Could not extract a simple text message from common JSON paths.`);
+      console.log(`[Evolution API Webhook Store] Could not extract a simple text message from common JSON paths in actualPayload.`);
     }
 
-    const remoteJidPath1 = 'data.key.remoteJid';
-    const remoteJidPath2 = 'sender';
-    let jid = getProperty(parsedBodyForExtraction, remoteJidPath1);
-    if (typeof jid === 'string' && jid.trim() !== '') {
-      webhookRemoteJid = jid.trim();
-      console.log(`[Evolution API Webhook Store] Extracted remoteJid using path "${remoteJidPath1}": "${webhookRemoteJid}"`);
-    } else {
-      jid = getProperty(parsedBodyForExtraction, remoteJidPath2);
+    const remoteJidPaths = [
+      'data.key.remoteJid', 'sender',
+      'body.data.key.remoteJid', // For array-wrapped payloads
+      'body.sender'
+    ];
+    for (const path of remoteJidPaths) {
+      const jid = getProperty(actualPayloadToExtractFrom, path);
       if (typeof jid === 'string' && jid.trim() !== '') {
         webhookRemoteJid = jid.trim();
-        console.log(`[Evolution API Webhook Store] Extracted remoteJid using path "${remoteJidPath2}": "${webhookRemoteJid}"`);
+        console.log(`[Evolution API Webhook Store] Extracted remoteJid using path "${path}" from actualPayload: "${webhookRemoteJid}"`);
+        break;
       }
     }
     if (!webhookRemoteJid) {
-      console.log(`[Evolution API Webhook Store] Could not extract remoteJid from common JSON paths.`);
+      console.log(`[Evolution API Webhook Store] Could not extract remoteJid from common JSON paths in actualPayload.`);
     }
   }
 
@@ -140,7 +142,7 @@ async function storeRequestDetails(request: NextRequest): Promise<StoredLogEntry
     method: method,
     url: url,
     headers: headers,
-    payload: payload,
+    payload: payload, // Store the original parsed payload
     ip: ip,
     geo: geo,
   };
@@ -152,7 +154,6 @@ async function storeRequestDetails(request: NextRequest): Promise<StoredLogEntry
     logEntry.webhook_remoteJid = webhookRemoteJid;
   }
   
-  console.log(`[Evolution API Webhook Store] BEFORE UNSHIFT: Current globalThis.evolutionWebhookLogs length: ${globalThis.evolutionWebhookLogs?.length}. Type: ${typeof globalThis.evolutionWebhookLogs}. IsArray: ${Array.isArray(globalThis.evolutionWebhookLogs)}`);
   if (!Array.isArray(globalThis.evolutionWebhookLogs)) {
     console.warn('[Evolution API Webhook Store] globalThis.evolutionWebhookLogs is not an array before unshift! Re-initializing.');
     globalThis.evolutionWebhookLogs = [];
@@ -167,57 +168,82 @@ async function storeRequestDetails(request: NextRequest): Promise<StoredLogEntry
     console.log(`[Evolution API Webhook Store] Popped oldest log entry (timestamp: ${popped?.timestamp}). Logs count: ${globalThis.evolutionWebhookLogs.length}`);
   }
   console.log(`[Evolution API Webhook Store EXIT] Request logged. Total logs in global store: ${globalThis.evolutionWebhookLogs.length}`);
-  return logEntry; // Return the processed log entry
+  return logEntry; 
 }
 
 export async function POST(request: NextRequest) {
   console.log('[Evolution API Webhook Route] POST request received.');
+  
+  // Clone the request to safely read the body for debugging, then pass original to storeRequestDetails
+  const requestCloneForDebug = request.clone();
+  try {
+    const bodyTextDebug = await requestCloneForDebug.text();
+    console.log('[Evolution API Webhook Route - DEBUG] Raw body in POST handler:', bodyTextDebug.substring(0, 500) + (bodyTextDebug.length > 500 ? '...' : ''));
+  } catch (e: any) {
+    console.error('[Evolution API Webhook Route - DEBUG] Error reading raw body in POST handler:', e.message);
+  }
+
   const loggedEntry = await storeRequestDetails(request);
 
   if (loggedEntry && loggedEntry.payload && typeof loggedEntry.payload === 'object') {
-    const webhookBody = loggedEntry.payload; // This is the parsed JSON body if successful
+    // Use the *original* parsed payload from loggedEntry for further processing
+    const webhookPayload = loggedEntry.payload; 
+    let actualPayload = webhookPayload;
+    if (Array.isArray(webhookPayload) && webhookPayload.length === 1 && typeof webhookPayload[0] === 'object') {
+      actualPayload = webhookPayload[0]; // Use the inner object if payload is an array of one
+    }
 
-    const instance = webhookBody.instance as string;
-    const senderJid = loggedEntry.webhook_remoteJid as string; // Use the extracted one
-    const receivedMessageText = loggedEntry.extractedMessage as string; // Use the extracted one
-    const evolutionApiBaseUrl = webhookBody.server_url as string;
-    const evolutionApiKey = webhookBody.apikey as string;
+    const eventType = getProperty(actualPayload, 'event') as string;
+    const instance = getProperty(actualPayload, 'instance') as string;
+    const senderJid = loggedEntry.webhook_remoteJid as string; // Use the JID extracted by storeRequestDetails
+    const receivedMessageText = loggedEntry.extractedMessage as string; // Use the message extracted by storeRequestDetails
+    const evolutionApiBaseUrl = getProperty(actualPayload, 'server_url') as string;
+    const evolutionApiKey = getProperty(actualPayload, 'apikey') as string;
 
-    if (webhookBody.event === 'messages.upsert' && receivedMessageText && senderJid && instance && evolutionApiBaseUrl) {
-      console.log(`[Evolution API Webhook Route] messages.upsert event detected. Attempting to send reply.`);
-      console.log(`[Evolution API Webhook Route] Details for reply: instance='${instance}', senderJid='${senderJid}', receivedMessage='${receivedMessageText}', baseUrl='${evolutionApiBaseUrl}', apiKeyExists='${!!evolutionApiKey}'`);
+    console.log(`[Evolution API Webhook Route] Parsed data: event='${eventType}', instance='${instance}', senderJid='${senderJid}', receivedMessage='${receivedMessageText}', baseUrl='${evolutionApiBaseUrl}', apiKeyExists='${!!evolutionApiKey}'`);
+
+    if (eventType === 'messages.upsert' && receivedMessageText && senderJid && instance && evolutionApiBaseUrl) {
+      console.log(`[Evolution API Webhook Route] 'messages.upsert' event detected with required data. Attempting to get AI reply.`);
       
-      const replyText = `Webhook recebido! Você disse: '${receivedMessageText}'`;
-
       try {
-        const sendResult = await sendWhatsAppMessageAction({
-          baseUrl: evolutionApiBaseUrl,
-          apiKey: evolutionApiKey || undefined, // Pass undefined if not present
-          instanceName: instance,
-          recipientPhoneNumber: senderJid,
-          messageType: 'text',
-          textContent: replyText,
-        });
+        const aiInput: UserMessageInput = { userMessage: receivedMessageText };
+        console.log('[Evolution API Webhook Route] Calling simpleChatReply with input:', aiInput);
+        const aiResponse = await simpleChatReply(aiInput);
+        const replyText = aiResponse.botReply;
+        console.log('[Evolution API Webhook Route] AI Reply received:', replyText);
 
-        if (sendResult.success) {
-          console.log(`[Evolution API Webhook Route] Successfully sent reply to ${senderJid}: ${replyText}. API Response:`, sendResult.data);
+        if (replyText) {
+          const sendResult = await sendWhatsAppMessageAction({
+            baseUrl: evolutionApiBaseUrl,
+            apiKey: evolutionApiKey || undefined,
+            instanceName: instance,
+            recipientPhoneNumber: senderJid,
+            messageType: 'text',
+            textContent: replyText,
+          });
+
+          if (sendResult.success) {
+            console.log(`[Evolution API Webhook Route] Successfully sent AI reply to ${senderJid}: ${replyText}. API Response:`, sendResult.data);
+          } else {
+            console.error(`[Evolution API Webhook Route] Failed to send AI reply to ${senderJid}. Error: ${sendResult.error}. API Response:`, sendResult.data);
+          }
         } else {
-          console.error(`[Evolution API Webhook Route] Failed to send reply to ${senderJid}. Error: ${sendResult.error}. API Response:`, sendResult.data);
+          console.warn('[Evolution API Webhook Route] AI did not provide a reply. No message sent.');
         }
       } catch (error: any) {
-        console.error(`[Evolution API Webhook Route] Exception while trying to send reply to ${senderJid}:`, error);
+        console.error(`[Evolution API Webhook Route] Exception while trying to get AI reply or send message to ${senderJid}:`, error);
       }
-       // TODO: Aqui seria o local para adicionar a lógica de backend para:
-      // 1. Identificar o Flowise Lite Workspace/Flow para esta 'instance' ou 'senderId'.
+       // TODO: Aqui seria o local para adicionar a lógica de backend mais avançada para:
+      // 1. Identificar o Flowise Lite Workspace/Flow para esta 'instance' ou 'senderId' (talvez via config global).
       // 2. Carregar ou criar um estado de conversa (session) para este 'senderId'.
-      // 3. Injetar 'extractedMessage', 'senderId', 'messageTimestamp' nas variáveis da sessão.
-      // 4. Acionar o motor de fluxo para processar o nó atual da sessão ou o gatilho de início configurado.
+      // 3. Injetar 'extractedMessage', 'senderId', etc. nas variáveis da sessão do fluxo.
+      // 4. Acionar o motor de fluxo REAL para processar o nó atual da sessão ou o gatilho de início configurado.
       // 5. Se o fluxo gerar uma resposta, usar evolutionApiActions.ts para enviá-la de volta.
     } else {
-        console.log(`[Evolution API Webhook Route] POST request logged, but not a 'messages.upsert' event with all necessary data for auto-reply. Instance: ${instance}, Sender: ${senderJid}, Message: ${receivedMessageText}, BaseURL: ${evolutionApiBaseUrl}`);
+        console.log(`[Evolution API Webhook Route] POST request logged, but not a 'messages.upsert' event or missing necessary data for AI auto-reply. Event: ${eventType}, Instance: ${instance}, Sender: ${senderJid}, Message: ${receivedMessageText}, BaseURL: ${evolutionApiBaseUrl}`);
     }
   } else {
-    console.log('[Evolution API Webhook Route] POST request logged, but payload was not suitable for auto-reply logic.');
+    console.log('[Evolution API Webhook Route] POST request logged, but payload was not suitable for AI auto-reply logic (not an object or processing error).');
   }
 
 
@@ -247,7 +273,7 @@ export async function GET(request: NextRequest) {
 
   if (logEventParam === 'true') {
     console.log('[Evolution API Webhook Route] GET request received (logEvent=true).');
-    await storeRequestDetails(request); // Loga o evento GET
+    await storeRequestDetails(request); 
     return NextResponse.json(
       {
         status: "received_and_logged",
@@ -257,14 +283,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Resposta informativa padrão para GET
   console.log('[Evolution API Webhook Route] GET request received (informative).');
   return NextResponse.json(
     {
       message: "Flowise Lite Webhook Endpoint for Evolution API.",
-      note: "This endpoint is configured to receive events (typically via POST) from your Evolution API instance. Received events are logged to the server console and stored in-memory for viewing in the 'Console' section of the Flowise Lite application.",
-      testInstructions: "To test, configure your Evolution API to send webhooks (e.g., POST requests with JSON payloads) to this URL. You can also send PUT, PATCH, DELETE requests directly to see them logged. Use the 'logEvent=true' query parameter with a GET request if you want to log it as an event (useful for simple browser tests)."
+      note: "This endpoint is configured to receive events (typically via POST) from your Evolution API instance. Received events are logged to the server console and stored in-memory for viewing in the 'Console' section of the Flowise Lite application. It will also attempt a simple AI-generated reply to 'messages.upsert' events.",
+      testInstructions: "To test, configure your Evolution API to send webhooks (e.g., POST requests with JSON payloads for 'messages.upsert') to this URL. You can also send PUT, PATCH, DELETE requests directly to see them logged. Use the 'logEvent=true' query parameter with a GET request if you want to log it as an event."
     },
     { status: 200 }
   );
 }
+
