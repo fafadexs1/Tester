@@ -49,7 +49,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     onDropNodeCbRef.current = onDropNode;
   }, [onDropNode]);
 
-  // Refs for zoomLevel and canvasOffset to use in stableOnDropNode
+  // Refs para zoomLevel e canvasOffset para usar em stableOnDropNode
   const zoomLevelRef = useRef(zoomLevel);
   const canvasOffsetRef = useRef(canvasOffset);
 
@@ -74,6 +74,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
       const logicalX = (xOnCanvasElement - currentCanvasOffset.x) / currentZoom;
       const logicalY = (yOnCanvasElement - currentCanvasOffset.y) / currentZoom;
       
+      // console.log('[Canvas] Drop event (target: canvasElementRef)', { itemType: item.type, clientOffset, canvasRect, xOnCanvasElement, yOnCanvasElement, canvasOffsetX: currentCanvasOffset.x, canvasOffsetY: currentCanvasOffset.y, zoomLevel: currentZoom, logicalX, logicalY });
       onDropNodeCbRef.current(item, { x: logicalX, y: logicalY });
     } else {
       // console.warn('[Canvas] Drop failed: clientOffset or canvasElementRef.current is null');
@@ -92,7 +93,10 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
   useEffect(() => {
     const currentCanvasElement = canvasElementRef.current; 
     if (currentCanvasElement) {
+      // console.log('[Canvas] Attaching drop target to canvasElementRef:', currentCanvasElement);
       drop(currentCanvasElement);
+    } else {
+      // console.warn('[Canvas] Attaching drop target: canvasElementRef.current is null.');
     }
     return () => {
       if (currentCanvasElement) {
@@ -121,7 +125,7 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
     return map;
   }, [nodes]);
 
-  // console.log("[Canvas] Rendering with nodes count:", nodes.length);
+  // console.log("[Canvas] Rendering with nodes count:", nodes.length); // Avoid logging the entire array for performance
 
   const renderedNodes = useMemo(() => (
     nodes.map((node) => (
@@ -214,12 +218,11 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
   
   // useEffect(() => {
   //   if (drawingLine) {
-  //      // console.log('[Canvas] Drawing line active. Data:', JSON.parse(JSON.stringify(drawingLine)), 'Offset:', JSON.parse(JSON.stringify(canvasOffset)), 'Zoom:', zoomLevel);
+  //      console.log('[Canvas] Drawing line active. Data:', JSON.parse(JSON.stringify(drawingLine)), 'Offset:', JSON.parse(JSON.stringify(canvasOffset)), 'Zoom:', zoomLevel);
   //   }
   // }, [drawingLine, canvasOffset, zoomLevel]);
 
-  const gridDotSize = Math.max(0.2, 0.5 * zoomLevel);
-  const gridSpacing = GRID_SIZE * zoomLevel;
+  const visualGridSpacing = GRID_SIZE * zoomLevel;
 
   return (
     <div
@@ -228,9 +231,9 @@ const Canvas: React.FC<CanvasProps> = React.forwardRef<HTMLDivElement, CanvasPro
       onMouseDown={onCanvasMouseDown}
       style={{
         cursor: 'grab',
-        backgroundImage: `radial-gradient(hsl(var(--flow-grid-dots)) ${gridDotSize}px, transparent ${gridDotSize}px)`,
-        backgroundSize: `${gridSpacing}px ${gridSpacing}px`,
-        backgroundPosition: `${canvasOffset.x % gridSpacing}px ${canvasOffset.y % gridSpacing}px`,
+        backgroundImage: `radial-gradient(hsl(var(--flow-grid-dots)) 1px, transparent 1px)`,
+        backgroundSize: `${visualGridSpacing}px ${visualGridSpacing}px`,
+        backgroundPosition: `${canvasOffset.x % visualGridSpacing}px ${canvasOffset.y % visualGridSpacing}px`,
       }}
       tabIndex={0}
     >
