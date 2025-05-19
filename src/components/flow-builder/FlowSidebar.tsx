@@ -1,20 +1,20 @@
 
 "use client";
 
-import type React from 'react';
+import React from 'react'; // Ensure React is imported
 import DraggableBlock from './DraggableBlock';
 import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, 
-  Database, Rows, Search, Edit3, Trash, PlayCircle, StopCircle
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface FlowSidebarProps {}
 
-const FlowSidebar: React.FC<FlowSidebarProps> = () => {
+const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
   const iconProps = { className: "w-4 h-4" };
 
   const blockCategories = [
@@ -22,7 +22,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = () => {
       value: "basic",
       title: "Básicos",
       blocks: [
-        { type: "start", label: "Início do Fluxo", icon: <PlayCircle {...iconProps} color="hsl(var(--primary))" />, defaultData: { triggers: ['Gatilho Inicial'] } },
+        { type: "start", label: "Início do Fluxo", icon: <PlayCircle {...iconProps} color="hsl(var(--primary))" />, defaultData: { triggers: [{ id: 'default-trigger-1', name: 'Gatilho Inicial', type: 'manual', webhookPayloadVariable: 'webhook_payload' }] } },
         { type: "message", label: "Exibir Texto", icon: <MessageSquareText {...iconProps} color="hsl(var(--accent))" />, defaultData: { text: 'Olá!'} },
         { type: "input", label: "Entrada do Usuário", icon: <Type {...iconProps} className="text-green-600" />, defaultData: { inputType: 'text', promptText: 'Qual é o seu nome?', variableToSaveResponse: 'nome_usuario' } },
         { type: "option", label: "Múltiplas Escolhas", icon: <ListChecks {...iconProps} className="text-purple-600" />, defaultData: { questionText: 'Escolha uma opção:', optionsList: 'Opção A\nOpção B', variableToSaveChoice: 'escolha_usuario' }},
@@ -50,7 +50,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = () => {
       title: "Inteligência Artificial",
       blocks: [
         { type: "ai-text-generation", label: "Gerar Texto com IA", icon: <Sparkles {...iconProps} className="text-rose-500" />, defaultData: { aiPromptText: 'Resuma o seguinte texto: {{input.texto_longo}}', aiOutputVariable: 'texto_resumido_ia' } },
-        { type: "intelligent-agent", label: "Agente Inteligente", icon: <Headset {...iconProps} className="text-sky-500" />, defaultData: { agentName: 'Agente de Suporte', agentSystemPrompt: 'Você é um agente de suporte virtual. Ajude o usuário com suas dúvidas.', userInputVariable: '{{pergunta_do_usuario}}', agentResponseVariable: 'resposta_do_agente', aiModelName: 'gemini-2.0-flash', maxConversationTurns: 5, temperature: 0.7,}}
+        { type: "intelligent-agent", label: "Agente Inteligente", icon: <Headset {...iconProps} className="text-sky-500" />, defaultData: { agentName: 'Agente de Suporte', agentSystemPrompt: 'Você é um agente de suporte virtual. Ajude o usuário com suas dúvidas.', userInputVariable: '{{pergunta_do_usuario}}', agentResponseVariable: 'resposta_do_agente', aiModelName: 'gemini-pro', maxConversationTurns: 5, temperature: 0.7,}}
       ]
     },
     {
@@ -61,7 +61,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = () => {
         { type: "redirect", label: "Redirecionar URL", icon: <ExternalLink {...iconProps} className="text-lime-600" />, defaultData: { redirectUrl: 'https://google.com' } },
         { type: "date-input", label: "Entrada de Data", icon: <CalendarDays {...iconProps} className="text-sky-600" />, defaultData: { dateInputLabel: 'Qual sua data de nascimento?', variableToSaveDate: 'data_nascimento' } },
         { type: "send-email", label: "Enviar E-mail", icon: <Mail {...iconProps} className="text-blue-600" />, defaultData: { emailTo: 'destinatario@exemplo.com', emailSubject: 'Assunto do E-mail', emailBody: 'Olá, {{input.nome}}!' } },
-        { type: "google-sheets-append", label: "Adicionar Linha Planilha Google", icon: <Sheet {...iconProps} className="text-emerald-500" />, defaultData: { googleSheetId: 'SEU_SPREADSHEET_ID', sheetName: 'Página1', googleSheetRowData: '["{{input.campo1}}", "{{input.campo2}}"]' } },
+        { type: "google-sheets-append", label: "Adicionar Linha Planilha Google", icon: <Sheet {...iconProps} className="text-emerald-500" />, defaultData: { googleSheetId: 'SEU_SPREADSHEET_ID', googleSheetName: 'Página1', googleSheetRowData: '["{{input.campo1}}", "{{input.campo2}}"]' } },
       ]
     },
     {
@@ -69,7 +69,7 @@ const FlowSidebar: React.FC<FlowSidebarProps> = () => {
       title: "Supabase",
       blocks: [
         { type: "supabase-create-row", label: "Criar Linha", icon: <Rows {...iconProps} className="text-green-500" />, defaultData: { supabaseTableName: '', supabaseDataJson: '{ "coluna": "valor" }', supabaseResultVariable: 'id_linha_criada_supabase' } },
-        { type: "supabase-read-row", label: "Ler Linha(s)", icon: <Search {...iconProps} className="text-blue-500" />, defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase' } },
+        { type: "supabase-read-row", label: "Ler Linha(s)", icon: <Search {...iconProps} className="text-blue-500" />, defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase'} },
         { type: "supabase-update-row", label: "Atualizar Linha", icon: <Edit3 {...iconProps} className="text-yellow-500" />, defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseDataJson: '{ "coluna": "novo_valor" }' } },
         { type: "supabase-delete-row", label: "Deletar Linha", icon: <Trash {...iconProps} className="text-red-500" />, defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '' } },
       ]
@@ -117,5 +117,8 @@ const FlowSidebar: React.FC<FlowSidebarProps> = () => {
     </aside>
   );
 };
+
+const FlowSidebar = React.memo(FlowSidebarComponent);
+FlowSidebar.displayName = 'FlowSidebar'; // Adicionando displayName para o componente memoizado
 
 export default FlowSidebar;
