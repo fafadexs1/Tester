@@ -124,12 +124,14 @@ export default function FlowBuilderClient() {
         if (JSON.stringify(prevDefinedVars) === JSON.stringify(newVarsArray)) {
           return prevDefinedVars; 
         }
+        // console.log("[FlowBuilderClient] Defined variables updated:", newVarsArray);
         return newVarsArray; 
       });
 
     } else {
        setDefinedVariablesInFlow(prevDefinedVars => {
         if (prevDefinedVars.length === 0) return prevDefinedVars;
+        // console.log("[FlowBuilderClient] No active workspace nodes, clearing defined variables.");
         return [];
       });
     }
@@ -382,8 +384,7 @@ export default function FlowBuilderClient() {
       console.error('[FlowBuilderClient] No activeWorkspaceId, cannot add node.');
       return;
     }
-    // console.log('[FlowBuilderClient] handleDropNode called with:', { itemType: item.type, logicalDropCoords, activeWorkspaceId });
-
+    
     const currentWksp = workspaces.find(ws => ws.id === activeWorkspaceId); 
     const existingVariableNames: string[] = [];
     if (currentWksp) { 
@@ -419,7 +420,7 @@ export default function FlowBuilderClient() {
       }
     });
     
-    const baseNodeData: Omit<NodeData, 'id' | 'type' | 'title' | 'x' | 'y' | 'triggers' | 'sendViaWhatsApp' | 'whatsappTargetPhoneNumber'> = {
+    const baseNodeData: Omit<NodeData, 'id' | 'type' | 'title' | 'x' | 'y' | 'triggers'> = {
       text: '', promptText: '', inputType: 'text', variableToSaveResponse: '',
       questionText: '', optionsList: '', variableToSaveChoice: '',
       mediaDisplayType: 'image', mediaDisplayUrl: '', mediaDisplayText: '',
@@ -520,6 +521,9 @@ export default function FlowBuilderClient() {
       const lineStartX = logicalNodeX + NODE_WIDTH; 
       const lineStartY = logicalNodeY + startYOffset; 
       
+      // As coordenadas do mouse já vêm relativas ao viewport
+      // Precisamos convertê-las para coordenadas visuais relativas ao canvasRef
+      // E então para coordenadas lógicas
       const mouseXOnCanvas = event.clientX - canvasRect.left;
       const mouseYOnCanvas = event.clientY - canvasRect.top;
       const lineCurrentX = (mouseXOnCanvas - currentCanvasOffset.x) / currentZoomLevel; 
@@ -534,22 +538,17 @@ export default function FlowBuilderClient() {
         currentY: lineCurrentY, 
       });
     },
-    [canvasRef] 
+    [canvasRef, setDrawingLine, canvasOffsetCbRef, zoomLevelCbRef] 
   ); 
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    // Verifica se o clique foi diretamente no canvas (e não em um nó ou outro elemento interativo)
-    // A verificação `(e.target as HTMLElement).closest('[data-node-id]')` impediria o pan se o clique começasse em um nó.
-    // Para permitir pan mesmo começando em um nó (mas não em seus inputs/botões), a lógica de não-drag no NodeCard é mais importante.
-    // Aqui, vamos simplificar: se o alvo direto é o canvas ou o wrapper de conteúdo, iniciamos o pan.
-    if (e.target === canvasElementRef.current || (e.target as HTMLElement).id === 'flow-content-wrapper') { 
+    if (canvasRef.current && (e.target === canvasRef.current || (e.target as HTMLElement).id === 'flow-content-wrapper')) { 
       isPanning.current = true;
       panStartMousePosition.current = { x: e.clientX, y: e.clientY };
       initialCanvasOffsetOnPanStart.current = { ...canvasOffsetCbRef.current };
-      if (canvasElementRef.current) canvasElementRef.current.style.cursor = 'grabbing';
+      if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
     }
-  }, [canvasElementRef]); // Adicionando canvasElementRef como dependência
-
+  }, [canvasRef, canvasOffsetCbRef]); // Corrigido para usar canvasRef e canvasOffsetCbRef
 
   const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -560,9 +559,9 @@ export default function FlowBuilderClient() {
         y: initialCanvasOffsetOnPanStart.current.y + dy,
       });
     } else if (drawingLine && canvasRef.current) {
-      const canvasRect = canvasRef.current.getBoundingClientRect();
       const currentCanvasOffset = canvasOffsetCbRef.current; 
       const currentZoomLevel = zoomLevelCbRef.current;     
+      const canvasRect = canvasRef.current.getBoundingClientRect();
       
       const mouseXOnCanvas = e.clientX - canvasRect.left;
       const mouseYOnCanvas = e.clientY - canvasRect.top;
@@ -576,24 +575,21 @@ export default function FlowBuilderClient() {
         };
       });
     }
-  }, [drawingLine, canvasRef]); 
+  }, [drawingLine, canvasRef, setDrawingLine, setCanvasOffset, canvasOffsetCbRef, zoomLevelCbRef]); 
 
-  const handleGlobalMouseUp = useCallback((e: MouseEvent) => { // e: MouseEvent - tipagem explícita
+  const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
       isPanning.current = false;
-      if (canvasElementRef.current) canvasElementRef.current.style.cursor = 'grab'; // Usar canvasElementRef
+      if (canvasRef.current) canvasRef.current.style.cursor = 'grab'; 
     } else if (drawingLine) {
       const targetElement = document.elementFromPoint(e.clientX, e.clientY);
-      // Procurar pelo handle de destino ou pelo card do nó
       const targetHandleElement = targetElement?.closest('[data-handle-type="target"]');
       const targetNodeElement = targetElement?.closest('[data-node-id]');
       
       let toId = null;
       if (targetHandleElement) {
-          // Se o clique foi em um handle de entrada, pegue o ID do nó pai desse handle
           toId = targetHandleElement.closest('[data-node-id]')?.getAttribute('data-node-id');
       } else if (targetNodeElement && !targetNodeElement.closest('[data-connector="true"]')) { 
-          // Se o clique foi em um nó (mas não em um conector de SAÍDA desse mesmo nó), considera o nó como destino
           toId = targetNodeElement.getAttribute('data-node-id');
       }
 
@@ -608,8 +604,8 @@ export default function FlowBuilderClient() {
             const newConnection: Connection = {
                 id: uuidv4(),
                 from: drawingLine.fromId,
-                to: toId as string, // Garantir que é string
-                sourceHandle: drawingLine.sourceHandleId, // Usar o handleId correto
+                to: toId as string,
+                sourceHandle: drawingLine.sourceHandleId, 
             };
 
             const isDuplicate = newConnectionsArray.some(
@@ -618,7 +614,6 @@ export default function FlowBuilderClient() {
                      c.sourceHandle === newConnection.sourceHandle
             );
 
-            // Lógica para substituir conexão se uma já existir do mesmo sourceHandle
             const existingConnectionFromThisSourceHandle = newConnectionsArray.find(
                 c => c.from === newConnection.from && c.sourceHandle === newConnection.sourceHandle
             );
@@ -638,36 +633,35 @@ export default function FlowBuilderClient() {
       }
       setDrawingLine(null);
     }
-  }, [drawingLine, activeWorkspaceId, updateActiveWorkspace, canvasElementRef]); // Adicionar canvasElementRef
+  }, [drawingLine, activeWorkspaceId, updateActiveWorkspace, setDrawingLine, canvasRef]);
 
   const deleteConnection = useCallback((connectionIdToDelete: string) => {
-    // console.log("[FlowBuilderClient] Connection deleted:", connectionIdToDelete);
     updateActiveWorkspace(ws => ({
         ...ws,
         connections: ws.connections.filter(conn => conn.id !== connectionIdToDelete)
     }));
-    setHighlightedConnectionId(null); // Limpa o highlight ao deletar
-  }, [updateActiveWorkspace]); 
+    setHighlightedConnectionId(null); 
+  }, [updateActiveWorkspace, setHighlightedConnectionId]); 
 
   useEffect(() => {
+    if (!hasMounted) return; // Só adiciona listeners após a montagem no cliente
+
     document.addEventListener('mousemove', handleGlobalMouseMove);
     document.addEventListener('mouseup', handleGlobalMouseUp);
     
-    // Correção para o bug da linha presa:
-    // Usar uma ref para a linha de desenho dentro do manipulador de mouseleave
-    const currentDrawingLineForCleanupRef = React.createRef<DrawingLineData | null>(); 
-    currentDrawingLineForCleanupRef.current = drawingLine;
+    const currentDrawingLineRef = React.createRef<DrawingLineData | null>();
+    currentDrawingLineRef.current = drawingLine;
 
     const handleMouseLeaveWindow = () => {
       if (isPanning.current) {
         isPanning.current = false;
         if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
       }
-      // Use a ref para obter o valor mais recente de drawingLine
-      if (currentDrawingLineForCleanupRef.current) { 
+      if (currentDrawingLineRef.current) { 
         setDrawingLine(null);
       }
     };
+    // Adicionar ao body pode ser mais confiável para mouseleave do que document
     document.body.addEventListener('mouseleave', handleMouseLeaveWindow);
 
     return () => {
@@ -675,17 +669,16 @@ export default function FlowBuilderClient() {
       document.removeEventListener('mouseup', handleGlobalMouseUp);
       document.body.removeEventListener('mouseleave', handleMouseLeaveWindow);
     };
-  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine, canvasRef]); // Adicionado canvasRef
+  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine, canvasRef, hasMounted, setDrawingLine]); // Adicionado hasMounted
   
 
   const handleZoom = useCallback((direction: 'in' | 'out' | 'reset') => {
-    if (!canvasRef.current) return; // Usar canvasRef
+    if (!canvasRef.current) return; 
 
     const currentZoom = zoomLevelCbRef.current;
     const currentOffset = canvasOffsetCbRef.current;
-    const canvasRect = canvasRef.current.getBoundingClientRect(); // Usar canvasRef
+    const canvasRect = canvasRef.current.getBoundingClientRect(); 
     
-    // Ponto de zoom é o centro do viewport do canvas
     const viewportCenterX = canvasRect.width / 2;
     const viewportCenterY = canvasRect.height / 2;
 
@@ -698,31 +691,26 @@ export default function FlowBuilderClient() {
       newZoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoom * zoomFactor));
     }
 
-    if (newZoomLevel === currentZoom && direction !== 'reset') return; // Evita re-cálculo se o zoom não mudou
+    if (newZoomLevel === currentZoom && direction !== 'reset') return; 
 
-    // Ponto lógico no centro do viewport antes do zoom
     const logicalCenterXBeforeZoom = (viewportCenterX - currentOffset.x) / currentZoom;
     const logicalCenterYBeforeZoom = (viewportCenterY - currentOffset.y) / currentZoom;
 
-    // Posição visual (em relação ao canto superior esquerdo do canvas) do ponto lógico após o novo zoom
     const visualXOfLogicalCenterAfterZoom = logicalCenterXBeforeZoom * newZoomLevel;
     const visualYOfLogicalCenterAfterZoom = logicalCenterYBeforeZoom * newZoomLevel;
     
-    // Novo offset para manter o ponto lógico no centro do viewport
     const newOffsetX = viewportCenterX - visualXOfLogicalCenterAfterZoom;
     const newOffsetY = viewportCenterY - visualYOfLogicalCenterAfterZoom;
     
     setZoomLevel(newZoomLevel);
     setCanvasOffset({ x: newOffsetX, y: newOffsetY });
 
-  }, [setZoomLevel, setCanvasOffset, canvasRef]); // Adicionado canvasRef
+  }, [setZoomLevel, setCanvasOffset, canvasRef, zoomLevelCbRef, canvasOffsetCbRef]);
 
 
   if (isLoading && hasMounted) {
     return <div className="flex items-center justify-center h-screen">Carregando fluxos do banco de dados...</div>;
   }
-
-  const canvasElementRef = canvasRef; // Para consistência com a lógica de pan
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -740,11 +728,11 @@ export default function FlowBuilderClient() {
           onZoom={handleZoom}
           currentZoomLevel={zoomLevel}
         />
-        <div className="flex flex-1 overflow-hidden relative" > {/* mainContentRef foi removido daqui, canvasRef é usado diretamente */}
+        <div className="flex flex-1 overflow-hidden relative"> 
           <FlowSidebar />
-          <div className="flex-1 flex relative overflow-hidden"> {/* Container para canvas */}
+          <div className="flex-1 flex relative overflow-hidden"> 
             <Canvas
-              ref={canvasRef} // Passando a ref para o componente Canvas
+              ref={canvasRef} 
               nodes={currentNodes}
               connections={currentConnections}
               drawingLine={drawingLine}
@@ -761,10 +749,9 @@ export default function FlowBuilderClient() {
               definedVariablesInFlow={definedVariablesInFlow}
             />
           </div>
-          {/* TestChatPanel é renderizado condicionalmente */}
           {hasMounted && isChatPanelOpen && (
             <TestChatPanel
-              activeWorkspace={activeWorkspace} // Passa o objeto workspace inteiro
+              activeWorkspace={activeWorkspace} 
             />
           )}
         </div>
@@ -772,3 +759,4 @@ export default function FlowBuilderClient() {
     </DndProvider>
   );
 }
+
