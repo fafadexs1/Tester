@@ -56,13 +56,20 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
     zoomLevelRef.current = zoomLevel;
   }, [zoomLevel]);
   
-  // canvasOffsetRef não é mais necessário aqui se usarmos as props diretamente no stableOnDropNode
-  // e o target for o flowContentWrapperRef
+  // canvasOffset é passado como prop, então não precisa de ref aqui para stableOnDropNode se
+  // stableOnDropNode depende de canvasOffset.x e .y (primitivos)
+  // No entanto, para consistência e para evitar que stableOnDropNode mude desnecessariamente
+  // se o objeto canvasOffset mudar de referência (mesmo com x/y iguais), usar ref é mais seguro.
+  const canvasOffsetRef = useRef(canvasOffset);
+    useEffect(() => {
+        canvasOffsetRef.current = canvasOffset;
+    }, [canvasOffset]);
+
 
   const stableOnDropNode = useCallback(
     (item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
       const clientOffset = monitor.getClientOffset();
-      if (clientOffset && flowContentWrapperRef.current) {
+      if (clientOffset && flowContentWrapperRef.current) { // Alvo de drop é flowContentWrapperRef
         const flowWrapperRect = flowContentWrapperRef.current.getBoundingClientRect();
         
         const xOnFlowWrapper = clientOffset.x - flowWrapperRect.left;
@@ -70,6 +77,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
         
         const currentZoom = zoomLevelRef.current; // Usa a ref para o zoom atual
         
+        // Coordenadas lógicas são relativas ao conteúdo do flowContentWrapperRef
         const logicalX = xOnFlowWrapper / currentZoom;
         const logicalY = yOnFlowWrapper / currentZoom;
         
@@ -79,7 +87,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
         // console.warn('[Canvas] Drop failed: clientOffset or flowContentWrapperRef.current is null');
       }
     },
-    [onDropNodeCbRef, zoomLevelRef, flowContentWrapperRef] 
+    [onDropNodeCbRef, zoomLevelRef, flowContentWrapperRef] // Depende apenas das refs estáveis
   );
 
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
@@ -104,7 +112,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
       drop(currentFlowContentWrapper);
     }
     return () => {
-      if (flowContentWrapperRef.current) { 
+      if (flowContentWrapperRef.current) {  // Use a ref diretamente no cleanup
         drop(null);
         // console.log('[Canvas] Cleanup drop target from flowContentWrapperRef');
       }
@@ -240,7 +248,6 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
           height: `${SVG_CANVAS_DIMENSION}px`,
           transformOrigin: 'top left',
           transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
-          // willChange: 'transform', // Test for performance if needed
         }}
       >
         <svg
@@ -285,4 +292,3 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
 
 Canvas.displayName = 'Canvas';
 export default Canvas;
-

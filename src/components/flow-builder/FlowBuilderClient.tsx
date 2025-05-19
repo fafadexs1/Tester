@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, WorkspaceData } from '@/lib/types';
+import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, WorkspaceData, StartNodeTrigger } from '@/lib/types';
 import { 
   NODE_WIDTH, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX, GRID_SIZE,
   START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y,
@@ -25,7 +25,6 @@ import {
 const LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI = 'flowiseLiteActiveWorkspaceUI';
 const LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN = 'flowiseLiteChatPanelOpen';
 
-// Campos nos nós que definem uma variável que pode ser usada em outros lugares
 const VARIABLE_DEFINING_FIELDS: (keyof NodeData)[] = [
   'variableToSaveResponse', 'variableToSaveChoice', 'variableName', 
   'apiOutputVariable', 'variableToSaveDate', 'codeOutputVariable', 
@@ -33,9 +32,8 @@ const VARIABLE_DEFINING_FIELDS: (keyof NodeData)[] = [
   'aiOutputVariable', 'agentResponseVariable', 'supabaseResultVariable',
 ];
 
-// Função para gerar nomes de variáveis únicos
 function generateUniqueVariableName(baseName: string, existingNames: string[]): string {
-  if (!baseName || baseName.trim() === '') return ''; // Retorna vazio se o nome base for inválido
+  if (!baseName || baseName.trim() === '') return '';
   const cleanedBaseName = baseName.replace(/\{\{/g, '').replace(/\}\}/g, '').trim();
   if (cleanedBaseName === '') return '';
 
@@ -69,14 +67,12 @@ export default function FlowBuilderClient() {
   
   const canvasRef = useRef<HTMLDivElement>(null);
   
-  // Refs para valores que mudam frequentemente e são usados em callbacks estáveis
   const canvasOffsetCbRef = useRef(canvasOffset);
   const zoomLevelCbRef = useRef(zoomLevel);
 
-  const [isChatPanelOpen, setIsChatPanelOpen] = useState(true); // Default to true
+  const [isChatPanelOpen, setIsChatPanelOpen] = useState(true);
   const [hasMounted, setHasMounted] = useState(false);
   const [definedVariablesInFlow, setDefinedVariablesInFlow] = useState<string[]>([]);
-
 
   useEffect(() => {
     setHasMounted(true);
@@ -86,7 +82,7 @@ export default function FlowBuilderClient() {
         setIsChatPanelOpen(JSON.parse(savedIsChatPanelOpen));
       } catch (e) {
         console.warn("[FlowBuilderClient] Failed to parse chat panel state from localStorage.", e);
-        setIsChatPanelOpen(true); // Fallback
+        setIsChatPanelOpen(true);
       }
     }
   }, []);
@@ -103,7 +99,6 @@ export default function FlowBuilderClient() {
   const currentNodes = activeWorkspace?.nodes || [];
   const currentConnections = activeWorkspace?.connections || [];
 
-
   useEffect(() => {
     if (activeWorkspace?.nodes) {
       const variables: Set<string> = new Set();
@@ -114,8 +109,7 @@ export default function FlowBuilderClient() {
             variables.add(varName.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
           }
         });
-        // Adicionar variáveis de gatilhos de webhook do nó 'start'
-         if (n.type === 'start' && n.triggers) {
+        if (n.type === 'start' && n.triggers) {
           n.triggers.forEach(trigger => {
             if (trigger.type === 'webhook' && trigger.webhookPayloadVariable) {
               variables.add(trigger.webhookPayloadVariable.replace(/\{\{/g, '').replace(/\}\}/g, ''));
@@ -124,17 +118,14 @@ export default function FlowBuilderClient() {
         }
       });
       
-      // Apenas atualiza se o array realmente mudou para evitar re-renders desnecessários
       setDefinedVariablesInFlow(prevDefinedVars => {
         const newVarsArray = Array.from(variables).sort();
         if (JSON.stringify(prevDefinedVars) === JSON.stringify(newVarsArray)) {
-          return prevDefinedVars; // Retorna a mesma referência se não houver mudanças
+          return prevDefinedVars;
         }
-        return newVarsArray; // Retorna o novo array
+        return newVarsArray;
       });
-
     } else {
-       // Garante que limpa se não houver nós ou workspace
        setDefinedVariablesInFlow(prevDefinedVars => {
         if (prevDefinedVars.length === 0) return prevDefinedVars;
         return [];
@@ -145,16 +136,15 @@ export default function FlowBuilderClient() {
   const toggleChatPanel = useCallback(() => {
     setIsChatPanelOpen(prev => {
       const newState = !prev;
-      if (hasMounted) { // Garante que localStorage só seja acessado no cliente
+      if (hasMounted) {
         localStorage.setItem(LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN, JSON.stringify(newState));
       }
       return newState;
     });
   }, [hasMounted]);
 
-  // Carregar dados do DB
   useEffect(() => {
-    if (!hasMounted) return; // Só executa no cliente
+    if (!hasMounted) return;
     console.log("[FlowBuilderClient] Initializing: Attempting to load workspaces from DB.");
     setIsLoading(true);
     
@@ -166,7 +156,6 @@ export default function FlowBuilderClient() {
         if (loadedWorkspacesFromDB && loadedWorkspacesFromDB.length > 0) {
           setWorkspaces(loadedWorkspacesFromDB);
           
-          // Default para o mais recente do DB (já ordenado pela action)
           let newActiveId = loadedWorkspacesFromDB[0].id; 
           const lastActiveIdFromStorage = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI);
 
@@ -174,10 +163,9 @@ export default function FlowBuilderClient() {
             newActiveId = lastActiveIdFromStorage;
             console.log("[FlowBuilderClient] Active workspace ID set from localStorage (and exists in DB):", newActiveId);
           } else {
-            console.log("[FlowBuilderClient] Active workspace ID set to most recent from DB (or last UI active not found/valid):", newActiveId);
+             console.log("[FlowBuilderClient] Active workspace ID set to most recent from DB:", newActiveId);
           }
           setActiveWorkspaceId(newActiveId);
-          // Salva o ID ativo determinado (seja do localStorage ou o padrão do DB) de volta no localStorage
           localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, newActiveId);
 
         } else {
@@ -186,7 +174,7 @@ export default function FlowBuilderClient() {
           const initialWorkspace: WorkspaceData = {
             id: initialId,
             name: 'Meu Primeiro Fluxo (DB)',
-            nodes: [], // Começa com zero nós
+            nodes: [],
             connections: [],
           };
           const saveResult = await clientSideSaveWorkspacesAction([initialWorkspace]);
@@ -208,7 +196,6 @@ export default function FlowBuilderClient() {
               variant: "destructive",
               duration: 9000
             });
-            // Fallback para um workspace em memória para não quebrar a UI completamente
              const fallbackId = uuidv4();
              setWorkspaces([{ id: fallbackId, name: 'Fluxo de Fallback (Erro DB)', nodes: [], connections: [] }]);
              setActiveWorkspaceId(fallbackId);
@@ -230,10 +217,9 @@ export default function FlowBuilderClient() {
       }
     }
     loadData();
-  }, [hasMounted, toast]); // `toast` é estável
+  }, [hasMounted, toast]);
   
 
-  // Salvar activeWorkspaceId no localStorage quando mudar
   useEffect(() => {
     if (hasMounted && activeWorkspaceId) {
       localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, activeWorkspaceId);
@@ -280,7 +266,7 @@ export default function FlowBuilderClient() {
       if (loadedWorkspacesFromDB && loadedWorkspacesFromDB.length > 0) {
         setWorkspaces(loadedWorkspacesFromDB);
         
-        let newActiveId = loadedWorkspacesFromDB[0].id; // Default ao mais recente do DB
+        let newActiveId = loadedWorkspacesFromDB[0].id;
         const lastActiveIdFromStorage = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI);
         if (lastActiveIdFromStorage && loadedWorkspacesFromDB.some(ws => ws.id === lastActiveIdFromStorage)) {
             newActiveId = lastActiveIdFromStorage;
@@ -340,13 +326,12 @@ export default function FlowBuilderClient() {
       connections: [],
     };
     
-    // Atualiza o estado local primeiro para feedback rápido na UI
     const updatedWorkspaces = [...workspaces, newWorkspace];
     setWorkspaces(updatedWorkspaces);
     setActiveWorkspaceId(newWorkspaceId); 
-    localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, newWorkspaceId); // Salva o novo ID ativo
+    localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, newWorkspaceId);
 
-    console.log("[FlowBuilderClient] New workspace created locally, attempting to save all workspaces to DB.");
+    console.log("[FlowBuilderClient] New workspace created, attempting to save all workspaces to DB.");
     const saveResult = await clientSideSaveWorkspacesAction(updatedWorkspaces); 
     console.log('[FlowBuilderClient] Result from saving new workspace (and others) to DB:', saveResult);
 
@@ -366,9 +351,7 @@ export default function FlowBuilderClient() {
             variant: "destructive",
             duration: 9000
           });
-          // Reverter a adição local se o salvamento no DB falhar
           setWorkspaces(prev => prev.filter(ws => ws.id !== newWorkspaceId));
-          // Define o workspace ativo para o anterior ou nulo se não houver mais workspaces
           if(workspaces.length > 0) setActiveWorkspaceId(workspaces[0].id); else setActiveWorkspaceId(null);
       }
   }, [workspaces, toast, hasMounted]);
@@ -376,7 +359,6 @@ export default function FlowBuilderClient() {
   const switchWorkspace = useCallback((workspaceId: string) => {
     if (workspaces.find(ws => ws.id === workspaceId)) {
         setActiveWorkspaceId(workspaceId); 
-        // activeWorkspaceId já é salvo no localStorage por seu próprio useEffect
     } else {
         console.warn(`[FlowBuilderClient] Attempted to switch to non-existent workspace ID: ${workspaceId}`);
         if (workspaces.length > 0) {
@@ -386,7 +368,7 @@ export default function FlowBuilderClient() {
             setActiveWorkspaceId(null); 
         }
     }
-  }, [workspaces]); // `workspaces` é uma dependência necessária aqui
+  }, [workspaces]);
   
   const updateActiveWorkspace = useCallback((updater: (workspace: WorkspaceData) => WorkspaceData) => {
     if (!activeWorkspaceId) {
@@ -398,7 +380,7 @@ export default function FlowBuilderClient() {
         ws.id === activeWorkspaceId ? updater(ws) : ws
       )
     );
-  }, [activeWorkspaceId]); // `setWorkspaces` é estável, `activeWorkspaceId` é a dependência chave
+  }, [activeWorkspaceId]);
 
   const handleDropNode = useCallback((item: DraggableBlockItemData, logicalDropCoords: { x: number, y: number }) => {
     if (!activeWorkspaceId) {
@@ -406,66 +388,50 @@ export default function FlowBuilderClient() {
       return;
     }
     
-    // Recalcula as variáveis existentes com base no estado ATUAL de `workspaces` e `activeWorkspaceId`
-    // para garantir que os nomes únicos sejam gerados corretamente.
-    const currentActiveWkspForVars = workspaces.find(ws => ws.id === activeWorkspaceId);
-    const existingVariableNames: string[] = [];
-    if (currentActiveWkspForVars?.nodes) { 
-      currentActiveWkspForVars.nodes.forEach(node => {
-        VARIABLE_DEFINING_FIELDS.forEach(field => {
-          const varName = node[field] as string | undefined;
-          if (varName && varName.trim() !== '') {
-            existingVariableNames.push(varName.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
-          }
-        });
-         if (node.type === 'start' && node.triggers) {
-          node.triggers.forEach(trigger => {
-            if (trigger.type === 'webhook' && trigger.webhookPayloadVariable) {
-              existingVariableNames.push(trigger.webhookPayloadVariable.replace(/\{\{/g, '').replace(/\}\}/g, ''));
-            }
-          });
-        }
-      });
-    }
-    
     const itemDefaultDataCopy = item.defaultData ? JSON.parse(JSON.stringify(item.defaultData)) : {};
+    let tempExistingVars = [...definedVariablesInFlow]; // Use o estado de definedVariablesInFlow que já é calculado
 
-    // Gera nomes de variáveis únicos para o novo nó
     VARIABLE_DEFINING_FIELDS.forEach(field => {
       if (itemDefaultDataCopy.hasOwnProperty(field)) {
         const baseVarName = itemDefaultDataCopy[field] as string | undefined;
         if (baseVarName && baseVarName.trim() !== '') {
-          const uniqueName = generateUniqueVariableName(baseVarName, existingVariableNames);
+          const uniqueName = generateUniqueVariableName(baseVarName, tempExistingVars);
           (itemDefaultDataCopy as any)[field] = uniqueName;
-          // Adiciona o novo nome único à lista de existentes para a próxima verificação no mesmo drop (se houver múltiplos campos de var)
-          if (uniqueName !== baseVarName.replace(/\{\{/g, '').replace(/\}\}/g, '').trim()) { 
-            existingVariableNames.push(uniqueName); // Adiciona apenas se realmente mudou
+          if (uniqueName !== baseVarName.replace(/\{\{|\}\}/g, '').trim()) { 
+            tempExistingVars.push(uniqueName); 
           }
         }
       }
     });
     
-    const baseNodeData: Omit<NodeData, 'id' | 'type' | 'title' | 'x' | 'y' | 'triggers'> = {
+    // Lógica para gerar nome único para webhookPayloadVariable em triggers do nó 'start'
+    if (item.type === 'start' && itemDefaultDataCopy.triggers) {
+      itemDefaultDataCopy.triggers = (itemDefaultDataCopy.triggers as StartNodeTrigger[]).map(trigger => {
+        if (trigger.type === 'webhook' && trigger.webhookPayloadVariable) {
+          const uniqueWebhookVarName = generateUniqueVariableName(trigger.webhookPayloadVariable, tempExistingVars);
+          if (uniqueWebhookVarName !== trigger.webhookPayloadVariable.replace(/\{\{|\}\}/g, '').trim()) {
+            tempExistingVars.push(uniqueWebhookVarName);
+          }
+          return { ...trigger, webhookPayloadVariable: uniqueWebhookVarName };
+        }
+        return trigger;
+      });
+    }
+    
+    const baseNodeData: Omit<NodeData, 'id' | 'type' | 'title' | 'x' | 'y'> = {
       text: '', promptText: '', inputType: 'text', variableToSaveResponse: '',
       questionText: '', optionsList: '', variableToSaveChoice: '',
-      mediaDisplayType: 'image', mediaDisplayUrl: '', mediaDisplayText: '', dataAiHint: '',
+      mediaDisplayType: 'image', mediaDisplayUrl: 'https://placehold.co/300x200.png', mediaDisplayText: 'Imagem de exemplo', dataAiHint: 'placeholder abstract',
       conditionVariable: '', conditionOperator: '==', conditionValue: '',
       variableName: '', variableValue: '', delayDuration: 1000, typingDuration: 1500,
-      logMessage: '', codeSnippet: '', codeOutputVariable: '', inputJson: '', jsonataExpression: '', jsonOutputVariable: '',
+      logMessage: '', codeSnippet: "return { resultado: 'sucesso' };", codeOutputVariable: 'resultado_codigo', 
+      inputJson: '{ "nome": "Exemplo" }', jsonataExpression: '$.nome', jsonOutputVariable: 'nome_transformado',
       uploadPromptText: '', fileTypeFilter: '', maxFileSizeMB: 5, fileUrlVariable: '',
       ratingQuestionText: '', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: '',
-      apiUrl: '', 
-      apiMethod: 'GET', 
-      apiAuthType: 'none',
-      apiAuthBearerToken: '',
-      apiAuthBasicUser: '',
-      apiAuthBasicPassword: '',
-      apiHeadersList: [],
-      apiQueryParamsList: [],
-      apiBodyType: 'none',
-      apiBodyJson: '{}',
-      apiBodyFormDataList: [],
-      apiBodyRaw: '',
+      apiUrl: 'https://', apiMethod: 'GET', apiAuthType: 'none',
+      apiAuthBearerToken: '', apiAuthBasicUser: '', apiAuthBasicPassword: '',
+      apiHeadersList: [], apiQueryParamsList: [],
+      apiBodyType: 'none', apiBodyJson: '{}', apiBodyFormDataList: [], apiBodyRaw: '',
       apiOutputVariable: '',
       redirectUrl: '', dateInputLabel: '', variableToSaveDate: '',
       emailTo: '', emailSubject: '', emailBody: '', emailFrom: '',
@@ -475,7 +441,6 @@ export default function FlowBuilderClient() {
       agentName: 'Agente Inteligente Padrão', agentSystemPrompt: 'Você é um assistente IA. Responda às perguntas do usuário de forma concisa e prestativa.',
       userInputVariable: '{{entrada_usuario}}', agentResponseVariable: 'resposta_do_agente', maxConversationTurns: 5, temperature: 0.7,
       supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseDataJson: '', supabaseColumnsToSelect: '*', supabaseResultVariable: '',
-      // sendViaWhatsApp: false, whatsappTargetPhoneNumber: '', // Removido
     };
 
     const newNode: NodeData = {
@@ -483,7 +448,7 @@ export default function FlowBuilderClient() {
       type: item.type as NodeData['type'],
       title: item.label,
       ...baseNodeData, 
-      ...(item.type === 'start' && { triggers: [{ id: uuidv4(), name: 'Gatilho Inicial', type: 'manual', webhookPayloadVariable: 'webhook_payload' }] }),
+      ...(item.type === 'start' && !itemDefaultDataCopy.triggers && { triggers: [{ id: uuidv4(), name: 'Gatilho Inicial', type: 'manual', webhookPayloadVariable: 'webhook_payload' }] }),
       ...itemDefaultDataCopy, 
       x: Math.round((logicalDropCoords.x - NODE_WIDTH / 2) / GRID_SIZE) * GRID_SIZE, 
       y: Math.round((logicalDropCoords.y - NODE_HEADER_HEIGHT_APPROX / 2) / GRID_SIZE) * GRID_SIZE, 
@@ -491,15 +456,14 @@ export default function FlowBuilderClient() {
     
     console.log("[FlowBuilderClient] New node created:", JSON.parse(JSON.stringify(newNode)));
     updateActiveWorkspace(ws => {
-      // CORREÇÃO APLICADA AQUI: Garante que estamos adicionando ao array de nós existente.
       const updatedNodes = [...(ws.nodes || []), newNode]; 
-      console.log("[FlowBuilderClient] Nodes after adding new node. New count:", updatedNodes.length); // Removido log do array inteiro para performance
+      console.log("[FlowBuilderClient] Nodes after adding new node. New count:", updatedNodes.length);
       return { ...ws, nodes: updatedNodes };
     });
-  }, [activeWorkspaceId, updateActiveWorkspace, workspaces]); // `workspaces` é necessário para obter currentActiveWkspForVars
+  }, [activeWorkspaceId, updateActiveWorkspace, definedVariablesInFlow]);
 
   const updateNode = useCallback((id: string, changes: Partial<NodeData>) => {
-    console.log("[FlowBuilderClient] Node updated:", {id, changes });
+    // console.log("[FlowBuilderClient] Node updated:", {id, changes }); // Log frequente, comentar se não necessário
     updateActiveWorkspace(ws => ({
       ...ws,
       nodes: (ws.nodes || []).map(n => (n.id === id ? { ...n, ...changes } : n)),
@@ -541,26 +505,26 @@ export default function FlowBuilderClient() {
           else if (sourceHandleId === 'false') startYOffset = NODE_HEADER_HEIGHT_APPROX * (2/3) + 6;
       }
 
-      // Coordenadas lógicas do ponto de início da linha
       const logicalStartX = fromNodeData.x + NODE_WIDTH; 
       const logicalStartY = fromNodeData.y + startYOffset; 
       
-      // Coordenadas visuais do mouse relativas ao canvas (para a ponta da linha que segue o mouse)
       const mouseXOnCanvasVisual = event.clientX - canvasRect.left;
       const mouseYOnCanvasVisual = event.clientY - canvasRect.top;
 
+      const logicalCurrentX = (mouseXOnCanvasVisual - currentCanvasOffset.x) / currentZoomLevel;
+      const logicalCurrentY = (mouseYOnCanvasVisual - currentCanvasOffset.y) / currentZoomLevel;
+      
       setDrawingLine({
         fromId: fromNodeData.id,
         sourceHandleId,
-        startX: logicalStartX,       // Lógico
-        startY: logicalStartY,       // Lógico
-        currentX: mouseXOnCanvasVisual, // Visual, relativo ao canvasElementRef
-        currentY: mouseYOnCanvasVisual,  // Visual, relativo ao canvasElementRef
+        startX: logicalStartX,
+        startY: logicalStartY,
+        currentX: logicalCurrentX, 
+        currentY: logicalCurrentY,
       });
     },
-    [canvasRef, setDrawingLine] // canvasOffsetCbRef e zoomLevelCbRef são usados via ref, não precisam ser deps diretas
+    [canvasRef, setDrawingLine, canvasOffsetCbRef, zoomLevelCbRef]
   ); 
-
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (canvasRef.current && (e.target === canvasRef.current || (e.target as HTMLElement).id === 'flow-content-wrapper')) { 
@@ -569,7 +533,7 @@ export default function FlowBuilderClient() {
       initialCanvasOffsetOnPanStart.current = { ...canvasOffsetCbRef.current };
       if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
     }
-  }, [canvasRef]); // canvasOffsetCbRef é uma ref, não precisa ser dep
+  }, [canvasRef, canvasOffsetCbRef]);
 
   const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -581,22 +545,25 @@ export default function FlowBuilderClient() {
       });
     } else if (drawingLine && canvasRef.current) {
       const canvasRect = canvasRef.current.getBoundingClientRect();
+      const currentCanvasOffset = canvasOffsetCbRef.current;
+      const currentZoomLevel = zoomLevelCbRef.current;
       
-      // Coordenadas visuais do mouse relativas ao canvas (elemento que tem a grade)
       const mouseXOnCanvasVisual = e.clientX - canvasRect.left;
       const mouseYOnCanvasVisual = e.clientY - canvasRect.top;
 
-      // As coordenadas currentX/Y na drawingLine são visuais em relação ao canvasElementRef
+      const logicalCurrentX = (mouseXOnCanvasVisual - currentCanvasOffset.x) / currentZoomLevel;
+      const logicalCurrentY = (mouseYOnCanvasVisual - currentCanvasOffset.y) / currentZoomLevel;
+
       setDrawingLine((prev) => {
         if (!prev) return null;
         return {
           ...prev,
-          currentX: mouseXOnCanvasVisual, 
-          currentY: mouseYOnCanvasVisual,
+          currentX: logicalCurrentX, 
+          currentY: logicalCurrentY,
         };
       });
     }
-  }, [drawingLine, setDrawingLine, setCanvasOffset, canvasRef]); // canvasOffsetCbRef e zoomLevelCbRef são usados via ref
+  }, [drawingLine, setDrawingLine, setCanvasOffset, canvasRef, canvasOffsetCbRef, zoomLevelCbRef]);
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -611,7 +578,6 @@ export default function FlowBuilderClient() {
       if (targetHandleElement) {
           toId = targetHandleElement.closest('[data-node-id]')?.getAttribute('data-node-id');
       } else if (targetNodeElement && !targetNodeElement.closest('[data-connector="true"]')) { 
-          // Permite conectar ao corpo do nó se não for um conector de saída
           toId = targetNodeElement.getAttribute('data-node-id');
       }
 
@@ -637,8 +603,6 @@ export default function FlowBuilderClient() {
                      c.sourceHandle === newConnection.sourceHandle
             );
 
-            // Permite apenas uma conexão saindo de um sourceHandle específico.
-            // Se uma nova conexão for feita do mesmo sourceHandle, a anterior é removida.
             const existingConnectionFromThisSourceHandle = newConnectionsArray.find(
                 c => c.from === newConnection.from && c.sourceHandle === newConnection.sourceHandle
             );
@@ -657,43 +621,42 @@ export default function FlowBuilderClient() {
       }
       setDrawingLine(null);
     }
-  }, [drawingLine, activeWorkspaceId, updateActiveWorkspace, setDrawingLine, canvasRef]); // canvasRef é estável
+  }, [drawingLine, activeWorkspaceId, updateActiveWorkspace, setDrawingLine, canvasRef]);
 
   const deleteConnection = useCallback((connectionIdToDelete: string) => {
     updateActiveWorkspace(ws => ({
         ...ws,
         connections: (ws.connections || []).filter(conn => conn.id !== connectionIdToDelete)
     }));
-    setHighlightedConnectionId(null); // Limpa o destaque
-  }, [updateActiveWorkspace, setHighlightedConnectionId]); // setHighlightedConnectionId é estável
+    setHighlightedConnectionId(null);
+  }, [updateActiveWorkspace, setHighlightedConnectionId]);
 
-  // Efeito para listeners globais
   useEffect(() => {
-    if (!hasMounted) return;
-    // Não precisamos de canvasRef.current aqui, pois as funções de callback já o usam.
+    if (!hasMounted || !canvasRef.current ) return;
     
+    const currentCanvas = canvasRef.current; // Capture for cleanup
+    // console.log("[FlowBuilderClient] Attaching global mouse listeners.");
     document.addEventListener('mousemove', handleGlobalMouseMove);
     document.addEventListener('mouseup', handleGlobalMouseUp);
     
-    // Cleanup para mouseleave (quando o mouse sai da janela do navegador)
     const handleMouseLeaveWindow = () => {
       if (isPanning.current) {
         isPanning.current = false;
-        // Não precisa mudar o cursor aqui, pois o mouseup faria isso.
-        // Mas é bom resetar o estado de panning.
+        if (currentCanvas) currentCanvas.style.cursor = 'grab';
       }
-      if (drawingLine) { // Se estava desenhando uma linha e o mouse saiu da janela
+      if (drawingLine) {
         setDrawingLine(null);
       }
     };
     document.body.addEventListener('mouseleave', handleMouseLeaveWindow);
 
     return () => {
+      // console.log("[FlowBuilderClient] Removing global mouse listeners.");
       document.removeEventListener('mousemove', handleGlobalMouseMove);
       document.removeEventListener('mouseup', handleGlobalMouseUp);
       document.body.removeEventListener('mouseleave', handleMouseLeaveWindow);
     };
-  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine, hasMounted, setDrawingLine]); // drawingLine e setDrawingLine são importantes aqui
+  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine, hasMounted, canvasRef, setDrawingLine]);
   
 
   const handleZoom = useCallback((direction: 'in' | 'out' | 'reset') => {
@@ -706,7 +669,6 @@ export default function FlowBuilderClient() {
     const currentOffset = canvasOffsetCbRef.current;
     const canvasRect = canvasRef.current.getBoundingClientRect(); 
     
-    // Ponto de zoom: centro da viewport do canvas
     const viewportCenterX = canvasRect.width / 2;
     const viewportCenterY = canvasRect.height / 2;
 
@@ -719,27 +681,24 @@ export default function FlowBuilderClient() {
       newZoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currentZoom * zoomFactor));
     }
 
-    if (newZoomLevel === currentZoom && direction !== 'reset') return; // Sem mudança no zoom
+    if (newZoomLevel === currentZoom && direction !== 'reset') return;
 
-    // Calcular o ponto lógico no centro da viewport ANTES do zoom
     const logicalCenterXBeforeZoom = (viewportCenterX - currentOffset.x) / currentZoom;
     const logicalCenterYBeforeZoom = (viewportCenterY - currentOffset.y) / currentZoom;
 
-    // Calcular a nova posição visual desse ponto lógico DEPOIS do zoom
     const visualXOfLogicalCenterAfterZoom = logicalCenterXBeforeZoom * newZoomLevel;
     const visualYOfLogicalCenterAfterZoom = logicalCenterYBeforeZoom * newZoomLevel;
     
-    // Ajustar o canvasOffset para que o ponto lógico central permaneça no centro visual
     const newOffsetX = viewportCenterX - visualXOfLogicalCenterAfterZoom;
     const newOffsetY = viewportCenterY - visualYOfLogicalCenterAfterZoom;
     
     setZoomLevel(newZoomLevel);
     setCanvasOffset({ x: newOffsetX, y: newOffsetY });
 
-  }, [setZoomLevel, setCanvasOffset, canvasRef]); // zoomLevelCbRef e canvasOffsetCbRef são refs, canvasRef é estável
+  }, [setZoomLevel, setCanvasOffset, canvasRef, zoomLevelCbRef, canvasOffsetCbRef]);
 
 
-  if (isLoading && hasMounted) { // Garante que só mostra loading no cliente após tentar carregar
+  if (isLoading && hasMounted) {
     return <div className="flex items-center justify-center h-screen">Carregando fluxos do banco de dados...</div>;
   }
 
@@ -759,11 +718,11 @@ export default function FlowBuilderClient() {
           onZoom={handleZoom}
           currentZoomLevel={zoomLevel}
         />
-        <div className="flex-1 flex relative overflow-hidden"> {/* Flex row para sidebar e conteúdo principal */}
+        <div className="flex-1 flex relative overflow-hidden">
           <FlowSidebar />
-          <div className="flex-1 flex relative overflow-hidden" > {/* Container para o Canvas se expandir */}
+          <div className="flex-1 flex relative overflow-hidden" > 
             <Canvas
-              ref={canvasRef} // Passa a ref para o Canvas poder ser acessado
+              ref={canvasRef}
               nodes={currentNodes}
               connections={currentConnections}
               drawingLine={drawingLine}
@@ -780,10 +739,9 @@ export default function FlowBuilderClient() {
               definedVariablesInFlow={definedVariablesInFlow}
             />
           </div>
-          {/* Renderiza TestChatPanel apenas no cliente e se estiver aberto */}
           {hasMounted && isChatPanelOpen && (
             <TestChatPanel
-              activeWorkspace={activeWorkspace} // Passa o workspace ativo para o chat
+              activeWorkspace={activeWorkspace}
             />
           )}
         </div>
@@ -791,5 +749,3 @@ export default function FlowBuilderClient() {
     </DndProvider>
   );
 }
-
-
