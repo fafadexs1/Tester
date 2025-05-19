@@ -33,6 +33,8 @@ interface CanvasProps {
   definedVariablesInFlow: string[];
 }
 
+const SVG_CANVAS_DIMENSION = 50000; // Dimensão lógica grande para o canvas interno
+
 const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   nodes, connections, drawingLine, canvasOffset, zoomLevel,
   onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDeleteConnection,
@@ -53,11 +55,9 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   useEffect(() => {
     zoomLevelRef.current = zoomLevel;
   }, [zoomLevel]);
-
-  const canvasOffsetRef = useRef(canvasOffset);
-  useEffect(() => {
-    canvasOffsetRef.current = canvasOffset;
-  }, [canvasOffset]);
+  
+  // canvasOffsetRef não é mais necessário aqui se usarmos as props diretamente no stableOnDropNode
+  // e o target for o flowContentWrapperRef
 
   const stableOnDropNode = useCallback(
     (item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
@@ -68,7 +68,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
         const xOnFlowWrapper = clientOffset.x - flowWrapperRect.left;
         const yOnFlowWrapper = clientOffset.y - flowWrapperRect.top;
         
-        const currentZoom = zoomLevelRef.current;
+        const currentZoom = zoomLevelRef.current; // Usa a ref para o zoom atual
         
         const logicalX = xOnFlowWrapper / currentZoom;
         const logicalY = yOnFlowWrapper / currentZoom;
@@ -102,8 +102,6 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
     if (currentFlowContentWrapper) {
       // console.log('[Canvas] Attaching drop target to flowContentWrapperRef:', currentFlowContentWrapper);
       drop(currentFlowContentWrapper);
-    } else {
-      // console.warn('[Canvas] Attaching drop target: flowContentWrapperRef.current is null.');
     }
     return () => {
       if (flowContentWrapperRef.current) { 
@@ -236,15 +234,18 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
       <div 
         ref={flowContentWrapperRef}
         id="flow-content-wrapper"
-        className="absolute top-0 left-0 w-full h-full" // Adicionado w-full h-full
+        className="absolute top-0 left-0"
         style={{
-          transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
+          width: `${SVG_CANVAS_DIMENSION}px`, 
+          height: `${SVG_CANVAS_DIMENSION}px`,
           transformOrigin: 'top left',
+          transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
+          // willChange: 'transform', // Test for performance if needed
         }}
       >
         <svg
-          width="10000" 
-          height="10000" 
+          width={SVG_CANVAS_DIMENSION} 
+          height={SVG_CANVAS_DIMENSION} 
           className="absolute top-0 left-0 pointer-events-none z-10 overflow-visible"
         >
           <defs>
@@ -285,5 +286,3 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
 Canvas.displayName = 'Canvas';
 export default Canvas;
 
-
-    
