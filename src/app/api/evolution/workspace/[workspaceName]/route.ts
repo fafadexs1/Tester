@@ -4,18 +4,17 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getProperty } from 'dot-prop';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
-import { 
-  loadSessionFromDB, 
-  saveSessionToDB, 
+import {
+  loadSessionFromDB,
+  saveSessionToDB,
   deleteSessionFromDB,
   loadWorkspaceByNameFromDB,
-  loadActiveWorkspaceFromDB, // Keep for the case where workspace name might not be found or for a fallback
+  loadActiveWorkspaceFromDB,
 } from '@/app/actions/databaseActions';
 import type { NodeData, Connection, FlowSession, WorkspaceData, StartNodeTrigger } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 
-// Certifique-se de que a variável global para logs é inicializada se não existir
 if (!globalThis.evolutionWebhookLogs || !Array.isArray(globalThis.evolutionWebhookLogs)) {
   console.log('[API Evolution WS Route] Initializing globalThis.evolutionWebhookLogs as new array.');
   globalThis.evolutionWebhookLogs = [];
@@ -43,29 +42,25 @@ function substituteVariablesInText(text: string | undefined, variables: Record<s
     return '';
   }
   let subbedText = String(text);
-  const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g; // Regex para {{variavel.nome_aninhado}}
+  const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
   let match;
 
-  // Loop para substituir todas as ocorrências
   while ((match = variableRegex.exec(text)) !== null) {
-    const fullMatch = match[0]; // ex: {{variavel.nome}}
-    const varName = match[1].trim(); // ex: variavel.nome
-    
+    const fullMatch = match[0];
+    const varName = match[1].trim();
+
     let value = getProperty(variables, varName);
 
-    // Fallback para nomes simples se getProperty não encontrar (ex: {{variavel}} sem pontos)
     if (value === undefined && !varName.includes('.')) {
       value = variables[varName];
     }
 
     if (value === undefined || value === null) {
-      // console.warn(`[Flow Engine Substitute] Variable {{${varName}}} not found. Substituting with empty string.`);
       subbedText = subbedText.replace(fullMatch, '');
     } else if (typeof value === 'object' || Array.isArray(value)) {
       try {
         subbedText = subbedText.replace(fullMatch, JSON.stringify(value, null, 2));
       } catch (e) {
-        // console.error(`[Flow Engine Substitute] Failed to stringify object for variable {{${varName}}}. Error:`, e);
         subbedText = subbedText.replace(fullMatch, `[Error stringifying ${varName}]`);
       }
     } else {
@@ -75,10 +70,9 @@ function substituteVariablesInText(text: string | undefined, variables: Record<s
   return subbedText;
 }
 
-
 async function executeFlowStep(
-  session: FlowSession, 
-  nodes: NodeData[], 
+  session: FlowSession,
+  nodes: NodeData[],
   connections: Connection[],
   apiConfig: ApiConfig
 ): Promise<void> {
@@ -97,7 +91,6 @@ async function executeFlowStep(
   }
 
   console.log(`[API Evolution WS Execute - ${session.session_id}] Executing Node: ${currentNode.id} (${currentNode.type} - ${currentNode.title})`);
-  // console.log(`[API Evolution WS Execute - ${session.session_id}] Current Variables:`, JSON.stringify(session.flow_variables, null, 2));
 
   let nextNodeId: string | null = null;
   let shouldContinueRecursive = true;
@@ -136,7 +129,7 @@ async function executeFlowStep(
       }
       session.awaiting_input_type = 'text';
       session.awaiting_input_details = { variableToSave: currentNode.variableToSaveResponse || 'last_user_input', originalNodeId: currentNode.id };
-      shouldContinueRecursive = false; 
+      shouldContinueRecursive = false;
       break;
 
     case 'option':
@@ -156,10 +149,10 @@ async function executeFlowStep(
           textContent: messageWithOptions.trim(),
         });
         session.awaiting_input_type = 'option';
-        session.awaiting_input_details = { 
-          variableToSave: currentNode.variableToSaveChoice || 'last_user_choice', 
-          options: optionsList, 
-          originalNodeId: currentNode.id 
+        session.awaiting_input_details = {
+          variableToSave: currentNode.variableToSaveChoice || 'last_user_choice',
+          options: optionsList,
+          originalNodeId: currentNode.id
         };
         shouldContinueRecursive = false;
       } else {
@@ -189,7 +182,7 @@ async function executeFlowStep(
         default: conditionMet = false;
       }
       console.log(`[API Evolution WS Execute - ${session.session_id}] Condition: ${varNameCond} ('${actualValueCond}') ${currentNode.conditionOperator} '${compareValueCond}' -> ${conditionMet}`);
-      nextNodeId = findNextNodeId(currentNode.id, conditionMet ? 'true' : 'false');
+      nextNodeId = findNextNodeId(currentNode.id, conditionMet ? 'true' : 'false', connections);
       break;
 
     case 'set-variable':
@@ -201,7 +194,7 @@ async function executeFlowStep(
       }
       nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
       break;
-    
+
     case 'api-call':
       const apiUrl = substituteVariablesInText(currentNode.apiUrl, updatedFlowVariables);
       let recipientPhoneApi = substituteVariablesInText(currentNode.phoneNumber, updatedFlowVariables);
@@ -209,7 +202,7 @@ async function executeFlowStep(
           recipientPhoneApi = updatedFlowVariables.whatsapp_sender_jid;
       }
       const instanceForApi = substituteVariablesInText(currentNode.instanceName, updatedFlowVariables) || apiConfig.instanceName;
-      
+
       console.log(`[API Evolution WS Execute - ${session.session_id}] API Call Node: ${currentNode.id} - URL: ${apiUrl}`);
 
       if (apiUrl?.includes('/message/sendText/') && currentNode.apiMethod === 'POST') {
@@ -217,12 +210,12 @@ async function executeFlowStep(
         if (!textContentApi && currentNode.apiBodyType === 'json' && currentNode.apiBodyJson) {
           try {
             const bodyData = JSON.parse(substituteVariablesInText(currentNode.apiBodyJson, updatedFlowVariables));
-            textContentApi = bodyData.text || bodyData.textMessage?.text; 
+            textContentApi = bodyData.text || bodyData.textMessage?.text;
           } catch (e) { console.error(`[API Evolution WS Execute - ${session.session_id}] API Call: Error parsing JSON body for text`, e); }
         }
         if (recipientPhoneApi && textContentApi) {
             await sendWhatsAppMessageAction({
-              baseUrl: apiConfig.baseUrl, 
+              baseUrl: apiConfig.baseUrl,
               apiKey: apiConfig.apiKey,
               instanceName: instanceForApi,
               recipientPhoneNumber: recipientPhoneApi,
@@ -279,7 +272,7 @@ async function executeFlowStep(
       break;
 
     case 'intelligent-agent':
-      const userInputForAgent = substituteVariablesInText(currentNode.userInputVariable, updatedFlowVariables); 
+      const userInputForAgent = substituteVariablesInText(currentNode.userInputVariable, updatedFlowVariables);
       if (userInputForAgent && currentNode.agentResponseVariable) {
          try {
           console.log(`[API Evolution WS Execute - ${session.session_id}] Intelligent Agent: Calling simpleChatReply with input: "${userInputForAgent}"`);
@@ -309,49 +302,310 @@ async function executeFlowStep(
       nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
       break;
   }
-  
-  session.flow_variables = updatedFlowVariables; // Ensure session object passed around has latest vars
+
+  session.flow_variables = updatedFlowVariables;
 
   if (shouldContinueRecursive) {
     if (nextNodeId) {
       session.current_node_id = nextNodeId;
-      await saveSessionToDB(session); 
+      await saveSessionToDB(session);
       await executeFlowStep(session, nodes, connections, apiConfig);
     } else {
       console.log(`[API Evolution WS Execute - ${session.session_id}] No next node from ${currentNode.id}. Ending flow (or pausing if no end-node and not awaiting input).`);
-      // If not an explicit end-flow node and not awaiting input, it's an implicit end.
       if (currentNode.type !== 'end-flow' && !session.awaiting_input_type) {
-        await deleteSessionFromDB(session.session_id); 
+        await deleteSessionFromDB(session.session_id);
       } else {
-        // If awaiting input, or explicitly ended, session was already saved/deleted.
-        // If it's just end of a branch, make sure to save the final state if not deleted.
         if (currentNode.type !== 'end-flow') {
           await saveSessionToDB(session);
         }
       }
     }
   } else {
-    // Flow paused (e.g. for input) or explicitly ended by end-flow node.
-    // Session state was already saved or deleted within the switch case.
     if (currentNode.type !== 'end-flow' && currentNode.type !== 'input' && currentNode.type !== 'option' ) {
-        // If not an explicit end, input, or option node, but recursion is stopped, save final state.
-        // This case might be rare if nextNodeId logic is comprehensive.
-        await saveSessionToDB(session); 
+        await saveSessionToDB(session);
     }
     console.log(`[API Evolution WS Execute - ${session.session_id}] Flow paused or ended for node ${currentNode.id}. Session state handled.`);
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: { workspaceName: string } }) {
-  try {
-    const decodedWorkspaceName = decodeURIComponent(params.workspaceName);
-    console.log(`[API Evolution WS Route - GET] Received request for workspace: "${decodedWorkspaceName}"`);
-    const workspace = await loadWorkspaceByNameFromDB(decodedWorkspaceName);
+async function storeRequestDetails(
+  request: NextRequest,
+  parsedPayload: any,
+  rawBodyText: string | null,
+  workspaceNameParam: string
+): Promise<any> {
+  const currentTimestamp = new Date().toISOString();
+  let extractedMessage: string | null = null;
+  let webhookRemoteJid: string | null = null;
+  const headers = Object.fromEntries(request.headers.entries());
+  const ip = request.ip || headers['x-forwarded-for'] || 'unknown IP';
 
+  // Try to extract from parsedPayload first
+  if (parsedPayload && typeof parsedPayload === 'object') {
+    let actualPayloadToExtractFrom = parsedPayload;
+    // Handle if parsedBody is an array with a single object, like some N8N test payloads
+    if (Array.isArray(parsedPayload) && parsedPayload.length === 1 && typeof parsedPayload[0] === 'object') {
+      actualPayloadToExtractFrom = parsedPayload[0];
+    }
+
+    const commonMessagePaths = [
+      'data.message.conversation',
+      'message.conversation', // Common for direct Evolution API
+      'message.body',
+      'message.textMessage.text',
+      'text',
+      'data.message.extendedTextMessage.text',
+    ];
+    for (const path of commonMessagePaths) {
+      const msg = getProperty(actualPayloadToExtractFrom, path);
+      if (typeof msg === 'string' && msg.trim() !== '') {
+        extractedMessage = msg.trim();
+        console.log(`[Evolution API Webhook Store] Extracted message using path "${path}" from actualPayload: "${extractedMessage}"`);
+        break;
+      }
+    }
+
+    const remoteJidPaths = [
+      'data.key.remoteJid',
+      'sender', // Common for direct Evolution API
+      'key.remoteJid',
+    ];
+    for (const path of remoteJidPaths) {
+      const jid = getProperty(actualPayloadToExtractFrom, path);
+      if (typeof jid === 'string' && jid.trim() !== '') {
+        webhookRemoteJid = jid.trim();
+        console.log(`[Evolution API Webhook Store] Extracted remoteJid using path "${path}" from actualPayload: "${webhookRemoteJid}"`);
+        break;
+      }
+    }
+  }
+
+  const logEntry: Record<string, any> = {
+    timestamp: currentTimestamp,
+    workspaceNameParam: workspaceNameParam,
+    method: request.method,
+    url: request.url,
+    headers: headers,
+    ip: ip,
+    extractedMessage: extractedMessage,
+    webhook_remoteJid: webhookRemoteJid,
+    payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
+  };
+
+  if (!Array.isArray(globalThis.evolutionWebhookLogs)) {
+    console.warn('[Evolution API Webhook Store] globalThis.evolutionWebhookLogs is not an array before unshift! Re-initializing.');
+    globalThis.evolutionWebhookLogs = [];
+  }
+  console.log(`[Evolution API Webhook Store] BEFORE UNSHIFT: Current globalThis.evolutionWebhookLogs length: ${globalThis.evolutionWebhookLogs.length}.`);
+  globalThis.evolutionWebhookLogs.unshift(logEntry);
+  if (globalThis.evolutionWebhookLogs.length > MAX_LOG_ENTRIES) {
+    globalThis.evolutionWebhookLogs.pop();
+  }
+  console.log(`[Evolution API Webhook Store] AFTER UNSHIFT: New globalThis.evolutionWebhookLogs length: ${globalThis.evolutionWebhookLogs.length}. Entry for: ${logEntry.timestamp}, Extracted Msg: ${logEntry.extractedMessage || 'N/A'}, RemoteJID: ${logEntry.webhook_remoteJid || 'N/A'}`);
+  return logEntry;
+}
+
+
+export async function POST(request: NextRequest, { params }: { params: { workspaceName: string } }) {
+  const decodedWorkspaceName = decodeURIComponent(params.workspaceName);
+  console.log(`[API Evolution WS Route] POST request received for workspace: "${decodedWorkspaceName}"`);
+
+  let rawBody: string | null = null;
+  let parsedBody: any = null;
+  let logStoragePayload: any = {};
+
+  try {
+    console.log(`[API Evolution WS Route - POST DEBUG] Attempting to read raw body for workspace: "${decodedWorkspaceName}"...`);
+    rawBody = await request.text();
+
+    if (!rawBody || rawBody.trim() === '') {
+      console.warn(`[API Evolution WS Route - POST DEBUG] Raw body for workspace "${decodedWorkspaceName}" is empty or whitespace.`);
+      logStoragePayload = { message: "Request body was empty or whitespace.", original_content_type: request.headers.get('content-type') || 'N/A' };
+    } else {
+      console.log(`[API Evolution WS Route - POST DEBUG] Raw body successfully read (length: ${rawBody.length}) for workspace "${decodedWorkspaceName}". Preview: ${rawBody.substring(0, 300)}...`);
+      const contentType = request.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          console.log(`[API Evolution WS Route - POST DEBUG] Attempting to parse JSON body for workspace "${decodedWorkspaceName}"...`);
+          parsedBody = JSON.parse(rawBody);
+          logStoragePayload = parsedBody; // Store the parsed JSON for logging
+          console.log(`[API Evolution WS Route - POST DEBUG] JSON body successfully parsed for workspace "${decodedWorkspaceName}".`);
+        } catch (jsonError: any) {
+          console.warn(`[API Evolution WS Route - POST DEBUG] Failed to parse body as JSON for workspace "${decodedWorkspaceName}", will store raw text. Error: ${jsonError.message}`);
+          logStoragePayload = { raw_text: rawBody, parse_error: jsonError.message, original_content_type: contentType };
+          // parsedBody remains null if JSON parse fails, flow logic should handle this
+        }
+      } else {
+        console.log(`[API Evolution WS Route - POST DEBUG] Content-Type is not application/json (was: ${contentType}). Storing raw text for workspace "${decodedWorkspaceName}".`);
+        logStoragePayload = { raw_text: rawBody, original_content_type: contentType || 'N/A' };
+      }
+    }
+
+    // Store details for viewing in the app's console
+    const loggedEntry = await storeRequestDetails(request, parsedBody /* use parsed for log if available */, rawBody, decodedWorkspaceName);
+
+    // --- Flow Execution Logic (uses 'parsedBody' which might be null if parsing failed) ---
+    if (!parsedBody) {
+      console.warn(`[API Evolution WS Route] No valid JSON body parsed for workspace "${decodedWorkspaceName}". Cannot execute flow logic.`);
+      return NextResponse.json({ error: "Invalid or empty JSON payload." }, { status: 400 });
+    }
+
+    const eventType = getProperty(parsedBody, 'event') as string;
+    const instanceName = getProperty(parsedBody, 'instance') as string;
+    const senderJid = loggedEntry.webhook_remoteJid; // Use JID from storeRequestDetails which has fallbacks
+    const receivedMessageText = loggedEntry.extractedMessage; // Use message from storeRequestDetails
+    const evolutionApiBaseUrl = getProperty(parsedBody, 'server_url') as string;
+    const evolutionApiKey = getProperty(parsedBody, 'apikey') as string;
+
+    console.log(`[API Evolution WS Route] Parsed data for logic: event='${eventType}', instance='${instanceName}', senderJid='${senderJid}', receivedMessage='${receivedMessageText}', baseUrl='${evolutionApiBaseUrl}', apiKeyExists='${!!evolutionApiKey}'`);
+
+    if (eventType === 'messages.upsert' && senderJid && instanceName && evolutionApiBaseUrl) {
+      const workspace = await loadWorkspaceByNameFromDB(decodedWorkspaceName);
+
+      if (!workspace) {
+        console.error(`[API Evolution WS Route] Workspace "${decodedWorkspaceName}" not found. Cannot execute flow.`);
+        if (senderJid) {
+          await sendWhatsAppMessageAction({
+            baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey || undefined, instanceName,
+            recipientPhoneNumber: senderJid, messageType:'text',
+            textContent: `Desculpe, o fluxo "${decodedWorkspaceName}" não foi encontrado ou não está configurado.`
+          });
+        }
+        return NextResponse.json({ error: `Workspace "${decodedWorkspaceName}" not found.` }, { status: 404 });
+      }
+
+      if (!workspace.nodes || workspace.nodes.length === 0) {
+          console.error(`[API Evolution WS Route] Workspace "${decodedWorkspaceName}" is empty.`);
+          if (senderJid) await sendWhatsAppMessageAction({ baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey, instanceName, recipientPhoneNumber: senderJid, messageType:'text', textContent: `Desculpe, o fluxo "${decodedWorkspaceName}" está vazio.`});
+          return NextResponse.json({ error: `Workspace "${decodedWorkspaceName}" is empty.` }, { status: 500 });
+      }
+
+      const apiConfig: ApiConfig = { baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey || undefined, instanceName };
+      const sessionId = `${senderJid}@@${workspace.id}`;
+      let session = await loadSessionFromDB(sessionId);
+
+      if (!session) {
+        console.log(`[API Evolution WS Route - ${sessionId}] New session for workspace ${workspace.id}.`);
+        const startNode = workspace.nodes.find(n => n.type === 'start');
+        if (!startNode) {
+          console.error(`[API Evolution WS Route - ${sessionId}] No start node in workspace ${workspace.id}.`);
+          if (senderJid) await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Erro: O fluxo não tem um nó de início."});
+          return NextResponse.json({ error: "Flow has no start node." }, { status: 500 });
+        }
+        const firstTrigger = startNode.triggers?.[0];
+        let initialNodeId = findNextNodeId(startNode.id, firstTrigger?.name || 'default', workspace.connections || []);
+
+        if(!initialNodeId){
+            console.error(`[API Evolution WS Route - ${sessionId}] Start node ("${startNode.title}") or its first trigger ("${firstTrigger?.name || 'default'}") has no outgoing connection.`);
+            if (senderJid) await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Erro: O fluxo não está conectado corretamente a partir do início."});
+            return NextResponse.json({ error: "Start node is not connected." }, { status: 500 });
+        }
+
+        session = {
+          session_id: sessionId,
+          workspace_id: workspace.id,
+          current_node_id: initialNodeId,
+          flow_variables: {
+            whatsapp_sender_jid: senderJid,
+            mensagem_whatsapp: receivedMessageText || '',
+            [firstTrigger?.webhookPayloadVariable || 'webhook_payload']: parsedBody, // Store the parsed JSON
+          },
+          awaiting_input_type: null,
+          awaiting_input_details: null,
+        };
+      } else {
+        console.log(`[API Evolution WS Route - ${sessionId}] Existing session. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
+        session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
+        // Update webhook_payload with the latest received payload
+        const startNode = workspace.nodes.find(n => n.type === 'start');
+        session.flow_variables[startNode?.triggers?.find(t => t.type === 'webhook')?.webhookPayloadVariable || 'webhook_payload'] = parsedBody;
+
+
+        if (session.awaiting_input_type && session.current_node_id && session.awaiting_input_details) {
+          const originalNodeId = session.awaiting_input_details.originalNodeId || session.current_node_id;
+          const awaitingNode = findNodeById(originalNodeId, workspace.nodes);
+
+          if (awaitingNode) {
+            if (session.awaiting_input_type === 'text' && session.awaiting_input_details.variableToSave) {
+              session.flow_variables[session.awaiting_input_details.variableToSave] = receivedMessageText || '';
+              session.current_node_id = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
+            } else if (session.awaiting_input_type === 'option' && session.awaiting_input_details.options) {
+              const options = session.awaiting_input_details.options || [];
+              const chosenOptionIndex = options.findIndex(
+                (opt, idx) => opt.toLowerCase() === (receivedMessageText || '').toLowerCase() || String(idx + 1) === receivedMessageText
+              );
+
+              if (chosenOptionIndex !== -1) {
+                const chosenOptionText = options[chosenOptionIndex];
+                if (session.awaiting_input_details.variableToSave) {
+                  session.flow_variables[session.awaiting_input_details.variableToSave] = chosenOptionText;
+                }
+                session.current_node_id = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
+                console.log(`[API Evolution WS Route - ${sessionId}] User chose: "${chosenOptionText}". Next node: ${session.current_node_id}`);
+              } else {
+                if (senderJid) await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Opção inválida. Por favor, tente novamente."});
+                // Não mudar current_node_id, para re-executar o prompt de opção
+                // session.current_node_id = awaitingNode.id; // Ficar no nó de opção
+              }
+            }
+            session.awaiting_input_type = null;
+            session.awaiting_input_details = null;
+          } else {
+               console.warn(`[API Evolution WS Route - ${sessionId}] Awaiting node ${originalNodeId} not found. Resetting flow.`);
+               const startNode = workspace.nodes.find(n => n.type === 'start');
+               session.current_node_id = startNode ? findNextNodeId(startNode.id, startNode.triggers?.[0]?.name || 'default', workspace.connections || []) : null;
+          }
+        } else {
+           const startNode = workspace.nodes.find(n => n.type === 'start');
+           if(startNode){
+              session.current_node_id = findNextNodeId(startNode.id, startNode.triggers?.[0]?.name || 'default', workspace.connections || []);
+              console.log(`[API Evolution WS Route - ${sessionId}] Session not awaiting input, (re)starting from: ${session.current_node_id}`);
+           } else {
+               console.error(`[API Evolution WS Route - ${sessionId}] No start node in workspace ${workspace.id} for restart.`);
+               session.current_node_id = null;
+           }
+        }
+      }
+
+      if (session.current_node_id) {
+        await saveSessionToDB(session);
+        await executeFlowStep(session, workspace.nodes, workspace.connections || [], apiConfig);
+      } else {
+          console.log(`[API Evolution WS Route - ${sessionId}] Session has no current_node_id after processing. Flow might have ended or has an issue.`);
+          const existingSessionInDb = await loadSessionFromDB(sessionId);
+          if (existingSessionInDb && !existingSessionInDb.awaiting_input_type) {
+             console.log(`[API Evolution WS Route - ${sessionId}] Deleting session due to no next node and not awaiting input.`);
+             await deleteSessionFromDB(sessionId);
+          }
+      }
+      return NextResponse.json({ message: "Webhook processed, flow execution cycle complete or paused." }, { status: 200 });
+
+    } else {
+      let nonExecutionReason = "Not a 'messages.upsert' event or missing critical data in payload";
+      if (eventType === 'messages.upsert') {
+        if (!senderJid) nonExecutionReason = "Missing senderJid for logic";
+        else if (!instanceName) nonExecutionReason = "Missing instanceName in payload";
+        else if (!evolutionApiBaseUrl) nonExecutionReason = "Missing server_url in payload";
+      }
+      console.log(`[API Evolution WS Route] Webhook for workspace "${decodedWorkspaceName}" logged, but no flow execution triggered. Reason: ${nonExecutionReason}. Event: ${eventType}, Parsed Body was: ${parsedBody ? 'object' : 'null'}`);
+      return NextResponse.json({ message: `Webhook logged, but no flow execution triggered: ${nonExecutionReason}.` }, { status: 200 });
+    }
+
+  } catch (error: any) {
+    console.error(`[API Evolution WS Route - POST ERROR HANDLER] Error processing POST for "${decodedWorkspaceName}":`, error.message, error.stack);
+    return NextResponse.json({ error: "Internal server error processing webhook.", details: error.message }, { status: 500 });
+  }
+}
+
+export async function GET(request: NextRequest, { params }: { params: { workspaceName: string } }) {
+  const decodedWorkspaceName = decodeURIComponent(params.workspaceName);
+  console.log(`[API Evolution WS Route - GET] Request for workspace: "${decodedWorkspaceName}"`);
+  try {
+    const workspace = await loadWorkspaceByNameFromDB(decodedWorkspaceName);
     if (workspace) {
-      return NextResponse.json({ 
-        message: `Workspace "${decodedWorkspaceName}" found. Ready to receive POST webhooks at this endpoint.`, 
-        workspaceId: workspace.id, 
+      return NextResponse.json({
+        message: `Workspace "${decodedWorkspaceName}" found. Ready to receive POST webhooks at this endpoint.`,
+        workspaceId: workspace.id,
         nodesCount: workspace.nodes?.length || 0,
         connectionsCount: workspace.connections?.length || 0,
       }, { status: 200 });
@@ -359,218 +613,14 @@ export async function GET(request: NextRequest, { params }: { params: { workspac
       return NextResponse.json({ error: `Workspace "${decodedWorkspaceName}" not found.` }, { status: 404 });
     }
   } catch (error: any) {
-    console.error(`[API Evolution WS Route - GET] Error processing GET for workspace "${params.workspaceName}":`, error);
+    console.error(`[API Evolution WS Route - GET] Error processing GET for "${params.workspaceName}":`, error);
     return NextResponse.json({ error: "Internal server error while checking workspace." }, { status: 500 });
-  }
-}
-
-
-export async function POST(request: NextRequest, { params }: { params: { workspaceName: string } }) {
-  let rawBodyForLog: string | null = null;
-  let parsedBody: any = null;
-  let logEntryPayload: any = {};
-
-  try {
-    rawBodyForLog = await request.text();
-    // console.log(`[API Evolution WS Route - POST DEBUG] Raw body for workspace "${params.workspaceName}": ${rawBodyForLog.substring(0, 300)}...`);
-    if (!rawBodyForLog || rawBodyForLog.trim() === '') {
-      console.warn(`[API Evolution WS Route - POST DEBUG] Body for workspace "${params.workspaceName}" is empty.`);
-      logEntryPayload = { message: "Request body was empty or whitespace." };
-    } else {
-      try {
-        parsedBody = JSON.parse(rawBodyForLog);
-        logEntryPayload = parsedBody;
-      } catch (jsonError: any) {
-        console.warn(`[API Evolution WS Route - POST DEBUG] Failed to parse body as JSON for workspace "${params.workspaceName}", storing as raw text. Error: ${jsonError.message}`);
-        logEntryPayload = { raw_text: rawBodyForLog, parse_error: jsonError.message, original_content_type: request.headers.get('content-type') || 'N/A' };
-      }
-    }
-  } catch (error: any) {
-    console.error(`[API Evolution WS Route - POST DEBUG] Error reading/processing request body for workspace "${params.workspaceName}":`, error.message);
-    logEntryPayload = { error_reading_body: error.message, body_preview_on_error: rawBodyForLog?.substring(0, 200) || "Could not read body.", original_content_type: request.headers.get('content-type') || 'N/A'};
-  }
-
-  // --- Store request details in global log ---
-  const currentTimestamp = new Date().toISOString();
-  let extractedMessage: string | null = null;
-  let webhookRemoteJid: string | null = null;
-  
-  if (parsedBody && typeof parsedBody === 'object') {
-    let actualPayloadToExtractFrom = parsedBody;
-    if (Array.isArray(parsedBody) && parsedBody.length === 1 && typeof parsedBody[0] === 'object') {
-      actualPayloadToExtractFrom = parsedBody[0];
-    }
-    const commonMessagePaths = ['data.message.conversation', 'message.body', 'message.textMessage.text', 'text', 'data.message.extendedTextMessage.text'];
-    for (const path of commonMessagePaths) {
-      const msg = getProperty(actualPayloadToExtractFrom, path);
-      if (typeof msg === 'string' && msg.trim() !== '') { extractedMessage = msg.trim(); break; }
-    }
-    const remoteJidPaths = ['data.key.remoteJid', 'sender'];
-    for (const path of remoteJidPaths) {
-      const jid = getProperty(actualPayloadToExtractFrom, path);
-      if (typeof jid === 'string' && jid.trim() !== '') { webhookRemoteJid = jid.trim(); break; }
-    }
-  }
-  
-  const logEntry = {
-    timestamp: currentTimestamp,
-    workspaceNameParam: params.workspaceName,
-    method: request.method,
-    url: request.url,
-    headers: Object.fromEntries(request.headers.entries()),
-    payload: logEntryPayload, // This is the potentially parsed or raw body
-    ip: request.ip || request.headers.get('x-forwarded-for'),
-    extractedMessage,
-    webhook_remoteJid,
-  };
-  
-  if (!Array.isArray(globalThis.evolutionWebhookLogs)) globalThis.evolutionWebhookLogs = [];
-  globalThis.evolutionWebhookLogs.unshift(logEntry);
-  if (globalThis.evolutionWebhookLogs.length > MAX_LOG_ENTRIES) globalThis.evolutionWebhookLogs.pop();
-  console.log(`[API Evolution WS Route] Logged webhook for workspace "${params.workspaceName}". Msg: "${extractedMessage || 'N/A'}". Total logs: ${globalThis.evolutionWebhookLogs.length}`);
-  // --- End store request details ---
-  
-  const eventType = getProperty(parsedBody, 'event') as string;
-  const instanceName = getProperty(parsedBody, 'instance') as string;
-  const senderJid = webhookRemoteJid; // Use the extracted one
-  const receivedMessageText = extractedMessage; // Use the extracted one
-  const evolutionApiBaseUrl = getProperty(parsedBody, 'server_url') as string;
-  const evolutionApiKey = getProperty(parsedBody, 'apikey') as string;
-  
-  const decodedWorkspaceName = decodeURIComponent(params.workspaceName);
-  console.log(`[API Evolution WS Route] Processing POST for workspace: "${decodedWorkspaceName}". Event: ${eventType}, Sender: ${senderJid}, Msg: ${receivedMessageText}`);
-
-  if (eventType === 'messages.upsert' && senderJid && instanceName && evolutionApiBaseUrl) {
-    const workspace = await loadWorkspaceByNameFromDB(decodedWorkspaceName);
-
-    if (!workspace) {
-      console.error(`[API Evolution WS Route] Workspace not found for name: "${decodedWorkspaceName}" during POST. Cannot execute flow.`);
-      return NextResponse.json({ error: `Workspace "${decodedWorkspaceName}" not found. Flow not executed.` }, { status: 404 });
-    }
-    if (!workspace.nodes || workspace.nodes.length === 0) {
-        console.error(`[API Evolution WS Route] Workspace "${decodedWorkspaceName}" is empty. Cannot execute flow.`);
-        await sendWhatsAppMessageAction({ baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey, instanceName, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Desculpe, o fluxo para esta interação está vazio."});
-        return NextResponse.json({ error: `Workspace "${decodedWorkspaceName}" is empty. Flow not executed.` }, { status: 500 });
-    }
-
-    const apiConfig: ApiConfig = { baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey, instanceName };
-    const sessionId = `${senderJid}@@${workspace.id}`; 
-    let session = await loadSessionFromDB(sessionId);
-
-    if (!session) {
-      console.log(`[API Evolution WS Route - ${sessionId}] New session. Starting flow for workspace ${workspace.id}.`);
-      const startNode = workspace.nodes.find(n => n.type === 'start');
-      if (!startNode) {
-        console.error(`[API Evolution WS Route - ${sessionId}] No start node in workspace ${workspace.id}.`);
-        await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Erro: O fluxo não tem um nó de início."});
-        return NextResponse.json({ error: "Flow has no start node." }, { status: 500 });
-      }
-      const firstTriggerName = startNode.triggers?.[0]?.name;
-      const initialNodeId = findNextNodeId(startNode.id, firstTriggerName || 'default', workspace.connections || []);
-
-      if(!initialNodeId){
-          console.error(`[API Evolution WS Route - ${sessionId}] Start node or its first trigger has no outgoing connection in workspace ${workspace.id}.`);
-          await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Erro: O fluxo não está conectado corretamente a partir do início."});
-          return NextResponse.json({ error: "Start node is not connected." }, { status: 500 });
-      }
-
-      session = {
-        session_id: sessionId,
-        workspace_id: workspace.id,
-        current_node_id: initialNodeId,
-        flow_variables: { 
-          whatsapp_sender_jid: senderJid, 
-          mensagem_whatsapp: receivedMessageText || '', // User's first message
-          webhook_payload: parsedBody 
-        },
-        awaiting_input_type: null,
-        awaiting_input_details: null,
-      };
-    } else {
-      console.log(`[API Evolution WS Route - ${sessionId}] Existing session found. Current node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
-      // Update with the new message, always
-      session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
-      session.flow_variables.webhook_payload = parsedBody; // Update with latest payload
-
-      if (session.awaiting_input_type && session.current_node_id && session.awaiting_input_details) {
-        const originalNodeId = session.awaiting_input_details.originalNodeId || session.current_node_id;
-        const awaitingNode = findNodeById(originalNodeId, workspace.nodes);
-
-        if (awaitingNode) {
-          if (session.awaiting_input_type === 'text' && session.awaiting_input_details.variableToSave) {
-            session.flow_variables[session.awaiting_input_details.variableToSave] = receivedMessageText || '';
-            session.current_node_id = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
-          } else if (session.awaiting_input_type === 'option' && session.awaiting_input_details.options) {
-            const options = session.awaiting_input_details.options || [];
-            const chosenOptionIndex = options.findIndex(
-              (opt, idx) => opt.toLowerCase() === (receivedMessageText || '').toLowerCase() || String(idx + 1) === receivedMessageText
-            );
-            
-            if (chosenOptionIndex !== -1) {
-              const chosenOptionText = options[chosenOptionIndex];
-              if (session.awaiting_input_details.variableToSave) {
-                session.flow_variables[session.awaiting_input_details.variableToSave] = chosenOptionText;
-              }
-              // Important: findNextNodeId for option should use the optionText as sourceHandle
-              session.current_node_id = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
-               console.log(`[API Evolution WS Route - ${sessionId}] User chose option "${chosenOptionText}". Next node ID: ${session.current_node_id}`);
-            } else {
-              await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Opção inválida. Por favor, tente novamente."});
-              session.current_node_id = awaitingNode.id; // Stay on option node (or originalNodeId if it's more robust)
-            }
-          }
-          session.awaiting_input_type = null;
-          session.awaiting_input_details = null;
-        } else {
-             console.warn(`[API Evolution WS Route - ${sessionId}] Awaiting node ${originalNodeId} not found. Resetting session for safety.`);
-             session.current_node_id = null; // Problem with session or flow, reset to start on next message
-        }
-      } else {
-         // Not awaiting specific input, treat as new interaction or restart.
-         // Find start node and proceed from its first trigger/default output.
-         const startNode = workspace.nodes.find(n => n.type === 'start');
-         if(startNode){
-            const firstTriggerName = startNode.triggers?.[0]?.name;
-            session.current_node_id = findNextNodeId(startNode.id, firstTriggerName || 'default', workspace.connections || []);
-            console.log(`[API Evolution WS Route - ${sessionId}] Session not awaiting input, (re)starting from node: ${session.current_node_id}`);
-         } else {
-             console.error(`[API Evolution WS Route - ${sessionId}] No start node in workspace ${workspace.id} for restart.`);
-             session.current_node_id = null;
-         }
-      }
-    }
-
-    if (session.current_node_id) {
-      await saveSessionToDB(session); // Save session before starting execution
-      await executeFlowStep(session, workspace.nodes, workspace.connections || [], apiConfig);
-    } else {
-        console.log(`[API Evolution WS Route - ${sessionId}] Session has no current_node_id after processing. Flow might have ended or has an issue. No execution step.`);
-        // If session was reset due to awaitingNode not found, it might get deleted here if not caught by an end-flow node
-        if (!session.awaiting_input_type) { // Only delete if not explicitly paused
-           const existingSessionInDb = await loadSessionFromDB(sessionId);
-           if (existingSessionInDb && !existingSessionInDb.awaiting_input_type) { // Double check it's not paused
-             console.log(`[API Evolution WS Route - ${sessionId}] Deleting session as it has no next node and is not awaiting input.`);
-             await deleteSessionFromDB(sessionId);
-           }
-        }
-    }
-    return NextResponse.json({ message: "Webhook processed, flow execution attempted." }, { status: 200 });
-
-  } else {
-    let nonExecutionReason = "Not a 'messages.upsert' event";
-    if (eventType === 'messages.upsert') {
-      if (!senderJid) nonExecutionReason = "Missing senderJid";
-      else if (!instanceName) nonExecutionReason = "Missing instanceName";
-      else if (!evolutionApiBaseUrl) nonExecutionReason = "Missing evolutionApiBaseUrl";
-    }
-    console.log(`[API Evolution WS Route] Webhook for workspace "${decodedWorkspaceName}" logged, but no flow execution triggered. Reason: ${nonExecutionReason}. Event: ${eventType}`);
-    return NextResponse.json({ message: `Webhook logged, but no flow execution triggered: ${nonExecutionReason}.` }, { status: 200 });
   }
 }
 
 export async function PUT(request: NextRequest, { params }: { params: { workspaceName: string } }) {
   console.log(`[API Evolution WS Route - PUT] Received PUT for workspace: "${params.workspaceName}". Delegating to POST logic.`);
-  return POST(request, { params }); 
+  return POST(request, { params });
 }
 export async function PATCH(request: NextRequest, { params }: { params: { workspaceName: string } }) {
   console.log(`[API Evolution WS Route - PATCH] Received PATCH for workspace: "${params.workspaceName}". Delegating to POST logic.`);
@@ -578,5 +628,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { worksp
 }
 export async function DELETE(request: NextRequest, { params }: { params: { workspaceName: string } }) {
   console.log(`[API Evolution WS Route - DELETE] Received DELETE for workspace: "${params.workspaceName}". Delegating to POST logic.`);
-  return POST(request, { params }); // Or return a method not allowed error
+  return POST(request, { params });
 }
+
+    
