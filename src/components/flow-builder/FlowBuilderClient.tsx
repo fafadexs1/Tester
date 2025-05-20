@@ -13,6 +13,7 @@ import FlowSidebar from './FlowSidebar';
 import Canvas from './Canvas';
 import TopBar from './TopBar';
 import TestChatPanel from './TestChatPanel';
+import ErrorBoundary from '@/components/ErrorBoundary'; // Importar ErrorBoundary
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { v4 as uuidv4 } from 'uuid';
@@ -20,7 +21,6 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   clientSideLoadWorkspacesAction,
   clientSideSaveWorkspacesAction,
-  // deleteWorkspaceFromDB, // Adicionar se for usar
 } from '@/app/actions/databaseActions';
 
 const LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI = 'flowiseLiteActiveWorkspaceUI';
@@ -65,7 +65,7 @@ export default function FlowBuilderClient() {
   
   const isPanning = useRef(false);
   const panStartMousePosition = useRef({ x: 0, y: 0 });
-  const initialCanvasOffsetOnPanStart = useRef({ x: 0, y: 0 });
+  const initialCanvasOffsetOnPanStart = useRef<CanvasOffset>({ x: 0, y: 0 });
   
   const canvasRef = useRef<HTMLDivElement>(null);
   
@@ -147,8 +147,8 @@ export default function FlowBuilderClient() {
 
   useEffect(() => {
     if (!hasMounted) return;
-    console.log("[FlowBuilderClient] Initializing: Attempting to load workspaces from DB.");
     setIsLoading(true);
+    console.log("[FlowBuilderClient] Initializing: Attempting to load workspaces from DB.");
     
     async function loadData() {
       try {
@@ -158,20 +158,17 @@ export default function FlowBuilderClient() {
         if (loadedWorkspacesFromDB && loadedWorkspacesFromDB.length > 0) {
           setWorkspaces(loadedWorkspacesFromDB);
           
-          // Prioritize o mais recente do DB para ser o ativo
           let newActiveId = loadedWorkspacesFromDB[0].id; 
           const lastActiveIdFromStorage = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI);
 
-          // Se o último ativo do localStorage ainda existir na lista do DB, mantenha-o.
           if (lastActiveIdFromStorage && loadedWorkspacesFromDB.some(ws => ws.id === lastActiveIdFromStorage)) {
             newActiveId = lastActiveIdFromStorage;
-            console.log("[FlowBuilderClient] Active workspace ID set from localStorage (and exists in DB):", newActiveId);
+             console.log("[FlowBuilderClient] Active workspace ID set from localStorage (and exists in DB):", newActiveId);
           } else {
-             console.log("[FlowBuilderClient] Active workspace ID set to most recent from DB:", newActiveId);
+             console.log("[FlowBuilderClient] Active workspace ID set to most recent from DB (or first):", newActiveId);
           }
           setActiveWorkspaceId(newActiveId);
-          localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, newActiveId); // Salva a escolha (seja do DB ou localStorage)
-
+          localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, newActiveId);
         } else {
           console.log("[FlowBuilderClient] No workspaces in DB, creating initial one.");
           const initialId = uuidv4();
@@ -200,7 +197,6 @@ export default function FlowBuilderClient() {
               variant: "destructive",
               duration: 9000
             });
-            // Fallback para um workspace local se o DB falhar totalmente na primeira vez
              const fallbackId = uuidv4();
              setWorkspaces([{ id: fallbackId, name: 'Fluxo de Fallback (Erro DB)', nodes: [], connections: [] }]);
              setActiveWorkspaceId(fallbackId);
@@ -271,8 +267,11 @@ export default function FlowBuilderClient() {
       if (loadedWorkspacesFromDB && loadedWorkspacesFromDB.length > 0) {
         setWorkspaces(loadedWorkspacesFromDB);
         
-        // Define o ativo como o primeiro da lista (mais recente do DB) após descartar
-        const newActiveId = loadedWorkspacesFromDB[0].id;
+        let newActiveId = loadedWorkspacesFromDB[0].id; 
+        const lastActiveIdFromStorage = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI);
+        if (lastActiveIdFromStorage && loadedWorkspacesFromDB.some(ws => ws.id === lastActiveIdFromStorage)) {
+            newActiveId = lastActiveIdFromStorage;
+        }
         setActiveWorkspaceId(newActiveId);
         localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVE_WORKSPACE_UI, newActiveId);
 
@@ -391,8 +390,27 @@ export default function FlowBuilderClient() {
       return;
     }
     
-    // Use definedVariablesInFlow que já é um estado estável e reflete o fluxo ativo
-    let tempExistingVars = [...definedVariablesInFlow]; 
+    let tempExistingVars: string[] = [];
+    // Temporarily read current variables for naming. This is a read-only operation on current state.
+    const currentWsForVars = workspaces.find(ws => ws.id === activeWorkspaceId);
+    if (currentWsForVars?.nodes) {
+        currentWsForVars.nodes.forEach(n => {
+            VARIABLE_DEFINING_FIELDS.forEach(field => {
+                const varName = n[field] as string | undefined;
+                if (varName && varName.trim() !== '') {
+                    tempExistingVars.push(varName.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
+                }
+            });
+            if (n.type === 'start' && Array.isArray(n.triggers)) {
+                n.triggers.forEach(trigger => {
+                    if (trigger.type === 'webhook' && trigger.webhookPayloadVariable) {
+                        tempExistingVars.push(trigger.webhookPayloadVariable.replace(/\{\{/g, '').replace(/\}\}/g, ''));
+                    }
+                });
+            }
+        });
+        tempExistingVars = Array.from(new Set(tempExistingVars)); // Ensure unique names for generation logic
+    }
     
     const itemDefaultDataCopy = item.defaultData ? JSON.parse(JSON.stringify(item.defaultData)) : {};
     
@@ -423,28 +441,28 @@ export default function FlowBuilderClient() {
     }
     
     const baseNodeData: Omit<NodeData, 'id' | 'type' | 'title' | 'x' | 'y'> = {
-      text: '', promptText: '', inputType: 'text', variableToSaveResponse: '',
-      questionText: '', optionsList: '', variableToSaveChoice: '',
+      text: '', promptText: '', inputType: 'text', variableToSaveResponse: 'entrada_usuario',
+      questionText: '', optionsList: 'Opção 1\nOpção 2', variableToSaveChoice: 'escolha_usuario',
       mediaDisplayType: 'image', mediaDisplayUrl: 'https://placehold.co/300x200.png', mediaDisplayText: 'Imagem de exemplo', dataAiHint: 'placeholder abstract',
-      conditionVariable: '', conditionOperator: '==', conditionValue: '',
-      variableName: '', variableValue: '', delayDuration: 1000, typingDuration: 1500,
-      logMessage: '', codeSnippet: "return { resultado: 'sucesso' };", codeOutputVariable: 'resultado_codigo', 
+      conditionVariable: '{{variavel}}', conditionOperator: '==', conditionValue: 'valor',
+      variableName: 'minha_variavel', variableValue: 'valor_padrao', delayDuration: 1000, typingDuration: 1500,
+      logMessage: 'Log: {{status}}', codeSnippet: "return { resultado: 'sucesso' };", codeOutputVariable: 'resultado_codigo', 
       inputJson: '{ "nome": "Exemplo" }', jsonataExpression: '$.nome', jsonOutputVariable: 'nome_transformado',
-      uploadPromptText: '', fileTypeFilter: '', maxFileSizeMB: 5, fileUrlVariable: '',
-      ratingQuestionText: '', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: '',
+      uploadPromptText: 'Envie seu arquivo.', fileTypeFilter: 'image/*,.pdf', maxFileSizeMB: 5, fileUrlVariable: 'url_arquivo',
+      ratingQuestionText: 'Como você avalia?', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: 'avaliacao',
       apiUrl: 'https://', apiMethod: 'GET', apiAuthType: 'none',
       apiAuthBearerToken: '', apiAuthBasicUser: '', apiAuthBasicPassword: '',
       apiHeadersList: [], apiQueryParamsList: [],
       apiBodyType: 'none', apiBodyJson: '{}', apiBodyFormDataList: [], apiBodyRaw: '',
-      apiOutputVariable: '',
-      redirectUrl: '', dateInputLabel: '', variableToSaveDate: '',
-      emailTo: '', emailSubject: '', emailBody: '', emailFrom: '',
-      googleSheetId: '', googleSheetName: '', googleSheetRowData: '',
-      instanceName: '', phoneNumber: '', textMessage: '', mediaUrl: '', mediaType: 'image', caption: '', groupName: '', participants: '',
-      aiPromptText: '', aiModelName: '', aiOutputVariable: '',
-      agentName: 'Agente Inteligente Padrão', agentSystemPrompt: 'Você é um assistente IA. Responda às perguntas do usuário de forma concisa e prestativa.',
-      userInputVariable: '{{entrada_usuario}}', agentResponseVariable: 'resposta_do_agente', maxConversationTurns: 5, temperature: 0.7,
-      supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseDataJson: '', supabaseColumnsToSelect: '*', supabaseResultVariable: '',
+      apiOutputVariable: 'resposta_api',
+      redirectUrl: 'https://', dateInputLabel: 'Qual a data?', variableToSaveDate: 'data_selecionada',
+      emailTo: 'dest@ex.com', emailSubject: 'Assunto', emailBody: 'Corpo', emailFrom: 'remet@ex.com',
+      googleSheetId: '', googleSheetName: 'Página1', googleSheetRowData: '["{{col1}}", "{{col2}}"]',
+      instanceName: '', phoneNumber: '', textMessage: 'Olá de Flowise Lite!', mediaUrl: '', mediaType: 'image', caption: '', groupName: 'Novo Grupo', participants: '',
+      aiPromptText: 'Escreva um poema sobre {{tema}}', aiModelName: '', aiOutputVariable: 'texto_ia',
+      agentName: 'Agente IA', agentSystemPrompt: 'Você é um assistente prestativo.',
+      userInputVariable: '{{entrada_usuario_agente}}', agentResponseVariable: 'resposta_agente_ia', maxConversationTurns: 5, temperature: 0.7,
+      supabaseTableName: 'sua_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '{{id_registro}}', supabaseDataJson: '{ "coluna": "valor" }', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase',
     };
 
     const newNode: NodeData = {
@@ -464,7 +482,7 @@ export default function FlowBuilderClient() {
       console.log("[FlowBuilderClient] Nodes after adding new node. New count:", updatedNodes.length);
       return { ...ws, nodes: updatedNodes };
     });
-  }, [activeWorkspaceId, updateActiveWorkspace, definedVariablesInFlow]);
+  }, [activeWorkspaceId, updateActiveWorkspace, workspaces, definedVariablesInFlow]); // workspaces is used to read current state for var names
 
   const updateNode = useCallback((id: string, changes: Partial<NodeData>) => {
     console.log("[FlowBuilderClient] Node updated:", {id, changes});
@@ -510,6 +528,7 @@ export default function FlowBuilderClient() {
       const logicalStartX = fromNodeData.x + NODE_WIDTH; 
       const logicalStartY = fromNodeData.y + startYOffset; 
       
+      // Coordenadas visuais do mouse relativas ao canvasRef
       const mouseXOnCanvasVisual = event.clientX - canvasRect.left;
       const mouseYOnCanvasVisual = event.clientY - canvasRect.top;
 
@@ -526,7 +545,7 @@ export default function FlowBuilderClient() {
         currentY: logicalCurrentY,
       });
     },
-    [canvasRef, setDrawingLine] 
+    [canvasRef, setDrawingLine, canvasOffsetCbRef, zoomLevelCbRef] 
   ); 
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -537,7 +556,7 @@ export default function FlowBuilderClient() {
       if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
       setHighlightedNodeIdBySession(null); 
     }
-  }, [canvasRef]); 
+  }, [canvasRef, canvasOffsetCbRef]); 
 
   const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -555,7 +574,6 @@ export default function FlowBuilderClient() {
       const mouseXOnCanvasVisual = e.clientX - canvasRect.left;
       const mouseYOnCanvasVisual = e.clientY - canvasRect.top;
 
-      // Converter para coordenadas lógicas
       const logicalCurrentX = (mouseXOnCanvasVisual - currentCanvasOffset.x) / currentZoomLevel;
       const logicalCurrentY = (mouseYOnCanvasVisual - currentCanvasOffset.y) / currentZoomLevel;
 
@@ -568,7 +586,7 @@ export default function FlowBuilderClient() {
         };
       });
     }
-  }, [drawingLine, setDrawingLine, setCanvasOffset, canvasRef]); 
+  }, [drawingLine, setDrawingLine, setCanvasOffset, canvasRef, canvasOffsetCbRef, zoomLevelCbRef]); 
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -638,14 +656,13 @@ export default function FlowBuilderClient() {
   useEffect(() => {
     if (!hasMounted) return;
     
-    const currentCanvasForListeners = canvasRef.current; 
     document.addEventListener('mousemove', handleGlobalMouseMove);
     document.addEventListener('mouseup', handleGlobalMouseUp);
     
     const handleMouseLeaveWindow = () => {
       if (isPanning.current) {
         isPanning.current = false;
-        if (currentCanvasForListeners) currentCanvasForListeners.style.cursor = 'grab';
+        if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
       }
       if (drawingLine) {
         setDrawingLine(null);
@@ -697,7 +714,7 @@ export default function FlowBuilderClient() {
     setZoomLevel(newZoomLevel);
     setCanvasOffset({ x: newOffsetX, y: newOffsetY });
 
-  }, [setZoomLevel, setCanvasOffset, canvasRef]); 
+  }, [setZoomLevel, setCanvasOffset, canvasRef, zoomLevelCbRef, canvasOffsetCbRef]); 
 
   const handleHighlightNodeInFlow = useCallback((nodeId: string | null) => {
     setHighlightedNodeIdBySession(nodeId);
@@ -709,52 +726,53 @@ export default function FlowBuilderClient() {
   }
 
   return (
-    <DndProvider backend={HTML5Backend}>
-      <div className="flex flex-col h-screen bg-background font-sans select-none overflow-hidden">
-        <TopBar
-          workspaces={workspaces}
-          activeWorkspaceId={activeWorkspaceId}
-          onAddWorkspace={addWorkspace}
-          onSwitchWorkspace={switchWorkspace}
-          onSaveWorkspaces={handleSaveWorkspaces}
-          onDiscardChanges={handleDiscardChanges}
-          appName="Flowise Lite"
-          isChatPanelOpen={isChatPanelOpen}
-          onToggleChatPanel={toggleChatPanel}
-          onZoom={handleZoom}
-          currentZoomLevel={zoomLevel}
-          onHighlightNode={handleHighlightNodeInFlow} 
-        />
-        <div className="flex-1 flex relative overflow-hidden"> {/* Era flex-col aqui, removido para testar pan */}
-          <FlowSidebar />
-          <div className="flex-1 flex relative overflow-hidden" >  {/* Container para o Canvas */}
-            <Canvas
-              ref={canvasRef} // Passando a ref para o componente Canvas
-              nodes={currentNodes}
-              connections={currentConnections}
-              drawingLine={drawingLine}
-              canvasOffset={canvasOffset}
-              zoomLevel={zoomLevel}
-              onDropNode={handleDropNode}
-              onUpdateNode={updateNode}
-              onStartConnection={handleStartConnection}
-              onDeleteNode={deleteNode}
-              onDeleteConnection={deleteConnection}
-              onCanvasMouseDown={handleCanvasMouseDownForPanning}
-              highlightedConnectionId={highlightedConnectionId}
-              setHighlightedConnectionId={setHighlightedConnectionId}
-              definedVariablesInFlow={definedVariablesInFlow}
-              highlightedNodeIdBySession={highlightedNodeIdBySession}
-            />
+    <ErrorBoundary>
+      <DndProvider backend={HTML5Backend}>
+        <div className="flex flex-col h-screen bg-background font-sans select-none overflow-hidden">
+          <TopBar
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+            onAddWorkspace={addWorkspace}
+            onSwitchWorkspace={switchWorkspace}
+            onSaveWorkspaces={handleSaveWorkspaces}
+            onDiscardChanges={handleDiscardChanges}
+            appName="Flowise Lite"
+            isChatPanelOpen={isChatPanelOpen}
+            onToggleChatPanel={toggleChatPanel}
+            onZoom={handleZoom}
+            currentZoomLevel={zoomLevel}
+            onHighlightNode={handleHighlightNodeInFlow} 
+          />
+          <div className="flex-1 flex relative overflow-hidden">
+            <FlowSidebar />
+            <div className="flex-1 flex relative overflow-hidden" >
+              <Canvas
+                ref={canvasRef} 
+                nodes={currentNodes}
+                connections={currentConnections}
+                drawingLine={drawingLine}
+                canvasOffset={canvasOffset}
+                zoomLevel={zoomLevel}
+                onDropNode={handleDropNode}
+                onUpdateNode={updateNode}
+                onStartConnection={handleStartConnection}
+                onDeleteNode={deleteNode}
+                onDeleteConnection={deleteConnection}
+                onCanvasMouseDown={handleCanvasMouseDownForPanning}
+                highlightedConnectionId={highlightedConnectionId}
+                setHighlightedConnectionId={setHighlightedConnectionId}
+                definedVariablesInFlow={definedVariablesInFlow}
+                highlightedNodeIdBySession={highlightedNodeIdBySession}
+              />
+            </div>
+            {hasMounted && isChatPanelOpen && (
+              <TestChatPanel
+                activeWorkspace={activeWorkspace}
+              />
+            )}
           </div>
-          {hasMounted && isChatPanelOpen && (
-            <TestChatPanel
-              activeWorkspace={activeWorkspace}
-            />
-          )}
         </div>
-      </div>
-    </DndProvider>
+      </DndProvider>
+    </ErrorBoundary>
   );
 }
-

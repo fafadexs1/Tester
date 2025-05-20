@@ -2,13 +2,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { WorkspaceData, StartNodeTrigger, FlowSession } from '@/lib/types';
+import type { WorkspaceData, FlowSession } from '@/lib/types'; // Removido StartNodeTrigger se não usado aqui
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard,
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy,
-  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target
+  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut
 } from 'lucide-react';
 import {
   Dialog,
@@ -49,6 +49,15 @@ const PostgresIcon = () => (
   </svg>
 );
 
+const ResetZoomIcon = () => ( // Adicionado um ícone simples para resetar zoom
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+    <path d="M7 11h8M11 7v8"/>
+    <path d="M11 15a4 4 0 0 0 0-8M11 7a4 4 0 0 0 0 8"/>
+    <path d="M11 11h.01"/> {/* Ponto central */}
+  </svg>
+);
+
 type SettingsCategory = 'database' | 'integrations';
 interface WebhookLogEntry {
   timestamp: string;
@@ -60,6 +69,7 @@ interface WebhookLogEntry {
   geo?: any;
   extractedMessage?: string | null;
   webhook_remoteJid?: string | null;
+  workspaceNameParam?: string; // Adicionado para logs de workspace
 }
 
 interface TopBarProps {
@@ -72,6 +82,8 @@ interface TopBarProps {
   appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
+  onZoom: (direction: 'in' | 'out' | 'reset') => void;
+  currentZoomLevel: number;
   onHighlightNode: (nodeId: string | null) => void; 
 }
 
@@ -85,6 +97,8 @@ const TopBar: React.FC<TopBarProps> = ({
   appName = "Flowise Lite",
   isChatPanelOpen,
   onToggleChatPanel,
+  onZoom,
+  currentZoomLevel,
   onHighlightNode
 }) => {
   const { toast } = useToast();
@@ -126,14 +140,14 @@ const TopBar: React.FC<TopBarProps> = ({
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
   
   const [flowiseLiteAppBaseUrl, setFlowiseLiteAppBaseUrl] = useState('');
-
+  
   const activeWorkspace = useMemo(() => workspaces.find(ws => ws.id === activeWorkspaceId), [workspaces, activeWorkspaceId]);
   
   const evolutionWebhookUrlForCurrentFlow = useMemo(() => {
     if (flowiseLiteAppBaseUrl && activeWorkspace?.name) {
       return `${flowiseLiteAppBaseUrl}/api/evolution/workspace/${encodeURIComponent(activeWorkspace.name)}`;
     }
-    return `${flowiseLiteAppBaseUrl}/api/evolution/workspace/[NOME_DO_SEU_FLUXO]`;
+    return `${flowiseLiteAppBaseUrl}/api/evolution/workspace/[SELECIONE_UM_FLUXO]`;
   }, [flowiseLiteAppBaseUrl, activeWorkspace]);
 
 
@@ -151,7 +165,7 @@ const TopBar: React.FC<TopBarProps> = ({
       setIsSupabaseEnabled(localStorage.getItem('isSupabaseEnabled') === 'true');
 
       setPostgresHost(localStorage.getItem('postgresHost') || '');
-      setPostgresPort(localStorage.getItem('postgresPort') || '');
+      setPostgresPort(localStorage.getItem('postgresPort') || '5432');
       setPostgresUser(localStorage.getItem('postgresUser') || '');
       setPostgresPassword(localStorage.getItem('postgresPassword') || '');
       setPostgresDatabase(localStorage.getItem('postgresDatabase') || '');
@@ -267,11 +281,10 @@ const TopBar: React.FC<TopBarProps> = ({
   
   const handleGoToNodeInFlow = (session: FlowSession) => {
     if (onSwitchWorkspace && onHighlightNode && session.workspace_id && session.current_node_id) {
-        onSwitchWorkspace(session.workspace_id); // Certifica que o workspace correto está ativo
-        // Pequeno delay para garantir que o workspace e seus nós foram renderizados antes de destacar
+        onSwitchWorkspace(session.workspace_id);
         setTimeout(() => {
             onHighlightNode(session.current_node_id);
-        }, 100); // 100ms de delay, ajuste se necessário
+        }, 100); 
         setIsSessionsDialogOpen(false); 
     } else {
         toast({
@@ -297,7 +310,6 @@ const TopBar: React.FC<TopBarProps> = ({
           console.error(`Erro ao copiar ${type}: `, err);
         });
     } else {
-        // Fallback para navegadores mais antigos ou contextos inseguros
         const textArea = document.createElement("textarea");
         textArea.value = text;
         document.body.appendChild(textArea);
@@ -359,7 +371,7 @@ const TopBar: React.FC<TopBarProps> = ({
               >
                 <SelectTrigger
                   id="workspace-select-topbar-mobile"
-                  className="h-9 w-auto min-w-[calc(100vw-400px)] max-w-[180px] text-sm"
+                  className="h-9 w-auto min-w-[calc(100vw-400px)] max-w-[180px] text-sm" // Ajuste de largura para mobile
                   aria-label="Selecionar Fluxo de Trabalho"
                 >
                   <SelectValue placeholder="Selecionar Fluxo" />
@@ -379,23 +391,44 @@ const TopBar: React.FC<TopBarProps> = ({
             <span className="sr-only">Novo Fluxo</span>
           </Button>
 
+           <div className="flex items-center gap-1 ml-2">
+            <Button onClick={() => onZoom('out')} variant="outline" size="icon" className="h-9 w-9">
+              <ZoomOut className="h-4 w-4" />
+              <span className="sr-only">Diminuir Zoom</span>
+            </Button>
+            <Button 
+              onClick={() => onZoom('reset')} 
+              variant="outline" 
+              size="sm" 
+              className="h-9 px-2 text-xs w-[60px]"
+              title="Resetar Zoom"
+            >
+              {Math.round(currentZoomLevel * 100)}%
+            </Button>
+            <Button onClick={() => onZoom('in')} variant="outline" size="icon" className="h-9 w-9">
+              <ZoomIn className="h-4 w-4" />
+              <span className="sr-only">Aumentar Zoom</span>
+            </Button>
+          </div>
+
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
                 size="icon"
-                className="hidden md:inline-flex h-9 w-9"
+                className="h-9 w-9" // Removido hidden md:inline-flex
                 aria-label="Console e Logs"
               >
                 <TerminalSquare className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Console e Logs</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="w-60"> {/* Aumentado um pouco */}
+              <DropdownMenuLabel>Console e Diagnósticos</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setIsWebhookLogsDialogOpen(true)}>
                 <WebhookIcon className="mr-2 h-4 w-4" />
-                <span>Logs Webhook Evolution</span>
+                <span>Logs de Eventos da API Evolution</span>
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setIsSessionsDialogOpen(true)}>
                 <Users className="mr-2 h-4 w-4" />
@@ -403,7 +436,7 @@ const TopBar: React.FC<TopBarProps> = ({
               </DropdownMenuItem>
               <DropdownMenuItem disabled>
                 <FileText className="mr-2 h-4 w-4" />
-                <span>Logs de Execução do Fluxo</span>
+                <span>Logs da Aplicação</span>
                 <span className="ml-auto text-xs text-muted-foreground">(Em Breve)</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -549,7 +582,7 @@ const TopBar: React.FC<TopBarProps> = ({
                       <AccordionContent className="px-4 pt-3 pb-4 border-t">
                         <div className="flex items-center space-x-2 mb-4">
                           <Switch id="enable-postgres" checked={isPostgresEnabled} onCheckedChange={setIsPostgresEnabled} aria-label="Habilitar Conexão PostgreSQL"/>
-                          <Label htmlFor="enable-postgres" className="text-sm font-medium">Habilitar Conexão PostgreSQL (para persistência de fluxos/sessões)</Label>
+                          <Label htmlFor="enable-postgres" className="text-sm font-medium">Habilitar Conexão PostgreSQL (para persistência)</Label>
                         </div>
                         {isPostgresEnabled && (
                           <div className="space-y-3 animate-in fade-in-0 slide-in-from-top-2 duration-300">
@@ -579,13 +612,13 @@ const TopBar: React.FC<TopBarProps> = ({
                       <AccordionContent className="px-4 pt-3 pb-4 border-t">
                         <div className="flex items-center space-x-2 mb-4">
                           <Switch id="enable-supabase" checked={isSupabaseEnabled} onCheckedChange={setIsSupabaseEnabled} aria-label="Habilitar Integração Supabase"/>
-                          <Label htmlFor="enable-supabase" className="text-sm font-medium">Habilitar Integração Supabase (para buscar schema e testar nós)</Label>
+                          <Label htmlFor="enable-supabase" className="text-sm font-medium">Habilitar Integração Supabase (para schema e teste de nós)</Label>
                         </div>
                         {isSupabaseEnabled && (
                           <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
                             <div><Label htmlFor="supabase-url" className="text-card-foreground/90 text-sm">URL do Projeto Supabase</Label><Input id="supabase-url" placeholder="https://seunomeprojeto.supabase.co" value={supabaseUrl} onChange={(e) => setSupabaseUrl(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                            <div><Label htmlFor="supabase-anon-key" className="text-card-foreground/90 text-sm">Chave Pública (Anon Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-anon-key" type="password" placeholder="eyJhbGciOi..." value={supabaseAnonKey} onChange={(e) => setSupabaseAnonKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada para acesso no lado do cliente (TestChatPanel), respeitando RLS.</p></div>
-                            <div><Label htmlFor="supabase-service-key" className="text-card-foreground/90 text-sm">Chave de Serviço (Service Role Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-service-key" type="password" placeholder="eyJhbGciOi..." value={supabaseServiceKey} onChange={(e) => setSupabaseServiceKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada por Server Actions para buscar schema (tabelas/colunas). Mantenha em segredo.</p></div>
+                            <div><Label htmlFor="supabase-anon-key" className="text-card-foreground/90 text-sm">Chave Pública (Anon Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-anon-key" type="password" placeholder="eyJhbGciOi..." value={supabaseAnonKey} onChange={(e) => setSupabaseAnonKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada para acesso no TestChatPanel (respeitando RLS).</p></div>
+                            <div><Label htmlFor="supabase-service-key" className="text-card-foreground/90 text-sm">Chave de Serviço (Service Role Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-service-key" type="password" placeholder="eyJhbGciOi..." value={supabaseServiceKey} onChange={(e) => setSupabaseServiceKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada por Server Actions para buscar schema. Mantenha em segredo.</p></div>
                           </div>
                         )}
                       </AccordionContent>
@@ -609,14 +642,14 @@ const TopBar: React.FC<TopBarProps> = ({
                         {isEvolutionApiEnabled && (
                           <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
                             <div><Label htmlFor="evolution-api-base-url" className="text-card-foreground/90 text-sm">URL Base da API Evolution (para enviar mensagens)</Label><Input id="evolution-api-base-url" placeholder="http://localhost:8080" value={evolutionApiBaseUrl} onChange={(e) => setEvolutionApiBaseUrl(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                            <div><Label htmlFor="default-evolution-instance-name" className="text-card-foreground/90 text-sm">Nome da Instância Padrão</Label><Input id="default-evolution-instance-name" placeholder="evolution_instance_padrao" value={defaultEvolutionInstanceName} onChange={(e) => setDefaultEvolutionInstanceName(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                            <div><Label htmlFor="evolution-api-key" className="text-card-foreground/90 text-sm">Chave de API Global da Evolution (Opcional)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="evolution-api-key" type="password" placeholder="Sua chave de API global, se configurada" value={evolutionGlobalApiKey} onChange={(e) => setEvolutionGlobalApiKey(e.target.value)} className="bg-input text-foreground flex-1"/></div></div>
+                            <div><Label htmlFor="default-evolution-instance-name" className="text-card-foreground/90 text-sm">Nome da Instância Padrão</Label><Input id="default-evolution-instance-name" placeholder="evolution_instance" value={defaultEvolutionInstanceName} onChange={(e) => setDefaultEvolutionInstanceName(e.target.value)} className="bg-input text-foreground mt-1"/></div>
+                            <div><Label htmlFor="evolution-api-key" className="text-card-foreground/90 text-sm">Chave de API Global da Evolution (Opcional)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="evolution-api-key" type="password" placeholder="Sua chave de API global" value={evolutionGlobalApiKey} onChange={(e) => setEvolutionGlobalApiKey(e.target.value)} className="bg-input text-foreground flex-1"/></div></div>
                             
                             <div className="pt-4 border-t border-border space-y-2">
                               <Label className="text-card-foreground/90 text-sm font-medium">Recepção de Webhooks da API Evolution</Label>
                               <p className="text-xs text-muted-foreground mt-1 mb-2">
-                                Configure a URL abaixo na sua instância da API Evolution para que o Flowise Lite receba eventos (ex: novas mensagens). 
-                                Substitua <strong>`[NOME_DO_SEU_FLUXO]`</strong> pelo nome exato do seu fluxo (workspace) atualmente ativo: 
+                                Configure a URL abaixo na sua API Evolution para o Flowise Lite receber eventos.
+                                Substitua <code className="bg-muted px-1 rounded-sm text-xs">[NOME_DO_SEU_FLUXO]</code> pelo nome exato do fluxo ativo:
                                 <strong className="text-primary ml-1">{activeWorkspace?.name ? encodeURIComponent(activeWorkspace.name) : "[SELECIONE_UM_FLUXO]"}</strong>.
                               </p>
                               <div className="flex items-center space-x-2">
@@ -662,7 +695,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <DialogHeader>
             <DialogTitle>Logs de Eventos da API Evolution</DialogTitle>
             <DialogDescription>
-              Webhooks HTTP recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{flowiseLiteAppBaseUrl}/api/evolution/workspace/[NOME_DO_FLUXO]</code>.
+              Webhooks HTTP recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{`${flowiseLiteAppBaseUrl}/api/evolution/workspace/[NOME_DO_FLUXO]`}</code>.
               Os logs são armazenados em memória no servidor (máx. 50) e zerados ao reiniciar.
             </DialogDescription>
           </DialogHeader>
@@ -684,7 +717,7 @@ const TopBar: React.FC<TopBarProps> = ({
                       <summary className="cursor-pointer font-medium text-foreground/80 hover:text-foreground select-none">
                         <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm text-primary/80 mr-2">{new Date(log.timestamp).toLocaleTimeString()}</span>
                         <span className="font-semibold mr-1">{log.method || (log.payload?.event ? '' : 'Evento Desconhecido')}</span>
-                        {log.payload?.event && (<span className="text-accent font-semibold">{log.payload.event}</span>)}
+                        {(log.payload?.event || log.workspaceNameParam) && (<span className="text-accent font-semibold">{log.payload?.event || `GET para ${log.workspaceNameParam}`}</span>)}
                         {log.extractedMessage && (<span className="ml-2 text-slate-500 italic">Msg: "{log.extractedMessage.substring(0, 30)}{log.extractedMessage.length > 30 ? '...' : ''}"</span>)}
                         {log.webhook_remoteJid && (<span className="ml-2 text-blue-500 text-xs">De: {log.webhook_remoteJid}</span>)}
                       </summary>
@@ -694,7 +727,7 @@ const TopBar: React.FC<TopBarProps> = ({
                         {log.headers && (<div><strong>Headers:</strong><pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-24 overflow-y-auto">{JSON.stringify(log.headers, null, 2)}</pre></div>)}
                         <div><strong>Payload Completo:</strong>
                           <pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-60 overflow-y-auto">
-                            {log.payload && typeof log.payload === 'object' ? JSON.stringify(log.payload, null, 2) : String(log.payload)}
+                            {typeof log.payload === 'string' ? log.payload : (log.payload ? JSON.stringify(log.payload, null, 2) : 'N/A')}
                           </pre>
                         </div>
                       </div>
@@ -752,7 +785,7 @@ const TopBar: React.FC<TopBarProps> = ({
                         <TableCell>{session.last_interaction_at ? new Date(session.last_interaction_at).toLocaleString() : 'N/A'}</TableCell>
                         <TableCell className="text-right space-x-1">
                           <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => handleViewSessionVariables(session.flow_variables)}>
-                            <FileJson2 className="mr-1 h-3.5 w-3.5" /> Ver Vars
+                            <FileJson2 className="mr-1 h-3.5 w-3.5" /> Ver
                           </Button>
                            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => handleGoToNodeInFlow(session)}>
                             <Target className="mr-1 h-3.5 w-3.5" /> Ir Nó
