@@ -75,7 +75,7 @@ export interface NodeData {
   
   // Input Node
   promptText?: string; 
-  inputType?: 'text' | 'email' | 'phone' | 'number';
+  inputType?: 'text' | 'email' | 'phone' | 'number'; // For UI validation, backend treats as text
   variableToSaveResponse?: string;
 
   // Option Node
@@ -83,10 +83,10 @@ export interface NodeData {
   optionsList?: string; 
   variableToSaveChoice?: string;
 
-  // WhatsApp Nodes
+  // WhatsApp Nodes (can also be triggered by api-call node)
   instanceName?: string; 
-  phoneNumber?: string; 
-  textMessage?: string; 
+  phoneNumber?: string; // Can be a variable like {{whatsapp_sender_jid}}
+  textMessage?: string; // For whatsapp-text, or if api-call is used for text
   mediaUrl?: string; 
   mediaType?: 'image' | 'video' | 'document' | 'audio'; 
   caption?: string; 
@@ -120,40 +120,40 @@ export interface NodeData {
   // Delay Node
   delayDuration?: number; 
 
-  // Date Input Node
+  // Date Input Node (UI only for now, backend treats as text input)
   dateInputLabel?: string;
   variableToSaveDate?: string;
 
-  // Redirect Node
+  // Redirect Node (UI/Client-side behavior mainly)
   redirectUrl?: string;
 
-  // Typing Emulation Node
+  // Typing Emulation Node (UI effect mainly)
   typingDuration?: number; 
 
-  // Media Display Node
+  // Media Display Node (UI only for now)
   mediaDisplayType?: 'image' | 'video' | 'audio';
   mediaDisplayUrl?: string;
   mediaDisplayText?: string; 
 
-  // Log Console Node
+  // Log Console Node (Server-side logging in flow engine)
   logMessage?: string;
 
-  // Code Execution Node
+  // Code Execution Node (Potentially server-side, but complex to sandbox)
   codeSnippet?: string;
   codeOutputVariable?: string;
 
   // JSON Transform Node
-  inputJson?: string;
+  inputJson?: string; // Variable or JSON string
   jsonataExpression?: string;
   jsonOutputVariable?: string;
 
-  // File Upload Node
+  // File Upload Node (UI only for now)
   uploadPromptText?: string;
   fileTypeFilter?: string;
   maxFileSizeMB?: number;
   fileUrlVariable?: string;
 
-  // Rating Input Node
+  // Rating Input Node (UI only for now)
   ratingQuestionText?: string;
   maxRatingValue?: number;
   ratingIconType?: 'star' | 'heart' | 'number';
@@ -161,27 +161,27 @@ export interface NodeData {
 
   // AI Text Generation Node
   aiPromptText?: string;
-  aiModelName?: string; // e.g., gemini-1.5-flash
+  aiModelName?: string; 
   aiOutputVariable?: string;
   
-  // Send Email Node
+  // Send Email Node (Would require server-side email service integration)
   emailTo?: string;
   emailSubject?: string;
   emailBody?: string;
-  emailFrom?: string; // Optional
+  emailFrom?: string; 
 
-  // Google Sheets Append Node
+  // Google Sheets Append Node (Requires server-side Google API integration)
   googleSheetId?: string;
-  googleSheetName?: string; // e.g., "Página1"
-  googleSheetRowData?: string; // JSON string array, e.g., '["{{val1}}", "valor2"]'
+  googleSheetName?: string; 
+  googleSheetRowData?: string;
 
   // Intelligent Agent Node
   agentName?: string;
   agentSystemPrompt?: string;
-  userInputVariable?: string; // Variable holding the user's current message to the agent
-  agentResponseVariable?: string; // Variable to store the agent's response
-  maxConversationTurns?: number; // Optional: To limit conversation length for state management
-  temperature?: number; // Optional: For LLM creativity
+  userInputVariable?: string; 
+  agentResponseVariable?: string; 
+  maxConversationTurns?: number; 
+  temperature?: number; 
 
   // Supabase Nodes
   supabaseTableName?: string;
@@ -199,12 +199,12 @@ export interface Connection {
   id: string;
   from: string; 
   to: string;   
-  sourceHandle?: string; 
+  sourceHandle?: string; // e.g., "default", "true", "false", trigger name, option text
 }
 
 export interface DrawingLineData {
   fromId: string;
-  sourceHandleId: string; // 'default', trigger name, or option text
+  sourceHandleId: string; 
   startX: number; // Logical X
   startY: number; // Logical Y
   currentX: number; // Logical X of mouse
@@ -221,4 +221,21 @@ export interface WorkspaceData {
   name: string;
   nodes: NodeData[];
   connections: Connection[];
+  // Could add last_updated_by, etc. in a real system
+}
+
+// For managing active conversations in the backend flow engine
+export interface FlowSession {
+  session_id: string; // e.g., senderJid
+  workspace_id: string;
+  current_node_id: string | null;
+  flow_variables: Record<string, any>;
+  awaiting_input_type?: 'text' | 'option' | null; // What kind of input the flow is paused for
+  awaiting_input_details?: {
+    variableToSave?: string; // For 'text' input
+    options?: string[];       // For 'option' input
+    originalNodeId?: string; // The ID of the input/option node that paused the flow
+  } | null;
+  last_interaction_at?: Date;
+  created_at?: Date;
 }
