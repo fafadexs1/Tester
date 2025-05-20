@@ -31,15 +31,16 @@ interface CanvasProps {
   highlightedConnectionId: string | null;
   setHighlightedConnectionId: (id: string | null) => void;
   definedVariablesInFlow: string[];
+  highlightedNodeIdBySession: string | null;
 }
 
-const SVG_CANVAS_DIMENSION = 50000; // Dimensão lógica grande para o canvas interno
+const SVG_CANVAS_DIMENSION = 50000; 
 
 const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   nodes, connections, drawingLine, canvasOffset, zoomLevel,
   onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDeleteConnection,
   onCanvasMouseDown, highlightedConnectionId, setHighlightedConnectionId,
-  definedVariablesInFlow
+  definedVariablesInFlow, highlightedNodeIdBySession
 }, ref) => {
   const localCanvasRef = useRef<HTMLDivElement>(null);
   const flowContentWrapperRef = useRef<HTMLDivElement>(null);
@@ -56,10 +57,6 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
     zoomLevelRef.current = zoomLevel;
   }, [zoomLevel]);
   
-  // canvasOffset é passado como prop, então não precisa de ref aqui para stableOnDropNode se
-  // stableOnDropNode depende de canvasOffset.x e .y (primitivos)
-  // No entanto, para consistência e para evitar que stableOnDropNode mude desnecessariamente
-  // se o objeto canvasOffset mudar de referência (mesmo com x/y iguais), usar ref é mais seguro.
   const canvasOffsetRef = useRef(canvasOffset);
     useEffect(() => {
         canvasOffsetRef.current = canvasOffset;
@@ -69,15 +66,14 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   const stableOnDropNode = useCallback(
     (item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
       const clientOffset = monitor.getClientOffset();
-      if (clientOffset && flowContentWrapperRef.current) { // Alvo de drop é flowContentWrapperRef
+      if (clientOffset && flowContentWrapperRef.current) { 
         const flowWrapperRect = flowContentWrapperRef.current.getBoundingClientRect();
         
         const xOnFlowWrapper = clientOffset.x - flowWrapperRect.left;
         const yOnFlowWrapper = clientOffset.y - flowWrapperRect.top;
         
-        const currentZoom = zoomLevelRef.current; // Usa a ref para o zoom atual
+        const currentZoom = zoomLevelRef.current;
         
-        // Coordenadas lógicas são relativas ao conteúdo do flowContentWrapperRef
         const logicalX = xOnFlowWrapper / currentZoom;
         const logicalY = yOnFlowWrapper / currentZoom;
         
@@ -87,16 +83,15 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
         // console.warn('[Canvas] Drop failed: clientOffset or flowContentWrapperRef.current is null');
       }
     },
-    [onDropNodeCbRef, zoomLevelRef, flowContentWrapperRef] // Depende apenas das refs estáveis
+    [onDropNodeCbRef, zoomLevelRef, flowContentWrapperRef] 
   );
 
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
     accept: ITEM_TYPE_BLOCK,
     drop: stableOnDropNode,
     collect: (monitor) => {
-      // const canActuallyDrop = monitor.canDrop();
       // if (monitor.isOver() || monitor.canDrop() || monitor.getItem()) { 
-      //  console.debug(`[Canvas] Monitored props: isOver=${monitor.isOver()}, canDrop=${canActuallyDrop}, itemType=${monitor.getItemType()}, item=${JSON.stringify(monitor.getItem())}`);
+      //  console.debug(`[Canvas] Monitored props: isOver=${monitor.isOver()}, canDrop=${monitor.canDrop()}, itemType=${monitor.getItemType()}, item=${JSON.stringify(monitor.getItem())}`);
       // }
       return {
         isOver: !!monitor.isOver(),
@@ -112,7 +107,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
       drop(currentFlowContentWrapper);
     }
     return () => {
-      if (flowContentWrapperRef.current) {  // Use a ref diretamente no cleanup
+      if (flowContentWrapperRef.current) {  // Use ref.current in cleanup as well
         drop(null);
         // console.log('[Canvas] Cleanup drop target from flowContentWrapperRef');
       }
@@ -157,10 +152,11 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
           onStartConnection={onStartConnection} 
           onDeleteNode={onDeleteNode}
           definedVariablesInFlow={definedVariablesInFlow}
+          isSessionHighlighted={node.id === highlightedNodeIdBySession}
         />
       </motion.div>
     ))
-  ), [nodes, onUpdateNode, onStartConnection, onDeleteNode, definedVariablesInFlow]);
+  ), [nodes, onUpdateNode, onStartConnection, onDeleteNode, definedVariablesInFlow, highlightedNodeIdBySession]);
 
   const renderedConnections = useMemo(() => (
     (connections || []).map((conn) => {
@@ -224,6 +220,12 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
     })
   ), [connections, nodeMap, highlightedConnectionId, onDeleteConnection, setHighlightedConnectionId, zoomLevel, drawBezierPath]);
   
+  // useEffect(() => {
+  //   if (drawingLine) {
+  //     console.log('[Canvas] Drawing line active. Data:', JSON.parse(JSON.stringify(drawingLine)), 'Offset:', JSON.parse(JSON.stringify(canvasOffset)), 'Zoom:', zoomLevel);
+  //   }
+  // }, [drawingLine, canvasOffset, zoomLevel]);
+
   const visualGridSpacing = GRID_SIZE * zoomLevel;
 
   return (
@@ -265,23 +267,20 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
           </defs>
           {renderedConnections}
           {drawingLine && (
-            <>
-              {/* console.log('[Canvas] Drawing line active. Data:', JSON.parse(JSON.stringify(drawingLine)), 'Offset:', JSON.parse(JSON.stringify(canvasOffset)), 'Zoom:', zoomLevel) */}
-              <path
-                d={drawBezierPath(
-                  drawingLine.startX,    // Lógico
-                  drawingLine.startY,    // Lógico
-                  drawingLine.currentX,  // Já é lógico (definido no FlowBuilderClient)
-                  drawingLine.currentY   // Já é lógico (definido no FlowBuilderClient)
-                )}
-                stroke="hsl(var(--accent))" 
-                strokeOpacity="0.8"
-                strokeWidth={Math.max(0.5, 2.5 / Math.max(zoomLevel, 0.1))}
-                fill="none"
-                strokeDasharray="7,3"
-                markerEnd="url(#arrowhead)"
-              />
-            </>
+            <path
+              d={drawBezierPath(
+                drawingLine.startX,    // Lógico
+                drawingLine.startY,    // Lógico
+                drawingLine.currentX,  // Já é lógico (definido no FlowBuilderClient)
+                drawingLine.currentY   // Já é lógico (definido no FlowBuilderClient)
+              )}
+              stroke="hsl(var(--accent))" 
+              strokeOpacity="0.8"
+              strokeWidth={Math.max(0.5, 2.5 / Math.max(zoomLevel, 0.1))}
+              fill="none"
+              strokeDasharray="7,3"
+              markerEnd="url(#arrowhead)"
+            />
           )}
         </svg>
         {renderedNodes}
@@ -292,3 +291,4 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
 
 Canvas.displayName = 'Canvas';
 export default Canvas;
+

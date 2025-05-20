@@ -12,6 +12,7 @@ import {
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash, 
   Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle
 } from 'lucide-react';
+import { cn } from "@/lib/utils";
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -40,9 +41,17 @@ interface NodeCardProps {
   onStartConnection: (event: React.MouseEvent, fromNodeData: NodeData, sourceHandleId?: string) => void;
   onDeleteNode: (id: string) => void;
   definedVariablesInFlow: string[];
+  isSessionHighlighted?: boolean;
 }
 
-const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartConnection, onDeleteNode, definedVariablesInFlow }) => {
+const NodeCard: React.FC<NodeCardProps> = React.memo(({ 
+  node, 
+  onUpdate, 
+  onStartConnection, 
+  onDeleteNode, 
+  definedVariablesInFlow,
+  isSessionHighlighted 
+}) => {
   const { toast } = useToast();
   const isDraggingNode = useRef(false);
   
@@ -80,7 +89,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               console.error(`[NodeCard - ${node.id}] Supabase error fetching tables:`, result.error);
               setSupabaseTables([]);
             } else if (result.data) {
-              // console.log(`[NodeCard - ${node.id}] Supabase tables fetched:`, result.data);
               setSupabaseTables(result.data);
               if (node.supabaseTableName && !result.data.some(t => t.name === node.supabaseTableName)) {
                 onUpdate(node.id, { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseColumnsToSelect: '*' });
@@ -125,7 +133,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
               console.error(`[NodeCard - ${node.id}] Supabase error fetching columns for ${node.supabaseTableName}:`, result.error);
               setSupabaseColumns([]);
             } else if (result.data) {
-              // console.log(`[NodeCard - ${node.id}] Columns for ${node.supabaseTableName} fetched:`, result.data);
               setSupabaseColumns(result.data);
               if (node.supabaseIdentifierColumn && !result.data.some(c => c.name === node.supabaseIdentifierColumn)) {
                 onUpdate(node.id, { supabaseIdentifierColumn: '' });
@@ -274,7 +281,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       });
       return;
     }
-    // console.log('[NodeCard] handleTestApiCall triggered for node:', node.id, 'with URL:', node.apiUrl);
+    console.log('[NodeCard] handleTestApiCall triggered for node:', node.id, 'with URL:', node.apiUrl);
     setIsTestingApi(true);
     setTestResponseData(null);
     setTestResponseError(null);
@@ -600,7 +607,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
       );
     }
     
-    // Saída padrão para a maioria dos nós
     if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow') {
         return (
           <div 
@@ -631,8 +637,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
           <div className="space-y-3" data-no-drag="true">
             <Label className="text-sm font-medium">Gatilhos de Início</Label>
             <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
-              {(node.triggers || []).map((trigger, index) => { // Added index here for a more robust key if needed
-                // console.log(`[NodeCard - Start Triggers] Rendering trigger with id: ${trigger.id}`);
+              {(node.triggers || []).map((trigger, index) => {
+                // console.log(`[NodeCard - Start Triggers Render] ID: ${trigger.id}, Index: ${index}`);
                 return (
                 <div key={`${trigger.id}-${index}`} className="p-2.5 border rounded-md bg-muted/30 space-y-2">
                   <div className="flex items-center space-x-2">
@@ -1466,7 +1472,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
                 />
               </div>
             )}
-            <p className="text-xs text-muted-foreground">Requer Supabase habilitado e configurado nas Configurações Globais, e que as funções SQL \`get_public_tables\` e \`get_table_columns\` existam no seu banco.</p>
+            <p className="text-xs text-muted-foreground">Requer Supabase habilitado e configurado nas Configurações Globais, e que as funções SQL `get_public_tables` e `get_table_columns` existam no seu banco.</p>
           </div>
         );
       }
@@ -1480,7 +1486,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
   return (
     <>
     <motion.div
-      className="w-full cursor-default bg-card rounded-lg shadow-xl border border-border relative"
+      className={cn(
+        "w-full cursor-default bg-card rounded-lg shadow-xl border border-border relative",
+        isSessionHighlighted && "ring-2 ring-accent ring-offset-2 ring-offset-background"
+        )}
       whileHover={{ scale: 1.01, boxShadow: "0px 5px 25px rgba(0,0,0,0.1)" }}
       transition={{ type: 'spring', stiffness: 400, damping: 17 }}
       data-node-id={node.id}
@@ -1600,4 +1609,3 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({ node, onUpdate, onStartC
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
