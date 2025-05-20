@@ -7,17 +7,18 @@ import {
   loadSessionFromDB, 
   saveSessionToDB, 
   deleteSessionFromDB,
-  loadActiveWorkspaceFromDB, // To get a default flow
+  loadActiveWorkspaceFromDB,
   loadWorkspaceFromDB
 } from '@/app/actions/databaseActions';
 import type { NodeData, Connection, FlowSession, WorkspaceData } from '@/lib/types';
-import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow'; // Assuming this exists
+import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
-
 
 declare global {
   // eslint-disable-next-line no-var
   var evolutionWebhookLogs: Array<any>;
+  // eslint-disable-next-line no-var
+  var activeFlowSessions: Record<string, FlowSession>;
 }
 
 if (!globalThis.evolutionWebhookLogs || !Array.isArray(globalThis.evolutionWebhookLogs)) {
@@ -25,6 +26,12 @@ if (!globalThis.evolutionWebhookLogs || !Array.isArray(globalThis.evolutionWebho
   globalThis.evolutionWebhookLogs = [];
 }
 const MAX_LOG_ENTRIES = 50;
+
+if (!globalThis.activeFlowSessions) {
+  console.log(`[GLOBAL_INIT in webhook/route.ts] Initializing globalThis.activeFlowSessions as new object.`);
+  globalThis.activeFlowSessions = {};
+}
+
 
 interface StoredLogEntry {
   timestamp: string;
@@ -38,6 +45,13 @@ interface StoredLogEntry {
   webhook_remoteJid?: string | null;
 }
 
+interface ApiConfig {
+  baseUrl: string;
+  apiKey?: string;
+  instanceName: string;
+}
+
+
 // --- Helper Functions for Flow Engine ---
 function findNodeById(nodeId: string, nodes: NodeData[]): NodeData | undefined {
   return nodes.find(n => n.id === nodeId);
@@ -50,7 +64,7 @@ function findNextNodeId(fromNodeId: string, sourceHandle: string | undefined, co
 
 function substituteVariablesInText(text: string | undefined, variables: Record<string, any>): string {
   if (!text) return '';
-  let-subbedText = text;
+  let subbedText = text;
   const regex = /\{\{(.*?)\}\}/g;
   let match;
   while ((match = regex.exec(text)) !== null) {
@@ -70,17 +84,11 @@ function substituteVariablesInText(text: string | undefined, variables: Record<s
   return subbedText;
 }
 
-interface ApiConfig {
-  baseUrl: string;
-  apiKey?: string;
-  instanceName: string;
-}
-
 async function executeFlowStep(
   session: FlowSession, 
   nodes: NodeData[], 
   connections: Connection[],
-  apiConfig: ApiConfig // For sending WhatsApp messages back
+  apiConfig: ApiConfig
 ): Promise<void> {
   if (!session.current_node_id) {
     console.log(`[Flow Engine - ${session.session_id}] No current node. Ending flow.`);
@@ -101,6 +109,7 @@ async function executeFlowStep(
 
   let nextNodeId: string | null = null;
   let shouldContinueRecursive = true;
+  let updatedFlowVariables = { ...session.flow_variables };
 
   switch (currentNode.type) {
     case 'start':
@@ -109,13 +118,11 @@ async function executeFlowStep(
       break;
 
     case 'message':
-      const messageText = substituteVariablesInText(currentNode.text, session.flow_variables);
+      const messageText = substituteVariablesInText(currentNode.text, updatedFlowVariables);
       if (messageText) {
         console.log(`[Flow Engine - ${session.session_id}] Sending message: "${messageText}"`);
         await sendWhatsAppMessageAction({
-          baseUrl: apiConfig.baseUrl,
-          apiKey: apiConfig.apiKey,
-          instanceName: apiConfig.instanceName,
+          ...apiConfig,
           recipientPhoneNumber: session.session_id, // senderJid is the sessionId
           messageType: 'text',
           textContent: messageText,
@@ -125,13 +132,11 @@ async function executeFlowStep(
       break;
 
     case 'input':
-      const promptText = substituteVariablesInText(currentNode.promptText, session.flow_variables);
+      const promptText = substituteVariablesInText(currentNode.promptText, updatedFlowVariables);
       if (promptText) {
         console.log(`[Flow Engine - ${session.session_id}] Sending input prompt: "${promptText}"`);
         await sendWhatsAppMessageAction({
-          baseUrl: apiConfig.baseUrl,
-          apiKey: apiConfig.apiKey,
-          instanceName: apiConfig.instanceName,
+          ...apiConfig,
           recipientPhoneNumber: session.session_id,
           messageType: 'text',
           textContent: promptText,
@@ -143,18 +148,16 @@ async function executeFlowStep(
       break;
 
     case 'option':
-      const questionText = substituteVariablesInText(currentNode.questionText, session.flow_variables);
+      const questionText = substituteVariablesInText(currentNode.questionText, updatedFlowVariables);
       const optionsList = (currentNode.optionsList || '').split('\n').map(opt => opt.trim()).filter(Boolean);
       if (questionText && optionsList.length > 0) {
         let messageWithOptions = questionText + '\n';
         optionsList.forEach((opt, index) => {
-          messageWithOptions += `${index + 1}. ${substituteVariablesInText(opt, session.flow_variables)}\n`;
+          messageWithOptions += `${index + 1}. ${substituteVariablesInText(opt, updatedFlowVariables)}\n`;
         });
         console.log(`[Flow Engine - ${session.session_id}] Sending options: "${messageWithOptions}"`);
         await sendWhatsAppMessageAction({
-          baseUrl: apiConfig.baseUrl,
-          apiKey: apiConfig.apiKey,
-          instanceName: apiConfig.instanceName,
+          ...apiConfig,
           recipientPhoneNumber: session.session_id,
           messageType: 'text',
           textContent: messageWithOptions.trim(),
@@ -168,98 +171,126 @@ async function executeFlowStep(
         shouldContinueRecursive = false; // Pause flow
       } else {
         console.warn(`[Flow Engine - ${session.session_id}] Option node ${currentNode.id} misconfigured.`);
-        nextNodeId = findNextNodeId(currentNode.id, 'default', connections); // Try to fail gracefully
+        nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
       }
       break;
 
     case 'condition':
-      const varName = substituteVariablesInText(currentNode.conditionVariable, session.flow_variables).replace(/\{\{|\}\}/g, '');
-      const actualValue = getProperty(session.flow_variables, varName) ?? '';
-      const compareValue = substituteVariablesInText(currentNode.conditionValue, session.flow_variables);
+      const varNameCond = substituteVariablesInText(currentNode.conditionVariable, updatedFlowVariables).replace(/\{\{|\}\}/g, '');
+      const actualValueCond = getProperty(updatedFlowVariables, varNameCond) ?? '';
+      const compareValueCond = substituteVariablesInText(currentNode.conditionValue, updatedFlowVariables);
       let conditionMet = false;
-      // Simplified condition logic (expand as needed from TestChatPanel)
       switch (currentNode.conditionOperator) {
-        case '==': conditionMet = String(actualValue) === String(compareValue); break;
-        case '!=': conditionMet = String(actualValue) !== String(compareValue); break;
-        case 'contains': conditionMet = String(actualValue).includes(String(compareValue)); break;
-        // Add other operators
+        case '==': conditionMet = String(actualValueCond) === String(compareValueCond); break;
+        case '!=': conditionMet = String(actualValueCond) !== String(compareValueCond); break;
+        case 'contains': conditionMet = String(actualValueCond).includes(String(compareValueCond)); break;
+        // TODO: Add other operators from TestChatPanel if needed
         default: conditionMet = false;
       }
-      console.log(`[Flow Engine - ${session.session_id}] Condition: ${varName} ('${actualValue}') ${currentNode.conditionOperator} '${compareValue}' -> ${conditionMet}`);
+      console.log(`[Flow Engine - ${session.session_id}] Condition: ${varNameCond} ('${actualValueCond}') ${currentNode.conditionOperator} '${compareValueCond}' -> ${conditionMet}`);
       nextNodeId = findNextNodeId(currentNode.id, conditionMet ? 'true' : 'false', connections);
       break;
 
     case 'set-variable':
       if (currentNode.variableName) {
-        const valueToSet = substituteVariablesInText(currentNode.variableValue, session.flow_variables);
-        session.flow_variables[currentNode.variableName] = valueToSet;
+        const valueToSet = substituteVariablesInText(currentNode.variableValue, updatedFlowVariables);
+        updatedFlowVariables[currentNode.variableName] = valueToSet;
+        session.flow_variables = updatedFlowVariables; // Update session's variables
         console.log(`[Flow Engine - ${session.session_id}] Variable "${currentNode.variableName}" set to "${valueToSet}"`);
       }
       nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
       break;
     
     case 'api-call':
-      const apiUrl = substituteVariablesInText(currentNode.apiUrl, session.flow_variables);
+      const apiUrl = substituteVariablesInText(currentNode.apiUrl, updatedFlowVariables);
+      const apiInstance = substituteVariablesInText(currentNode.instanceName, updatedFlowVariables) || apiConfig.instanceName;
+      let recipientPhone = substituteVariablesInText(currentNode.phoneNumber, updatedFlowVariables);
+      if (!recipientPhone && updatedFlowVariables.whatsapp_sender_jid) {
+          recipientPhone = updatedFlowVariables.whatsapp_sender_jid;
+      }
+      
       if (apiUrl.includes('/message/sendText/') && currentNode.apiMethod === 'POST') {
-        let number = substituteVariablesInText(currentNode.phoneNumber, session.flow_variables);
-        if (!number) number = session.flow_variables.whatsapp_sender_jid || session.session_id;
-        
-        let textContent = substituteVariablesInText(currentNode.textMessage, session.flow_variables);
+        let textContent = substituteVariablesInText(currentNode.textMessage, updatedFlowVariables);
         if (!textContent && currentNode.apiBodyType === 'json' && currentNode.apiBodyJson) {
           try {
-            const bodyData = JSON.parse(substituteVariablesInText(currentNode.apiBodyJson, session.flow_variables));
+            const bodyData = JSON.parse(substituteVariablesInText(currentNode.apiBodyJson, updatedFlowVariables));
             textContent = bodyData.text || bodyData.textMessage?.text;
           } catch (e) { console.error(`[Flow Engine - ${session.session_id}] API Call: Error parsing JSON body for text`, e); }
         }
-
-        if (number && textContent) {
+        if (recipientPhone && textContent) {
             await sendWhatsAppMessageAction({
-              baseUrl: apiConfig.baseUrl, // Or use a globally configured one if node.apiUrl is just a path
+              baseUrl: apiConfig.baseUrl, 
               apiKey: apiConfig.apiKey,
-              instanceName: substituteVariablesInText(currentNode.instanceName, session.flow_variables) || apiConfig.instanceName,
-              recipientPhoneNumber: number,
+              instanceName: apiInstance,
+              recipientPhoneNumber: recipientPhone,
               messageType: 'text',
               textContent: textContent,
             });
         } else {
             console.warn(`[Flow Engine - ${session.session_id}] API Call (sendText): Missing number or text for node ${currentNode.id}`);
         }
+      } else if (apiUrl.includes('/message/sendMedia/') && currentNode.apiMethod === 'POST') {
+        const mediaUrl = substituteVariablesInText(currentNode.mediaUrl, updatedFlowVariables);
+        const caption = substituteVariablesInText(currentNode.caption, updatedFlowVariables);
+        if (recipientPhone && mediaUrl && currentNode.mediaType) {
+          await sendWhatsAppMessageAction({
+            baseUrl: apiConfig.baseUrl,
+            apiKey: apiConfig.apiKey,
+            instanceName: apiInstance,
+            recipientPhoneNumber: recipientPhone,
+            messageType: currentNode.mediaType,
+            mediaUrl: mediaUrl,
+            caption: caption,
+          });
+        } else {
+           console.warn(`[Flow Engine - ${session.session_id}] API Call (sendMedia): Missing number, mediaUrl or mediaType for node ${currentNode.id}`);
+        }
       } else {
-        // Generic API call simulation or placeholder
-        console.log(`[Flow Engine - ${session.session_id}] API Call to ${apiUrl} (simulation)`);
+        console.log(`[Flow Engine - ${session.session_id}] Generic API Call to ${apiUrl} (simulation). Output variable: ${currentNode.apiOutputVariable}`);
         if (currentNode.apiOutputVariable) {
-          session.flow_variables[currentNode.apiOutputVariable] = { success: true, data: "Simulated API response from backend" };
+          updatedFlowVariables[currentNode.apiOutputVariable] = { success: true, data: "Simulated API response from backend engine" };
+          session.flow_variables = updatedFlowVariables;
         }
       }
       nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
       break;
 
     case 'ai-text-generation':
-      const aiPrompt = substituteVariablesInText(currentNode.aiPromptText, session.flow_variables);
-      if (aiPrompt && currentNode.aiOutputVariable) {
+      const aiPromptText = substituteVariablesInText(currentNode.aiPromptText, updatedFlowVariables);
+      if (aiPromptText && currentNode.aiOutputVariable) {
         try {
-          const aiResponse = await genericTextGenerationFlow({ promptText: aiPrompt });
-          session.flow_variables[currentNode.aiOutputVariable] = aiResponse.generatedText;
-          console.log(`[Flow Engine - ${session.session_id}] AI Text Gen: Output set to ${currentNode.aiOutputVariable}`);
+          console.log(`[Flow Engine - ${session.session_id}] AI Text Gen: Calling genericTextGenerationFlow with prompt: "${aiPromptText}"`);
+          const aiResponse = await genericTextGenerationFlow({ promptText: aiPromptText });
+          updatedFlowVariables[currentNode.aiOutputVariable] = aiResponse.generatedText;
+          session.flow_variables = updatedFlowVariables;
+          console.log(`[Flow Engine - ${session.session_id}] AI Text Gen: Output "${aiResponse.generatedText}" set to variable ${currentNode.aiOutputVariable}`);
         } catch (e:any) {
           console.error(`[Flow Engine - ${session.session_id}] AI Text Gen Error:`, e.message);
-           session.flow_variables[currentNode.aiOutputVariable] = "Erro ao gerar texto com IA.";
+          updatedFlowVariables[currentNode.aiOutputVariable] = "Erro ao gerar texto com IA.";
+          session.flow_variables = updatedFlowVariables;
         }
+      } else {
+        console.warn(`[Flow Engine - ${session.session_id}] AI Text Gen: Misconfigured node ${currentNode.id} (missing prompt or output variable)`);
       }
       nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
       break;
 
     case 'intelligent-agent':
-      const userInputForAgent = substituteVariablesInText(currentNode.userInputVariable, session.flow_variables);
+      const userInputForAgent = substituteVariablesInText(currentNode.userInputVariable, updatedFlowVariables);
       if (userInputForAgent && currentNode.agentResponseVariable) {
          try {
+          console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: Calling simpleChatReply with input: "${userInputForAgent}"`);
           const agentReply = await simpleChatReply({ userMessage: userInputForAgent });
-          session.flow_variables[currentNode.agentResponseVariable] = agentReply.botReply;
-          console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: Output set to ${currentNode.agentResponseVariable}`);
+          updatedFlowVariables[currentNode.agentResponseVariable] = agentReply.botReply;
+          session.flow_variables = updatedFlowVariables;
+          console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: Output "${agentReply.botReply}" set to variable ${currentNode.agentResponseVariable}`);
         } catch (e:any) {
           console.error(`[Flow Engine - ${session.session_id}] Intelligent Agent Error:`, e.message);
-           session.flow_variables[currentNode.agentResponseVariable] = "Erro ao comunicar com agente IA.";
+          updatedFlowVariables[currentNode.agentResponseVariable] = "Erro ao comunicar com agente IA.";
+          session.flow_variables = updatedFlowVariables;
         }
+      } else {
+         console.warn(`[Flow Engine - ${session.session_id}] Intelligent Agent: Misconfigured node ${currentNode.id} (missing user input variable or agent response variable)`);
       }
       nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
       break;
@@ -275,31 +306,38 @@ async function executeFlowStep(
       nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
       break;
   }
+  
+  session.flow_variables = updatedFlowVariables; // Ensure session always has the latest variables
 
   if (shouldContinueRecursive) {
     if (nextNodeId) {
       session.current_node_id = nextNodeId;
-      await saveSessionToDB(session); // Save before next step
+      await saveSessionToDB(session); 
       await executeFlowStep(session, nodes, connections, apiConfig);
     } else {
-      console.log(`[Flow Engine - ${session.session_id}] No next node from ${currentNode.id}. Ending flow.`);
-      await deleteSessionFromDB(session.session_id); // End session if no next node
+      console.log(`[Flow Engine - ${session.session_id}] No next node from ${currentNode.id}. Ending flow (or pausing if no end-node).`);
+      // If it's not an explicit end-flow node, we might just be at the end of a branch.
+      // The session is saved, but no further recursive call.
+      // The next user message will try to resume or restart.
+      await saveSessionToDB(session); // Save final state before potential implicit end
     }
   } else {
-    // Flow paused (e.g. for input) or ended, session was already saved or deleted.
-    await saveSessionToDB(session); // Ensure latest state (like awaiting_input_type) is saved
-    console.log(`[Flow Engine - ${session.session_id}] Flow paused or ended. Session state saved for node ${currentNode.id}.`);
+    // Flow paused (e.g. for input) or explicitly ended by end-flow node.
+    // Session state was already saved or deleted within the switch case.
+    if (currentNode.type !== 'end-flow') { // Avoid double save if end-flow already deleted/saved.
+        await saveSessionToDB(session); // Ensure latest state (like awaiting_input_type) is saved
+    }
+    console.log(`[Flow Engine - ${session.session_id}] Flow paused or ended. Session state for node ${currentNode.id} handled.`);
   }
 }
 // --- End Helper Functions ---
 
 
 async function storeRequestDetails(request: NextRequest): Promise<StoredLogEntry | null> {
-  // ... (storeRequestDetails implementation remains largely the same as before) ...
   const currentTimestamp = new Date().toISOString();
   const { method, url } = request;
   const headers = Object.fromEntries(request.headers.entries());
-  const contentType = request.headers.get('content-type');
+  const contentType = request.headers.get('content-type'); // Store original content-type
   const ip = request.ip || request.headers.get('x-forwarded-for') || 'unknown IP';
   const geo = request.geo || { city: 'unknown city', country: 'unknown country' };
 
@@ -315,12 +353,12 @@ async function storeRequestDetails(request: NextRequest): Promise<StoredLogEntry
   if (method !== 'GET' && method !== 'HEAD') {
     try {
       console.log(`[Evolution API Webhook Store] Attempting to read request body as text for ${method}...`);
-      bodyAsText = await request.text(); // Read as text first
+      bodyAsText = await request.text(); 
 
       if (bodyAsText && bodyAsText.trim() !== '') {
         console.log(`[Evolution API Webhook Store] Successfully read body as text. Length: ${bodyAsText.length}. Preview: ${bodyAsText.substring(0, 200)}`);
-        // Try to parse as JSON if content type suggests it or if it looks like JSON
-        if (contentType && (contentType.includes('application/json') || contentType.includes('application/x-www-form-urlencoded')) || (bodyAsText.startsWith('{') && bodyAsText.endsWith('}')) || (bodyAsText.startsWith('[') && bodyAsText.endsWith(']'))) {
+        // Try to parse as JSON if content type suggests it OR if it looks like JSON
+        if (contentType && (contentType.includes('application/json')) || (bodyAsText.startsWith('{') && bodyAsText.endsWith('}')) || (bodyAsText.startsWith('[') && bodyAsText.endsWith(']'))) {
           try {
             parsedBodyForExtraction = JSON.parse(bodyAsText);
             payload = parsedBodyForExtraction; 
@@ -331,7 +369,7 @@ async function storeRequestDetails(request: NextRequest): Promise<StoredLogEntry
           }
         } else {
           payload = { raw_text: bodyAsText, original_content_type: contentType || 'N/A' };
-          console.log(`[Evolution API Webhook Store] Stored non-JSON/non-form-urlencoded payload as raw_text for ${method}.`);
+          console.log(`[Evolution API Webhook Store] Stored non-JSON payload as raw_text for ${method}.`);
         }
       } else {
         payload = { message: `Request body was empty or whitespace for ${method}.`, original_content_type: contentType || 'N/A' };
@@ -358,8 +396,10 @@ async function storeRequestDetails(request: NextRequest): Promise<StoredLogEntry
     }
 
     const commonMessagePaths = [
-      'data.message.conversation', 'message.body', 'message.message.conversation', 'body.message.conversation',
-      'textMessage.text', 'text', 'data.message.extendedTextMessage.text', 'body.data.message.extendedTextMessage.text',
+      'body.data.message.conversation', 'data.message.conversation', 
+      'message.body', 'message.message.conversation', 
+      'body.textMessage.text', 'text', 
+      'body.data.message.extendedTextMessage.text', 'data.message.extendedTextMessage.text',
     ];
     for (const path of commonMessagePaths) {
       const msg = getProperty(actualPayloadToExtractFrom, path);
@@ -374,7 +414,8 @@ async function storeRequestDetails(request: NextRequest): Promise<StoredLogEntry
     }
 
     const remoteJidPaths = [
-      'data.key.remoteJid', 'sender', 'body.data.key.remoteJid', 'body.sender'
+      'body.data.key.remoteJid', 'data.key.remoteJid', 
+      'body.sender', 'sender'
     ];
     for (const path of remoteJidPaths) {
       const jid = getProperty(actualPayloadToExtractFrom, path);
@@ -417,20 +458,35 @@ async function storeRequestDetails(request: NextRequest): Promise<StoredLogEntry
   return logEntry; 
 }
 
-
 export async function POST(request: NextRequest) {
   console.log('[Evolution API Webhook Route] POST request received.');
+  
+  // Clone a requisição para poder ler o corpo duas vezes se necessário (uma para debug, outra para storeRequestDetails)
+  // No entanto, `storeRequestDetails` já tenta ler o corpo. Se ele falhar, o debug abaixo pode não ter corpo.
+  // Alternativamente, lemos aqui e passamos para storeRequestDetails, mas storeRequestDetails já é genérico.
+  // Vamos confiar que storeRequestDetails fará o log correto.
+  // const clonedRequest = request.clone();
+  // try {
+  //   const rawBody = await clonedRequest.text();
+  //   console.log(`[Evolution API Webhook Route - DEBUG] Raw body in POST handler: ${rawBody.substring(0, 500)}...`);
+  //   if(!rawBody || rawBody.trim() === '') {
+  //        console.warn('[Evolution API Webhook Route - DEBUG] Body appears empty in POST handler.');
+  //   }
+  // } catch (e: any) {
+  //   console.error('[Evolution API Webhook Route - DEBUG] Error reading raw body in POST handler:', e.message);
+  // }
+
   const loggedEntry = await storeRequestDetails(request);
 
   if (!loggedEntry || !loggedEntry.payload) {
-    console.error('[Evolution API Webhook Route] Failed to log/process request details.');
-    return NextResponse.json({ error: "Internal server error processing request." }, { status: 500 });
+    console.error('[Evolution API Webhook Route] Failed to log/process request details or payload is missing.');
+    return NextResponse.json({ error: "Internal server error processing request payload." }, { status: 500 });
   }
 
   const eventType = getProperty(loggedEntry.payload, 'event') as string;
   const instanceName = getProperty(loggedEntry.payload, 'instance') as string;
-  const senderJid = loggedEntry.webhook_remoteJid; // Use the JID extracted by storeRequestDetails
-  const receivedMessageText = loggedEntry.extractedMessage; // Use the message extracted by storeRequestDetails
+  const senderJid = loggedEntry.webhook_remoteJid; 
+  const receivedMessageText = loggedEntry.extractedMessage;
   const evolutionApiBaseUrl = getProperty(loggedEntry.payload, 'server_url') as string;
   const evolutionApiKey = getProperty(loggedEntry.payload, 'apikey') as string;
 
@@ -447,70 +503,82 @@ export async function POST(request: NextRequest) {
       const apiConfig: ApiConfig = { baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey, instanceName };
 
       if (session) {
-        console.log(`[Flow Engine - ${senderJid}] Existing session found: Node ${session.current_node_id}`);
+        console.log(`[Flow Engine - ${senderJid}] Existing session found: Node ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
         workspace = await loadWorkspaceFromDB(session.workspace_id);
         if (!workspace) {
-          console.error(`[Flow Engine - ${senderJid}] Critical: Workspace ${session.workspace_id} for existing session not found.`);
-          await deleteSessionFromDB(senderJid); // Clean up bad session
-          return NextResponse.json({ error: "Associated workspace not found." }, { status: 500 });
-        }
-        nodes = workspace.nodes;
-        connections = workspace.connections;
-        
-        // Process user's reply if flow was awaiting input
-        if (session.awaiting_input_type && session.current_node_id) {
-          const awaitingNode = findNodeById(session.current_node_id, nodes);
-          if (awaitingNode) {
-            if (session.awaiting_input_type === 'text' && session.awaiting_input_details?.variableToSave) {
-              session.flow_variables[session.awaiting_input_details.variableToSave] = receivedMessageText;
-              console.log(`[Flow Engine - ${senderJid}] Saved user input to: ${session.awaiting_input_details.variableToSave}`);
-              session.current_node_id = findNextNodeId(awaitingNode.id, 'default', connections);
-            } else if (session.awaiting_input_type === 'option' && session.awaiting_input_details?.options) {
-              const chosenOption = session.awaiting_input_details.options.find(
-                (opt, idx) => opt.toLowerCase() === receivedMessageText.toLowerCase() || String(idx + 1) === receivedMessageText
-              );
-              if (chosenOption) {
-                if (session.awaiting_input_details.variableToSave) {
-                  session.flow_variables[session.awaiting_input_details.variableToSave] = chosenOption;
-                }
-                session.current_node_id = findNextNodeId(awaitingNode.id, chosenOption, connections);
-                 console.log(`[Flow Engine - ${senderJid}] User chose option: ${chosenOption}`);
-              } else {
-                console.log(`[Flow Engine - ${senderJid}] Invalid option. Re-prompting or fallback needed (not implemented).`);
-                // Re-prompt or handle invalid option (e.g., send original prompt again)
-                await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Opção inválida. Por favor, tente novamente."});
-                session.current_node_id = awaitingNode.id; // Stay on option node
-              }
-            }
-          }
-          session.awaiting_input_type = null;
-          session.awaiting_input_details = null;
+          console.error(`[Flow Engine - ${senderJid}] Critical: Workspace ${session.workspace_id} for existing session not found. Deleting session.`);
+          await deleteSessionFromDB(senderJid);
+          session = null; // Force new session creation
         } else {
-           // Not awaiting input, treat as a new message that might restart or trigger something
-           // For now, if session exists but not awaiting, we might just restart or log.
-           // Or, if you want messages to always try to trigger the start of a flow:
-           console.log(`[Flow Engine - ${senderJid}] Session exists but was not awaiting input. Treating as new interaction.`);
-           session = null; // Force re-initialization for this example
+          nodes = workspace.nodes || [];
+          connections = workspace.connections || [];
+          
+          if (session.awaiting_input_type && session.current_node_id && session.awaiting_input_details) {
+            const originalNodeId = session.awaiting_input_details.originalNodeId || session.current_node_id;
+            const awaitingNode = findNodeById(originalNodeId, nodes);
+
+            if (awaitingNode) {
+              console.log(`[Flow Engine - ${senderJid}] Processing user reply for node: ${awaitingNode.id} (${awaitingNode.type})`);
+              if (session.awaiting_input_type === 'text' && session.awaiting_input_details.variableToSave) {
+                session.flow_variables[session.awaiting_input_details.variableToSave] = receivedMessageText;
+                console.log(`[Flow Engine - ${senderJid}] Saved user text input to: ${session.awaiting_input_details.variableToSave} = "${receivedMessageText}"`);
+                session.current_node_id = findNextNodeId(awaitingNode.id, 'default', connections);
+              } else if (session.awaiting_input_type === 'option' && session.awaiting_input_details.options) {
+                const chosenOptionText = session.awaiting_input_details.options.find(
+                  (opt, idx) => opt.toLowerCase() === receivedMessageText.toLowerCase() || String(idx + 1) === receivedMessageText
+                );
+                if (chosenOptionText) {
+                  if (session.awaiting_input_details.variableToSave) {
+                    session.flow_variables[session.awaiting_input_details.variableToSave] = chosenOptionText;
+                    console.log(`[Flow Engine - ${senderJid}] Saved user option choice to: ${session.awaiting_input_details.variableToSave} = "${chosenOptionText}"`);
+                  }
+                  session.current_node_id = findNextNodeId(awaitingNode.id, chosenOptionText, connections);
+                  console.log(`[Flow Engine - ${senderJid}] User chose option: ${chosenOptionText}. Next node: ${session.current_node_id}`);
+                } else {
+                  console.log(`[Flow Engine - ${senderJid}] Invalid option: "${receivedMessageText}". Re-prompting.`);
+                  await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Opção inválida. Por favor, tente novamente."});
+                  session.current_node_id = awaitingNode.id; // Stay on option node to re-prompt (implicit via next executeFlowStep if current_node_id is the same)
+                }
+              }
+              session.awaiting_input_type = null;
+              session.awaiting_input_details = null;
+            } else {
+               console.warn(`[Flow Engine - ${senderJid}] Awaiting node ${originalNodeId} not found. Resetting session.`);
+               session = null; // Problem with session or flow, reset
+            }
+          } else {
+             console.log(`[Flow Engine - ${senderJid}] Session exists but was not awaiting input or details missing. Treating as new interaction, might restart.`);
+             // Potentially restart flow or handle as out-of-band message. For now, let's reset.
+             session = null; 
+          }
         }
       }
       
       if (!session) {
-        console.log(`[Flow Engine - ${senderJid}] No active session. Starting new one.`);
-        workspace = await loadActiveWorkspaceFromDB(); // Or a specific one mapped to instanceName
-        if (!workspace) {
-          console.error(`[Flow Engine - ${senderJid}] No active/default workspace found to start flow.`);
-           await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Desculpe, não há um fluxo configurado para esta interação no momento."});
-          return NextResponse.json({ error: "No active workspace configured for webhook." }, { status: 500 });
+        console.log(`[Flow Engine - ${senderJid}] No active session or session was reset. Starting new one.`);
+        workspace = await loadActiveWorkspaceFromDB(); 
+        if (!workspace || !workspace.nodes || workspace.nodes.length === 0) {
+          console.error(`[Flow Engine - ${senderJid}] No active/default workspace found or workspace is empty.`);
+          await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Desculpe, não há um fluxo configurado para esta interação no momento."});
+          return NextResponse.json({ error: "No active workspace or empty workspace configured." }, { status: 500 });
         }
         nodes = workspace.nodes;
         connections = workspace.connections;
         const startNode = nodes.find(n => n.type === 'start');
         if (!startNode) {
           console.error(`[Flow Engine - ${senderJid}] No start node in workspace ${workspace.id}.`);
+           await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Erro: O fluxo não tem um nó de início."});
           return NextResponse.json({ error: "Flow has no start node." }, { status: 500 });
         }
+        
         const firstTriggerName = startNode.triggers?.[0]?.name;
         const initialNodeId = findNextNodeId(startNode.id, firstTriggerName || 'default', connections);
+
+        if (!initialNodeId) {
+            console.error(`[Flow Engine - ${senderJid}] Start node or its first trigger has no outgoing connection in workspace ${workspace.id}.`);
+            await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Erro: O fluxo não está conectado corretamente a partir do início."});
+            return NextResponse.json({ error: "Start node is not connected." }, { status: 500 });
+        }
 
         session = {
           session_id: senderJid,
@@ -518,8 +586,8 @@ export async function POST(request: NextRequest) {
           current_node_id: initialNodeId,
           flow_variables: { 
             whatsapp_sender_jid: senderJid, 
-            mensagem_whatsapp: receivedMessageText,
-            webhook_evolution_payload: loggedEntry.payload // Save the full payload
+            mensagem_whatsapp: receivedMessageText, // User's first message
+            webhook_evolution_payload: loggedEntry.payload 
           },
           awaiting_input_type: null,
           awaiting_input_details: null,
@@ -527,25 +595,24 @@ export async function POST(request: NextRequest) {
         console.log(`[Flow Engine - ${senderJid}] New session created. Starting at node ${initialNodeId}`);
       }
       
-      // Save session state before starting/continuing step execution
       await saveSessionToDB(session);
-      if (session.current_node_id) {
+      if (session.current_node_id) { // Ensure there's a node to execute
         await executeFlowStep(session, nodes, connections, apiConfig);
+      } else if (session.awaiting_input_type) {
+        // Flow is paused, waiting for input, no further step to execute now. Session already saved.
+        console.log(`[Flow Engine - ${senderJid}] Flow is paused, awaiting user input for type: ${session.awaiting_input_type}`);
       } else {
-         console.log(`[Flow Engine - ${senderJid}] Session has no current_node_id after processing input. Ending.`);
-         await deleteSessionFromDB(senderJid); // Or send a default message
+         console.log(`[Flow Engine - ${senderJid}] Session has no current_node_id after processing input/init. Might be end of a branch. Flow effectively paused.`);
+         // No explicit end node, but no next node. Session is saved.
       }
 
     } catch (error: any) {
       console.error(`[Evolution API Webhook Route - ${senderJid}] Exception processing flow:`, error);
-      // Optionally send an error message back to the user
        await sendWhatsAppMessageAction({
-          baseUrl: evolutionApiBaseUrl, // These might be undefined if error happened early
-          apiKey: evolutionApiKey,
-          instanceName: instanceName,
-          recipientPhoneNumber: senderJid,
+          ...apiConfig, // Use the apiConfig derived from the webhook if available
+          recipientPhoneNumber: senderJid, // senderJid should be defined
           messageType: 'text',
-          textContent: "Desculpe, ocorreu um erro ao processar sua mensagem.",
+          textContent: "Desculpe, ocorreu um erro interno ao processar sua mensagem.",
         });
     }
   } else {
@@ -554,9 +621,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ status: "received", message: "Webhook POST event processed." }, { status: 200 });
 }
 
-
-// GET, PUT, PATCH, DELETE handlers remain the same, calling storeRequestDetails
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest) { 
   const logEventParam = request.nextUrl.searchParams.get('logEvent');
   if (logEventParam === 'true') {
     console.log('[Evolution API Webhook Route] GET request received (logEvent=true).');
@@ -586,3 +651,5 @@ export async function DELETE(request: NextRequest) {
   await storeRequestDetails(request); 
   return NextResponse.json({ status: "received", message: "Webhook DELETE event logged." }, { status: 200 });
 }
+
+    
