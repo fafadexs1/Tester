@@ -8,9 +8,9 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   MessageSquareText, Type as InputIcon, ListChecks, Trash2, BotMessageSquare,
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
-  CalendarDays, ExternalLink, MoreHorizontal, FileImage, 
-  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash, 
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle
+  CalendarDays, ExternalLink, MoreHorizontal, FileImage,
+  TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, Trash
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -27,10 +27,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y, 
-  OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y, 
-  NODE_HEADER_HEIGHT_APPROX, NODE_HEADER_CONNECTOR_Y_OFFSET 
+import {
+  START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y,
+  OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y,
+  NODE_HEADER_HEIGHT_APPROX, NODE_HEADER_CONNECTOR_Y_OFFSET
 } from '@/lib/constants';
 import { fetchSupabaseTablesAction, fetchSupabaseTableColumnsAction } from '@/lib/supabase/actions';
 
@@ -44,17 +44,17 @@ interface NodeCardProps {
   isSessionHighlighted?: boolean;
 }
 
-const NodeCard: React.FC<NodeCardProps> = React.memo(({ 
-  node, 
-  onUpdate, 
-  onStartConnection, 
-  onDeleteNode, 
+const NodeCard: React.FC<NodeCardProps> = React.memo(({
+  node,
+  onUpdate,
+  onStartConnection,
+  onDeleteNode,
   definedVariablesInFlow,
-  isSessionHighlighted 
+  isSessionHighlighted
 }) => {
   const { toast } = useToast();
   const isDraggingNode = useRef(false);
-  
+
   const [newTriggerName, setNewTriggerName] = useState('');
   const [newTriggerType, setNewTriggerType] = useState<StartNodeTrigger['type']>('manual');
 
@@ -79,9 +79,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       if (isSupabaseConfigured) {
         setIsLoadingSupabaseTables(true);
         setSupabaseSchemaError(null);
-        setSupabaseTables([]); 
-        setSupabaseColumns([]); 
-        
+        setSupabaseTables([]);
+        setSupabaseColumns([]);
+
         fetchSupabaseTablesAction(savedSupabaseUrl as string, savedSupabaseServiceKey as string)
           .then(result => {
             if (result.error) {
@@ -89,12 +89,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               console.error(`[NodeCard - ${node.id}] Supabase error fetching tables:`, result.error);
               setSupabaseTables([]);
             } else if (result.data) {
+              console.log(`[NodeCard - ${node.id}] Supabase tables fetched:`, result.data);
               setSupabaseTables(result.data);
               if (node.supabaseTableName && !result.data.some(t => t.name === node.supabaseTableName)) {
                 onUpdate(node.id, { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseColumnsToSelect: '*' });
               }
             } else {
-              setSupabaseTables([]); 
+              setSupabaseTables([]);
             }
           })
           .catch(err => {
@@ -112,7 +113,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.type, node.id, onUpdate]); 
+  }, [node.type, node.id]); // Removido onUpdate da lista de dependências para evitar loops se a tabela não existir
 
 
   useEffect(() => {
@@ -123,9 +124,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
       if (isSupabaseConfigured) {
         setIsLoadingSupabaseColumns(true);
-        setSupabaseSchemaError(null); 
-        setSupabaseColumns([]); 
-        
+        setSupabaseSchemaError(null);
+        setSupabaseColumns([]);
+
         fetchSupabaseTableColumnsAction(savedSupabaseUrl as string, savedSupabaseServiceKey as string, node.supabaseTableName)
           .then(result => {
             if (result.error) {
@@ -133,6 +134,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               console.error(`[NodeCard - ${node.id}] Supabase error fetching columns for ${node.supabaseTableName}:`, result.error);
               setSupabaseColumns([]);
             } else if (result.data) {
+              console.log(`[NodeCard - ${node.id}] Columns for ${node.supabaseTableName} fetched:`, result.data);
               setSupabaseColumns(result.data);
               if (node.supabaseIdentifierColumn && !result.data.some(c => c.name === node.supabaseIdentifierColumn)) {
                 onUpdate(node.id, { supabaseIdentifierColumn: '' });
@@ -151,30 +153,30 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           });
 
       } else {
-         setSupabaseColumns([]); 
+         setSupabaseColumns([]);
          setSupabaseSchemaError('Supabase não configurado para buscar colunas.');
       }
     } else if (node.type.startsWith('supabase-')) {
-      setSupabaseColumns([]); 
+      setSupabaseColumns([]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.id, node.supabaseTableName, onUpdate]); 
+  }, [node.id, node.supabaseTableName]); // Removido onUpdate
 
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (
-        target.dataset.connector === 'true' || 
+        target.dataset.connector === 'true' ||
         target.closest('[data-action="delete-node"]') ||
-        target.closest('[data-no-drag="true"]') || 
-        target.closest('[role="dialog"]') || 
-        target.closest('[data-radix-popover-content]') || 
-        target.closest('[data-radix-scroll-area-viewport]') || 
+        target.closest('[data-no-drag="true"]') ||
+        target.closest('[role="dialog"]') ||
+        target.closest('[data-radix-popover-content]') ||
+        target.closest('[data-radix-scroll-area-viewport]') ||
         (target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target))
     ) {
       return;
     }
-    
+
     isDraggingNode.current = true;
     const startX = e.clientX;
     const startY = e.clientY;
@@ -199,7 +201,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   }, [node.x, node.y, node.id, onUpdate]);
 
   const handleDeleteClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
     onDeleteNode(node.id);
   }, [node.id, onDeleteNode]);
 
@@ -217,7 +219,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       id: uuidv4(),
       name: newTriggerName.trim(),
       type: newTriggerType,
-      webhookPayloadVariable: 'webhook_payload', 
+      webhookPayloadVariable: 'webhook_payload',
     };
     if (newTriggerType === 'webhook') {
       newTrigger.webhookId = uuidv4();
@@ -242,12 +244,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       }
       if (field === 'type' && value === 'manual') {
          delete currentTriggers[triggerIndex].webhookId;
-         delete currentTriggers[triggerIndex].webhookPayloadVariable;
+         // Mantenha webhookPayloadVariable caso o usuário alterne de volta, ou decida se deve ser limpo.
+         // delete currentTriggers[triggerIndex].webhookPayloadVariable;
       }
       onUpdate(node.id, { triggers: currentTriggers });
     }
   };
-  
+
   const handleAddListItem = (listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList') => {
     const currentList = (node[listName] as any[] || []);
     onUpdate(node.id, { [listName]: [...currentList, { id: uuidv4(), key: '', value: '' }] });
@@ -259,16 +262,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   };
 
   const handleListItemChange = (
-    listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList', 
-    itemId: string, 
-    field: 'key' | 'value', 
+    listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList',
+    itemId: string,
+    field: 'key' | 'value',
     newValue: string
   ) => {
     const currentList = (node[listName] as any[] || []);
-    onUpdate(node.id, { 
-      [listName]: currentList.map(item => 
+    onUpdate(node.id, {
+      [listName]: currentList.map(item =>
         item.id === itemId ? { ...item, [field]: newValue } : item
-      ) 
+      )
     });
   };
 
@@ -308,7 +311,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     }
 
     let requestBody: BodyInit | null = null;
-    if (node.apiMethod !== 'GET' && node.apiMethod !== 'HEAD' && node.apiMethod !== 'DELETE') { 
+    if (node.apiMethod !== 'GET' && node.apiMethod !== 'HEAD' && node.apiMethod !== 'DELETE') {
         if (node.apiBodyType === 'json' && node.apiBodyJson) {
           requestBody = node.apiBodyJson;
           if (!requestHeaders.has('Content-Type')) {
@@ -327,7 +330,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           }
         }
     }
-    
+
     try {
       const response = await fetch(constructedUrl, {
         method: node.apiMethod || 'GET',
@@ -343,7 +346,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       let responseBodyContent: any;
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
-        responseBodyContent = await response.json();
+        try {
+            responseBodyContent = await response.json();
+        } catch (jsonError) {
+            console.warn('[NodeCard TestAPI] Failed to parse JSON, reading as text. Error:', jsonError);
+            responseBodyContent = await response.text(); // Fallback to text if JSON parse fails
+        }
       } else {
         responseBodyContent = await response.text();
       }
@@ -407,14 +415,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     itemKeyOrValue?: 'key' | 'value'
   ) => {
     if (!definedVariablesInFlow || definedVariablesInFlow.length === 0) return null;
-    
+
     return (
       <Popover>
         <PopoverTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
-            className={`absolute ${isTextarea ? 'top-1 right-1' : 'top-1/2 right-1 -translate-y-1/2'} h-7 w-7 z-10`}
+            className={cn("absolute h-7 w-7 z-10", isTextarea ? 'top-1 right-1' : 'top-1/2 right-1 -translate-y-1/2')}
             data-no-drag="true"
             aria-label="Inserir Variável"
           >
@@ -448,8 +456,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   ) => {
     return (
       <div className="space-y-2">
-        {(list || []).map((item, index) => (
-          <div key={`${listName}-item-${item.id || index}`} className="flex items-center space-x-2">
+        {(list || []).map((item) => (
+          <div key={`${listName}-item-${item.id}`} className="flex items-center space-x-2">
             <div className="relative flex-1">
               <Input
                 placeholder={keyPlaceholder}
@@ -517,25 +525,25 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       'supabase-create-row': <Rows {...iconProps} className="text-green-500" />,
       'supabase-read-row': <Search {...iconProps} className="text-blue-500" />,
       'supabase-update-row': <Edit3 {...iconProps} className="text-yellow-500" />,
-      'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />, 
+      'supabase-delete-row': <Trash {...iconProps} className="text-red-500" />,
       'end-flow': <StopCircle {...iconProps} className="text-destructive" />,
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
     return icons[node.type] || icons.default;
   };
-  
+
   const renderOutputConnectors = (): React.ReactNode => {
     if (node.type === 'end-flow') {
-      return null; 
+      return null;
     }
     if (node.type === 'start') {
       return (node.triggers || []).map((trigger, index) => {
         // console.log(`[NodeCard - Start Output Connector] Node: ${node.id}, Trigger ID: ${trigger.id}, Index: ${index}, Name: ${trigger.name}`);
         return (
           <div
-            key={`${trigger.id}-${index}`} 
+            key={`${trigger.id}-${index}`} // Chave baseada no ID único do trigger e no índice
             className="absolute -right-2.5 z-10 flex items-center"
-            style={{ top: `${START_NODE_TRIGGER_INITIAL_Y_OFFSET + index * START_NODE_TRIGGER_SPACING_Y - 10}px` }} 
+            style={{ top: `${START_NODE_TRIGGER_INITIAL_Y_OFFSET + index * START_NODE_TRIGGER_SPACING_Y - 10}px` }}
             title={`Gatilho: ${trigger.name}`}
           >
             <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
@@ -555,7 +563,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     if (node.type === 'option') {
       const options = (node.optionsList || '').split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
       return options.map((optionText, index) => {
-        const key = `option-connector-${node.id}-${index}`; 
+        const key = `option-connector-${node.id}-${index}`;
         // console.log(`[NodeCard - Option Output Connector] Node: ${node.id}, Key: ${key}, Option: ${optionText}`);
         return (
           <div
@@ -606,13 +614,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         </>
       );
     }
-    
+
     if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow') {
         return (
-          <div 
+          <div
             className="absolute -right-2.5 z-10 flex items-center justify-center"
-            style={{ 
-              top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`, 
+            style={{
+              top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`,
               transform: 'translateY(-50%)',
             }}
           >
@@ -627,7 +635,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </div>
         );
     }
-    return null; 
+    return null;
   };
 
   const renderNodeContent = (): React.ReactNode => {
@@ -637,8 +645,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           <div className="space-y-3" data-no-drag="true">
             <Label className="text-sm font-medium">Gatilhos de Início</Label>
             <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
-              {(node.triggers || []).map((trigger, index) => {
-                // console.log(`[NodeCard - Start Triggers Render] ID: ${trigger.id}, Index: ${index}`);
+              {(node.triggers || []).map((trigger, index) => { // Adicionado index para key robusta
+                // console.log(`[NodeCard - Start Triggers Content] Rendering trigger with id: ${trigger.id}`);
                 return (
                 <div key={`${trigger.id}-${index}`} className="p-2.5 border rounded-md bg-muted/30 space-y-2">
                   <div className="flex items-center space-x-2">
@@ -664,22 +672,29 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     <div className='space-y-1.5 text-xs'>
                       <Label htmlFor={`${node.id}-${trigger.id}-webhookUrl`} className="text-xs">URL do Webhook:</Label>
                       <div className="flex items-center space-x-1.5">
-                        <Input 
-                          id={`${node.id}-${trigger.id}-webhookUrl`} 
-                          type="text" 
-                          readOnly 
-                          value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhook/${trigger.webhookId || ''}`} 
+                        <Input
+                          id={`${node.id}-${trigger.id}-webhookUrl`}
+                          type="text"
+                          readOnly
+                          value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhook/${trigger.webhookId || ''}`}
                           className="bg-input/50 h-7 text-xs"
                         />
-                        <Button 
-                          variant="outline" 
-                          size="icon" 
+                        <Button
+                          variant="outline"
+                          size="icon"
                           className="h-7 w-7"
                           onClick={() => {
-                            if (typeof window !== 'undefined' && trigger.webhookId) {
-                              navigator.clipboard.writeText(`${window.location.origin}/api/webhook/${trigger.webhookId}`)
+                            const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhook/${trigger.webhookId || ''}`;
+                            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                              navigator.clipboard.writeText(webhookUrl)
                                 .then(() => toast({ title: "URL Copiada!", description: "URL do Webhook copiada para a área de transferência."}))
                                 .catch(() => toast({ title: "Erro", description: "Não foi possível copiar a URL.", variant: "destructive"}));
+                            } else {
+                              toast({
+                                title: "Erro ao Copiar",
+                                description: "Copiar para a área de transferência não é suportado ou permitido neste navegador/contexto.",
+                                variant: "destructive"
+                              });
                             }
                           }}
                           title="Copiar URL"
@@ -690,7 +705,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                       </div>
                       <Label htmlFor={`${node.id}-${trigger.id}-webhookPayloadVar`} className="text-xs">Salvar Payload em:</Label>
                        <div className="relative">
-                        <Input 
+                        <Input
                           id={`${node.id}-${trigger.id}-webhookPayloadVar`}
                           placeholder="webhook_payload"
                           value={trigger.webhookPayloadVariable || 'webhook_payload'}
@@ -798,7 +813,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{var_tel}}"})</Label>
+                <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
                 <div className="relative">
                     <Input id={`${node.id}-phone`} placeholder="55119... ou {{whatsapp_sender_jid}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8"/>
                      {renderVariableInserter('phoneNumber')}
@@ -824,7 +839,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </div>
             </div>
              <div>
-                <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{var_tel}}"})</Label>
+                <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
                 <div className="relative">
                     <Input id={`${node.id}-phone`} placeholder="55119... ou {{whatsapp_sender_jid}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8"/>
                      {renderVariableInserter('phoneNumber')}
@@ -1381,7 +1396,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         const isCreateOp = node.type === 'supabase-create-row';
         const needsIdentifier = isReadOp || node.type === 'supabase-update-row' || isDeleteOp;
         const needsDataJson = isCreateOp || node.type === 'supabase-update-row';
-        
+
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
@@ -1390,13 +1405,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               {!isLoadingSupabaseTables && supabaseSchemaError && <p className="text-xs text-destructive">{supabaseSchemaError}</p>}
               {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tabela encontrada ou Supabase não configurado/habilitado.</p>}
               {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length > 0 && (
-                <Select 
-                    value={node.supabaseTableName || ''} 
+                <Select
+                    value={node.supabaseTableName || ''}
                     onValueChange={(value) => {
-                      onUpdate(node.id, { 
-                        supabaseTableName: value, 
-                        supabaseIdentifierColumn: '',
-                        supabaseColumnsToSelect: '*'
+                      onUpdate(node.id, {
+                        supabaseTableName: value,
+                        supabaseIdentifierColumn: '', // Resetar coluna ao mudar tabela
+                        supabaseColumnsToSelect: '*'  // Resetar colunas a selecionar
                       });
                     }}
                 >
@@ -1416,8 +1431,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   {!isLoadingSupabaseColumns && !node.supabaseTableName && <p className="text-xs text-muted-foreground">Selecione uma tabela para ver as colunas.</p>}
                   {!isLoadingSupabaseColumns && node.supabaseTableName && supabaseColumns.length === 0 && !supabaseSchemaError && <p className="text-xs text-muted-foreground">Nenhuma coluna encontrada para a tabela selecionada.</p>}
                   {!isLoadingSupabaseColumns && supabaseColumns.length > 0 && (
-                     <Select 
-                        value={node.supabaseIdentifierColumn || ''} 
+                     <Select
+                        value={node.supabaseIdentifierColumn || ''}
                         onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}
                         disabled={!node.supabaseTableName || supabaseColumns.length === 0}
                     >
@@ -1440,7 +1455,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 </div>
               </>
             )}
-            
+
             {isReadOp && (
                  <div>
                     <Label htmlFor={`${node.id}-columnsToSelectRead`}>Colunas a Selecionar (ex: *, nome, email)</Label>
@@ -1464,11 +1479,11 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             {(isReadOp || isCreateOp) && (
               <div>
                 <Label htmlFor={`${node.id}-resultVar`}>Salvar Resultado na Variável</Label>
-                <Input 
-                    id={`${node.id}-resultVar`} 
-                    placeholder={isReadOp ? (node.supabaseResultVariable || "dados_supabase") : (node.supabaseResultVariable || "id_linha_criada_supabase")} 
-                    value={node.supabaseResultVariable || ''} 
-                    onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })} 
+                <Input
+                    id={`${node.id}-resultVar`}
+                    placeholder={isReadOp ? (node.supabaseResultVariable || "dados_supabase") : (node.supabaseResultVariable || "id_linha_criada_supabase")}
+                    value={node.supabaseResultVariable || ''}
+                    onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })}
                 />
               </div>
             )}
@@ -1496,16 +1511,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       aria-labelledby={`${node.id}-title`}
       onMouseDown={(e) => {
         const target = e.target as HTMLElement;
-         if (target.dataset.connector === 'true' || 
+         if (target.dataset.connector === 'true' ||
             target.closest('[data-action="delete-node"]') ||
-            target.closest('[data-no-drag="true"]') || 
+            target.closest('[data-no-drag="true"]') ||
             target.closest('[role="dialog"]') ||
             target.closest('[data-radix-popover-content]') ||
             target.closest('[data-radix-scroll-area-viewport]') ||
             (target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target)) ||
-            target.closest('[role="tablist"]') || 
+            target.closest('[role="tablist"]') ||
             target.closest('[role="tabpanel"]') ||
-            target.closest('.rc-select-dropdown') 
+            target.closest('.rc-select-dropdown')
         ) {
           return;
         }
@@ -1513,12 +1528,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       }}
     >
       <Card className="shadow-none border-none bg-transparent">
-        <CardHeader 
-          onMouseDown={handleNodeMouseDown} 
+        <CardHeader
+          onMouseDown={handleNodeMouseDown}
           data-drag-handle="true"
           className="py-2.5 px-3.5 bg-secondary/50 rounded-t-lg flex items-center justify-between cursor-grab active:cursor-grabbing"
         >
-          <div className="flex items-center min-w-0 pointer-events-none"> 
+          <div className="flex items-center min-w-0 pointer-events-none">
             {renderNodeIcon()}
             <CardTitle id={`${node.id}-title`} className="ml-2 text-sm font-medium text-secondary-foreground truncate" title={node.title}>
               {node.title}
@@ -1538,13 +1553,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           {renderNodeContent()}
         </CardContent>
       </Card>
-      
+
       {node.type !== 'start' && node.type !== 'end-flow' && (
-         <div 
+         <div
             className="absolute -left-2.5 z-10 flex items-center justify-center"
-            style={{ 
-              top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`, 
+            style={{
+              top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`,
               transform: 'translateY(-50%)',
+              height: '20px',
+              width: '20px'
             }}
           >
           <div
@@ -1554,7 +1571,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           />
         </div>
       )}
-      
+
       {renderOutputConnectors()}
     </motion.div>
 
