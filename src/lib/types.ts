@@ -55,11 +55,11 @@ export interface ApiFormDataEntry {
 }
 
 export interface StartNodeTrigger {
-  id: string;
-  name: string;
+  id: string; // Unique ID for this trigger instance (for React keys etc.)
+  name: string; // User-defined name (used for the connection handle)
   type: 'manual' | 'webhook';
-  webhookId?: string; 
-  webhookPayloadVariable?: string; 
+  webhookId?: string; // Auto-generated unique ID for the webhook path if type is 'webhook'
+  webhookPayloadVariable?: string; // Variable to store webhook payload, defaults to 'webhook_payload'
 }
 
 export interface NodeData {
@@ -75,7 +75,7 @@ export interface NodeData {
   
   // Input Node
   promptText?: string; 
-  inputType?: 'text' | 'email' | 'phone' | 'number'; // For UI validation, backend treats as text
+  inputType?: 'text' | 'email' | 'phone' | 'number'; 
   variableToSaveResponse?: string;
 
   // Option Node
@@ -85,8 +85,8 @@ export interface NodeData {
 
   // WhatsApp Nodes (can also be triggered by api-call node)
   instanceName?: string; 
-  phoneNumber?: string; // Can be a variable like {{whatsapp_sender_jid}}
-  textMessage?: string; // For whatsapp-text, or if api-call is used for text
+  phoneNumber?: string; 
+  textMessage?: string; 
   mediaUrl?: string; 
   mediaType?: 'image' | 'video' | 'document' | 'audio'; 
   caption?: string; 
@@ -120,40 +120,40 @@ export interface NodeData {
   // Delay Node
   delayDuration?: number; 
 
-  // Date Input Node (UI only for now, backend treats as text input)
+  // Date Input Node
   dateInputLabel?: string;
   variableToSaveDate?: string;
 
-  // Redirect Node (UI/Client-side behavior mainly)
+  // Redirect Node
   redirectUrl?: string;
 
-  // Typing Emulation Node (UI effect mainly)
+  // Typing Emulation Node
   typingDuration?: number; 
 
-  // Media Display Node (UI only for now)
+  // Media Display Node
   mediaDisplayType?: 'image' | 'video' | 'audio';
   mediaDisplayUrl?: string;
   mediaDisplayText?: string; 
 
-  // Log Console Node (Server-side logging in flow engine)
+  // Log Console Node
   logMessage?: string;
 
-  // Code Execution Node (Potentially server-side, but complex to sandbox)
+  // Code Execution Node
   codeSnippet?: string;
   codeOutputVariable?: string;
 
   // JSON Transform Node
-  inputJson?: string; // Variable or JSON string
+  inputJson?: string; 
   jsonataExpression?: string;
   jsonOutputVariable?: string;
 
-  // File Upload Node (UI only for now)
+  // File Upload Node
   uploadPromptText?: string;
-  fileTypeFilter?: string;
+  fileTypeFilter?: string; // e.g., "image/*,.pdf"
   maxFileSizeMB?: number;
   fileUrlVariable?: string;
 
-  // Rating Input Node (UI only for now)
+  // Rating Input Node
   ratingQuestionText?: string;
   maxRatingValue?: number;
   ratingIconType?: 'star' | 'heart' | 'number';
@@ -164,16 +164,16 @@ export interface NodeData {
   aiModelName?: string; 
   aiOutputVariable?: string;
   
-  // Send Email Node (Would require server-side email service integration)
+  // Send Email Node
   emailTo?: string;
   emailSubject?: string;
   emailBody?: string;
   emailFrom?: string; 
 
-  // Google Sheets Append Node (Requires server-side Google API integration)
+  // Google Sheets Append Node
   googleSheetId?: string;
   googleSheetName?: string; 
-  googleSheetRowData?: string;
+  googleSheetRowData?: string; // JSON string of an array
 
   // Intelligent Agent Node
   agentName?: string;
@@ -199,7 +199,7 @@ export interface Connection {
   id: string;
   from: string; 
   to: string;   
-  sourceHandle?: string; // e.g., "default", "true", "false", trigger name, option text
+  sourceHandle?: string; 
 }
 
 export interface DrawingLineData {
@@ -221,21 +221,21 @@ export interface WorkspaceData {
   name: string;
   nodes: NodeData[];
   connections: Connection[];
-  // Could add last_updated_by, etc. in a real system
+  created_at?: string | Date;
+  updated_at?: string | Date;
 }
 
-// For managing active conversations in the backend flow engine
 export interface FlowSession {
-  session_id: string; // e.g., senderJid
+  session_id: string; 
   workspace_id: string;
   current_node_id: string | null;
   flow_variables: Record<string, any>;
-  awaiting_input_type?: 'text' | 'option' | null; // What kind of input the flow is paused for
-  awaiting_input_details?: {
-    variableToSave?: string; // For 'text' input
-    options?: string[];       // For 'option' input
-    originalNodeId?: string; // The ID of the input/option node that paused the flow
+  awaiting_input_type: 'text' | 'option' | null;
+  awaiting_input_details: {
+    variableToSave?: string; 
+    options?: string[];       
+    originalNodeId?: string; 
   } | null;
-  last_interaction_at?: Date;
-  created_at?: Date;
+  last_interaction_at?: string | Date;
+  created_at?: string | Date;
 }

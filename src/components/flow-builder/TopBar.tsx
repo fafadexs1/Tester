@@ -2,13 +2,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { WorkspaceData, StartNodeTrigger } from '@/lib/types';
+import type { WorkspaceData, StartNodeTrigger, FlowSession } from '@/lib/types'; // Added FlowSession
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard,
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy,
-  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, ZoomIn, ZoomOut
+  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, ZoomIn, ZoomOut, Users // Added Users icon
 } from 'lucide-react';
 import {
   Dialog,
@@ -17,6 +17,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogClose,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +35,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"; // For session display
 
 
 const SupabaseIcon = () => (
@@ -48,6 +50,14 @@ const PostgresIcon = () => (
   </svg>
 );
 
+const ResetZoomIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-4 h-4">
+    <path d="M7.99999 2.66667C6.07999 2.66667 4.24666 3.40001 2.92666 4.72001L2.66666 5.00001L3.66666 6.00001L4.79332 4.87334C5.77999 3.89334 7.09999 3.33334 8.49999 3.33334C9.63332 3.33334 10.7133 3.68001 11.5867 4.34001C12.48 5.01334 13.1067 5.93334 13.3 6.94667L13.3333 7.33334H12C11.8233 7.33334 11.6533 7.26001 11.5267 7.13334C11.4 7.00667 11.3267 6.83667 11.3267 6.66001L11.3333 6.66667C11.06 5.76001 10.4267 4.99334 9.58666 4.50667C8.74666 4.02001 7.76666 3.84667 6.83332 4.02001C5.89332 4.18667 5.03999 4.68667 4.40666 5.43334L2.66666 7.17334V2.66667H7.99999Z" fill="currentColor" />
+    <path d="M7.99999 13.3333C9.91999 13.3333 11.7533 12.6 13.0733 11.28L13.3333 11L12.3333 10L11.2067 11.1267C10.22 12.1067 8.90002 12.6667 7.50002 12.6667C6.36669 12.6667 5.28669 12.32 4.41335 11.66C3.52002 10.9867 2.89335 10.0667 2.70002 9.05333L2.66669 8.66666H4.00002C4.17669 8.66666 4.34669 8.74 4.47335 8.86666C4.60002 8.99333 4.67335 9.16333 4.67335 9.34L4.66669 9.33333C4.94002 10.24 5.57335 11.0067 6.41335 11.4933C7.25335 11.98 8.23335 12.1533 9.16669 11.98C10.1067 11.8133 10.96 11.3133 11.5933 10.5667L13.3333 8.82666V13.3333H7.99999Z" fill="currentColor" />
+  </svg>
+);
+
+
 type SettingsCategory = 'database' | 'integrations';
 interface WebhookLogEntry {
   timestamp: string;
@@ -57,17 +67,9 @@ interface WebhookLogEntry {
   payload?: any;
   ip?: string;
   geo?: any;
-  extractedMessage?: string;
-  webhook_remoteJid?: string;
+  extractedMessage?: string | null;
+  webhook_remoteJid?: string | null;
 }
-
-const ResetZoomIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-4 h-4">
-    <path d="M7.99999 2.66667C6.07999 2.66667 4.24666 3.40001 2.92666 4.72001L2.66666 5.00001L3.66666 6.00001L4.79332 4.87334C5.77999 3.89334 7.09999 3.33334 8.49999 3.33334C9.63332 3.33334 10.7133 3.68001 11.5867 4.34001C12.48 5.01334 13.1067 5.93334 13.3 6.94667L13.3333 7.33334H12C11.8233 7.33334 11.6533 7.26001 11.5267 7.13334C11.4 7.00667 11.3267 6.83667 11.3267 6.66001L11.3333 6.66667C11.06 5.76001 10.4267 4.99334 9.58666 4.50667C8.74666 4.02001 7.76666 3.84667 6.83332 4.02001C5.89332 4.18667 5.03999 4.68667 4.40666 5.43334L2.66666 7.17334V2.66667H7.99999Z" fill="currentColor" />
-    <path d="M7.99999 13.3333C9.91999 13.3333 11.7533 12.6 13.0733 11.28L13.3333 11L12.3333 10L11.2067 11.1267C10.22 12.1067 8.90002 12.6667 7.50002 12.6667C6.36669 12.6667 5.28669 12.32 4.41335 11.66C3.52002 10.9867 2.89335 10.0667 2.70002 9.05333L2.66669 8.66666H4.00002C4.17669 8.66666 4.34669 8.74 4.47335 8.86666C4.60002 8.99333 4.67335 9.16333 4.67335 9.34L4.66669 9.33333C4.94002 10.24 5.57335 11.0067 6.41335 11.4933C7.25335 11.98 8.23335 12.1533 9.16669 11.98C10.1067 11.8133 10.96 11.3133 11.5933 10.5667L13.3333 8.82666V13.3333H7.99999Z" fill="currentColor" />
-  </svg>
-);
-
 
 interface TopBarProps {
   workspaces: WorkspaceData[];
@@ -105,6 +107,14 @@ const TopBar: React.FC<TopBarProps> = ({
   const [isLoadingEvolutionLogs, setIsLoadingEvolutionLogs] = useState(false);
   const [evolutionLogsError, setEvolutionLogsError] = useState<string | null>(null);
 
+  const [isSessionsDialogOpen, setIsSessionsDialogOpen] = useState(false);
+  const [activeSessions, setActiveSessions] = useState<FlowSession[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [selectedSessionVariables, setSelectedSessionVariables] = useState<Record<string, any> | null>(null);
+  const [isSessionVariablesModalOpen, setIsSessionVariablesModalOpen] = useState(false);
+
+
   // Supabase States
   const [supabaseUrl, setSupabaseUrl] = useState('');
   const [supabaseAnonKey, setSupabaseAnonKey] = useState('');
@@ -136,13 +146,11 @@ const TopBar: React.FC<TopBarProps> = ({
 
   useEffect(() => {
     if (isSettingsDialogOpen) {
-      // Supabase
       setSupabaseUrl(localStorage.getItem('supabaseUrl') || '');
       setSupabaseAnonKey(localStorage.getItem('supabaseAnonKey') || '');
       setSupabaseServiceKey(localStorage.getItem('supabaseServiceKey') || '');
       setIsSupabaseEnabled(localStorage.getItem('isSupabaseEnabled') === 'true');
 
-      // PostgreSQL
       setPostgresHost(localStorage.getItem('postgresHost') || '');
       setPostgresPort(localStorage.getItem('postgresPort') || '');
       setPostgresUser(localStorage.getItem('postgresUser') || '');
@@ -150,7 +158,6 @@ const TopBar: React.FC<TopBarProps> = ({
       setPostgresDatabase(localStorage.getItem('postgresDatabase') || '');
       setIsPostgresEnabled(localStorage.getItem('isPostgresEnabled') === 'true');
 
-      // Evolution API
       setEvolutionApiBaseUrl(localStorage.getItem('evolutionApiBaseUrl') || '');
       setEvolutionGlobalApiKey(localStorage.getItem('evolutionApiKey') || '');
       setDefaultEvolutionInstanceName(localStorage.getItem('defaultEvolutionInstanceName') || '');
@@ -159,13 +166,11 @@ const TopBar: React.FC<TopBarProps> = ({
   }, [isSettingsDialogOpen]);
 
   const handleSaveSettings = () => {
-    // Supabase
     localStorage.setItem('supabaseUrl', supabaseUrl);
     localStorage.setItem('supabaseAnonKey', supabaseAnonKey);
     localStorage.setItem('supabaseServiceKey', supabaseServiceKey);
     localStorage.setItem('isSupabaseEnabled', String(isSupabaseEnabled));
 
-    // PostgreSQL
     localStorage.setItem('postgresHost', postgresHost);
     localStorage.setItem('postgresPort', postgresPort);
     localStorage.setItem('postgresUser', postgresUser);
@@ -173,23 +178,11 @@ const TopBar: React.FC<TopBarProps> = ({
     localStorage.setItem('postgresDatabase', postgresDatabase);
     localStorage.setItem('isPostgresEnabled', String(isPostgresEnabled));
 
-    // Evolution API
     localStorage.setItem('evolutionApiBaseUrl', evolutionApiBaseUrl);
     localStorage.setItem('evolutionApiKey', evolutionGlobalApiKey);
     localStorage.setItem('defaultEvolutionInstanceName', defaultEvolutionInstanceName);
     localStorage.setItem('isEvolutionApiEnabled', String(isEvolutionApiEnabled));
 
-    console.log("Configurações Salvas:", {
-      supabase: { supabaseUrl, supabaseAnonKeyExists: supabaseAnonKey.length > 0, supabaseServiceKeyExists: supabaseServiceKey.length > 0, isSupabaseEnabled },
-      postgresql: { postgresHost, postgresPort, postgresUser, postgresDatabase, isPostgresEnabled, postgresPasswordExists: postgresPassword.length > 0 },
-      evolutionApi: {
-        evolutionApiBaseUrl,
-        evolutionApiKeyExists: evolutionGlobalApiKey.length > 0,
-        defaultEvolutionInstanceName,
-        isEvolutionApiEnabled,
-        flowiseLiteGlobalWebhookUrl,
-      }
-    });
     toast({
       title: "Configurações Salvas!",
       description: "Suas configurações foram salvas no localStorage.",
@@ -240,6 +233,36 @@ const TopBar: React.FC<TopBarProps> = ({
     }
   }, [isWebhookLogsDialogOpen, fetchEvolutionWebhookLogs]);
 
+  const fetchActiveSessions = useCallback(async () => {
+    setIsLoadingSessions(true);
+    setSessionsError(null);
+    try {
+      const response = await fetch('/api/sessions/active');
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(`Erro ao buscar sessões: ${response.status} - ${errorData || response.statusText}`);
+      }
+      const data: FlowSession[] = await response.json();
+      setActiveSessions(data);
+    } catch (error: any) {
+      console.error("Erro ao buscar sessões ativas:", error);
+      setSessionsError(error.message || "Falha ao buscar sessões ativas.");
+      setActiveSessions([]);
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isSessionsDialogOpen) {
+      fetchActiveSessions();
+    }
+  }, [isSessionsDialogOpen, fetchActiveSessions]);
+
+  const handleViewSessionVariables = (variables: Record<string, any>) => {
+    setSelectedSessionVariables(variables);
+    setIsSessionVariablesModalOpen(true);
+  };
 
   const settingsCategories: { id: SettingsCategory; label: string; icon: React.ReactNode }[] = [
     { id: 'database', label: 'Banco de Dados', icon: <Database className="w-5 h-5 mr-2" /> },
@@ -335,8 +358,12 @@ const TopBar: React.FC<TopBarProps> = ({
               <DropdownMenuLabel>Console e Logs</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setIsWebhookLogsDialogOpen(true)}>
-                <ListOrdered className="mr-2 h-4 w-4" />
-                <span>Logs de Eventos da API Evolution</span>
+                <WebhookIcon className="mr-2 h-4 w-4" />
+                <span>Logs Webhook Evolution</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setIsSessionsDialogOpen(true)}>
+                <Users className="mr-2 h-4 w-4" />
+                <span>Sessões Ativas</span>
               </DropdownMenuItem>
               <DropdownMenuItem disabled>
                 <FileText className="mr-2 h-4 w-4" />
@@ -473,12 +500,12 @@ const TopBar: React.FC<TopBarProps> = ({
         </div>
       </header>
 
+      {/* Settings Dialog */}
       <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
         <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl bg-card max-h-[85vh] flex flex-col p-0">
           <DialogHeader className="px-6 py-4 border-b">
             <DialogTitle className="text-xl">Configurações Globais</DialogTitle>
           </DialogHeader>
-
           <div className="flex flex-1 overflow-hidden">
             <aside className="w-1/4 min-w-[200px] border-r bg-muted/40 p-4 space-y-2 overflow-y-auto">
               {settingsCategories.map(category => (
@@ -496,7 +523,6 @@ const TopBar: React.FC<TopBarProps> = ({
                 </Button>
               ))}
             </aside>
-
             <main className="flex-1 p-6 overflow-y-auto space-y-6">
               {activeSettingsCategory === 'database' && (
                 <section>
@@ -511,112 +537,37 @@ const TopBar: React.FC<TopBarProps> = ({
                       </AccordionTrigger>
                       <AccordionContent className="px-4 pt-3 pb-4 border-t">
                         <div className="flex items-center space-x-2 mb-4">
-                          <Switch
-                            id="enable-supabase"
-                            checked={isSupabaseEnabled}
-                            onCheckedChange={setIsSupabaseEnabled}
-                            aria-label="Habilitar Integração Supabase"
-                          />
+                          <Switch id="enable-supabase" checked={isSupabaseEnabled} onCheckedChange={setIsSupabaseEnabled} aria-label="Habilitar Integração Supabase"/>
                           <Label htmlFor="enable-supabase" className="text-sm font-medium">Habilitar Integração Supabase</Label>
                         </div>
                         {isSupabaseEnabled && (
                           <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
-                            <div>
-                              <Label htmlFor="supabase-url" className="text-card-foreground/90 text-sm">URL do Projeto Supabase</Label>
-                              <Input
-                                id="supabase-url"
-                                placeholder="https://seunomeprojeto.supabase.co"
-                                value={supabaseUrl}
-                                onChange={(e) => setSupabaseUrl(e.target.value)}
-                                className="bg-input text-foreground mt-1"
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor="supabase-anon-key" className="text-card-foreground/90 text-sm">Chave Pública (Anon Key)</Label>
-                              <div className="flex items-center space-x-2 mt-1">
-                                <KeyRound className="w-4 h-4 text-muted-foreground" />
-                                <Input
-                                  id="supabase-anon-key"
-                                  type="password"
-                                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                                  value={supabaseAnonKey}
-                                  onChange={(e) => setSupabaseAnonKey(e.target.value)}
-                                  className="bg-input text-foreground flex-1"
-                                />
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Usada para acesso no lado do cliente (ex: no chat de teste), respeitando RLS.
-                              </p>
-                            </div>
-                            <div>
-                              <Label htmlFor="supabase-service-key" className="text-card-foreground/90 text-sm">Chave de Serviço (Service Role Key)</Label>
-                              <div className="flex items-center space-x-2 mt-1">
-                                <KeyRound className="w-4 h-4 text-muted-foreground" />
-                                <Input
-                                  id="supabase-service-key"
-                                  type="password"
-                                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                                  value={supabaseServiceKey}
-                                  onChange={(e) => setSupabaseServiceKey(e.target.value)}
-                                  className="bg-input text-foreground flex-1"
-                                />
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Usada para Server Actions que buscam schema (tabelas/colunas). Mantenha em segredo.
-                              </p>
-                            </div>
+                            <div><Label htmlFor="supabase-url" className="text-card-foreground/90 text-sm">URL do Projeto Supabase</Label><Input id="supabase-url" placeholder="https://seunomeprojeto.supabase.co" value={supabaseUrl} onChange={(e) => setSupabaseUrl(e.target.value)} className="bg-input text-foreground mt-1"/></div>
+                            <div><Label htmlFor="supabase-anon-key" className="text-card-foreground/90 text-sm">Chave Pública (Anon Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-anon-key" type="password" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." value={supabaseAnonKey} onChange={(e) => setSupabaseAnonKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada para acesso no lado do cliente, respeitando RLS.</p></div>
+                            <div><Label htmlFor="supabase-service-key" className="text-card-foreground/90 text-sm">Chave de Serviço (Service Role Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-service-key" type="password" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." value={supabaseServiceKey} onChange={(e) => setSupabaseServiceKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada para Server Actions que buscam schema. Mantenha em segredo.</p></div>
                           </div>
                         )}
                       </AccordionContent>
                     </AccordionItem>
-
                     <AccordionItem value="postgresql" className="border rounded-lg shadow-sm">
                       <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
-                        <div className="flex items-center space-x-3">
-                          <PostgresIcon />
-                          <span className="font-medium text-card-foreground">PostgreSQL (Exemplo)</span>
-                        </div>
+                        <div className="flex items-center space-x-3"><PostgresIcon /><span className="font-medium text-card-foreground">PostgreSQL</span></div>
                       </AccordionTrigger>
                       <AccordionContent className="px-4 pt-3 pb-4 border-t">
                         <div className="flex items-center space-x-2 mb-4">
-                          <Switch
-                            id="enable-postgres"
-                            checked={isPostgresEnabled}
-                            onCheckedChange={setIsPostgresEnabled}
-                            aria-label="Habilitar Integração PostgreSQL"
-                          />
-                          <Label htmlFor="enable-postgres" className="text-sm font-medium">Habilitar Integração PostgreSQL (Placeholder)</Label>
+                          <Switch id="enable-postgres" checked={isPostgresEnabled} onCheckedChange={setIsPostgresEnabled} aria-label="Habilitar Integração PostgreSQL"/>
+                          <Label htmlFor="enable-postgres" className="text-sm font-medium">Habilitar Conexão PostgreSQL (para persistência de fluxos/sessões)</Label>
                         </div>
                         {isPostgresEnabled && (
-                          <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
+                          <div className="space-y-3 animate-in fade-in-0 slide-in-from-top-2 duration-300">
+                            <p className="text-xs text-muted-foreground">As credenciais de conexão são gerenciadas via variáveis de ambiente (arquivo `.env` ou configurações do ambiente de hospedagem). Preencha os campos abaixo apenas para sua referência visual.</p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                              <div>
-                                <Label htmlFor="postgres-host" className="text-card-foreground/90 text-sm">Host</Label>
-                                <Input id="postgres-host" placeholder="localhost" value={postgresHost} onChange={e => setPostgresHost(e.target.value)} className="bg-input text-foreground mt-1" />
-                              </div>
-                              <div>
-                                <Label htmlFor="postgres-port" className="text-card-foreground/90 text-sm">Porta</Label>
-                                <Input id="postgres-port" placeholder="5432" value={postgresPort} onChange={e => setPostgresPort(e.target.value)} className="bg-input text-foreground mt-1" />
-                              </div>
-                              <div>
-                                <Label htmlFor="postgres-user" className="text-card-foreground/90 text-sm">Usuário</Label>
-                                <Input id="postgres-user" placeholder="seu_usuario" value={postgresUser} onChange={e => setPostgresUser(e.target.value)} className="bg-input text-foreground mt-1" />
-                              </div>
-                              <div>
-                                <Label htmlFor="postgres-password" className="text-card-foreground/90 text-sm">Senha</Label>
-                                <div className="flex items-center space-x-2 mt-1">
-                                  <KeyRound className="w-4 h-4 text-muted-foreground" />
-                                  <Input id="postgres-password" type="password" placeholder="********" value={postgresPassword} onChange={e => setPostgresPassword(e.target.value)} className="bg-input text-foreground flex-1" />
-                                </div>
-                              </div>
-                              <div className="md:col-span-2">
-                                <Label htmlFor="postgres-database" className="text-card-foreground/90 text-sm">Nome do Banco</Label>
-                                <Input id="postgres-database" placeholder="nome_do_banco" value={postgresDatabase} onChange={e => setPostgresDatabase(e.target.value)} className="bg-input text-foreground mt-1" />
-                              </div>
+                              <div><Label htmlFor="postgres-host" className="text-card-foreground/90 text-sm">Host (Referência)</Label><Input id="postgres-host" placeholder={process.env.POSTGRES_HOST || "localhost"} value={postgresHost} onChange={e => setPostgresHost(e.target.value)} className="bg-input text-foreground mt-1"/></div>
+                              <div><Label htmlFor="postgres-port" className="text-card-foreground/90 text-sm">Porta (Referência)</Label><Input id="postgres-port" placeholder={process.env.POSTGRES_PORT || "5432"} value={postgresPort} onChange={e => setPostgresPort(e.target.value)} className="bg-input text-foreground mt-1"/></div>
+                              <div><Label htmlFor="postgres-user" className="text-card-foreground/90 text-sm">Usuário (Referência)</Label><Input id="postgres-user" placeholder={process.env.POSTGRES_USER || "seu_usuario"} value={postgresUser} onChange={e => setPostgresUser(e.target.value)} className="bg-input text-foreground mt-1"/></div>
+                              <div><Label htmlFor="postgres-db" className="text-card-foreground/90 text-sm">Nome do Banco (Referência)</Label><Input id="postgres-db" placeholder={process.env.POSTGRES_DATABASE || "flowise_lite_db"} value={postgresDatabase} onChange={e => setPostgresDatabase(e.target.value)} className="bg-input text-foreground mt-1"/></div>
+                              <div className="md:col-span-2"><Label htmlFor="postgres-password" className="text-card-foreground/90 text-sm">Senha (Referência)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="postgres-password" type="password" placeholder="********" value={postgresPassword} onChange={e => setPostgresPassword(e.target.value)} className="bg-input text-foreground flex-1"/></div></div>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              As configurações do PostgreSQL são para demonstração e não estão funcionalmente integradas.
-                            </p>
                           </div>
                         )}
                       </AccordionContent>
@@ -624,89 +575,32 @@ const TopBar: React.FC<TopBarProps> = ({
                   </Accordion>
                 </section>
               )}
-
               {activeSettingsCategory === 'integrations' && (
                 <section>
                   <h3 className="text-lg font-semibold text-card-foreground mb-4">Integrações de Plataformas</h3>
                   <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={isEvolutionApiEnabled ? 'evolution-api' : undefined}>
                     <AccordionItem value="evolution-api" className="border rounded-lg shadow-sm">
                       <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
-                        <div className="flex items-center space-x-3">
-                          <BotMessageSquare className="w-5 h-5 text-teal-500" />
-                          <span className="font-medium text-card-foreground">API Evolution (WhatsApp)</span>
-                        </div>
+                        <div className="flex items-center space-x-3"><BotMessageSquare className="w-5 h-5 text-teal-500" /><span className="font-medium text-card-foreground">API Evolution (WhatsApp)</span></div>
                       </AccordionTrigger>
                       <AccordionContent className="px-4 pt-3 pb-4 border-t">
                         <div className="flex items-center space-x-2 mb-4">
-                          <Switch
-                            id="enable-evolution-api"
-                            checked={isEvolutionApiEnabled}
-                            onCheckedChange={setIsEvolutionApiEnabled}
-                            aria-label="Habilitar Integração API Evolution"
-                          />
+                          <Switch id="enable-evolution-api" checked={isEvolutionApiEnabled} onCheckedChange={setIsEvolutionApiEnabled} aria-label="Habilitar Integração API Evolution"/>
                           <Label htmlFor="enable-evolution-api" className="text-sm font-medium">Habilitar Integração API Evolution</Label>
                         </div>
                         {isEvolutionApiEnabled && (
                           <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
-                            <div>
-                              <Label htmlFor="evolution-api-base-url" className="text-card-foreground/90 text-sm">URL Base da API Evolution (para enviar mensagens)</Label>
-                              <Input
-                                id="evolution-api-base-url"
-                                placeholder="http://localhost:8080"
-                                value={evolutionApiBaseUrl}
-                                onChange={(e) => setEvolutionApiBaseUrl(e.target.value)}
-                                className="bg-input text-foreground mt-1"
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor="default-evolution-instance-name" className="text-card-foreground/90 text-sm">Nome da Instância Padrão (Opcional)</Label>
-                              <Input
-                                id="default-evolution-instance-name"
-                                placeholder="minha_instancia_padrao"
-                                value={defaultEvolutionInstanceName}
-                                onChange={(e) => setDefaultEvolutionInstanceName(e.target.value)}
-                                className="bg-input text-foreground mt-1"
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor="evolution-api-key" className="text-card-foreground/90 text-sm">Chave de API Global da Evolution (Opcional, para enviar)</Label>
-                              <div className="flex items-center space-x-2 mt-1">
-                                <KeyRound className="w-4 h-4 text-muted-foreground" />
-                                <Input
-                                  id="evolution-api-key"
-                                  type="password"
-                                  placeholder="Sua chave de API global, se configurada"
-                                  value={evolutionGlobalApiKey}
-                                  onChange={(e) => setEvolutionGlobalApiKey(e.target.value)}
-                                  className="bg-input text-foreground flex-1"
-                                />
-                              </div>
-                            </div>
-
+                            <div><Label htmlFor="evolution-api-base-url" className="text-card-foreground/90 text-sm">URL Base da API Evolution (para enviar mensagens)</Label><Input id="evolution-api-base-url" placeholder="http://localhost:8080" value={evolutionApiBaseUrl} onChange={(e) => setEvolutionApiBaseUrl(e.target.value)} className="bg-input text-foreground mt-1"/></div>
+                            <div><Label htmlFor="default-evolution-instance-name" className="text-card-foreground/90 text-sm">Nome da Instância Padrão (Opcional)</Label><Input id="default-evolution-instance-name" placeholder="evolution_instance" value={defaultEvolutionInstanceName} onChange={(e) => setDefaultEvolutionInstanceName(e.target.value)} className="bg-input text-foreground mt-1"/></div>
+                            <div><Label htmlFor="evolution-api-key" className="text-card-foreground/90 text-sm">Chave de API Global da Evolution (Opcional)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="evolution-api-key" type="password" placeholder="Sua chave de API global, se configurada" value={evolutionGlobalApiKey} onChange={(e) => setEvolutionGlobalApiKey(e.target.value)} className="bg-input text-foreground flex-1"/></div></div>
                             <div className="pt-4 border-t border-border space-y-2">
                               <Label className="text-card-foreground/90 text-sm font-medium">Recepção de Webhooks da API Evolution</Label>
-                              <p className="text-xs text-muted-foreground mt-1 mb-2">
-                                Configure a URL abaixo no seu painel da API Evolution para que o Flowise Lite receba eventos (ex: novas mensagens):
-                              </p>
+                              <p className="text-xs text-muted-foreground mt-1 mb-2">Configure a URL abaixo na sua instância da API Evolution para que o Flowise Lite receba eventos (ex: novas mensagens):</p>
                               <div className="flex items-center space-x-2">
-                                <Input
-                                  id="flowise-webhook-url-for-evolution"
-                                  type="text"
-                                  value={flowiseLiteGlobalWebhookUrl}
-                                  readOnly
-                                  className="bg-input text-foreground flex-1 cursor-default break-all"
-                                />
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  onClick={() => handleCopyToClipboard(flowiseLiteGlobalWebhookUrl, "URL de Webhook")}
-                                  title="Copiar URL de Webhook"
-                                  className="h-9 w-9"
-                                >
-                                  <Copy className="w-4 h-4" />
-                                </Button>
+                                <Input id="flowise-webhook-url-for-evolution" type="text" value={flowiseLiteGlobalWebhookUrl} readOnly className="bg-input text-foreground flex-1 cursor-default break-all"/>
+                                <Button variant="outline" size="icon" onClick={() => handleCopyToClipboard(flowiseLiteGlobalWebhookUrl, "URL de Webhook")} title="Copiar URL de Webhook" className="h-9 w-9"><Copy className="w-4 h-4" /></Button>
                               </div>
-                               <p className="text-xs text-muted-foreground mt-1">Os payloads recebidos neste endpoint serão registrados e visíveis no "Console" do Flowise Lite (menu da TopBar) e no console do servidor Next.js.</p>
+                              <p className="text-xs text-muted-foreground mt-1">Payloads recebidos são logados no console do servidor e visíveis no "Console" do app.</p>
                             </div>
                           </div>
                         )}
@@ -717,100 +611,52 @@ const TopBar: React.FC<TopBarProps> = ({
               )}
             </main>
           </div>
-
           <DialogFooter className="px-6 py-4 border-t mt-auto">
-            <Button variant="outline" onClick={() => setIsSettingsDialogOpen(false)}>Cancelar</Button>
+            <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
             <Button onClick={handleSaveSettings}>Salvar Configurações</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Webhook Logs Dialog */}
       <Dialog open={isWebhookLogsDialogOpen} onOpenChange={setIsWebhookLogsDialogOpen}>
-        <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[80vh] flex flex-col">
+        <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Logs de Eventos da API Evolution</DialogTitle>
             <DialogDescription>
               Webhooks HTTP recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{flowiseLiteGlobalWebhookUrl}</code>.
-              Os logs são armazenados em memória no servidor e zerados ao reiniciar o servidor.
+              Os logs são armazenados em memória no servidor (máx. 50) e zerados ao reiniciar.
             </DialogDescription>
           </DialogHeader>
-
           <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
-            <Button
-              onClick={fetchEvolutionWebhookLogs}
-              variant="outline"
-              size="sm"
-              className="self-start mb-2 h-9"
-              disabled={isLoadingEvolutionLogs}
-            >
+            <Button onClick={fetchEvolutionWebhookLogs} variant="outline" size="sm" className="self-start mb-2 h-9" disabled={isLoadingEvolutionLogs}>
               <RefreshCw className={cn("mr-2 h-4 w-4", isLoadingEvolutionLogs && "animate-spin")} />
               {isLoadingEvolutionLogs ? "Atualizando..." : "Atualizar Logs"}
             </Button>
-
-            {evolutionLogsError && (
-              <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm">
-                <div className="flex items-center gap-2 font-medium">
-                  <AlertCircle className="h-5 w-5" /> Erro ao carregar logs:
-                </div>
-                <p className="mt-1 text-xs">{evolutionLogsError}</p>
-              </div>
-            )}
-
+            {isLoadingEvolutionLogs && <p className="text-sm text-muted-foreground text-center py-4">Carregando logs...</p>}
+            {evolutionLogsError && (<div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm"><div className="flex items-center gap-2 font-medium"><AlertCircle className="h-5 w-5" /> Erro ao carregar logs:</div><p className="mt-1 text-xs">{evolutionLogsError}</p></div>)}
             {!isLoadingEvolutionLogs && !evolutionLogsError && evolutionWebhookLogEntries.length === 0 && (
-              <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4">
-                <FileText className="w-12 h-12 mb-3" />
-                <p className="text-sm">Nenhum log de webhook da API Evolution encontrado.</p>
-                <p className="text-xs mt-1">Verifique se sua API Evolution está configurada para enviar webhooks para a URL correta e se o servidor Flowise Lite recebeu algum evento.</p>
-              </div>
+              <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4"><FileText className="w-12 h-12 mb-3" /><p className="text-sm">Nenhum log de webhook da API Evolution encontrado.</p><p className="text-xs mt-1">Verifique sua API Evolution e o endpoint de webhook.</p></div>
             )}
-
             {!isLoadingEvolutionLogs && evolutionWebhookLogEntries.length > 0 && (
               <ScrollArea className="flex-1 border rounded-md bg-muted/30">
                 <div className="p-3 space-y-3">
                   {evolutionWebhookLogEntries.map((log, index) => (
                     <details key={index} className="bg-background p-2.5 rounded shadow-sm text-xs">
                       <summary className="cursor-pointer font-medium text-foreground/80 hover:text-foreground select-none">
-                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm text-primary/80 mr-2">
-                          {new Date(log.timestamp).toLocaleTimeString()}
-                        </span>
-                        <span className="font-semibold mr-1">
-                          {log.method || 'N/A'}
-                        </span>
-                        {log.payload?.event ? (
-                          <span className="text-accent font-semibold">{log.payload.event}</span>
-                        ) : log.payload?.type ? (
-                          <span className="text-accent font-semibold">{log.payload.type}</span>
-                        ) : log.extractedMessage ? (
-                          <span className="text-slate-500 italic">Msg: "{log.extractedMessage.substring(0, 30)}{log.extractedMessage.length > 30 ? '...' : ''}"</span>
-                        ) : (
-                          <span>Evento Recebido</span>
-                        )}
+                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm text-primary/80 mr-2">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                        <span className="font-semibold mr-1">{log.method || (log.payload?.event ? '' : 'Evento Desconhecido')}</span>
+                        {log.payload?.event && (<span className="text-accent font-semibold">{log.payload.event}</span>)}
+                        {log.extractedMessage && (<span className="ml-2 text-slate-500 italic">Msg: "{log.extractedMessage.substring(0, 30)}{log.extractedMessage.length > 30 ? '...' : ''}"</span>)}
+                        {log.webhook_remoteJid && (<span className="ml-2 text-blue-500 text-xs">De: {log.webhook_remoteJid}</span>)}
                       </summary>
-                      <div className="mt-2 p-2 bg-muted rounded-sm overflow-auto text-xs text-foreground/70 space-y-2">
-                        {log.method && log.url && (
-                          <div><strong>Endpoint:</strong> {log.method} {log.url}</div>
-                        )}
-                        {log.ip && (
-                          <div><strong>IP Origem:</strong> {log.ip} {log.geo?.city && `(${log.geo.city}, ${log.geo.country})`}</div>
-                        )}
-                        {log.headers && (
-                          <div>
-                            <strong>Headers:</strong>
-                            <pre className="mt-1 p-1 bg-background/50 rounded text-xs max-h-24 overflow-y-auto">
-                              {JSON.stringify(log.headers, null, 2)}
-                            </pre>
-                          </div>
-                        )}
-                        {log.extractedMessage && (
-                          <div><strong>Mensagem Extraída:</strong> <span className="text-accent">{log.extractedMessage}</span></div>
-                        )}
-                         {log.webhook_remoteJid && (
-                          <div><strong>RemoteJID (Webhook):</strong> <span className="text-blue-500">{log.webhook_remoteJid}</span></div>
-                        )}
-                        <div>
-                          <strong>Payload Completo:</strong>
-                          <pre className="mt-1 p-1 bg-background/50 rounded text-xs max-h-60 overflow-y-auto">
-                            {JSON.stringify(log.payload, null, 2)}
+                      <div className="mt-2 p-2 bg-muted/20 rounded-sm overflow-auto text-xs text-foreground/70 space-y-1.5">
+                        {log.method && log.url && (<div><strong>Endpoint:</strong> {log.method} {log.url}</div>)}
+                        {log.ip && (<div><strong>IP Origem:</strong> {log.ip} {log.geo?.city && `(${log.geo.city}, ${log.geo.country})`}</div>)}
+                        {log.headers && (<div><strong>Headers:</strong><pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-24 overflow-y-auto">{JSON.stringify(log.headers, null, 2)}</pre></div>)}
+                        <div><strong>Payload Completo:</strong>
+                          <pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-60 overflow-y-auto">
+                            {typeof log.payload === 'string' ? log.payload : JSON.stringify(log.payload, null, 2)}
                           </pre>
                         </div>
                       </div>
@@ -825,6 +671,88 @@ const TopBar: React.FC<TopBarProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Active Sessions Dialog */}
+      <Dialog open={isSessionsDialogOpen} onOpenChange={setIsSessionsDialogOpen}>
+        <DialogContent className="sm:max-w-4xl md:max-w-5xl lg:max-w-6xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Sessões de Fluxo Ativas</DialogTitle>
+            <DialogDescription>
+              Lista de conversas atualmente ativas ou aguardando entrada no sistema. Os dados são do PostgreSQL.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
+            <Button onClick={fetchActiveSessions} variant="outline" size="sm" className="self-start mb-2 h-9" disabled={isLoadingSessions}>
+              <RefreshCw className={cn("mr-2 h-4 w-4", isLoadingSessions && "animate-spin")} />
+              {isLoadingSessions ? "Atualizando..." : "Atualizar Sessões"}
+            </Button>
+            {isLoadingSessions && <p className="text-sm text-muted-foreground text-center py-4">Carregando sessões...</p>}
+            {sessionsError && (<div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm"><div className="flex items-center gap-2 font-medium"><AlertCircle className="h-5 w-5" /> Erro ao carregar sessões:</div><p className="mt-1 text-xs">{sessionsError}</p></div>)}
+            {!isLoadingSessions && !sessionsError && activeSessions.length === 0 && (
+              <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4"><Users className="w-12 h-12 mb-3" /><p className="text-sm">Nenhuma sessão ativa encontrada no banco de dados.</p></div>
+            )}
+            {!isLoadingSessions && activeSessions.length > 0 && (
+              <ScrollArea className="flex-1 border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[200px]">ID da Sessão (Usuário)</TableHead>
+                      <TableHead>ID do Workspace</TableHead>
+                      <TableHead>ID do Nó Atual</TableHead>
+                      <TableHead>Aguardando</TableHead>
+                      <TableHead className="text-right">Última Interação</TableHead>
+                      <TableHead className="text-center">Variáveis</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeSessions.map((session) => (
+                      <TableRow key={session.session_id}>
+                        <TableCell className="font-medium truncate max-w-[200px]" title={session.session_id}>{session.session_id}</TableCell>
+                        <TableCell className="truncate max-w-[150px]" title={session.workspace_id}>{session.workspace_id}</TableCell>
+                        <TableCell className="truncate max-w-[150px]" title={session.current_node_id || 'N/A'}>{session.current_node_id || 'N/A'}</TableCell>
+                        <TableCell>{session.awaiting_input_type || 'N/A'}</TableCell>
+                        <TableCell className="text-right text-xs">
+                          {session.last_interaction_at 
+                            ? new Date(session.last_interaction_at).toLocaleString()
+                            : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button variant="ghost" size="sm" onClick={() => handleViewSessionVariables(session.flow_variables)}>
+                            Ver ({Object.keys(session.flow_variables || {}).length})
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsSessionsDialogOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+       {/* Session Variables Modal */}
+      <Dialog open={isSessionVariablesModalOpen} onOpenChange={setIsSessionVariablesModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Variáveis da Sessão</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh] mt-4">
+            <pre className="text-xs bg-muted p-3 rounded-md whitespace-pre-wrap break-all">
+              {selectedSessionVariables ? JSON.stringify(selectedSessionVariables, null, 2) : 'Nenhuma variável para exibir.'}
+            </pre>
+          </ScrollArea>
+          <DialogFooter className="mt-4">
+            <DialogClose asChild>
+              <Button type="button" variant="secondary">Fechar</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </>
   );
 };
