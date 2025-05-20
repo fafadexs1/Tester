@@ -2,13 +2,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { WorkspaceData, StartNodeTrigger, FlowSession } from '@/lib/types'; // Added FlowSession
+import type { WorkspaceData, StartNodeTrigger, FlowSession } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard,
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy,
-  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, ZoomIn, ZoomOut, Users // Added Users icon
+  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users
 } from 'lucide-react';
 import {
   Dialog,
@@ -35,8 +35,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"; // For session display
-
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const SupabaseIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
@@ -50,13 +49,12 @@ const PostgresIcon = () => (
   </svg>
 );
 
-const ResetZoomIcon = () => (
+const ResetZoomIcon = () => ( // Manter este se for usado
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-4 h-4">
     <path d="M7.99999 2.66667C6.07999 2.66667 4.24666 3.40001 2.92666 4.72001L2.66666 5.00001L3.66666 6.00001L4.79332 4.87334C5.77999 3.89334 7.09999 3.33334 8.49999 3.33334C9.63332 3.33334 10.7133 3.68001 11.5867 4.34001C12.48 5.01334 13.1067 5.93334 13.3 6.94667L13.3333 7.33334H12C11.8233 7.33334 11.6533 7.26001 11.5267 7.13334C11.4 7.00667 11.3267 6.83667 11.3267 6.66001L11.3333 6.66667C11.06 5.76001 10.4267 4.99334 9.58666 4.50667C8.74666 4.02001 7.76666 3.84667 6.83332 4.02001C5.89332 4.18667 5.03999 4.68667 4.40666 5.43334L2.66666 7.17334V2.66667H7.99999Z" fill="currentColor" />
     <path d="M7.99999 13.3333C9.91999 13.3333 11.7533 12.6 13.0733 11.28L13.3333 11L12.3333 10L11.2067 11.1267C10.22 12.1067 8.90002 12.6667 7.50002 12.6667C6.36669 12.6667 5.28669 12.32 4.41335 11.66C3.52002 10.9867 2.89335 10.0667 2.70002 9.05333L2.66669 8.66666H4.00002C4.17669 8.66666 4.34669 8.74 4.47335 8.86666C4.60002 8.99333 4.67335 9.16333 4.67335 9.34L4.66669 9.33333C4.94002 10.24 5.57335 11.0067 6.41335 11.4933C7.25335 11.98 8.23335 12.1533 9.16669 11.98C10.1067 11.8133 10.96 11.3133 11.5933 10.5667L13.3333 8.82666V13.3333H7.99999Z" fill="currentColor" />
   </svg>
 );
-
 
 type SettingsCategory = 'database' | 'integrations';
 interface WebhookLogEntry {
@@ -83,6 +81,7 @@ interface TopBarProps {
   onToggleChatPanel: () => void;
   onZoom: (direction: 'in' | 'out' | 'reset') => void;
   currentZoomLevel: number;
+  onHighlightNode: (nodeId: string | null) => void; 
 }
 
 const TopBar: React.FC<TopBarProps> = ({
@@ -97,6 +96,7 @@ const TopBar: React.FC<TopBarProps> = ({
   onToggleChatPanel,
   onZoom,
   currentZoomLevel,
+  onHighlightNode
 }) => {
   const { toast } = useToast();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
@@ -106,14 +106,13 @@ const TopBar: React.FC<TopBarProps> = ({
   const [evolutionWebhookLogEntries, setEvolutionWebhookLogEntries] = useState<WebhookLogEntry[]>([]);
   const [isLoadingEvolutionLogs, setIsLoadingEvolutionLogs] = useState(false);
   const [evolutionLogsError, setEvolutionLogsError] = useState<string | null>(null);
-
+  
   const [isSessionsDialogOpen, setIsSessionsDialogOpen] = useState(false);
   const [activeSessions, setActiveSessions] = useState<FlowSession[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [selectedSessionVariables, setSelectedSessionVariables] = useState<Record<string, any> | null>(null);
   const [isSessionVariablesModalOpen, setIsSessionVariablesModalOpen] = useState(false);
-
 
   // Supabase States
   const [supabaseUrl, setSupabaseUrl] = useState('');
@@ -128,6 +127,8 @@ const TopBar: React.FC<TopBarProps> = ({
   const [postgresPassword, setPostgresPassword] = useState('');
   const [postgresDatabase, setPostgresDatabase] = useState('');
   const [isPostgresEnabled, setIsPostgresEnabled] = useState(false);
+  const [postgresSsl, setPostgresSsl] = useState(false);
+
 
   // Evolution API States
   const [evolutionApiBaseUrl, setEvolutionApiBaseUrl] = useState('');
@@ -140,7 +141,7 @@ const TopBar: React.FC<TopBarProps> = ({
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setFlowiseLiteGlobalWebhookUrl(`${window.location.origin}/api/evolution/webhook`);
+      setFlowiseLiteGlobalWebhookUrl(`${window.location.origin}/api/evolution/workspace`);
     }
   }, []);
 
@@ -157,6 +158,7 @@ const TopBar: React.FC<TopBarProps> = ({
       setPostgresPassword(localStorage.getItem('postgresPassword') || '');
       setPostgresDatabase(localStorage.getItem('postgresDatabase') || '');
       setIsPostgresEnabled(localStorage.getItem('isPostgresEnabled') === 'true');
+      setPostgresSsl(localStorage.getItem('postgresSsl') === 'true');
 
       setEvolutionApiBaseUrl(localStorage.getItem('evolutionApiBaseUrl') || '');
       setEvolutionGlobalApiKey(localStorage.getItem('evolutionApiKey') || '');
@@ -177,6 +179,7 @@ const TopBar: React.FC<TopBarProps> = ({
     localStorage.setItem('postgresPassword', postgresPassword);
     localStorage.setItem('postgresDatabase', postgresDatabase);
     localStorage.setItem('isPostgresEnabled', String(isPostgresEnabled));
+    localStorage.setItem('postgresSsl', String(postgresSsl));
 
     localStorage.setItem('evolutionApiBaseUrl', evolutionApiBaseUrl);
     localStorage.setItem('evolutionApiKey', evolutionGlobalApiKey);
@@ -263,6 +266,20 @@ const TopBar: React.FC<TopBarProps> = ({
     setSelectedSessionVariables(variables);
     setIsSessionVariablesModalOpen(true);
   };
+  
+  const handleGoToNode = (session: FlowSession) => {
+    if (onSwitchWorkspace && onHighlightNode && session.workspace_id && session.current_node_id) {
+        onSwitchWorkspace(session.workspace_id);
+        onHighlightNode(session.current_node_id);
+        setIsSessionsDialogOpen(false); // Fecha o diálogo de sessões
+    } else {
+        toast({
+            title: "Informação Incompleta",
+            description: "Não foi possível determinar o fluxo ou nó da sessão.",
+            variant: "destructive"
+        });
+    }
+  };
 
   const settingsCategories: { id: SettingsCategory; label: string; icon: React.ReactNode }[] = [
     { id: 'database', label: 'Banco de Dados', icon: <Database className="w-5 h-5 mr-2" /> },
@@ -270,12 +287,20 @@ const TopBar: React.FC<TopBarProps> = ({
   ];
 
   const handleCopyToClipboard = (text: string, type: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      toast({ title: `${type} Copiada!`, description: `A ${type.toLowerCase()} foi copiada para a área de transferência.` });
-    }).catch(err => {
-      toast({ title: `Erro ao Copiar ${type}`, description: `Não foi possível copiar a ${type.toLowerCase()}.`, variant: "destructive" });
-      console.error(`Erro ao copiar ${type}: `, err);
-    });
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        navigator.clipboard.writeText(text).then(() => {
+          toast({ title: `${type} Copiada!`, description: `A ${type.toLowerCase()} foi copiada para a área de transferência.` });
+        }).catch(err => {
+          toast({ title: `Erro ao Copiar ${type}`, description: `Não foi possível copiar a ${type.toLowerCase()}.`, variant: "destructive" });
+          console.error(`Erro ao copiar ${type}: `, err);
+        });
+    } else {
+        toast({
+            title: "Erro ao Copiar",
+            description: "Copiar para a área de transferência não é suportado ou permitido neste navegador/contexto.",
+            variant: "destructive"
+        });
+    }
   };
 
   return (
@@ -373,27 +398,7 @@ const TopBar: React.FC<TopBarProps> = ({
             </DropdownMenuContent>
           </DropdownMenu>
           
-          <div className="flex items-center gap-1 ml-2">
-            <Button onClick={() => onZoom('out')} variant="outline" size="icon" className="h-8 w-8">
-              <ZoomOut className="h-4 w-4" />
-              <span className="sr-only">Diminuir Zoom</span>
-            </Button>
-            <Button
-              onClick={() => onZoom('reset')}
-              variant="outline"
-              size="sm"
-              className="h-8 px-2 text-xs w-16"
-              title="Resetar Zoom (100%)"
-            >
-              <ResetZoomIcon />
-              <span className="ml-1 tabular-nums">{(currentZoomLevel * 100).toFixed(0)}%</span>
-            </Button>
-            <Button onClick={() => onZoom('in')} variant="outline" size="icon" className="h-8 w-8">
-              <ZoomIn className="h-4 w-4" />
-              <span className="sr-only">Aumentar Zoom</span>
-            </Button>
-          </div>
-
+          {/* Removidos botões de zoom conforme solicitado anteriormente */}
 
           <Button
             onClick={handlePublishFlow}
@@ -526,9 +531,36 @@ const TopBar: React.FC<TopBarProps> = ({
             <main className="flex-1 p-6 overflow-y-auto space-y-6">
               {activeSettingsCategory === 'database' && (
                 <section>
-                  <h3 className="text-lg font-semibold text-card-foreground mb-4">Banco de Dados</h3>
-                  <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={isSupabaseEnabled ? 'supabase' : (isPostgresEnabled ? 'postgresql' : undefined)}>
-                    <AccordionItem value="supabase" className="border rounded-lg shadow-sm">
+                  <h3 className="text-lg font-semibold text-card-foreground mb-4">Configuração do Banco de Dados</h3>
+                  <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={isPostgresEnabled ? 'postgresql' : (isSupabaseEnabled ? 'supabase' : undefined) }>
+                    <AccordionItem value="postgresql" className="border rounded-lg shadow-sm">
+                      <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
+                        <div className="flex items-center space-x-3"><PostgresIcon /><span className="font-medium text-card-foreground">PostgreSQL</span></div>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-4 pt-3 pb-4 border-t">
+                        <div className="flex items-center space-x-2 mb-4">
+                          <Switch id="enable-postgres" checked={isPostgresEnabled} onCheckedChange={setIsPostgresEnabled} aria-label="Habilitar Conexão PostgreSQL"/>
+                          <Label htmlFor="enable-postgres" className="text-sm font-medium">Habilitar Conexão PostgreSQL (para persistência de fluxos/sessões)</Label>
+                        </div>
+                        {isPostgresEnabled && (
+                          <div className="space-y-3 animate-in fade-in-0 slide-in-from-top-2 duration-300">
+                            <p className="text-xs text-muted-foreground">As credenciais de conexão são gerenciadas via variáveis de ambiente (arquivo `.env`). Os campos abaixo são apenas para sua referência.</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                              <div><Label htmlFor="postgres-host" className="text-card-foreground/90 text-sm">Host (Ref: POSTGRES_HOST)</Label><Input id="postgres-host" placeholder="localhost" value={postgresHost} onChange={e => setPostgresHost(e.target.value)} className="bg-input text-foreground mt-1"/></div>
+                              <div><Label htmlFor="postgres-port" className="text-card-foreground/90 text-sm">Porta (Ref: POSTGRES_PORT)</Label><Input id="postgres-port" placeholder="5432" value={postgresPort} onChange={e => setPostgresPort(e.target.value)} className="bg-input text-foreground mt-1"/></div>
+                              <div><Label htmlFor="postgres-user" className="text-card-foreground/90 text-sm">Usuário (Ref: POSTGRES_USER)</Label><Input id="postgres-user" placeholder="seu_usuario" value={postgresUser} onChange={e => setPostgresUser(e.target.value)} className="bg-input text-foreground mt-1"/></div>
+                              <div><Label htmlFor="postgres-db" className="text-card-foreground/90 text-sm">Banco (Ref: POSTGRES_DATABASE)</Label><Input id="postgres-db" placeholder="flowise_lite_db" value={postgresDatabase} onChange={e => setPostgresDatabase(e.target.value)} className="bg-input text-foreground mt-1"/></div>
+                              <div className="md:col-span-2"><Label htmlFor="postgres-password" className="text-card-foreground/90 text-sm">Senha (Ref: POSTGRES_PASSWORD)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="postgres-password" type="password" placeholder="********" value={postgresPassword} onChange={e => setPostgresPassword(e.target.value)} className="bg-input text-foreground flex-1"/></div></div>
+                              <div className="flex items-center space-x-2">
+                                <Switch id="postgres-ssl" checked={postgresSsl} onCheckedChange={setPostgresSsl} />
+                                <Label htmlFor="postgres-ssl" className="text-sm">Usar SSL (Ref: POSTGRES_SSL=true)</Label>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                     <AccordionItem value="supabase" className="border rounded-lg shadow-sm">
                       <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
                         <div className="flex items-center space-x-3">
                           <SupabaseIcon />
@@ -538,36 +570,13 @@ const TopBar: React.FC<TopBarProps> = ({
                       <AccordionContent className="px-4 pt-3 pb-4 border-t">
                         <div className="flex items-center space-x-2 mb-4">
                           <Switch id="enable-supabase" checked={isSupabaseEnabled} onCheckedChange={setIsSupabaseEnabled} aria-label="Habilitar Integração Supabase"/>
-                          <Label htmlFor="enable-supabase" className="text-sm font-medium">Habilitar Integração Supabase</Label>
+                          <Label htmlFor="enable-supabase" className="text-sm font-medium">Habilitar Integração Supabase (para buscar schema)</Label>
                         </div>
                         {isSupabaseEnabled && (
                           <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
                             <div><Label htmlFor="supabase-url" className="text-card-foreground/90 text-sm">URL do Projeto Supabase</Label><Input id="supabase-url" placeholder="https://seunomeprojeto.supabase.co" value={supabaseUrl} onChange={(e) => setSupabaseUrl(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                            <div><Label htmlFor="supabase-anon-key" className="text-card-foreground/90 text-sm">Chave Pública (Anon Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-anon-key" type="password" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." value={supabaseAnonKey} onChange={(e) => setSupabaseAnonKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada para acesso no lado do cliente, respeitando RLS.</p></div>
-                            <div><Label htmlFor="supabase-service-key" className="text-card-foreground/90 text-sm">Chave de Serviço (Service Role Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-service-key" type="password" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." value={supabaseServiceKey} onChange={(e) => setSupabaseServiceKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada para Server Actions que buscam schema. Mantenha em segredo.</p></div>
-                          </div>
-                        )}
-                      </AccordionContent>
-                    </AccordionItem>
-                    <AccordionItem value="postgresql" className="border rounded-lg shadow-sm">
-                      <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
-                        <div className="flex items-center space-x-3"><PostgresIcon /><span className="font-medium text-card-foreground">PostgreSQL</span></div>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-4 pt-3 pb-4 border-t">
-                        <div className="flex items-center space-x-2 mb-4">
-                          <Switch id="enable-postgres" checked={isPostgresEnabled} onCheckedChange={setIsPostgresEnabled} aria-label="Habilitar Integração PostgreSQL"/>
-                          <Label htmlFor="enable-postgres" className="text-sm font-medium">Habilitar Conexão PostgreSQL (para persistência de fluxos/sessões)</Label>
-                        </div>
-                        {isPostgresEnabled && (
-                          <div className="space-y-3 animate-in fade-in-0 slide-in-from-top-2 duration-300">
-                            <p className="text-xs text-muted-foreground">As credenciais de conexão são gerenciadas via variáveis de ambiente (arquivo `.env` ou configurações do ambiente de hospedagem). Preencha os campos abaixo apenas para sua referência visual.</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                              <div><Label htmlFor="postgres-host" className="text-card-foreground/90 text-sm">Host (Referência)</Label><Input id="postgres-host" placeholder={process.env.POSTGRES_HOST || "localhost"} value={postgresHost} onChange={e => setPostgresHost(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                              <div><Label htmlFor="postgres-port" className="text-card-foreground/90 text-sm">Porta (Referência)</Label><Input id="postgres-port" placeholder={process.env.POSTGRES_PORT || "5432"} value={postgresPort} onChange={e => setPostgresPort(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                              <div><Label htmlFor="postgres-user" className="text-card-foreground/90 text-sm">Usuário (Referência)</Label><Input id="postgres-user" placeholder={process.env.POSTGRES_USER || "seu_usuario"} value={postgresUser} onChange={e => setPostgresUser(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                              <div><Label htmlFor="postgres-db" className="text-card-foreground/90 text-sm">Nome do Banco (Referência)</Label><Input id="postgres-db" placeholder={process.env.POSTGRES_DATABASE || "flowise_lite_db"} value={postgresDatabase} onChange={e => setPostgresDatabase(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                              <div className="md:col-span-2"><Label htmlFor="postgres-password" className="text-card-foreground/90 text-sm">Senha (Referência)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="postgres-password" type="password" placeholder="********" value={postgresPassword} onChange={e => setPostgresPassword(e.target.value)} className="bg-input text-foreground flex-1"/></div></div>
-                            </div>
+                            <div><Label htmlFor="supabase-anon-key" className="text-card-foreground/90 text-sm">Chave Pública (Anon Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-anon-key" type="password" placeholder="eyJhbGciOi..." value={supabaseAnonKey} onChange={(e) => setSupabaseAnonKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada para acesso no lado do cliente (ex: TestChatPanel), respeitando RLS.</p></div>
+                            <div><Label htmlFor="supabase-service-key" className="text-card-foreground/90 text-sm">Chave de Serviço (Service Role Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-service-key" type="password" placeholder="eyJhbGciOi..." value={supabaseServiceKey} onChange={(e) => setSupabaseServiceKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada por Server Actions para buscar schema (tabelas/colunas). Mantenha em segredo.</p></div>
                           </div>
                         )}
                       </AccordionContent>
@@ -595,10 +604,10 @@ const TopBar: React.FC<TopBarProps> = ({
                             <div><Label htmlFor="evolution-api-key" className="text-card-foreground/90 text-sm">Chave de API Global da Evolution (Opcional)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="evolution-api-key" type="password" placeholder="Sua chave de API global, se configurada" value={evolutionGlobalApiKey} onChange={(e) => setEvolutionGlobalApiKey(e.target.value)} className="bg-input text-foreground flex-1"/></div></div>
                             <div className="pt-4 border-t border-border space-y-2">
                               <Label className="text-card-foreground/90 text-sm font-medium">Recepção de Webhooks da API Evolution</Label>
-                              <p className="text-xs text-muted-foreground mt-1 mb-2">Configure a URL abaixo na sua instância da API Evolution para que o Flowise Lite receba eventos (ex: novas mensagens):</p>
+                              <p className="text-xs text-muted-foreground mt-1 mb-2">Configure a URL abaixo na sua instância da API Evolution para que o Flowise Lite receba eventos (ex: novas mensagens). Substitua `[NOME_DO_SEU_FLUXO]` pelo nome exato do seu fluxo (workspace), codificado para URL se necessário (ex: `Meu%20Fluxo`).</p>
                               <div className="flex items-center space-x-2">
-                                <Input id="flowise-webhook-url-for-evolution" type="text" value={flowiseLiteGlobalWebhookUrl} readOnly className="bg-input text-foreground flex-1 cursor-default break-all"/>
-                                <Button variant="outline" size="icon" onClick={() => handleCopyToClipboard(flowiseLiteGlobalWebhookUrl, "URL de Webhook")} title="Copiar URL de Webhook" className="h-9 w-9"><Copy className="w-4 h-4" /></Button>
+                                <Input id="flowise-webhook-url-for-evolution" type="text" value={`${flowiseLiteGlobalWebhookUrl}/[NOME_DO_SEU_FLUXO]`} readOnly className="bg-input text-foreground flex-1 cursor-default break-all"/>
+                                <Button variant="outline" size="icon" onClick={() => handleCopyToClipboard(`${flowiseLiteGlobalWebhookUrl}/[NOME_DO_SEU_FLUXO]`, "URL de Webhook Exemplo")} title="Copiar URL de Webhook Exemplo" className="h-9 w-9"><Copy className="w-4 h-4" /></Button>
                               </div>
                               <p className="text-xs text-muted-foreground mt-1">Payloads recebidos são logados no console do servidor e visíveis no "Console" do app.</p>
                             </div>
@@ -624,7 +633,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <DialogHeader>
             <DialogTitle>Logs de Eventos da API Evolution</DialogTitle>
             <DialogDescription>
-              Webhooks HTTP recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{flowiseLiteGlobalWebhookUrl}</code>.
+              Webhooks HTTP recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{flowiseLiteGlobalWebhookUrl}/[NOME_DO_FLUXO]</code>.
               Os logs são armazenados em memória no servidor (máx. 50) e zerados ao reiniciar.
             </DialogDescription>
           </DialogHeader>
@@ -656,7 +665,7 @@ const TopBar: React.FC<TopBarProps> = ({
                         {log.headers && (<div><strong>Headers:</strong><pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-24 overflow-y-auto">{JSON.stringify(log.headers, null, 2)}</pre></div>)}
                         <div><strong>Payload Completo:</strong>
                           <pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-60 overflow-y-auto">
-                            {typeof log.payload === 'string' ? log.payload : JSON.stringify(log.payload, null, 2)}
+                            {log.payload && typeof log.payload === 'object' ? JSON.stringify(log.payload, null, 2) : String(log.payload)}
                           </pre>
                         </div>
                       </div>
@@ -668,68 +677,6 @@ const TopBar: React.FC<TopBarProps> = ({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsWebhookLogsDialogOpen(false)}>Fechar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Active Sessions Dialog */}
-      <Dialog open={isSessionsDialogOpen} onOpenChange={setIsSessionsDialogOpen}>
-        <DialogContent className="sm:max-w-4xl md:max-w-5xl lg:max-w-6xl max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Sessões de Fluxo Ativas</DialogTitle>
-            <DialogDescription>
-              Lista de conversas atualmente ativas ou aguardando entrada no sistema. Os dados são do PostgreSQL.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
-            <Button onClick={fetchActiveSessions} variant="outline" size="sm" className="self-start mb-2 h-9" disabled={isLoadingSessions}>
-              <RefreshCw className={cn("mr-2 h-4 w-4", isLoadingSessions && "animate-spin")} />
-              {isLoadingSessions ? "Atualizando..." : "Atualizar Sessões"}
-            </Button>
-            {isLoadingSessions && <p className="text-sm text-muted-foreground text-center py-4">Carregando sessões...</p>}
-            {sessionsError && (<div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm"><div className="flex items-center gap-2 font-medium"><AlertCircle className="h-5 w-5" /> Erro ao carregar sessões:</div><p className="mt-1 text-xs">{sessionsError}</p></div>)}
-            {!isLoadingSessions && !sessionsError && activeSessions.length === 0 && (
-              <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4"><Users className="w-12 h-12 mb-3" /><p className="text-sm">Nenhuma sessão ativa encontrada no banco de dados.</p></div>
-            )}
-            {!isLoadingSessions && activeSessions.length > 0 && (
-              <ScrollArea className="flex-1 border rounded-md">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[200px]">ID da Sessão (Usuário)</TableHead>
-                      <TableHead>ID do Workspace</TableHead>
-                      <TableHead>ID do Nó Atual</TableHead>
-                      <TableHead>Aguardando</TableHead>
-                      <TableHead className="text-right">Última Interação</TableHead>
-                      <TableHead className="text-center">Variáveis</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {activeSessions.map((session) => (
-                      <TableRow key={session.session_id}>
-                        <TableCell className="font-medium truncate max-w-[200px]" title={session.session_id}>{session.session_id}</TableCell>
-                        <TableCell className="truncate max-w-[150px]" title={session.workspace_id}>{session.workspace_id}</TableCell>
-                        <TableCell className="truncate max-w-[150px]" title={session.current_node_id || 'N/A'}>{session.current_node_id || 'N/A'}</TableCell>
-                        <TableCell>{session.awaiting_input_type || 'N/A'}</TableCell>
-                        <TableCell className="text-right text-xs">
-                          {session.last_interaction_at 
-                            ? new Date(session.last_interaction_at).toLocaleString()
-                            : 'N/A'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Button variant="ghost" size="sm" onClick={() => handleViewSessionVariables(session.flow_variables)}>
-                            Ver ({Object.keys(session.flow_variables || {}).length})
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsSessionsDialogOpen(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -752,9 +699,11 @@ const TopBar: React.FC<TopBarProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </>
   );
 };
 
 export default TopBar;
+
+
+    
