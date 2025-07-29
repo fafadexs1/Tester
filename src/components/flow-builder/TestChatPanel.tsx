@@ -933,7 +933,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                     <div className="mt-2.5 w-full space-y-2">
                       {msg.options.map((opt, index) => (
                         <button
-                          key={opt}
+                          key={index} // Changed from opt to index to avoid duplicate keys if options are identical
                           onClick={() => handleOptionClick(opt)}
                           disabled={isProcessingNode || awaitingInputFor?.type !== 'option'}
                           className="w-full text-left p-3 rounded-lg border bg-background hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1001,4 +1001,3 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 };
 
 export default TestChatPanel;
-

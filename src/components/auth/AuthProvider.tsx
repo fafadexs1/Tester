@@ -15,8 +15,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const USERS_STORAGE_KEY = 'flowise_lite_users';
-const SESSION_STORAGE_KEY = 'flowise_lite_session';
+const USERS_STORAGE_KEY = 'nexusflow_users';
+const SESSION_STORAGE_KEY = 'nexusflow_session';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);

@@ -20,7 +20,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/components/auth/AuthProvider';
 
-const LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN = 'flowiseLiteChatPanelOpen';
+const LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN = 'nexusflowChatPanelOpen';
 
 const VARIABLE_DEFINING_FIELDS: (keyof NodeData)[] = [
   'variableToSaveResponse', 'variableToSaveChoice', 'variableName', 
@@ -317,7 +317,7 @@ export default function FlowBuilderClient() {
         if (baseVarName && baseVarName.trim() !== '') {
           const uniqueName = generateUniqueVariableName(baseVarName, tempExistingVars);
           (itemDefaultDataCopy as any)[field] = uniqueName;
-          if (uniqueName !== baseVarName.replace(/\{\{|\}\}/g, '').trim()) { 
+          if (uniqueName !== baseVarName.replace(/\{\{/g, '').replace(/\}\}/g, '').trim()) { 
             tempExistingVars.push(uniqueName); 
           }
         }
@@ -328,7 +328,7 @@ export default function FlowBuilderClient() {
       itemDefaultDataCopy.triggers = (itemDefaultDataCopy.triggers as StartNodeTrigger[]).map(trigger => {
         if (trigger.type === 'webhook' && trigger.webhookPayloadVariable) {
           const uniqueWebhookVarName = generateUniqueVariableName(trigger.webhookPayloadVariable, tempExistingVars);
-          if (uniqueWebhookVarName !== trigger.webhookPayloadVariable.replace(/\{\{|\}\}/g, '').trim()) {
+          if (uniqueWebhookVarName !== trigger.webhookPayloadVariable.replace(/\{\{/g, '').replace(/\}\}/g, '').trim()) {
             tempExistingVars.push(uniqueWebhookVarName);
           }
           return { ...trigger, webhookPayloadVariable: uniqueWebhookVarName };
@@ -355,7 +355,7 @@ export default function FlowBuilderClient() {
       redirectUrl: 'https://', dateInputLabel: 'Qual a data?', variableToSaveDate: 'data_selecionada',
       emailTo: 'dest@ex.com', emailSubject: 'Assunto', emailBody: 'Corpo', emailFrom: 'remet@ex.com',
       googleSheetId: '', googleSheetName: 'Página1', googleSheetRowData: '["{{col1}}", "{{col2}}"]',
-      instanceName: '', phoneNumber: '', textMessage: 'Olá de Flowise Lite!', mediaUrl: '', mediaType: 'image', caption: '', groupName: 'Novo Grupo', participants: '',
+      instanceName: '', phoneNumber: '', textMessage: 'Olá de NexusFlow!', mediaUrl: '', mediaType: 'image', caption: '', groupName: 'Novo Grupo', participants: '',
       aiPromptText: 'Escreva um poema sobre {{tema}}', aiModelName: '', aiOutputVariable: 'texto_ia',
       agentName: 'Agente IA', agentSystemPrompt: 'Você é um assistente prestativo.',
       userInputVariable: '{{entrada_usuario_agente}}', agentResponseVariable: 'resposta_agente_ia', maxConversationTurns: 5, temperature: 0.7,
@@ -626,7 +626,7 @@ export default function FlowBuilderClient() {
             onSwitchWorkspace={switchWorkspace}
             onSaveWorkspaces={handleSaveWorkspaces}
             onDiscardChanges={handleDiscardChanges}
-            appName="Flowise Lite"
+            appName="NexusFlow"
             isChatPanelOpen={isChatPanelOpen}
             onToggleChatPanel={toggleChatPanel}
             onZoom={handleZoom}
