@@ -929,19 +929,17 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                   >
                     {typeof msg.text === 'string' ? msg.text.split('\n').map((line, i) => <p key={i}>{line}</p>) : msg.text}
                   </div>
-                  {msg.sender === 'bot' && msg.options && msg.options.length > 0 && awaitingInputType === 'option' && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {msg.options.map(opt => (
-                        <Button
+                   {msg.sender === 'bot' && msg.options && msg.options.length > 0 && awaitingInputType === 'option' && (
+                    <div className="mt-2.5 w-full space-y-2">
+                      {msg.options.map((opt, index) => (
+                        <button
                           key={opt}
-                          variant="outline"
-                          size="sm"
                           onClick={() => handleOptionClick(opt)}
-                          className="bg-background hover:bg-accent hover:text-accent-foreground"
                           disabled={isProcessingNode || awaitingInputFor?.type !== 'option'}
+                          className="w-full text-left p-3 rounded-lg border bg-background hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {opt}
-                        </Button>
+                          <span className="font-medium">{index + 1}.</span> {opt}
+                        </button>
                       ))}
                     </div>
                   )}
