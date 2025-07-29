@@ -38,7 +38,7 @@ export function getWebSocketServer(httpServer?: any): WebSocketServer {
       console.log('[WebSocket Server] Received message:', messageString);
       
       // Here, you would typically parse the message and decide what to do with it.
-      // For example, if it's from Evolution API, you might try to find a Flowise Lite flow
+      // For example, if it's from Evolution API, you might try to find a NexusFlow flow
       // to trigger or continue. This part is the "flow engine" logic.
 
       // For now, let's just echo it back to the client or broadcast to all for demonstration.
@@ -61,7 +61,7 @@ export function getWebSocketServer(httpServer?: any): WebSocketServer {
       console.error('[WebSocket Server] Error on client connection:', error);
     });
 
-    ws.send('Welcome to the Flowise Lite WebSocket server (Dev Mode)!');
+    ws.send('Welcome to the NexusFlow WebSocket server (Dev Mode)!');
   });
   
   wss.on('error', (error) => {

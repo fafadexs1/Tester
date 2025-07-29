@@ -13,7 +13,7 @@ const fontSans = FontSans({
 })
 
 export const metadata: Metadata = {
-    title: 'Flowise Lite',
+    title: 'NexusFlow',
     description: 'Um construtor de fluxos de conversação com interface de arrastar e soltar.',
 };
 

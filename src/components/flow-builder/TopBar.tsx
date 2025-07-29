@@ -95,7 +95,7 @@ const TopBar: React.FC<TopBarProps> = ({
   onSwitchWorkspace,
   onSaveWorkspaces,
   onDiscardChanges,
-  appName = "Flowise Lite",
+  appName = "NexusFlow",
   isChatPanelOpen,
   onToggleChatPanel,
   onZoom,
@@ -141,21 +141,21 @@ const TopBar: React.FC<TopBarProps> = ({
   const [defaultEvolutionInstanceName, setDefaultEvolutionInstanceName] = useState('');
   const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
   
-  const [flowiseLiteAppBaseUrl, setFlowiseLiteAppBaseUrl] = useState('');
+  const [nexusFlowAppBaseUrl, setNexusFlowAppBaseUrl] = useState('');
   
   const activeWorkspace = useMemo(() => workspaces.find(ws => ws.id === activeWorkspaceId), [workspaces, activeWorkspaceId]);
   
   const evolutionWebhookUrlForCurrentFlow = useMemo(() => {
-    if (flowiseLiteAppBaseUrl && activeWorkspace?.name) {
-      return `${flowiseLiteAppBaseUrl}/api/evolution/workspace/${encodeURIComponent(activeWorkspace.name)}`;
+    if (nexusFlowAppBaseUrl && activeWorkspace?.name) {
+      return `${nexusFlowAppBaseUrl}/api/evolution/workspace/${encodeURIComponent(activeWorkspace.name)}`;
     }
-    return `${flowiseLiteAppBaseUrl}/api/evolution/workspace/[SELECIONE_UM_FLUXO]`;
-  }, [flowiseLiteAppBaseUrl, activeWorkspace]);
+    return `${nexusFlowAppBaseUrl}/api/evolution/workspace/[SELECIONE_UM_FLUXO]`;
+  }, [nexusFlowAppBaseUrl, activeWorkspace]);
 
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setFlowiseLiteAppBaseUrl(window.location.origin);
+      setNexusFlowAppBaseUrl(window.location.origin);
     }
   }, []);
 
@@ -649,7 +649,7 @@ const TopBar: React.FC<TopBarProps> = ({
                             <div className="pt-4 border-t border-border space-y-2">
                               <Label className="text-card-foreground/90 text-sm font-medium">Recepção de Webhooks da API Evolution</Label>
                               <p className="text-xs text-muted-foreground mt-1 mb-2">
-                                Configure a URL abaixo na sua API Evolution para o Flowise Lite receber eventos.
+                                Configure a URL abaixo na sua API Evolution para o NexusFlow receber eventos.
                                 Substitua <code className="bg-muted px-1 rounded-sm text-xs">[NOME_DO_SEU_FLUXO]</code> pelo nome exato do fluxo ativo:
                                 <strong className="text-primary ml-1">{activeWorkspace?.name ? encodeURIComponent(activeWorkspace.name) : "[SELECIONE_UM_FLUXO]"}</strong>.
                               </p>
@@ -696,7 +696,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <DialogHeader>
             <DialogTitle>Logs de Eventos da API Evolution</DialogTitle>
             <DialogDescription>
-              Webhooks HTTP recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{`${flowiseLiteAppBaseUrl}/api/evolution/workspace/[NOME_DO_FLUXO]`}</code>.
+              Webhooks HTTP recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{`${nexusFlowAppBaseUrl}/api/evolution/workspace/[NOME_DO_FLUXO]`}</code>.
               Os logs são armazenados em memória no servidor (máx. 50) e zerados ao reiniciar.
             </DialogDescription>
           </DialogHeader>

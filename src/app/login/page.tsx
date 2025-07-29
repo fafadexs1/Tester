@@ -71,7 +71,7 @@ export default function LoginPage() {
         <CardHeader className="text-center">
             <div className="flex justify-center items-center gap-2 mb-2">
                 <Zap className="w-8 h-8 text-primary" />
-                <CardTitle className="text-2xl">Flowise Lite</CardTitle>
+                <CardTitle className="text-2xl">NexusFlow</CardTitle>
             </div>
           <CardDescription>
             {isLoginView ? 'Entre com sua conta para continuar' : 'Crie uma nova conta para começar'}

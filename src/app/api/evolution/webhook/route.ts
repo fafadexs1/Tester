@@ -632,7 +632,7 @@ export async function GET(request: NextRequest) {
     );
   }
   return NextResponse.json(
-    { message: "Flowise Lite Webhook Endpoint for Evolution API. Accepts POST for events." },
+    { message: "NexusFlow Webhook Endpoint for Evolution API. Accepts POST for events." },
     { status: 200 }
   );
 }
@@ -651,5 +651,3 @@ export async function DELETE(request: NextRequest) {
   await storeRequestDetails(request); 
   return NextResponse.json({ status: "received", message: "Webhook DELETE event logged." }, { status: 200 });
 }
-
-    
