@@ -1,8 +1,9 @@
 
+
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger } from '@/lib/types';
+import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger, WebhookVariableMapping } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -219,7 +220,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       id: uuidv4(),
       name: newTriggerName.trim(),
       type: newTriggerType,
-      webhookPayloadVariable: 'webhook_payload',
+      variableMappings: [],
     };
     if (newTriggerType === 'webhook') {
       newTrigger.webhookId = uuidv4();
@@ -244,12 +245,44 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       }
       if (field === 'type' && value === 'manual') {
          delete currentTriggers[triggerIndex].webhookId;
-         // Mantenha webhookPayloadVariable caso o usuário alterne de volta, ou decida se deve ser limpo.
-         // delete currentTriggers[triggerIndex].webhookPayloadVariable;
       }
       onUpdate(node.id, { triggers: currentTriggers });
     }
   };
+
+  const handleAddVariableMapping = (triggerId: string) => {
+    const currentTriggers = [...(node.triggers || [])];
+    const triggerIndex = currentTriggers.findIndex(t => t.id === triggerId);
+    if (triggerIndex !== -1) {
+      const newMapping: WebhookVariableMapping = { id: uuidv4(), jsonPath: '', flowVariable: '' };
+      const currentMappings = currentTriggers[triggerIndex].variableMappings || [];
+      currentTriggers[triggerIndex].variableMappings = [...currentMappings, newMapping];
+      onUpdate(node.id, { triggers: currentTriggers });
+    }
+  };
+  
+  const handleRemoveVariableMapping = (triggerId: string, mappingId: string) => {
+    const currentTriggers = [...(node.triggers || [])];
+    const triggerIndex = currentTriggers.findIndex(t => t.id === triggerId);
+    if (triggerIndex !== -1) {
+      const currentMappings = currentTriggers[triggerIndex].variableMappings || [];
+      currentTriggers[triggerIndex].variableMappings = currentMappings.filter(m => m.id !== mappingId);
+      onUpdate(node.id, { triggers: currentTriggers });
+    }
+  };
+
+  const handleVariableMappingChange = (triggerId: string, mappingId: string, field: 'jsonPath' | 'flowVariable', value: string) => {
+    const currentTriggers = [...(node.triggers || [])];
+    const triggerIndex = currentTriggers.findIndex(t => t.id === triggerId);
+    if (triggerIndex !== -1) {
+      const currentMappings = currentTriggers[triggerIndex].variableMappings || [];
+      currentTriggers[triggerIndex].variableMappings = currentMappings.map(m => 
+        m.id === mappingId ? { ...m, [field]: value } : m
+      );
+      onUpdate(node.id, { triggers: currentTriggers });
+    }
+  };
+
 
   const handleAddListItem = (listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList') => {
     const currentList = (node[listName] as any[] || []);
@@ -644,11 +677,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <Label className="text-sm font-medium">Gatilhos de Início</Label>
-            <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
-              {(node.triggers || []).map((trigger, index) => { // Adicionado index para key robusta
-                // console.log(`[NodeCard - Start Triggers Content] Rendering trigger with id: ${trigger.id}`);
-                return (
-                <div key={`${trigger.id}-${index}`} className="p-2.5 border rounded-md bg-muted/30 space-y-2">
+            <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+              {(node.triggers || []).map((trigger) => (
+                <div key={trigger.id} className="p-2.5 border rounded-md bg-muted/30 space-y-2">
                   <div className="flex items-center space-x-2">
                     <Input
                       type="text"
@@ -669,55 +700,70 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     </SelectContent>
                   </Select>
                   {trigger.type === 'webhook' && (
-                    <div className='space-y-1.5 text-xs'>
-                      <Label htmlFor={`${node.id}-${trigger.id}-webhookUrl`} className="text-xs">URL do Webhook:</Label>
-                      <div className="flex items-center space-x-1.5">
-                        <Input
-                          id={`${node.id}-${trigger.id}-webhookUrl`}
-                          type="text"
-                          readOnly
-                          value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhook/${trigger.webhookId || ''}`}
-                          className="bg-input/50 h-7 text-xs"
-                        />
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => {
-                            const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhook/${trigger.webhookId || ''}`;
-                            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                    <div className='space-y-2 text-xs'>
+                      <div>
+                        <Label htmlFor={`${node.id}-${trigger.id}-webhookUrl`} className="text-xs font-medium">URL do Webhook:</Label>
+                        <div className="flex items-center space-x-1.5 mt-1">
+                          <Input
+                            id={`${node.id}-${trigger.id}-webhookUrl`}
+                            type="text"
+                            readOnly
+                            value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/workspace/${encodeURIComponent(node.title)}`}
+                            className="bg-input/50 h-7 text-xs"
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/workspace/${encodeURIComponent(node.title)}`;
                               navigator.clipboard.writeText(webhookUrl)
-                                .then(() => toast({ title: "URL Copiada!", description: "URL do Webhook copiada para a área de transferência."}))
+                                .then(() => toast({ title: "URL Copiada!", description: "URL do Webhook copiada."}))
                                 .catch(() => toast({ title: "Erro", description: "Não foi possível copiar a URL.", variant: "destructive"}));
-                            } else {
-                              toast({
-                                title: "Erro ao Copiar",
-                                description: "Copiar para a área de transferência não é suportado ou permitido neste navegador/contexto.",
-                                variant: "destructive"
-                              });
-                            }
-                          }}
-                          title="Copiar URL"
-                          disabled={!trigger.webhookId}
-                        >
-                          <Copy className="w-3 h-3"/>
-                        </Button>
+                            }}
+                            title="Copiar URL"
+                          >
+                            <Copy className="w-3 h-3"/>
+                          </Button>
+                        </div>
                       </div>
-                      <Label htmlFor={`${node.id}-${trigger.id}-webhookPayloadVar`} className="text-xs">Salvar Payload em:</Label>
-                       <div className="relative">
-                        <Input
-                          id={`${node.id}-${trigger.id}-webhookPayloadVar`}
-                          placeholder="webhook_payload"
-                          value={trigger.webhookPayloadVariable || 'webhook_payload'}
-                          onChange={(e) => handleStartTriggerChange(trigger.id, 'webhookPayloadVariable', e.target.value)}
-                          className="h-7 text-xs pr-8"
-                        />
-                         {renderVariableInserter('triggers' as any, false, true, trigger.id, 'webhookPayloadVariable' as any)}
+                      <div className="pt-2 border-t">
+                        <Label className="text-xs font-medium">Mapeamento de Variáveis do Webhook</Label>
+                        <p className="text-xs text-muted-foreground mb-2">Extraia dados do JSON do webhook para variáveis do fluxo.</p>
+                        <div className="space-y-2">
+                          {(trigger.variableMappings || []).map(mapping => (
+                            <div key={mapping.id} className="flex items-center space-x-2">
+                              <Input
+                                placeholder="Caminho (ex: data.key.remoteJid)"
+                                value={mapping.jsonPath}
+                                onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', e.target.value)}
+                                className="h-7 text-xs flex-1"
+                              />
+                              <Input
+                                placeholder="Variável (ex: remetente)"
+                                value={mapping.flowVariable}
+                                onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'flowVariable', e.target.value)}
+                                className="h-7 text-xs flex-1"
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRemoveVariableMapping(trigger.id, mapping.id)}
+                                className="text-destructive hover:text-destructive/80 w-6 h-6"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                        <Button onClick={() => handleAddVariableMapping(trigger.id)} variant="outline" size="sm" className="mt-2 text-xs h-7">
+                           <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Mapeamento
+                        </Button>
                       </div>
                     </div>
                   )}
                 </div>
-              )})}
+              ))}
             </div>
             <div className="flex items-end space-x-2 pt-2 border-t mt-2">
               <div className="flex-grow space-y-1">

@@ -1,4 +1,5 @@
 
+
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -11,7 +12,7 @@ import {
   loadWorkspaceByNameFromDB,
   loadActiveWorkspaceFromDB, // Para fallback se nenhum workspace for encontrado pelo nome
 } from '@/app/actions/databaseActions';
-import type { NodeData, Connection, FlowSession, WorkspaceData, StartNodeTrigger } from '@/lib/types';
+import type { NodeData, Connection, FlowSession, StartNodeTrigger } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 
@@ -471,16 +472,28 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
             if (senderJid) await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Erro: O fluxo não está conectado corretamente a partir do início."});
             return NextResponse.json({ error: "Start node is not connected." }, { status: 500 });
         }
+        
+        const initialVars: Record<string, any> = {
+          whatsapp_sender_jid: senderJid,
+          mensagem_whatsapp: receivedMessageText || '',
+        };
+
+        if (firstTrigger?.type === 'webhook' && Array.isArray(firstTrigger.variableMappings)) {
+          for (const mapping of firstTrigger.variableMappings) {
+            if (mapping.jsonPath && mapping.flowVariable) {
+              const value = getProperty(actualEventPayload, mapping.jsonPath);
+              if (value !== undefined) {
+                initialVars[mapping.flowVariable] = value;
+              }
+            }
+          }
+        }
 
         session = {
           session_id: sessionId,
           workspace_id: workspace.id,
           current_node_id: initialNodeId, 
-          flow_variables: { 
-            whatsapp_sender_jid: senderJid, 
-            mensagem_whatsapp: receivedMessageText || '',
-            [firstTrigger?.webhookPayloadVariable || 'webhook_payload']: actualEventPayload,
-          },
+          flow_variables: initialVars,
           awaiting_input_type: null,
           awaiting_input_details: null,
         };
@@ -488,9 +501,9 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
         console.log(`[API Evolution WS Route - ${sessionId}] Existing session. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
         session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
         
-        const startNode = workspace.nodes.find(n => n.type === 'start');
-        const relevantTrigger = startNode?.triggers?.find(t => t.type === 'webhook') || startNode?.triggers?.[0];
-        session.flow_variables[relevantTrigger?.webhookPayloadVariable || 'webhook_payload'] = actualEventPayload;
+        // This part is tricky: should we re-evaluate webhook variables on every message? 
+        // For now, let's assume we don't, as webhook data is usually for session initiation.
+        // We could add a node type to explicitly re-parse the latest webhook payload if needed.
 
         if (session.awaiting_input_type && session.current_node_id && session.awaiting_input_details) {
           const originalNodeId = session.awaiting_input_details.originalNodeId || session.current_node_id;
@@ -521,13 +534,8 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
               } else {
                 console.log(`[API Evolution WS Route - ${sessionId}] Invalid option: "${trimmedReceivedMessage}". Re-prompting.`);
                 await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Opção inválida. Por favor, tente novamente respondendo com o número ou o texto exato da opção."});
-                // Manter a sessão no nó de opção, NÃO avançar para o próximo nó automaticamente aqui.
-                // A próxima chamada a executeFlowStep (se houver) irá re-enviar o prompt do nó de opção
-                // ou, se o usuário enviar outra mensagem, ela será reavaliada.
-                // Para evitar um loop de reenvio do prompt imediatamente, não chamamos executeFlowStep aqui.
-                // Apenas salvamos a sessão. A próxima mensagem do usuário acionará a lógica novamente.
                 session.current_node_id = awaitingNode.id; 
-                continueProcessing = false; // Indica que não devemos chamar executeFlowStep imediatamente.
+                continueProcessing = false;
               }
             }
             session.awaiting_input_type = null;
@@ -556,16 +564,14 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
       if (continueProcessing && session.current_node_id) {
         await executeFlowStep(session, workspace.nodes, workspace.connections || [], apiConfig);
       } else if (continueProcessing && !session.current_node_id && session.awaiting_input_type === null) {
-        // Fim de um caminho sem nó de 'end-flow' e não aguardando input.
         console.log(`[API Evolution WS Route - ${sessionId}] Session has no current_node_id and not awaiting input. Flow implicitly ended.`);
-        await saveSessionToDB(session); // Salva o estado final da sessão
+        await saveSessionToDB(session);
       } else {
         console.log(`[API Evolution WS Route - ${sessionId}] Flow execution paused for session or no current node to execute (Current Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}). Session saved.`);
       }
       return NextResponse.json({ message: "Webhook processed." }, { status: 200 });
 
     } else {
-      // Log para outros eventos ou dados ausentes
       let reason = "Not a 'messages.upsert' event or missing critical data.";
       if (eventType === 'messages.upsert') {
         if (!senderJid) reason = "Missing senderJid.";
@@ -615,4 +621,3 @@ export async function DELETE(request: NextRequest, { params }: { params: { works
   console.log(`[API Evolution WS Route - DELETE] Received DELETE for workspace: "${params.workspaceName}". Delegating to POST logic.`);
   return POST(request, { params });
 }
-    

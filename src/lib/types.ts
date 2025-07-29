@@ -55,12 +55,18 @@ export interface ApiFormDataEntry {
   value: string;
 }
 
+export interface WebhookVariableMapping {
+  id: string;
+  jsonPath: string;
+  flowVariable: string;
+}
+
 export interface StartNodeTrigger {
-  id: string; // Unique ID for this trigger instance (for React keys etc.)
-  name: string; // User-defined name (used for the connection handle)
+  id: string;
+  name: string;
   type: 'manual' | 'webhook';
-  webhookId?: string; // Auto-generated unique ID for the webhook path if type is 'webhook'
-  webhookPayloadVariable?: string; // Variable to store webhook payload, defaults to 'webhook_payload'
+  webhookId?: string;
+  variableMappings?: WebhookVariableMapping[];
 }
 
 export interface NodeData {
