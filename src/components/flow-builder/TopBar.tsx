@@ -36,6 +36,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useAuth } from '@/components/auth/AuthProvider';
 
 const SupabaseIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
@@ -102,6 +103,7 @@ const TopBar: React.FC<TopBarProps> = ({
   onHighlightNode
 }) => {
   const { toast } = useToast();
+  const { user, logout } = useAuth();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [activeSettingsCategory, setActiveSettingsCategory] = useState<SettingsCategory>('database');
 
@@ -434,10 +436,9 @@ const TopBar: React.FC<TopBarProps> = ({
                 <Users className="mr-2 h-4 w-4" />
                 <span>Sessões Ativas</span>
               </DropdownMenuItem>
-              <DropdownMenuItem disabled>
+              <DropdownMenuItem onSelect={() => { console.log("Frontend logs can be viewed in the browser's developer console (F12)."); toast({title: "Logs do Frontend", description: "Logs de erro e de depuração do frontend podem ser vistos no console do seu navegador (geralmente F12)."}); }}>
                 <FileText className="mr-2 h-4 w-4" />
                 <span>Logs da Aplicação</span>
-                <span className="ml-auto text-xs text-muted-foreground">(Em Breve)</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -516,14 +517,14 @@ const TopBar: React.FC<TopBarProps> = ({
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full ml-1 md:ml-2 h-9 w-9">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="https://placehold.co/40x40.png?text=UE" alt="@usuarioexemplo" data-ai-hint="user avatar"/>
-                  <AvatarFallback>UE</AvatarFallback>
+                  <AvatarImage src="https://placehold.co/40x40.png?text=UE" alt={user?.username} data-ai-hint="user avatar"/>
+                  <AvatarFallback>{user?.username?.substring(0,2).toUpperCase() || 'U'}</AvatarFallback>
                 </Avatar>
                 <span className="sr-only">Abrir menu do usuário</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
+              <DropdownMenuLabel>{user?.username || 'Minha Conta'}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem>
                 <UserCircle className="mr-2 h-4 w-4" />
@@ -538,7 +539,7 @@ const TopBar: React.FC<TopBarProps> = ({
                 <span>Configurações Globais</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={logout}>
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Sair</span>
               </DropdownMenuItem>

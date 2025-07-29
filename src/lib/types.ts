@@ -1,4 +1,5 @@
 
+
 export interface DraggableBlockItemData {
   type: string;
   label: string;
@@ -221,6 +222,7 @@ export interface WorkspaceData {
   name: string;
   nodes: NodeData[];
   connections: Connection[];
+  owner: string;
   created_at?: string | Date;
   updated_at?: string | Date;
 }
@@ -238,4 +240,8 @@ export interface FlowSession {
   } | null;
   last_interaction_at?: string | Date;
   created_at?: string | Date;
+}
+
+export interface User {
+    username: string;
 }

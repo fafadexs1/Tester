@@ -4,6 +4,7 @@ import { Inter as FontSans } from "next/font/google" // Changed to Inter for a c
 import './globals.css';
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider } from '@/components/auth/AuthProvider';
 
 
 const fontSans = FontSans({
@@ -28,9 +29,11 @@ export default function RootLayout({
                 "min-h-screen bg-background font-sans antialiased",
                 fontSans.variable
             )}
-            suppressHydrationWarning={true} // Adicionado aqui
+            suppressHydrationWarning={true}
         >
-        {children}
+        <AuthProvider>
+            {children}
+        </AuthProvider>
         <Toaster />
         </body>
         </html>
