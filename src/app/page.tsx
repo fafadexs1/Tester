@@ -22,8 +22,8 @@ export default function Home() {
 
   if (!hasMounted || loading || !user) {
     return (
-        <div className="flex h-screen w-full items-center justify-center">
-            <div className="text-muted-foreground">Carregando...</div>
+        <div className="flex h-screen w-full items-center justify-center" suppressHydrationWarning={true}>
+            <div className="text-muted-foreground" suppressHydrationWarning={true}>Carregando...</div>
         </div>
     );
   }
