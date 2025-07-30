@@ -127,7 +127,7 @@ export default function WorkspaceList({ initialWorkspaces }: WorkspaceListProps)
                       </DropdownMenu>
                     </div>
                     <CardDescription>
-                      {`Atualizado em: ${new Date(ws.updated_at || Date.now()).toLocaleDateString()}`}
+                      {`Atualizado em: ${new Date(ws.updated_at || Date.now()).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`}
                     </CardDescription>
                   </CardHeader>
                   <CardFooter 

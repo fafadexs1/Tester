@@ -1,7 +1,7 @@
 
 'use client';
 
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -13,8 +13,7 @@ export default function FlowEditorPage({ params }: { params: { workspaceId: stri
   const { user, loading } = useAuth();
   const router = useRouter();
   
-  // Use React.use() to unwrap the Promise-like params object
-  const { workspaceId } = use(Promise.resolve(params));
+  const { workspaceId } = params;
 
   // Um estado para garantir que a verificação do cliente seja feita antes de renderizar
   const [isClient, setIsClient] = useState(false);
@@ -42,5 +41,3 @@ export default function FlowEditorPage({ params }: { params: { workspaceId: stri
     </ErrorBoundary>
   );
 }
-
-    
