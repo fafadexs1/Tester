@@ -21,10 +21,12 @@ export default function LoginPage() {
   const { login, register, loading, user } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-
+  
+  // O redirecionamento agora é gerenciado centralmente pelo AuthProvider
+  // Este useEffect apenas lida com a submissão do formulário.
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    console.log(`[LoginPage] handleSubmit: Starting for ${isLoginView ? 'login' : 'register'}.`);
+    console.log(`[LoginPage] handleSubmit: Iniciando para ${isLoginView ? 'login' : 'register'}.`);
     setIsSubmitting(true);
 
     const formData = new FormData();
@@ -34,7 +36,6 @@ export default function LoginPage() {
     try {
       let result;
       if (isLoginView) {
-        console.log('[LoginPage] handleSubmit: Calling login action...');
         result = await login(formData);
       } else {
         if (password !== confirmPassword) {
@@ -42,11 +43,8 @@ export default function LoginPage() {
           setIsSubmitting(false);
           return;
         }
-        console.log('[LoginPage] handleSubmit: Calling register action...');
         result = await register(formData);
       }
-
-      console.log('[LoginPage] handleSubmit: Auth action returned:', result);
       
       if (!result.success) {
         toast({
@@ -55,16 +53,17 @@ export default function LoginPage() {
           variant: "destructive",
         });
       }
-      // O redirecionamento agora é tratado pelo AuthProvider
+      // O redirecionamento é tratado pelo AuthProvider useEffect
+      
     } catch (error: any) {
-        console.error('[LoginPage] handleSubmit: Caught exception:', error);
+        console.error('[LoginPage] handleSubmit: Exceção capturada:', error);
         toast({
           title: "Erro Inesperado",
           description: error.message || "Ocorreu um erro durante a operação.",
           variant: "destructive",
         });
     } finally {
-      console.log('[LoginPage] handleSubmit: Finished.');
+      console.log('[LoginPage] handleSubmit: Finalizado.');
       setIsSubmitting(false);
     }
   };
@@ -80,8 +79,8 @@ export default function LoginPage() {
       );
   }
 
-  // A lógica de redirecionamento agora vive no AuthProvider para evitar loops
-  // Esta página só renderiza o formulário se não estiver carregando a sessão.
+  // O AuthProvider agora lida com o redirecionamento de usuários já logados.
+  // Esta página só renderiza o formulário se o carregamento inicial estiver concluído e não houver usuário.
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4 relative overflow-hidden">
