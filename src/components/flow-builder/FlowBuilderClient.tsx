@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, WorkspaceData, StartNodeTrigger } from '@/lib/types';
+import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, WorkspaceData, StartNodeTrigger, User } from '@/lib/types';
 import { 
   NODE_WIDTH, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX, GRID_SIZE,
   START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y,
@@ -17,7 +17,6 @@ import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/components/auth/AuthProvider';
 import { 
     saveWorkspaceToDB,
     loadWorkspaceFromDB,
@@ -52,13 +51,18 @@ function generateUniqueVariableName(baseName: string, existingNames: string[]): 
   return newName;
 }
 
-export default function FlowBuilderClient({ workspaceId }: { workspaceId: string }) {
+interface FlowBuilderClientProps {
+  workspaceId: string;
+  user: User;
+  initialWorkspace: WorkspaceData | null;
+}
+
+export default function FlowBuilderClient({ workspaceId, user, initialWorkspace }: FlowBuilderClientProps) {
   const { toast } = useToast();
-  const { user } = useAuth();
   const router = useRouter();
   
-  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceData | null>(null);
-  const [isLoading, setIsLoading] = useState(true); 
+  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceData | null>(initialWorkspace);
+  const [isLoading, setIsLoading] = useState(!initialWorkspace && workspaceId !== 'new'); 
   
   const [drawingLine, setDrawingLine] = useState<DrawingLineData | null>(null);
   const [highlightedConnectionId, setHighlightedConnectionId] = useState<string | null>(null);
@@ -151,51 +155,55 @@ export default function FlowBuilderClient({ workspaceId }: { workspaceId: string
   }, [hasMounted]);
   
   const loadWorkspace = useCallback(async () => {
-    if (!user || !workspaceId) return;
+    if (!user || !workspaceId || workspaceId === 'new') return;
     setIsLoading(true);
     console.log(`[FlowBuilderClient] Loading workspace ${workspaceId} from DB...`);
     
-    if (workspaceId === 'new') {
-        const newId = uuidv4();
-        const newWorkspace: WorkspaceData = { 
-            id: newId, 
-            name: 'Meu Novo Fluxo', 
-            nodes: [], 
-            connections: [], 
-            owner: user.username 
-        };
-        const saveResult = await saveWorkspaceToDB(newWorkspace);
-        if(saveResult.success) {
-            setActiveWorkspace(newWorkspace);
-            router.replace(`/flow/${newId}`); // Substitui a URL para a nova ID
+    try {
+        const dbWorkspace = await loadWorkspaceFromDB(workspaceId);
+        if (dbWorkspace) {
+            setActiveWorkspace(dbWorkspace);
         } else {
-             toast({ title: "Erro", description: `Não foi possível criar o novo fluxo: ${saveResult.error}`, variant: "destructive" });
-             router.push('/'); // Volta para o dashboard em caso de erro
-        }
-    } else {
-        try {
-            const dbWorkspace = await loadWorkspaceFromDB(workspaceId);
-            if (dbWorkspace) {
-                setActiveWorkspace(dbWorkspace);
-            } else {
-                toast({ title: "Erro de Carregamento", description: "O fluxo solicitado não foi encontrado.", variant: "destructive" });
-                router.push('/');
-            }
-        } catch(error: any) {
-            console.error(`[FlowBuilderClient] Failed to load workspace ${workspaceId} from DB:`, error);
-            toast({ title: "Erro de Carregamento", description: "Não foi possível carregar o fluxo do banco de dados.", variant: "destructive" });
+            toast({ title: "Erro de Carregamento", description: "O fluxo solicitado não foi encontrado.", variant: "destructive" });
             router.push('/');
         }
+    } catch(error: any) {
+        console.error(`[FlowBuilderClient] Failed to load workspace ${workspaceId} from DB:`, error);
+        toast({ title: "Erro de Carregamento", description: "Não foi possível carregar o fluxo do banco de dados.", variant: "destructive" });
+        router.push('/');
     }
     setIsLoading(false);
   }, [user, workspaceId, toast, router]);
 
+  const createNewWorkspace = useCallback(async () => {
+    if (!user) return;
+    setIsLoading(true);
+    const newId = uuidv4();
+    const newWorkspace: WorkspaceData = {
+        id: newId,
+        name: 'Meu Novo Fluxo',
+        nodes: [],
+        connections: [],
+        owner: user.username
+    };
+    const saveResult = await saveWorkspaceToDB(newWorkspace);
+    if(saveResult.success) {
+        // Replace URL and set active workspace
+        router.replace(`/flow/${newId}`, { scroll: false });
+        setActiveWorkspace(newWorkspace);
+    } else {
+         toast({ title: "Erro", description: `Não foi possível criar o novo fluxo: ${saveResult.error}`, variant: "destructive" });
+         router.push('/'); // Volta para o dashboard em caso de erro
+    }
+    setIsLoading(false);
+  }, [user, toast, router]);
+
 
   useEffect(() => {
-    if (user && hasMounted) {
-      loadWorkspace();
+    if (workspaceId === 'new' && hasMounted) {
+        createNewWorkspace();
     }
-  }, [user, hasMounted, loadWorkspace]);
+  }, [workspaceId, hasMounted, createNewWorkspace]);
 
   const handleSaveWorkspace = useCallback(async () => {
     if (!activeWorkspace) {
@@ -221,14 +229,13 @@ export default function FlowBuilderClient({ workspaceId }: { workspaceId: string
 
 
   const handleDiscardChanges = useCallback(async () => {
-    if (!hasMounted || !user) return;
     toast({
       title: "Descartando Alterações...",
       description: "Recarregando fluxo do banco de dados.",
     });
     await loadWorkspace();
     setHighlightedNodeIdBySession(null); 
-  }, [hasMounted, user, loadWorkspace, toast]);
+  }, [loadWorkspace, toast]);
 
   const updateActiveWorkspace = useCallback((updater: (workspace: WorkspaceData) => WorkspaceData) => {
     setActiveWorkspace(prevWorkspace => {
@@ -572,7 +579,7 @@ export default function FlowBuilderClient({ workspaceId }: { workspaceId: string
   }, [updateActiveWorkspace]);
 
 
-  if (isLoading && hasMounted) {
+  if (isLoading || (workspaceId === 'new' && !activeWorkspace)) {
     return (
         <div className="flex h-screen w-full items-center justify-center bg-muted/20">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -585,18 +592,16 @@ export default function FlowBuilderClient({ workspaceId }: { workspaceId: string
     <DndProvider backend={HTML5Backend}>
       <div className="flex flex-col h-screen bg-background font-sans select-none overflow-hidden">
         <TopBar
-          workspaces={activeWorkspace ? [activeWorkspace] : []}
-          activeWorkspaceId={activeWorkspace?.id || null}
-          onSwitchWorkspace={() => {}} // A navegação agora é por URL
+          workspaceName={activeWorkspace?.name || 'Carregando...'}
           onSaveWorkspaces={handleSaveWorkspace}
           onDiscardChanges={handleDiscardChanges}
           onUpdateWorkspaceName={handleUpdateWorkspaceName}
-          appName="NexusFlow"
           isChatPanelOpen={isChatPanelOpen}
           onToggleChatPanel={toggleChatPanel}
           onZoom={handleZoom}
           currentZoomLevel={zoomLevel}
-          onHighlightNode={handleHighlightNodeInFlow} 
+          onHighlightNode={handleHighlightNodeInFlow}
+          activeWorkspace={activeWorkspace}
         />
         <div className="flex-1 flex relative overflow-hidden">
           <FlowSidebar />

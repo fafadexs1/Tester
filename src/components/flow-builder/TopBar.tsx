@@ -76,31 +76,29 @@ interface WebhookLogEntry {
 }
 
 interface TopBarProps {
-  workspaces: WorkspaceData[];
-  activeWorkspaceId: string | null;
-  onSwitchWorkspace: (id: string) => void;
+  workspaceName: string;
   onSaveWorkspaces: () => void;
   onDiscardChanges: () => void;
   onUpdateWorkspaceName: (newName: string) => void;
-  appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
   onZoom: (direction: 'in' | 'out' | 'reset') => void;
   currentZoomLevel: number;
-  onHighlightNode: (nodeId: string | null) => void; 
+  onHighlightNode: (nodeId: string | null) => void;
+  activeWorkspace: WorkspaceData | null | undefined;
 }
 
 const TopBar: React.FC<TopBarProps> = ({
-  activeWorkspaceId,
+  workspaceName,
   onSaveWorkspaces,
   onDiscardChanges,
   onUpdateWorkspaceName,
-  appName = "NexusFlow",
   isChatPanelOpen,
   onToggleChatPanel,
   onZoom,
   currentZoomLevel,
-  onHighlightNode
+  onHighlightNode,
+  activeWorkspace
 }) => {
   const { toast } = useToast();
   const { user, logout } = useAuth();
@@ -132,14 +130,12 @@ const TopBar: React.FC<TopBarProps> = ({
   
   const [nexusFlowAppBaseUrl, setNexusFlowAppBaseUrl] = useState('');
   
-  const activeWorkspace = useMemo(() => activeWorkspaceId ? { id: activeWorkspaceId, name: 'temp' } : null, [activeWorkspaceId]);
-  
   const evolutionWebhookUrlForCurrentFlow = useMemo(() => {
-    if (nexusFlowAppBaseUrl && activeWorkspace?.name) {
-      return `${nexusFlowAppBaseUrl}/api/evolution/workspace/${encodeURIComponent(activeWorkspace.name)}`;
+    if (nexusFlowAppBaseUrl && workspaceName) {
+      return `${nexusFlowAppBaseUrl}/api/evolution/workspace/${encodeURIComponent(workspaceName)}`;
     }
     return `${nexusFlowAppBaseUrl}/api/evolution/workspace/[NOME_DO_FLUXO]`;
-  }, [nexusFlowAppBaseUrl, activeWorkspace]);
+  }, [nexusFlowAppBaseUrl, workspaceName]);
 
 
   useEffect(() => {
@@ -183,7 +179,7 @@ const TopBar: React.FC<TopBarProps> = ({
   };
 
   const handlePublishFlow = () => {
-    if (!activeWorkspaceId) {
+    if (!activeWorkspace) {
       toast({
         title: "Nenhum fluxo ativo",
         description: "Por favor, selecione um fluxo para publicar.",
@@ -282,7 +278,7 @@ const TopBar: React.FC<TopBarProps> = ({
   
   const handleGoToNodeInFlow = (session: FlowSession) => {
     if (onHighlightNode && session.current_node_id) {
-        if (session.workspace_id !== activeWorkspaceId) {
+        if (session.workspace_id !== activeWorkspace?.id) {
             toast({
                 title: "Ação Interrompida",
                 description: "Esta sessão pertence a um fluxo diferente do que está aberto.",
@@ -342,7 +338,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <div className='w-px h-6 bg-border mx-2'></div>
           <Input 
             className="text-lg font-semibold tracking-tight text-foreground whitespace-nowrap bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto"
-            value={activeWorkspace?.name || ''}
+            value={workspaceName}
             onChange={(e) => onUpdateWorkspaceName(e.target.value)}
             disabled={!activeWorkspace}
           />
@@ -404,7 +400,7 @@ const TopBar: React.FC<TopBarProps> = ({
             variant="default"
             size="sm"
             className="bg-accent hover:bg-accent/90 text-accent-foreground hidden md:inline-flex h-9"
-            disabled={!activeWorkspaceId}
+            disabled={!activeWorkspace}
           >
             <Rocket className="mr-2 h-4 w-4" /> Publicar
           </Button>
@@ -413,7 +409,7 @@ const TopBar: React.FC<TopBarProps> = ({
             onClick={onSaveWorkspaces}
             variant="secondary"
             size="sm"
-            disabled={!activeWorkspaceId}
+            disabled={!activeWorkspace}
             className="hidden md:inline-flex h-9"
           >
             <Save className="mr-2 h-4 w-4" /> Salvar
@@ -423,7 +419,7 @@ const TopBar: React.FC<TopBarProps> = ({
             onClick={onDiscardChanges}
             variant="ghost"
             size="sm"
-            disabled={!activeWorkspaceId}
+            disabled={!activeWorkspace}
             className="hidden text-muted-foreground hover:text-destructive-foreground hover:bg-destructive/90 md:inline-flex h-9"
           >
             <Undo2 className="mr-2 h-4 w-4" /> Descartar
@@ -524,8 +520,7 @@ const TopBar: React.FC<TopBarProps> = ({
                               <Label className="text-card-foreground/90 text-sm font-medium">Recepção de Webhooks da API Evolution</Label>
                               <p className="text-xs text-muted-foreground mt-1 mb-2">
                                 Configure a URL abaixo na sua API Evolution para o NexusFlow receber eventos.
-                                Substitua <code className="bg-muted px-1 rounded-sm text-xs">[NOME_DO_SEU_FLUXO]</code> pelo nome exato do fluxo ativo:
-                                <strong className="text-primary ml-1">{activeWorkspace?.name ? encodeURIComponent(activeWorkspace.name) : "[SELECIONE_UM_FLUXO]"}</strong>.
+                                O nome do fluxo é pego automaticamente do fluxo ativo.
                               </p>
                               <div className="flex items-center space-x-2">
                                 <Input 
@@ -541,7 +536,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                   onClick={() => handleCopyToClipboard(evolutionWebhookUrlForCurrentFlow, "URL de Webhook")} 
                                   title="Copiar URL de Webhook" 
                                   className="h-9 w-9"
-                                  disabled={!activeWorkspace?.name}
+                                  disabled={!workspaceName}
                                 >
                                   <Copy className="w-4 w-4" />
                                 </Button>

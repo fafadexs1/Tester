@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { redirect } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -28,12 +27,12 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
+      <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 sm:px-6">
         <div className="flex items-center gap-3">
           <Zap className="h-6 w-6 text-primary" />
           <h1 className="text-xl font-semibold tracking-tight text-primary whitespace-nowrap">NexusFlow</h1>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-4">
            <span className="text-sm text-muted-foreground hidden sm:inline">
             Olá, {user.username}
           </span>
@@ -46,24 +45,22 @@ export default async function DashboardPage() {
           </form>
         </div>
       </header>
-      <main className="flex flex-1 flex-col p-4 sm:p-6 lg:p-8">
-        <div className="flex-1 flex flex-col">
-            <div className="flex items-center">
-              <div className="flex-1">
-                <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Meus Fluxos</h1>
-                <p className="text-muted-foreground mt-1">Gerencie, edite ou crie novas automações.</p>
-              </div>
-              <Link href="/flow/new">
-                <Button className="flex items-center gap-2">
-                  <PlusCircle className="h-5 w-5" />
-                  <span className="hidden sm:inline">Criar Novo Fluxo</span>
-                </Button>
-              </Link>
-            </div>
-            
-            <div className="flex-1 mt-8">
-              <WorkspaceList initialWorkspaces={workspaces} />
-            </div>
+      <main className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
+        <div className="flex items-center">
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Meus Fluxos</h1>
+            <p className="text-muted-foreground mt-1">Gerencie, edite ou crie novas automações.</p>
+          </div>
+          <Link href="/flow/new">
+            <Button className="flex items-center gap-2">
+              <PlusCircle className="h-5 w-5" />
+              <span className="hidden sm:inline">Criar Novo Fluxo</span>
+            </Button>
+          </Link>
+        </div>
+        
+        <div className="flex-1">
+          <WorkspaceList initialWorkspaces={workspaces} />
         </div>
       </main>
     </div>
