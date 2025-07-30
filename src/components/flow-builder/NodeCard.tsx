@@ -221,6 +221,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       name: newTriggerName.trim(),
       type: newTriggerType,
       variableMappings: [],
+      sessionTimeoutSeconds: 0,
     };
     if (newTriggerType === 'webhook') {
       newTrigger.webhookId = uuidv4();
@@ -235,7 +236,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     onUpdate(node.id, { triggers: currentTriggers.filter(t => t.id !== triggerIdToRemove) });
   };
 
-  const handleStartTriggerChange = (triggerIdToChange: string, field: keyof StartNodeTrigger, value: string | boolean) => {
+  const handleStartTriggerChange = (triggerIdToChange: string, field: keyof StartNodeTrigger, value: string | boolean | number) => {
     const currentTriggers = [...(node.triggers || [])];
     const triggerIndex = currentTriggers.findIndex(t => t.id === triggerIdToChange);
     if (triggerIndex !== -1) {
@@ -700,6 +701,18 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                       <SelectItem value="webhook">Webhook</SelectItem>
                     </SelectContent>
                   </Select>
+                  <div>
+                    <Label htmlFor={`${node.id}-${trigger.id}-timeout`} className="text-xs font-medium">Tempo limite da sessão (segundos)</Label>
+                    <Input
+                      id={`${node.id}-${trigger.id}-timeout`}
+                      type="number"
+                      value={trigger.sessionTimeoutSeconds || 0}
+                      onChange={(e) => handleStartTriggerChange(trigger.id, 'sessionTimeoutSeconds', parseInt(e.target.value, 10) || 0)}
+                      placeholder="0 (sem limite)"
+                      className="h-8 text-xs mt-1"
+                    />
+                     <p className="text-xs text-muted-foreground mt-1">Tempo de inatividade para encerrar a sessão. 0 para desabilitar.</p>
+                  </div>
                   {trigger.type === 'webhook' && (
                     <div className='space-y-2 text-xs'>
                       <div>
@@ -1053,7 +1066,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     <div>
                       <Label htmlFor={`${node.id}-apiauthbasicpassword`}>Senha</Label>
                        <div className="relative">
-                            <Input id={`${node.id}-apiauthbasicpassword`} type="password" placeholder="Senha" value={node.apiAuthBasicPassword || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicPassword: e.target.value })} className="pr-8"/>
+                            <Input id={`${node.id}-apiauthbasicpassword`} type="password" placeholder="Senha" value={node.apiAuthBasicPassword || ''} onChange={e => onUpdate(node.id, { apiAuthBasicPassword: e.target.value })} className="pr-8"/>
                             {renderVariableInserter('apiAuthBasicPassword')}
                         </div>
                     </div>
@@ -1673,5 +1686,3 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
-    

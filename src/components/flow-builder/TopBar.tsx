@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard,
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy, FileJson2,
-  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut
+  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut, Trash2
 } from 'lucide-react';
 import {
   Dialog,
@@ -19,6 +19,17 @@ import {
   DialogTitle,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -269,6 +280,30 @@ const TopBar: React.FC<TopBarProps> = ({
       setIsLoadingSessions(false);
     }
   }, []);
+
+  const handleDeleteSession = async (sessionId: string) => {
+    try {
+      const response = await fetch(`/api/sessions/active?sessionId=${sessionId}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || `Failed to delete session ${sessionId}`);
+      }
+      toast({
+        title: "Sessão Encerrada",
+        description: `A sessão ${sessionId} foi encerrada com sucesso.`,
+      });
+      fetchActiveSessions(); // Refresh the list
+    } catch (error: any) {
+      toast({
+        title: "Erro ao Encerrar Sessão",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
 
   useEffect(() => {
     if (isSessionsDialogOpen) {
@@ -669,7 +704,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                   className="h-9 w-9"
                                   disabled={!activeWorkspace?.name}
                                 >
-                                  <Copy className="w-4 h-4" />
+                                  <Copy className="w-4 w-4" />
                                 </Button>
                               </div>
                               <p className="text-xs text-muted-foreground mt-1">Payloads recebidos são logados no console do servidor e visíveis no "Console" do app.</p>
@@ -773,7 +808,7 @@ const TopBar: React.FC<TopBarProps> = ({
                       <TableHead>ID do Nó Atual</TableHead>
                       <TableHead className="w-[120px]">Aguardando</TableHead>
                       <TableHead className="w-[180px]">Última Interação</TableHead>
-                      <TableHead className="w-[150px] text-right">Ações</TableHead>
+                      <TableHead className="w-[180px] text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -791,6 +826,25 @@ const TopBar: React.FC<TopBarProps> = ({
                            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => handleGoToNodeInFlow(session)}>
                             <Target className="mr-1 h-3.5 w-3.5" /> Ir Nó
                           </Button>
+                           <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="icon" className="h-7 w-7">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Encerrar Sessão?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Tem certeza que deseja encerrar a sessão para <strong className='break-all'>{session.session_id}</strong>? Esta ação não pode ser desfeita e o fluxo será interrompido para este usuário.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteSession(session.session_id)}>Encerrar</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </TableCell>
                       </TableRow>
                     ))}

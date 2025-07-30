@@ -85,6 +85,7 @@ async function initializeDatabase(): Promise<void> {
         flow_variables JSONB,
         awaiting_input_type TEXT,
         awaiting_input_details JSONB,
+        session_timeout_seconds INTEGER DEFAULT 0,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         last_interaction_at TIMESTAMPTZ DEFAULT NOW()
       );
@@ -355,14 +356,15 @@ export async function saveSessionToDB(sessionData: FlowSession): Promise<{ succe
     client = await poolInstance.connect();
     console.log(`[DB Actions] saveSessionToDB: Saving session to DB: ${sessionData.session_id}`);
     const query = `
-      INSERT INTO flow_sessions (session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, last_interaction_at)
-      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      INSERT INTO flow_sessions (session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, session_timeout_seconds, last_interaction_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
       ON CONFLICT (session_id) DO UPDATE
       SET workspace_id = EXCLUDED.workspace_id,
           current_node_id = EXCLUDED.current_node_id,
           flow_variables = EXCLUDED.flow_variables,
           awaiting_input_type = EXCLUDED.awaiting_input_type,
           awaiting_input_details = EXCLUDED.awaiting_input_details,
+          session_timeout_seconds = EXCLUDED.session_timeout_seconds,
           last_interaction_at = NOW();
     `;
     await client.query(query, [
@@ -372,6 +374,7 @@ export async function saveSessionToDB(sessionData: FlowSession): Promise<{ succe
       JSON.stringify(sessionData.flow_variables || {}),
       sessionData.awaiting_input_type,
       sessionData.awaiting_input_details ? JSON.stringify(sessionData.awaiting_input_details) : null,
+      sessionData.session_timeout_seconds || 0,
     ]);
     console.log(`[DB Actions] saveSessionToDB: Session ${sessionData.session_id} saved successfully.`);
     return { success: true };
@@ -393,7 +396,7 @@ export async function loadSessionFromDB(sessionId: string): Promise<FlowSession 
     client = await poolInstance.connect();
     // console.log(`[DB Actions] loadSessionFromDB: Loading session from DB: ${sessionId}`);
     const result: QueryResult<FlowSession> = await client.query(
-      'SELECT session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, created_at, last_interaction_at FROM flow_sessions WHERE session_id = $1',
+      'SELECT session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, session_timeout_seconds, created_at, last_interaction_at FROM flow_sessions WHERE session_id = $1',
       [sessionId]
     );
     if (result.rows.length > 0) {
@@ -437,7 +440,7 @@ export async function loadAllActiveSessionsFromDB(): Promise<FlowSession[]> {
     client = await poolInstance.connect();
     console.log('[DB Actions] loadAllActiveSessionsFromDB: Loading all active sessions...');
     const result = await client.query<FlowSession>(
-      'SELECT session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, created_at, last_interaction_at FROM flow_sessions ORDER BY last_interaction_at DESC'
+      'SELECT session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, session_timeout_seconds, created_at, last_interaction_at FROM flow_sessions ORDER BY last_interaction_at DESC'
     );
     return result.rows.map(row => ({
       ...row,

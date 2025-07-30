@@ -455,6 +455,19 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
       let session = await loadSessionFromDB(sessionId);
       let continueProcessing = true;
 
+      // Check for session timeout
+      if (session && session.session_timeout_seconds && session.session_timeout_seconds > 0) {
+        const lastInteraction = new Date(session.last_interaction_at || 0).getTime();
+        const now = new Date().getTime();
+        const secondsSinceLastInteraction = (now - lastInteraction) / 1000;
+        if (secondsSinceLastInteraction > session.session_timeout_seconds) {
+          console.log(`[API Evolution WS Route - ${sessionId}] Session timed out. Inactive for ${secondsSinceLastInteraction}s (limit: ${session.session_timeout_seconds}s). Deleting old session.`);
+          await deleteSessionFromDB(sessionId);
+          session = null; // Force creation of a new session
+        }
+      }
+
+
       if (!session) {
         console.log(`[API Evolution WS Route - ${sessionId}] New session for workspace ${workspace.id}.`);
         const startNode = workspace.nodes.find(n => n.type === 'start');
@@ -496,6 +509,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
           flow_variables: initialVars,
           awaiting_input_type: null,
           awaiting_input_details: null,
+          session_timeout_seconds: firstTrigger?.sessionTimeoutSeconds || 0,
         };
       } else {
         console.log(`[API Evolution WS Route - ${sessionId}] Existing session. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);

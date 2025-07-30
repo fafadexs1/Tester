@@ -1,7 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { loadAllActiveSessionsFromDB } from '@/app/actions/databaseActions';
+import { loadAllActiveSessionsFromDB, deleteSessionFromDB } from '@/app/actions/databaseActions';
 import type { FlowSession } from '@/lib/types';
 
 export async function GET(request: NextRequest) {
@@ -13,5 +13,27 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('[API /sessions/active] Error fetching active sessions:', error);
     return NextResponse.json({ error: 'Failed to fetch active sessions', details: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  console.log('[API /sessions/active] DELETE request received');
+  const { searchParams } = new URL(request.url);
+  const sessionId = searchParams.get('sessionId');
+
+  if (!sessionId) {
+    return NextResponse.json({ error: "Session ID is required" }, { status: 400 });
+  }
+  
+  try {
+    const result = await deleteSessionFromDB(sessionId);
+    if (result.success) {
+      return NextResponse.json({ message: `Session ${sessionId} deleted successfully` }, { status: 200 });
+    } else {
+      return NextResponse.json({ error: `Failed to delete session ${sessionId}`, details: result.error }, { status: 500 });
+    }
+  } catch (error: any) {
+    console.error(`[API /sessions/active] Error deleting session ${sessionId}:`, error);
+    return NextResponse.json({ error: 'Failed to delete session', details: error.message }, { status: 500 });
   }
 }
