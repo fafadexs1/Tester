@@ -1,5 +1,6 @@
 
 
+
 export interface DraggableBlockItemData {
   type: string;
   label: string;
@@ -253,4 +254,12 @@ export interface FlowSession {
 
 export interface User {
     username: string;
+}
+
+export interface EvolutionInstance {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  status: 'online' | 'offline' | 'unconfigured' | 'connecting';
 }

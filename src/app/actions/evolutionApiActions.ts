@@ -106,4 +106,39 @@ export async function sendWhatsAppMessageAction(
   }
 }
 
+export async function checkEvolutionInstanceStatus(
+    baseUrl: string,
+    instanceName: string,
+    apiKey?: string
+): Promise<{ status: 'online' | 'offline', error?: string, data?: any }> {
+    if (!baseUrl || !instanceName) {
+        return { status: 'offline', error: 'URL base ou nome da instância não fornecidos.' };
+    }
+
+    const endpoint = `${baseUrl.replace(/\/$/, '')}/instance/connectionState/${instanceName}`;
+    const headers: HeadersInit = {
+        'Accept': 'application/json',
+    };
+    if (apiKey) {
+        headers['apikey'] = apiKey;
+    }
+
+    try {
+        const response = await fetch(endpoint, { method: 'GET', headers: headers });
+        const data = await response.json();
+
+        if (!response.ok) {
+            return { status: 'offline', error: `Erro da API: ${response.status} - ${JSON.stringify(data)}` };
+        }
+
+        // A resposta esperada para uma instância conectada é { instance: { state: 'open' } }
+        if (data?.instance?.state === 'open') {
+            return { status: 'online', data: data };
+        } else {
+            return { status: 'offline', error: 'A instância não está conectada (state != "open").', data: data };
+        }
+    } catch (error: any) {
+        return { status: 'offline', error: `Falha na conexão: ${error.message}` };
+    }
+}
     
