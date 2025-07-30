@@ -2,13 +2,12 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { WorkspaceData, FlowSession } from '@/lib/types'; // Removido StartNodeTrigger se não usado aqui
+import type { WorkspaceData, FlowSession } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  PlusCircle, Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard,
+  Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard,
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy, FileJson2,
-  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut, Trash2
+  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut, Trash2, Home, ChevronsLeft
 } from 'lucide-react';
 import {
   Dialog,
@@ -48,6 +47,7 @@ import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from '@/components/auth/AuthProvider';
+import Link from 'next/link';
 
 const SupabaseIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
@@ -58,15 +58,6 @@ const SupabaseIcon = () => (
 const PostgresIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
     <path d="M5.10526 2H18.8947C19.9381 2 20.7895 2.82911 20.7895 3.8421V7.52631H16.6316V14.0526C16.6316 15.3461 15.5772 16.3684 14.2632 16.3684H9.73684C8.42283 16.3684 7.36842 15.3461 7.36842 14.0526V7.52631H3.21053V3.8421C3.21053 2.82911 4.06193 2 5.10526 2ZM12.5789 7.52631H16.6316V3.8421H12.5789V7.52631ZM7.36842 7.52631H11.4211V3.8421H7.36842V7.52631ZM9.73684 17.6316H14.2632C16.3051 17.6316 17.9474 19.2293 17.9474 21.2105C17.9474 21.6453 17.6047 22 17.1579 22H6.84211C6.39526 22 6.05263 21.6453 6.05263 21.2105C6.05263 19.2293 7.69491 17.6316 9.73684 17.6316ZM13.7368 11.2105H10.2632C9.91571 11.2105 9.73684 11.0373 9.73684 10.7895C9.73684 10.5416 9.71571 10.3684 10.2632 10.3684H13.7368C14.0843 10.3684 14.2632 10.5416 14.2632 10.7895C14.2632 11.0373 14.0843 11.2105 13.7368 11.2105Z" />
-  </svg>
-);
-
-const ResetZoomIcon = () => ( // Adicionado um ícone simples para resetar zoom
-  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
-    <path d="M7 11h8M11 7v8"/>
-    <path d="M11 15a4 4 0 0 0 0-8M11 7a4 4 0 0 0 0 8"/>
-    <path d="M11 11h.01"/> {/* Ponto central */}
   </svg>
 );
 
@@ -81,16 +72,16 @@ interface WebhookLogEntry {
   geo?: any;
   extractedMessage?: string | null;
   webhook_remoteJid?: string | null;
-  workspaceNameParam?: string; // Adicionado para logs de workspace
+  workspaceNameParam?: string;
 }
 
 interface TopBarProps {
   workspaces: WorkspaceData[];
   activeWorkspaceId: string | null;
-  onAddWorkspace: () => void;
   onSwitchWorkspace: (id: string) => void;
   onSaveWorkspaces: () => void;
   onDiscardChanges: () => void;
+  onUpdateWorkspaceName: (newName: string) => void;
   appName?: string;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
@@ -100,12 +91,10 @@ interface TopBarProps {
 }
 
 const TopBar: React.FC<TopBarProps> = ({
-  workspaces,
   activeWorkspaceId,
-  onAddWorkspace,
-  onSwitchWorkspace,
   onSaveWorkspaces,
   onDiscardChanges,
+  onUpdateWorkspaceName,
   appName = "NexusFlow",
   isChatPanelOpen,
   onToggleChatPanel,
@@ -154,13 +143,13 @@ const TopBar: React.FC<TopBarProps> = ({
   
   const [nexusFlowAppBaseUrl, setNexusFlowAppBaseUrl] = useState('');
   
-  const activeWorkspace = useMemo(() => workspaces.find(ws => ws.id === activeWorkspaceId), [workspaces, activeWorkspaceId]);
+  const activeWorkspace = useMemo(() => activeWorkspaceId ? { id: activeWorkspaceId, name: 'temp' } : null, [activeWorkspaceId]);
   
   const evolutionWebhookUrlForCurrentFlow = useMemo(() => {
     if (nexusFlowAppBaseUrl && activeWorkspace?.name) {
       return `${nexusFlowAppBaseUrl}/api/evolution/workspace/${encodeURIComponent(activeWorkspace.name)}`;
     }
-    return `${nexusFlowAppBaseUrl}/api/evolution/workspace/[SELECIONE_UM_FLUXO]`;
+    return `${nexusFlowAppBaseUrl}/api/evolution/workspace/[NOME_DO_FLUXO]`;
   }, [nexusFlowAppBaseUrl, activeWorkspace]);
 
 
@@ -227,10 +216,10 @@ const TopBar: React.FC<TopBarProps> = ({
       });
       return;
     }
-    const currentWorkspaceToPublish = workspaces.find(ws => ws.id === activeWorkspaceId);
+    onSaveWorkspaces();
     toast({
-      title: "Publicar Fluxo (Simulado)",
-      description: `O fluxo "${currentWorkspaceToPublish?.name || 'Selecionado'}" seria colocado em produção.`,
+      title: "Fluxo Publicado!",
+      description: `O fluxo ativo foi salvo e publicado (simulado).`,
       variant: "default",
     });
   };
@@ -317,16 +306,21 @@ const TopBar: React.FC<TopBarProps> = ({
   };
   
   const handleGoToNodeInFlow = (session: FlowSession) => {
-    if (onSwitchWorkspace && onHighlightNode && session.workspace_id && session.current_node_id) {
-        onSwitchWorkspace(session.workspace_id);
-        setTimeout(() => {
-            onHighlightNode(session.current_node_id);
-        }, 100); 
+    if (onHighlightNode && session.current_node_id) {
+        if (session.workspace_id !== activeWorkspaceId) {
+            toast({
+                title: "Ação Interrompida",
+                description: "Esta sessão pertence a um fluxo diferente do que está aberto.",
+                variant: "destructive"
+            });
+            return;
+        }
+        onHighlightNode(session.current_node_id);
         setIsSessionsDialogOpen(false); 
     } else {
         toast({
             title: "Informação Incompleta",
-            description: "Não foi possível determinar o fluxo ou nó da sessão.",
+            description: "Não foi possível determinar o nó da sessão.",
             variant: "destructive"
         });
     }
@@ -367,67 +361,20 @@ const TopBar: React.FC<TopBarProps> = ({
     <>
       <header className="flex items-center justify-between h-16 px-4 md:px-6 border-b bg-card text-card-foreground shadow-sm shrink-0">
         <div className="flex items-center gap-3">
-          <Zap className="w-6 h-6 text-primary" />
-          <h1 className="text-xl font-semibold tracking-tight text-primary whitespace-nowrap">{appName}</h1>
-
-          {workspaces.length > 0 && activeWorkspaceId && (
-            <div className="ml-4 hidden md:flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Fluxo:</span>
-              <Select
-                value={activeWorkspaceId}
-                onValueChange={onSwitchWorkspace}
-              >
-                <SelectTrigger
-                  id="workspace-select-topbar"
-                  className="h-9 w-auto min-w-[150px] max-w-[250px] text-sm"
-                  aria-label="Selecionar Fluxo de Trabalho"
-                >
-                  <SelectValue placeholder="Selecione um fluxo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {workspaces.map(ws => (
-                    <SelectItem key={ws.id} value={ws.id} className="text-sm">
-                      {ws.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          <Button onClick={onAddWorkspace} variant="outline" size="sm" className="ml-2 hidden md:inline-flex">
-            <PlusCircle className="mr-2 h-4 w-4" /> Novo Fluxo
-          </Button>
+            <Link href="/" className='flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors'>
+                <ChevronsLeft className='w-5 h-5' />
+                <Home className="w-5 h-5" />
+            </Link>
+          <div className='w-px h-6 bg-border mx-2'></div>
+          <Input 
+            className="text-lg font-semibold tracking-tight text-foreground whitespace-nowrap bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto"
+            value={activeWorkspace?.name || ''}
+            onChange={(e) => onUpdateWorkspaceName(e.target.value)}
+            disabled={!activeWorkspace}
+          />
         </div>
 
         <div className="flex items-center gap-1 md:gap-2">
-          <div className="md:hidden">
-            {activeWorkspaceId && workspaces.length > 0 && (
-              <Select
-                value={activeWorkspaceId || ""}
-                onValueChange={onSwitchWorkspace}
-              >
-                <SelectTrigger
-                  id="workspace-select-topbar-mobile"
-                  className="h-9 w-auto min-w-[calc(100vw-400px)] max-w-[180px] text-sm" // Ajuste de largura para mobile
-                  aria-label="Selecionar Fluxo de Trabalho"
-                >
-                  <SelectValue placeholder="Selecionar Fluxo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {workspaces.map(ws => (
-                    <SelectItem key={ws.id} value={ws.id} className="text-sm">
-                      {ws.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-          <Button onClick={onAddWorkspace} variant="outline" size="icon" className="ml-1 md:hidden">
-            <PlusCircle className="h-4 w-4" />
-            <span className="sr-only">Novo Fluxo</span>
-          </Button>
-
            <div className="flex items-center gap-1 ml-2">
             <Button onClick={() => onZoom('out')} variant="outline" size="icon" className="h-9 w-9">
               <ZoomOut className="h-4 w-4" />
@@ -454,13 +401,13 @@ const TopBar: React.FC<TopBarProps> = ({
               <Button
                 variant="outline"
                 size="icon"
-                className="h-9 w-9" // Removido hidden md:inline-flex
+                className="h-9 w-9"
                 aria-label="Console e Logs"
               >
                 <TerminalSquare className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60"> {/* Aumentado um pouco */}
+            <DropdownMenuContent align="end" className="w-60">
               <DropdownMenuLabel>Console e Diagnósticos</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setIsWebhookLogsDialogOpen(true)}>
@@ -482,60 +429,30 @@ const TopBar: React.FC<TopBarProps> = ({
             onClick={handlePublishFlow}
             variant="default"
             size="sm"
-            className="bg-teal-600 hover:bg-teal-700 text-white hidden md:inline-flex h-9"
+            className="bg-accent hover:bg-accent/90 text-accent-foreground hidden md:inline-flex h-9"
             disabled={!activeWorkspaceId}
           >
             <Rocket className="mr-2 h-4 w-4" /> Publicar
           </Button>
-          <Button
-            onClick={handlePublishFlow}
-            variant="default"
-            size="icon"
-            className="bg-teal-600 hover:bg-teal-700 text-white md:hidden h-9 w-9"
-            disabled={!activeWorkspaceId}
-            aria-label="Publicar Fluxo"
-          >
-            <Rocket className="h-4 w-4" />
-          </Button>
 
           <Button
             onClick={onSaveWorkspaces}
-            variant="outline"
+            variant="secondary"
             size="sm"
             disabled={!activeWorkspaceId}
             className="hidden md:inline-flex h-9"
           >
             <Save className="mr-2 h-4 w-4" /> Salvar
           </Button>
-          <Button
-            onClick={onSaveWorkspaces}
-            variant="outline"
-            size="icon"
-            disabled={!activeWorkspaceId}
-            className="md:hidden h-9 w-9"
-            aria-label="Salvar Fluxos"
-          >
-            <Save className="h-4 w-4" />
-          </Button>
 
           <Button
             onClick={onDiscardChanges}
-            variant="destructive"
+            variant="ghost"
             size="sm"
             disabled={!activeWorkspaceId}
-            className="hidden md:inline-flex h-9"
+            className="hidden text-muted-foreground hover:text-destructive-foreground hover:bg-destructive/90 md:inline-flex h-9"
           >
             <Undo2 className="mr-2 h-4 w-4" /> Descartar
-          </Button>
-          <Button
-            onClick={onDiscardChanges}
-            variant="destructive"
-            size="icon"
-            disabled={!activeWorkspaceId}
-            className="md:hidden h-9 w-9"
-            aria-label="Descartar Alterações"
-          >
-            <Undo2 className="h-4 w-4" />
           </Button>
 
           <Button

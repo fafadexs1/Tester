@@ -9,81 +9,70 @@ body {
 
 @layer base {
   :root {
-    --background: 220 20% 97%; /* Light Slate Cool Gray e.g. slate-100/gray-100 */
-    --foreground: 220 15% 25%; /* Dark Slate Cool Gray e.g. slate-800 */
+    --background: 240 10% 3.9%; /* almost-black */
+    --foreground: 0 0% 98%; /* almost-white */
 
-    --card: 0 0% 100%; /* White */
-    --card-foreground: 220 15% 25%; /* Dark Slate Cool Gray */
+    --card: 240 4.8% 9.5%; /* very-dark-gray */
+    --card-foreground: 0 0% 98%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 15% 25%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
 
-    --primary: 215 25% 27%; /* Slate Gray #334155 */
-    --primary-foreground: 0 0% 100%; /* White */
+    --primary: 262.1 83.3% 57.8%; /* vibrant-purple */
+    --primary-foreground: 0 0% 98%;
 
-    --secondary: 220 13% 91%; /* Lighter gray for secondary elements e.g. slate-200 */
-    --secondary-foreground: 220 15% 25%; /* Dark Slate Cool Gray */
+    --secondary: 240 3.7% 15.9%; /* dark-gray */
+    --secondary-foreground: 0 0% 98%;
 
-    --muted: 220 13% 88%; /* e.g. slate-300 */
-    --muted-foreground: 220 10% 45%; /* e.g. slate-500 */
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%; /* light-gray */
 
-    --accent: 172 80% 40%; /* Teal #14B8A6 */
-    --accent-foreground: 0 0% 100%; /* White, for text on teal backgrounds */
+    --accent: 12.3 83.3% 57.8%; /* vibrant-orange */
+    --accent-foreground: 0 0% 98%;
 
-    --destructive: 0 72% 51%; /* A standard red for destructive actions */
-    --destructive-foreground: 0 0% 98%; /* White */
+    --destructive: 0 62.8% 30.6%; /* dark-red */
+    --destructive-foreground: 0 0% 98%;
 
-    --border: 220 13% 88%; /* Border for cards, inputs e.g. slate-300 */
-    --input: 0 0% 100%;  /* Input background (white) */
-    --ring: 172 80% 40%;   /* Teal for focus rings */
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 262.1 83.3% 57.8%;
     
     --radius: 0.5rem;
 
-    /* Custom variables for flow builder */
-    --flow-node-message-icon: 38 92% 50%; /* orange for message icon example */
-    --flow-connection: hsl(var(--accent));
-    --flow-connection-highlight: hsl(var(--destructive));
-    --flow-grid-dots: 220 13% 80%; /* slate-400 equivalent for grid dots */
-
-    /* Sidebar specific variables - can be overridden by sidebar component if needed */
-    --sidebar-background: 220 14% 96%; /* slate-50 */
-    --sidebar-foreground: 220 15% 25%;
-    --sidebar-border: 220 13% 88%; /* slate-300 */
+    /* Custom flow builder vars */
+    --flow-grid-dots: 240 3.7% 20%;
+    --flow-connection: hsl(var(--primary));
+    --sidebar-background: 240 4.8% 9.5%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-border: 240 3.7% 15.9%;
   }
 
   .dark {
-    --background: 220 15% 10%; /* Dark Slate e.g. slate-900 */
-    --foreground: 220 13% 90%; /* Light Gray e.g. slate-200 */
-
-    --card: 220 15% 15%; /* Slightly lighter dark slate for cards e.g. slate-800 */
-    --card-foreground: 220 13% 90%;
-
-    --popover: 220 15% 12%;
-    --popover-foreground: 220 13% 90%;
-
-    --primary: 215 25% 75%; /* Lighter Slate Gray for dark mode */
-    --primary-foreground: 220 15% 10%; /* Dark Slate for text on primary */
-
-    --secondary: 220 15% 25%; /* e.g. slate-700 */
-    --secondary-foreground: 220 13% 90%;
-
-    --muted: 220 15% 22%; /* e.g. slate-700/800 */
-    --muted-foreground: 220 10% 60%; /* e.g. slate-400 */
-
-    --accent: 172 70% 55%; /* Brighter Teal for dark mode */
-    --accent-foreground: 0 0% 0%; /* Black for text on teal */
-
-    --destructive: 0 60% 55%;
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 4.8% 9.5%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 262.1 83.3% 57.8%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 12.3 83.3% 57.8%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-
-    --border: 220 15% 30%; /* e.g. slate-700 */
-    --input: 220 15% 20%;  /* e.g. slate-800 */
-    --ring: 172 70% 55%;
-
-    --flow-grid-dots: 220 15% 40%; /* slate-600 equivalent for grid dots */
-     --sidebar-background: 220 15% 12%; /* darker slate for sidebar */
-    --sidebar-foreground: 220 13% 90%;
-    --sidebar-border: 220 15% 30%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 262.1 83.3% 57.8%;
+    
+    --flow-grid-dots: 240 3.7% 20%;
+    --flow-connection: hsl(var(--primary));
+    --sidebar-background: 240 4.8% 9.5%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-border: 240 3.7% 15.9%;
   }
 }
 

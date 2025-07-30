@@ -13,18 +13,17 @@ import FlowSidebar from './FlowSidebar';
 import Canvas from './Canvas';
 import TopBar from './TopBar';
 import TestChatPanel from './TestChatPanel';
-import ErrorBoundary from '@/components/ErrorBoundary';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { 
-    clientSideLoadWorkspacesAction,
     saveWorkspaceToDB,
-    deleteWorkspaceFromDB,
-    loadActiveWorkspaceFromDB,
+    loadWorkspaceFromDB,
 } from '@/app/actions/databaseActions';
+import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 
 
 const LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN = 'nexusflowChatPanelOpen';
@@ -53,11 +52,12 @@ function generateUniqueVariableName(baseName: string, existingNames: string[]): 
   return newName;
 }
 
-export default function FlowBuilderClient() {
+export default function FlowBuilderClient({ workspaceId }: { workspaceId: string }) {
   const { toast } = useToast();
   const { user } = useAuth();
-  const [workspaces, setWorkspaces] = useState<WorkspaceData[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const router = useRouter();
+  
+  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceData | null>(null);
   const [isLoading, setIsLoading] = useState(true); 
   
   const [drawingLine, setDrawingLine] = useState<DrawingLineData | null>(null);
@@ -80,8 +80,6 @@ export default function FlowBuilderClient() {
   const [hasMounted, setHasMounted] = useState(false);
   const [definedVariablesInFlow, setDefinedVariablesInFlow] = useState<string[]>([]);
 
-  const getActiveWorkspaceKey = useCallback(() => `activeWorkspaceId_${user?.username}`, [user]);
-
   useEffect(() => {
     setHasMounted(true);
     const savedIsChatPanelOpen = localStorage.getItem(LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN);
@@ -103,7 +101,6 @@ export default function FlowBuilderClient() {
     zoomLevelCbRef.current = zoomLevel;
   }, [zoomLevel]);
 
-  const activeWorkspace = workspaces.find(ws => ws.id === activeWorkspaceId);
   const currentNodes = activeWorkspace?.nodes || [];
   const currentConnections = activeWorkspace?.connections || [];
 
@@ -153,61 +150,54 @@ export default function FlowBuilderClient() {
     });
   }, [hasMounted]);
   
-  const loadWorkspaces = useCallback(async () => {
-    if (!user) return;
+  const loadWorkspace = useCallback(async () => {
+    if (!user || !workspaceId) return;
     setIsLoading(true);
-    console.log("[FlowBuilderClient] Loading workspaces from DB...");
-    try {
-        const dbWorkspaces = await clientSideLoadWorkspacesAction();
-        const activeIdFromStorage = localStorage.getItem(getActiveWorkspaceKey());
-        
-        if (dbWorkspaces.length > 0) {
-            setWorkspaces(dbWorkspaces);
-            const activeExistsInDB = dbWorkspaces.some(ws => ws.id === activeIdFromStorage);
-            if (activeIdFromStorage && activeExistsInDB) {
-                setActiveWorkspaceId(activeIdFromStorage);
-            } else {
-                // If stored active ID is invalid, or doesn't exist, set to most recently updated
-                const mostRecent = await loadActiveWorkspaceFromDB();
-                setActiveWorkspaceId(mostRecent ? mostRecent.id : dbWorkspaces[0].id);
-            }
+    console.log(`[FlowBuilderClient] Loading workspace ${workspaceId} from DB...`);
+    
+    if (workspaceId === 'new') {
+        const newId = uuidv4();
+        const newWorkspace: WorkspaceData = { 
+            id: newId, 
+            name: 'Meu Novo Fluxo', 
+            nodes: [], 
+            connections: [], 
+            owner: user.username 
+        };
+        const saveResult = await saveWorkspaceToDB(newWorkspace);
+        if(saveResult.success) {
+            setActiveWorkspace(newWorkspace);
+            router.replace(`/flow/${newId}`); // Substitui a URL para a nova ID
         } else {
-            console.log("[FlowBuilderClient] No workspaces in DB. Creating a new one.");
-            const newId = uuidv4();
-            const newWorkspace: WorkspaceData = { id: newId, name: 'Meu Primeiro Fluxo', nodes: [], connections: [], owner: user.username };
-            const saveResult = await saveWorkspaceToDB(newWorkspace);
-            if(saveResult.success) {
-                setWorkspaces([newWorkspace]);
-                setActiveWorkspaceId(newId);
-            } else {
-                 toast({ title: "Erro", description: `Não foi possível criar o primeiro fluxo: ${saveResult.error}`, variant: "destructive" });
-            }
+             toast({ title: "Erro", description: `Não foi possível criar o novo fluxo: ${saveResult.error}`, variant: "destructive" });
+             router.push('/'); // Volta para o dashboard em caso de erro
         }
-    } catch(error: any) {
-        console.error("[FlowBuilderClient] Failed to load workspaces from DB:", error);
-        toast({ title: "Erro de Carregamento", description: "Não foi possível carregar os fluxos do banco de dados.", variant: "destructive" });
-        setWorkspaces([]);
-        setActiveWorkspaceId(null);
-    } finally {
-        setIsLoading(false);
+    } else {
+        try {
+            const dbWorkspace = await loadWorkspaceFromDB(workspaceId);
+            if (dbWorkspace) {
+                setActiveWorkspace(dbWorkspace);
+            } else {
+                toast({ title: "Erro de Carregamento", description: "O fluxo solicitado não foi encontrado.", variant: "destructive" });
+                router.push('/');
+            }
+        } catch(error: any) {
+            console.error(`[FlowBuilderClient] Failed to load workspace ${workspaceId} from DB:`, error);
+            toast({ title: "Erro de Carregamento", description: "Não foi possível carregar o fluxo do banco de dados.", variant: "destructive" });
+            router.push('/');
+        }
     }
-  }, [user, getActiveWorkspaceKey, toast]);
+    setIsLoading(false);
+  }, [user, workspaceId, toast, router]);
 
 
   useEffect(() => {
     if (user && hasMounted) {
-      loadWorkspaces();
+      loadWorkspace();
     }
-  }, [user, hasMounted, loadWorkspaces]);
-  
+  }, [user, hasMounted, loadWorkspace]);
 
-  useEffect(() => {
-    if (hasMounted && activeWorkspaceId && user) {
-      localStorage.setItem(getActiveWorkspaceKey(), activeWorkspaceId);
-    }
-  }, [activeWorkspaceId, hasMounted, user, getActiveWorkspaceKey]);
-
-  const handleSaveWorkspaces = useCallback(async () => {
+  const handleSaveWorkspace = useCallback(async () => {
     if (!activeWorkspace) {
       console.warn("[FlowBuilderClient] No active workspace to save.");
       toast({ title: "Aviso", description: "Nenhum fluxo ativo para salvar.", variant: "default" });
@@ -218,7 +208,7 @@ export default function FlowBuilderClient() {
     if (result.success) {
       toast({
         title: "Fluxo Salvo!",
-        description: `O fluxo "${activeWorkspace.name}" foi salvo no banco de dados.`,
+        description: `O fluxo "${activeWorkspace.name}" foi salvo com sucesso.`,
       });
     } else {
       toast({
@@ -234,83 +224,26 @@ export default function FlowBuilderClient() {
     if (!hasMounted || !user) return;
     toast({
       title: "Descartando Alterações...",
-      description: "Recarregando fluxos do banco de dados.",
+      description: "Recarregando fluxo do banco de dados.",
     });
-    await loadWorkspaces(); // Reload all from DB
+    await loadWorkspace();
     setHighlightedNodeIdBySession(null); 
-  }, [hasMounted, user, loadWorkspaces, toast]);
+  }, [hasMounted, user, loadWorkspace, toast]);
 
-  const addWorkspace = useCallback(async () => {
-    if (!hasMounted || !user) return;
-    const newWorkspaceId = uuidv4();
-    const newWorkspace: WorkspaceData = {
-      id: newWorkspaceId,
-      name: `Novo Fluxo ${workspaces.length + 1}`,
-      nodes: [],
-      connections: [],
-      owner: user.username,
-    };
-    
-    setWorkspaces(prev => [...prev, newWorkspace]);
-    setActiveWorkspaceId(newWorkspaceId);
-    
-    // Save the new workspace to DB immediately
-    const result = await saveWorkspaceToDB(newWorkspace);
-     if (result.success) {
-      toast({
-        title: "Novo Fluxo Criado",
-        description: `O fluxo "${newWorkspace.name}" foi criado e salvo.`,
-      });
-    } else {
-      toast({
-        title: "Erro ao Criar",
-        description: `Não foi possível salvar o novo fluxo: ${result.error}`,
-        variant: "destructive",
-      });
-      // Rollback UI change if save fails
-      setWorkspaces(workspaces);
-      setActiveWorkspaceId(activeWorkspaceId);
-    }
-  }, [workspaces, hasMounted, user, activeWorkspaceId, toast]);
-
-  const switchWorkspace = useCallback((workspaceId: string) => {
-    if (workspaces.find(ws => ws.id === workspaceId)) {
-        setActiveWorkspaceId(workspaceId); 
-        setHighlightedNodeIdBySession(null);
-    } else {
-        console.warn(`[FlowBuilderClient] Attempted to switch to non-existent workspace ID: ${workspaceId}`);
-        if (workspaces.length > 0) {
-            const firstId = workspaces[0].id;
-            setActiveWorkspaceId(firstId);
-        } else {
-            setActiveWorkspaceId(null); 
-        }
-         setHighlightedNodeIdBySession(null);
-    }
-  }, [workspaces]);
-  
   const updateActiveWorkspace = useCallback((updater: (workspace: WorkspaceData) => WorkspaceData) => {
-    if (!activeWorkspaceId) {
-        console.warn('[FlowBuilderClient] updateActiveWorkspace called but no activeWorkspaceId.');
-        return;
-    }
-    setWorkspaces(prevWorkspaces =>
-      prevWorkspaces.map(ws =>
-        ws.id === activeWorkspaceId ? updater(ws) : ws
-      )
-    );
-  }, [activeWorkspaceId]);
+    setActiveWorkspace(prevWorkspace => {
+        if (!prevWorkspace) {
+            console.warn('[FlowBuilderClient] updateActiveWorkspace called but no activeWorkspace.');
+            return null;
+        }
+        return updater(prevWorkspace);
+    });
+  }, []);
 
   const handleDropNode = useCallback((item: DraggableBlockItemData, logicalDropCoords: { x: number, y: number }) => {
-    if (!activeWorkspaceId) {
-      console.error('[FlowBuilderClient] No activeWorkspaceId, cannot add node.');
-      return;
-    }
-    
     let tempExistingVars: string[] = [];
-    const currentWsForVars = workspaces.find(ws => ws.id === activeWorkspaceId);
-    if (currentWsForVars?.nodes) {
-        currentWsForVars.nodes.forEach(n => {
+    if (activeWorkspace?.nodes) {
+        activeWorkspace.nodes.forEach(n => {
             VARIABLE_DEFINING_FIELDS.forEach(field => {
                 const varName = n[field] as string | undefined;
                 if (varName && varName.trim() !== '') {
@@ -393,7 +326,7 @@ export default function FlowBuilderClient() {
       type: item.type as NodeData['type'],
       title: item.label,
       ...baseNodeData, 
-      ...(item.type === 'start' && !itemDefaultDataCopy.triggers && { triggers: [{ id: uuidv4(), name: 'Gatilho Inicial', type: 'manual', variableMappings: [] }] }),
+      ...(item.type === 'start' && !itemDefaultDataCopy.triggers && { triggers: [{ id: uuidv4(), name: 'Manual', type: 'manual', enabled: true }, { id: uuidv4(), name: 'Webhook', type: 'webhook', enabled: false, variableMappings: [], sessionTimeoutSeconds: 0 }] }),
       ...itemDefaultDataCopy, 
       x: Math.round((logicalDropCoords.x - NODE_WIDTH / 2) / GRID_SIZE) * GRID_SIZE, 
       y: Math.round((logicalDropCoords.y - NODE_HEADER_HEIGHT_APPROX / 2) / GRID_SIZE) * GRID_SIZE, 
@@ -403,7 +336,7 @@ export default function FlowBuilderClient() {
       const updatedNodes = [...(ws.nodes || []), newNode]; 
       return { ...ws, nodes: updatedNodes };
     });
-  }, [activeWorkspaceId, updateActiveWorkspace, workspaces]);
+  }, [activeWorkspace, updateActiveWorkspace]);
 
   const updateNode = useCallback((id: string, changes: Partial<NodeData>) => {
     updateActiveWorkspace(ws => ({
@@ -523,11 +456,6 @@ export default function FlowBuilderClient() {
       }
 
       if (toId && drawingLine.fromId !== toId) {
-        if (!activeWorkspaceId) {
-            console.warn("[FlowBuilderClient] No activeWorkspaceId, cannot add connection.");
-            setDrawingLine(null);
-            return;
-        }
         updateActiveWorkspace(ws => {
             let newConnectionsArray = [...(ws.connections || [])]; 
             const newConnection: Connection = {
@@ -560,7 +488,7 @@ export default function FlowBuilderClient() {
       }
       setDrawingLine(null);
     }
-  }, [drawingLine, activeWorkspaceId, updateActiveWorkspace, setDrawingLine, canvasRef]); 
+  }, [drawingLine, updateActiveWorkspace, setDrawingLine, canvasRef]); 
 
   const deleteConnection = useCallback((connectionId: string) => {
     updateActiveWorkspace(ws => ({
@@ -636,62 +564,70 @@ export default function FlowBuilderClient() {
     setHighlightedNodeIdBySession(nodeId);
   }, []);
 
+  const handleUpdateWorkspaceName = useCallback((newName: string) => {
+    updateActiveWorkspace(ws => ({
+      ...ws,
+      name: newName,
+    }));
+  }, [updateActiveWorkspace]);
+
 
   if (isLoading && hasMounted) {
-    return <div className="flex items-center justify-center h-screen">Carregando seus fluxos...</div>;
+    return (
+        <div className="flex h-screen w-full items-center justify-center bg-muted/20">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <p className="ml-4 text-lg text-muted-foreground">Carregando seu fluxo...</p>
+        </div>
+    );
   }
 
   return (
-    <ErrorBoundary>
-      <DndProvider backend={HTML5Backend}>
-        <div className="flex flex-col h-screen bg-background font-sans select-none overflow-hidden">
-          <TopBar
-            workspaces={workspaces}
-            activeWorkspaceId={activeWorkspaceId}
-            onAddWorkspace={addWorkspace}
-            onSwitchWorkspace={switchWorkspace}
-            onSaveWorkspaces={handleSaveWorkspaces}
-            onDiscardChanges={handleDiscardChanges}
-            appName="NexusFlow"
-            isChatPanelOpen={isChatPanelOpen}
-            onToggleChatPanel={toggleChatPanel}
-            onZoom={handleZoom}
-            currentZoomLevel={zoomLevel}
-            onHighlightNode={handleHighlightNodeInFlow} 
-          />
-          <div className="flex-1 flex relative overflow-hidden">
-            <FlowSidebar />
-            <div className="flex-1 flex relative overflow-hidden" >
-              <Canvas
-                ref={canvasRef} 
-                nodes={currentNodes}
-                connections={currentConnections}
-                drawingLine={drawingLine}
-                canvasOffset={canvasOffset}
-                zoomLevel={zoomLevel}
-                onDropNode={handleDropNode}
-                onUpdateNode={updateNode}
-                onStartConnection={handleStartConnection}
-                onDeleteNode={deleteNode}
-                onDeleteConnection={deleteConnection}
-                onCanvasMouseDown={handleCanvasMouseDownForPanning}
-                highlightedConnectionId={highlightedConnectionId}
-                setHighlightedConnectionId={setHighlightedConnectionId}
-                definedVariablesInFlow={definedVariablesInFlow}
-                highlightedNodeIdBySession={highlightedNodeIdBySession}
-                activeWorkspace={activeWorkspace}
-              />
-            </div>
-            {hasMounted && isChatPanelOpen && (
-              <TestChatPanel
-                activeWorkspace={activeWorkspace}
-              />
-            )}
+    <DndProvider backend={HTML5Backend}>
+      <div className="flex flex-col h-screen bg-background font-sans select-none overflow-hidden">
+        <TopBar
+          workspaces={activeWorkspace ? [activeWorkspace] : []}
+          activeWorkspaceId={activeWorkspace?.id || null}
+          onSwitchWorkspace={() => {}} // A navegação agora é por URL
+          onSaveWorkspaces={handleSaveWorkspace}
+          onDiscardChanges={handleDiscardChanges}
+          onUpdateWorkspaceName={handleUpdateWorkspaceName}
+          appName="NexusFlow"
+          isChatPanelOpen={isChatPanelOpen}
+          onToggleChatPanel={toggleChatPanel}
+          onZoom={handleZoom}
+          currentZoomLevel={zoomLevel}
+          onHighlightNode={handleHighlightNodeInFlow} 
+        />
+        <div className="flex-1 flex relative overflow-hidden">
+          <FlowSidebar />
+          <div className="flex-1 flex relative overflow-hidden" >
+            <Canvas
+              ref={canvasRef} 
+              nodes={currentNodes}
+              connections={currentConnections}
+              drawingLine={drawingLine}
+              canvasOffset={canvasOffset}
+              zoomLevel={zoomLevel}
+              onDropNode={handleDropNode}
+              onUpdateNode={updateNode}
+              onStartConnection={handleStartConnection}
+              onDeleteNode={deleteNode}
+              onDeleteConnection={deleteConnection}
+              onCanvasMouseDown={handleCanvasMouseDownForPanning}
+              highlightedConnectionId={highlightedConnectionId}
+              setHighlightedConnectionId={setHighlightedConnectionId}
+              definedVariablesInFlow={definedVariablesInFlow}
+              highlightedNodeIdBySession={highlightedNodeIdBySession}
+              activeWorkspace={activeWorkspace}
+            />
           </div>
+          {hasMounted && isChatPanelOpen && (
+            <TestChatPanel
+              activeWorkspace={activeWorkspace}
+            />
+          )}
         </div>
-      </DndProvider>
-    </ErrorBoundary>
+      </div>
+    </DndProvider>
   );
 }
-
-    
