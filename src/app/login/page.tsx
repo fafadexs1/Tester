@@ -2,7 +2,6 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,9 +17,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login, register, loading } = useAuth(); // Removed user from here
+  const { login, register, loading, user } = useAuth();
   const { toast } = useToast();
-  const router = useRouter();
   
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -43,6 +41,8 @@ export default function LoginPage() {
         result = await register(formData);
       }
       
+      // O AuthProvider agora é o único responsável pelo redirecionamento.
+      // A página de login apenas exibe o erro se houver um.
       if (!result.success) {
         toast({
           title: isLoginView ? "Erro no Login" : "Erro no Registro",
@@ -50,8 +50,6 @@ export default function LoginPage() {
           variant: "destructive",
         });
       }
-      // O AuthProvider agora é o único responsável pelo redirecionamento.
-      // A página de login não precisa mais fazer isso.
       
     } catch (error: any) {
         toast({
@@ -65,16 +63,10 @@ export default function LoginPage() {
   };
   
   // O AuthProvider renderiza um loader global. 
-  // Esta página só renderiza o formulário.
-  if (loading) {
-     return (
-         <div className="flex h-screen w-full items-center justify-center bg-background">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-             <span className="ml-4 text-muted-foreground">
-               Verificando sessão...
-             </span>
-        </div>
-      );
+  // Esta página só renderiza o formulário se o loading inicial tiver terminado
+  // e não houver usuário logado. O AuthProvider lida com o redirecionamento.
+  if (loading || user) {
+     return null; // O AuthProvider está mostrando a tela de carregamento/redirecionamento
   }
 
   return (
