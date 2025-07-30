@@ -141,7 +141,7 @@ async function executeFlowStep(
 
     case 'option':
       const questionText = substituteVariablesInText(currentNode.questionText, session.flow_variables);
-      const optionsList = (currentNode.optionsList || '').split('\n').map(opt => substituteVariablesInText(opt.trim(), session.flow_variables)).filter(Boolean);
+      const optionsList = (currentNode.optionsList || '').split('\n').map(opt => substituteVariables(opt.trim(), session.flow_variables)).filter(Boolean);
       
       if (questionText && optionsList.length > 0) {
         let messageWithOptions = questionText + '\n\n';
@@ -446,12 +446,12 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
 
       if (!workspace || !workspace.nodes || workspace.nodes.length === 0) {
         console.error(`[API Evolution WS Route] Workspace "${decodedWorkspaceName}" not found or empty.`);
-        if (senderJid) await sendWhatsAppMessageAction({baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey || undefined, instanceName, recipientPhoneNumber: senderJid, messageType:'text', textContent: `Desculpe, o fluxo de trabalho "${decodedWorkspaceName}" não foi encontrado ou está vazio.`});
+        if (senderJid) await sendWhatsAppMessageAction({baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey || undefined, instanceName, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: `Desculpe, o fluxo de trabalho "${decodedWorkspaceName}" não foi encontrado ou está vazio.`});
         return NextResponse.json({ error: `Workspace "${decodedWorkspaceName}" not found or empty.` }, { status: 404 });
       }
       
       const apiConfig: ApiConfig = { baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey || undefined, instanceName };
-      const sessionId = `${senderJid}@@${workspace.id}`;
+      const sessionId = `${senderJid.split('@')[0]}@@${workspace.id}`;
       let session = await loadSessionFromDB(sessionId);
       let continueProcessing = true;
 
@@ -473,7 +473,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
         const startNode = workspace.nodes.find(n => n.type === 'start');
         if (!startNode) {
           console.error(`[API Evolution WS Route - ${sessionId}] No start node in workspace ${workspace.id}.`);
-          if (senderJid) await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Erro: O fluxo não tem um nó de início."});
+          if (senderJid) await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: "Erro: O fluxo não tem um nó de início."});
           return NextResponse.json({ error: "Flow has no start node." }, { status: 500 });
         }
         
@@ -482,12 +482,12 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
 
         if(!initialNodeId){
             console.error(`[API Evolution WS Route - ${sessionId}] Start node or its first trigger has no outgoing connection.`);
-            if (senderJid) await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Erro: O fluxo não está conectado corretamente a partir do início."});
+            if (senderJid) await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: "Erro: O fluxo não está conectado corretamente a partir do início."});
             return NextResponse.json({ error: "Start node is not connected." }, { status: 500 });
         }
         
         const initialVars: Record<string, any> = {
-          whatsapp_sender_jid: senderJid,
+          whatsapp_sender_jid: senderJid.split('@')[0],
           mensagem_whatsapp: receivedMessageText || '',
         };
 
@@ -515,10 +515,6 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
         console.log(`[API Evolution WS Route - ${sessionId}] Existing session. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
         session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
         
-        // This part is tricky: should we re-evaluate webhook variables on every message? 
-        // For now, let's assume we don't, as webhook data is usually for session initiation.
-        // We could add a node type to explicitly re-parse the latest webhook payload if needed.
-
         if (session.awaiting_input_type && session.current_node_id && session.awaiting_input_details) {
           const originalNodeId = session.awaiting_input_details.originalNodeId || session.current_node_id;
           const awaitingNode = findNodeById(originalNodeId, workspace.nodes);
@@ -547,9 +543,10 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
                 console.log(`[API Evolution WS Route - ${sessionId}] User chose option: "${chosenOptionText}". Next node: ${session.current_node_id}`);
               } else {
                 console.log(`[API Evolution WS Route - ${sessionId}] Invalid option: "${trimmedReceivedMessage}". Re-prompting.`);
-                await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid, messageType:'text', textContent: "Opção inválida. Por favor, tente novamente respondendo com o número ou o texto exato da opção."});
-                session.current_node_id = awaitingNode.id; 
-                continueProcessing = false;
+                await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: "Opção inválida. Por favor, tente novamente respondendo com o número ou o texto exato da opção."});
+                // Don't change the current node, just save session and stop processing
+                // The flow will implicitly stay on the same node.
+                continueProcessing = false; 
               }
             }
             session.awaiting_input_type = null;
