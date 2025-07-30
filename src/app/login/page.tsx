@@ -27,6 +27,14 @@ export default function LoginPage() {
     setHasMounted(true);
   }, []);
 
+  // Efeito para redirecionar o usuário se ele já estiver logado
+  useEffect(() => {
+    if (user && !loading) {
+      router.push('/');
+    }
+  }, [user, loading, router]);
+
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
@@ -40,7 +48,7 @@ export default function LoginPage() {
       result = await login(formData);
       if (result.success) {
         toast({ title: "Login bem-sucedido!", description: "Redirecionando para o dashboard..." });
-        router.push('/'); // Redireciona após o sucesso
+        // O redirecionamento será tratado pelo useEffect acima
       }
     } else {
       if (password !== confirmPassword) {
@@ -51,7 +59,7 @@ export default function LoginPage() {
       result = await register(formData);
        if (result.success) {
         toast({ title: "Registro bem-sucedido!", description: "Redirecionando para o dashboard..." });
-        router.push('/'); // Redireciona após o sucesso
+        // O redirecionamento será tratado pelo useEffect acima
       }
     }
 
@@ -75,10 +83,8 @@ export default function LoginPage() {
       );
   }
 
-  // Se o usuário navegou para /login enquanto já estava logado, redirecione-o.
-  // Isso acontece depois da verificação de carregamento para evitar loops.
+  // Se o usuário estiver logado, mostra a tela de redirecionamento enquanto o useEffect faz o trabalho.
   if (user) {
-    router.push('/');
     return (
         <div className="flex h-screen w-full items-center justify-center bg-background">
            <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -87,6 +93,7 @@ export default function LoginPage() {
      );
   }
 
+  // Se não houver usuário logado e não estiver carregando, mostra o formulário.
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4 relative overflow-hidden">
        <div className="absolute top-0 left-0 -translate-x-1/3 -translate-y-1/3 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse"></div>
