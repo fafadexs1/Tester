@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, BotMessageSquare, Loader2 } from 'lucide-react';
+import { Zap, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function LoginPage() {
@@ -65,7 +65,7 @@ export default function LoginPage() {
       return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
-             <span className="ml-4 text-muted-foreground">Carregando sessão...</span>
+             <span className="ml-4 text-muted-foreground">Verificando sessão...</span>
         </div>
       );
   }

@@ -3,7 +3,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { User } from '@/lib/types';
-import { useRouter } from 'next/navigation';
 import { loginAction, logoutAction, registerAction } from '@/app/actions/authActions';
 import { getCurrentUser } from '@/lib/auth';
 
@@ -20,7 +19,6 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true); // Começa como true para verificar a sessão
-  const router = useRouter();
 
   useEffect(() => {
     // Verifica a sessão com o servidor ao carregar o provedor
@@ -47,7 +45,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     if (result.success && result.user) {
         setUser(result.user);
-        // Após o login, o redirecionamento é tratado pela página de login
         return { success: true };
     } else {
         return { success: false, error: result.error };
@@ -67,9 +64,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     await logoutAction();
     setUser(null);
-    router.push('/login');
-    router.refresh(); // Garante que o estado do servidor seja atualizado
-  }, [router]);
+    // O redirecionamento será tratado pela página ou por um componente wrapper
+    // que observa o estado de autenticação.
+  }, []);
 
   const value = {
     user,
