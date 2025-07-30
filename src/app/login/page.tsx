@@ -22,12 +22,15 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   useEffect(() => {
+    // This effect now reliably redirects AFTER the user state is confirmed client-side
+    // and the server session is likely established (post-refresh).
     if (user) {
       router.push('/');
     }
   }, [user, router]);
   
-  if (loading || user) {
+  // This loading state is for initial page load check, not for post-login.
+  if (loading) {
       return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <motion.div
@@ -39,6 +42,15 @@ export default function LoginPage() {
         </div>
       );
   }
+  
+  // If user object exists (e.g., from a previous session), show loading while redirecting.
+  if (user) {
+      return (
+         <div className="flex h-screen w-full items-center justify-center bg-background">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+         </div>
+      )
+  }
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -46,20 +58,11 @@ export default function LoginPage() {
     let result;
     const formData = new FormData();
     formData.append('username', username);
+    // Password is now sent to the server for validation in loginAction
     formData.append('password', password);
 
     if (isLoginView) {
-      result = await login(formData, password); // Pass password for client-side validation
-      if (result.success) {
-        toast({ title: "Login bem-sucedido!", description: `Bem-vindo de volta, ${username}!` });
-        // Redirect is handled by the useEffect
-      } else {
-        toast({
-          title: "Erro no Login",
-          description: result.error || "Usuário ou senha inválidos.",
-          variant: "destructive",
-        });
-      }
+      result = await login(formData, password); // Pass password for client-side storage
     } else {
       if (password !== confirmPassword) {
         toast({ title: "Erro de Registro", description: "As senhas não coincidem.", variant: "destructive" });
@@ -67,21 +70,20 @@ export default function LoginPage() {
         return;
       }
       result = await register(formData, password); // Pass password for client-side storage
-      if (result.success) {
-        toast({ title: "Registro bem-sucedido!", description: `Bem-vindo, ${username}! Você agora está logado.` });
-         // Redirect is handled by the useEffect
-      } else {
-        toast({
-          title: "Erro no Registro",
-          description: result.error || "Não foi possível registrar o usuário.",
+    }
+
+    if (result.success) {
+      toast({ title: isLoginView ? "Login bem-sucedido!" : "Registro bem-sucedido!", description: "Redirecionando..." });
+      // CRITICAL FIX: Refresh the router to make sure client-side cache and server-side session are in sync.
+      router.refresh(); 
+      // The useEffect will handle the redirect once the user object is updated.
+    } else {
+      toast({
+          title: isLoginView ? "Erro no Login" : "Erro no Registro",
+          description: result.error || (isLoginView ? "Usuário ou senha inválidos." : "Não foi possível registrar o usuário."),
           variant: "destructive",
         });
-      }
-    }
-    
-    // Only set submitting to false on error, as success will trigger a redirect.
-    if (!result.success) {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
   };
 
