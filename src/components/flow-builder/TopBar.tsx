@@ -302,7 +302,9 @@ const TopBar: React.FC<TopBarProps> = ({
     { id: 'integrations', label: 'Integrações', icon: <PlugZap className="w-5 h-5 mr-2" /> },
   ];
 
-  const handleCopyToClipboard = (text: string, type: string) => {
+  const handleCopyToClipboard = (e: React.MouseEvent<HTMLButtonElement>, text: string, type: string) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
         navigator.clipboard.writeText(text).then(() => {
           toast({ title: `${type} Copiada!`, description: `A ${type.toLowerCase()} foi copiada para a área de transferência.` });
@@ -533,7 +535,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                 <Button 
                                   variant="outline" 
                                   size="icon" 
-                                  onClick={() => handleCopyToClipboard(evolutionWebhookUrlForCurrentFlow, "URL de Webhook")} 
+                                  onClick={(e) => handleCopyToClipboard(e, evolutionWebhookUrlForCurrentFlow, "URL de Webhook")} 
                                   title="Copiar URL de Webhook" 
                                   className="h-9 w-9"
                                   disabled={!workspaceName}

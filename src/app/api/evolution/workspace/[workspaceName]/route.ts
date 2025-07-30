@@ -377,7 +377,8 @@ async function storeRequestDetails(
     ];
     for (const path of remoteJidPaths) {
       const jid = getProperty(actualPayloadToExtractFrom, path);
-      if (typeof jid === 'string' && jid.trim() !== '') {
+      // We only care about the user's JID, which does not contain the instance name
+      if (typeof jid === 'string' && jid.includes('@s.whatsapp.net')) {
         webhookRemoteJid = jid.trim();
         break;
       }
