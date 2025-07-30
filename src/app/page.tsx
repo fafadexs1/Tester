@@ -15,7 +15,7 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) {
     // Se não houver usuário, redireciona para o login. Simples e direto.
-    redirect('/login');
+    return redirect('/login');
   }
 
   // Carrega os workspaces diretamente no servidor.

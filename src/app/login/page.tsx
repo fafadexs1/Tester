@@ -22,15 +22,9 @@ export default function LoginPage() {
   const { user, login, register, loading } = useAuth();
   const { toast } = useToast();
 
-  const [hasMounted, setHasMounted] = useState(false);
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
-
   // Efeito para redirecionar o usuário se ele já estiver logado
-  // Este é o local correto para o redirecionamento para evitar atualizações durante a renderização
   useEffect(() => {
-    if (user && !loading) {
+    if (!loading && user) {
       router.push('/');
     }
   }, [user, loading, router]);
@@ -49,8 +43,7 @@ export default function LoginPage() {
       result = await login(formData);
       if (result.success) {
         toast({ title: "Login bem-sucedido!", description: "Redirecionando para o dashboard..." });
-        // O useEffect acima cuidará do redirecionamento quando o 'user' for atualizado.
-        // router.push('/'); // Removido daqui para evitar o loop
+        router.push('/'); 
       }
     } else {
       if (password !== confirmPassword) {
@@ -61,8 +54,7 @@ export default function LoginPage() {
       result = await register(formData);
        if (result.success) {
         toast({ title: "Registro bem-sucedido!", description: "Redirecionando para o dashboard..." });
-        // O useEffect acima cuidará do redirecionamento.
-        // router.push('/'); // Removido daqui
+        router.push('/');
       }
     }
 
@@ -77,9 +69,7 @@ export default function LoginPage() {
     setIsSubmitting(false);
   };
   
-  // Renderiza um estado de carregamento enquanto a sessão está sendo verificada ou
-  // se o usuário já estiver logado e esperando o redirecionamento do useEffect.
-  if (!hasMounted || loading || user) {
+  if (loading || user) {
       return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -180,4 +170,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
