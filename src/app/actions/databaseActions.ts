@@ -52,11 +52,23 @@ async function initializeDatabase(): Promise<void> {
         nodes JSONB,
         connections JSONB,
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        owner TEXT
+        updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
-    console.log('[DB Actions] initializeDatabase: "workspaces" table checked/created (with UNIQUE name).');
+    console.log('[DB Actions] initializeDatabase: "workspaces" table checked/created.');
+
+    // Add the 'owner' column if it doesn't exist
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS(SELECT * FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'workspaces' AND column_name = 'owner') THEN
+          ALTER TABLE workspaces ADD COLUMN owner TEXT;
+          RAISE NOTICE 'Column owner added to workspaces table.';
+        END IF;
+      END;
+      $$;
+    `);
+    console.log('[DB Actions] initializeDatabase: "owner" column checked/added to "workspaces" table.');
 
     await client.query(`
       DROP TRIGGER IF EXISTS set_workspaces_timestamp ON workspaces;
