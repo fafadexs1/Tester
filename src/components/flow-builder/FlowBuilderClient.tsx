@@ -13,12 +13,19 @@ import FlowSidebar from './FlowSidebar';
 import Canvas from './Canvas';
 import TopBar from './TopBar';
 import TestChatPanel from './TestChatPanel';
-import ErrorBoundary from '@/components/ErrorBoundary'; // Importar ErrorBoundary
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { 
+    clientSideLoadWorkspacesAction,
+    saveWorkspaceToDB,
+    deleteWorkspaceFromDB,
+    loadActiveWorkspaceFromDB,
+} from '@/app/actions/databaseActions';
+
 
 const LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN = 'nexusflowChatPanelOpen';
 
@@ -73,7 +80,6 @@ export default function FlowBuilderClient() {
   const [hasMounted, setHasMounted] = useState(false);
   const [definedVariablesInFlow, setDefinedVariablesInFlow] = useState<string[]>([]);
 
-  const getWorkspacesKey = useCallback(() => `workspaces_${user?.username}`, [user]);
   const getActiveWorkspaceKey = useCallback(() => `activeWorkspaceId_${user?.username}`, [user]);
 
   useEffect(() => {
@@ -113,8 +119,10 @@ export default function FlowBuilderClient() {
         });
         if (n.type === 'start' && Array.isArray(n.triggers)) {
           n.triggers.forEach(trigger => {
-            if (trigger.type === 'webhook' && trigger.webhookPayloadVariable) {
-              variablesSet.add(trigger.webhookPayloadVariable.replace(/\{\{/g, '').replace(/\}\}/g, ''));
+            if (trigger.type === 'webhook' && Array.isArray(trigger.variableMappings)) {
+              trigger.variableMappings.forEach(mapping => {
+                if(mapping.flowVariable) variablesSet.add(mapping.flowVariable.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
+              })
             }
           });
         }
@@ -144,43 +152,53 @@ export default function FlowBuilderClient() {
       return newState;
     });
   }, [hasMounted]);
+  
+  const loadWorkspaces = useCallback(async () => {
+    if (!user) return;
+    setIsLoading(true);
+    console.log("[FlowBuilderClient] Loading workspaces from DB...");
+    try {
+        const dbWorkspaces = await clientSideLoadWorkspacesAction();
+        const activeIdFromStorage = localStorage.getItem(getActiveWorkspaceKey());
+        
+        if (dbWorkspaces.length > 0) {
+            setWorkspaces(dbWorkspaces);
+            const activeExistsInDB = dbWorkspaces.some(ws => ws.id === activeIdFromStorage);
+            if (activeIdFromStorage && activeExistsInDB) {
+                setActiveWorkspaceId(activeIdFromStorage);
+            } else {
+                // If stored active ID is invalid, or doesn't exist, set to most recently updated
+                const mostRecent = await loadActiveWorkspaceFromDB();
+                setActiveWorkspaceId(mostRecent ? mostRecent.id : dbWorkspaces[0].id);
+            }
+        } else {
+            console.log("[FlowBuilderClient] No workspaces in DB. Creating a new one.");
+            const newId = uuidv4();
+            const newWorkspace: WorkspaceData = { id: newId, name: 'Meu Primeiro Fluxo', nodes: [], connections: [], owner: user.username };
+            const saveResult = await saveWorkspaceToDB(newWorkspace);
+            if(saveResult.success) {
+                setWorkspaces([newWorkspace]);
+                setActiveWorkspaceId(newId);
+            } else {
+                 toast({ title: "Erro", description: `Não foi possível criar o primeiro fluxo: ${saveResult.error}`, variant: "destructive" });
+            }
+        }
+    } catch(error: any) {
+        console.error("[FlowBuilderClient] Failed to load workspaces from DB:", error);
+        toast({ title: "Erro de Carregamento", description: "Não foi possível carregar os fluxos do banco de dados.", variant: "destructive" });
+        setWorkspaces([]);
+        setActiveWorkspaceId(null);
+    } finally {
+        setIsLoading(false);
+    }
+  }, [user, getActiveWorkspaceKey, toast]);
+
 
   useEffect(() => {
     if (user && hasMounted) {
-      setIsLoading(true);
-      const workspacesKey = getWorkspacesKey();
-      const activeWorkspaceKey = getActiveWorkspaceKey();
-
-      const data = localStorage.getItem(workspacesKey);
-      const lastActiveId = localStorage.getItem(activeWorkspaceKey);
-      
-      let userWorkspaces: WorkspaceData[] = [];
-      if (data) {
-        try {
-          userWorkspaces = JSON.parse(data);
-        } catch(e) {
-          console.error("Failed to parse workspaces from localStorage", e);
-          userWorkspaces = [];
-        }
-      }
-
-      if (userWorkspaces.length > 0) {
-        setWorkspaces(userWorkspaces);
-        if (lastActiveId && userWorkspaces.some(ws => ws.id === lastActiveId)) {
-          setActiveWorkspaceId(lastActiveId);
-        } else {
-          setActiveWorkspaceId(userWorkspaces[0].id);
-        }
-      } else {
-        const newId = uuidv4();
-        const newWorkspace: WorkspaceData = { id: newId, name: 'Meu Primeiro Fluxo', nodes: [], connections: [], owner: user.username };
-        setWorkspaces([newWorkspace]);
-        setActiveWorkspaceId(newId);
-        localStorage.setItem(workspacesKey, JSON.stringify([newWorkspace]));
-      }
-      setIsLoading(false);
+      loadWorkspaces();
     }
-  }, [user, hasMounted, getWorkspacesKey, getActiveWorkspaceKey]);
+  }, [user, hasMounted, loadWorkspaces]);
   
 
   useEffect(() => {
@@ -190,53 +208,37 @@ export default function FlowBuilderClient() {
   }, [activeWorkspaceId, hasMounted, user, getActiveWorkspaceKey]);
 
   const handleSaveWorkspaces = useCallback(async () => {
-    if (!hasMounted || !workspaces || workspaces.length === 0 || !user) {
-      console.warn("[FlowBuilderClient] No workspaces to save or component not mounted.");
+    if (!activeWorkspace) {
+      console.warn("[FlowBuilderClient] No active workspace to save.");
+      toast({ title: "Aviso", description: "Nenhum fluxo ativo para salvar.", variant: "default" });
       return;
     }
-    const workspacesKey = getWorkspacesKey();
-    localStorage.setItem(workspacesKey, JSON.stringify(workspaces));
-    toast({
-      title: "Fluxos Salvos!",
-      description: "Seus fluxos foram salvos no armazenamento local.",
-    });
-  }, [workspaces, toast, hasMounted, user, getWorkspacesKey]);
+    console.log(`[FlowBuilderClient] Saving workspace ${activeWorkspace.id} to DB...`);
+    const result = await saveWorkspaceToDB(activeWorkspace);
+    if (result.success) {
+      toast({
+        title: "Fluxo Salvo!",
+        description: `O fluxo "${activeWorkspace.name}" foi salvo no banco de dados.`,
+      });
+    } else {
+      toast({
+        title: "Erro ao Salvar",
+        description: result.error || "Ocorreu um erro desconhecido.",
+        variant: "destructive",
+      });
+    }
+  }, [activeWorkspace, toast]);
 
 
   const handleDiscardChanges = useCallback(async () => {
     if (!hasMounted || !user) return;
-    setIsLoading(true);
-    const workspacesKey = getWorkspacesKey();
-    const data = localStorage.getItem(workspacesKey);
-    let userWorkspaces: WorkspaceData[] = [];
-    if (data) {
-      try {
-        userWorkspaces = JSON.parse(data);
-      } catch(e) {
-        console.error("Failed to parse workspaces from localStorage on discard", e);
-        userWorkspaces = [];
-      }
-    }
-    setWorkspaces(userWorkspaces);
-    if(userWorkspaces.length > 0) {
-        const lastActiveId = localStorage.getItem(getActiveWorkspaceKey());
-        if(lastActiveId && userWorkspaces.some(ws => ws.id === lastActiveId)) {
-            setActiveWorkspaceId(lastActiveId);
-        } else {
-            setActiveWorkspaceId(userWorkspaces[0].id);
-        }
-    } else {
-        setActiveWorkspaceId(null);
-    }
-    
     toast({
-      title: "Alterações Descartadas",
-      description: "Fluxos recarregados do armazenamento local.",
-      variant: "default",
+      title: "Descartando Alterações...",
+      description: "Recarregando fluxos do banco de dados.",
     });
-    setIsLoading(false);
+    await loadWorkspaces(); // Reload all from DB
     setHighlightedNodeIdBySession(null); 
-  }, [toast, hasMounted, user, getActiveWorkspaceKey, getWorkspacesKey]);
+  }, [hasMounted, user, loadWorkspaces, toast]);
 
   const addWorkspace = useCallback(async () => {
     if (!hasMounted || !user) return;
@@ -249,10 +251,27 @@ export default function FlowBuilderClient() {
       owner: user.username,
     };
     
-    const updatedWorkspaces = [...workspaces, newWorkspace];
-    setWorkspaces(updatedWorkspaces);
+    setWorkspaces(prev => [...prev, newWorkspace]);
     setActiveWorkspaceId(newWorkspaceId);
-  }, [workspaces, hasMounted, user]);
+    
+    // Save the new workspace to DB immediately
+    const result = await saveWorkspaceToDB(newWorkspace);
+     if (result.success) {
+      toast({
+        title: "Novo Fluxo Criado",
+        description: `O fluxo "${newWorkspace.name}" foi criado e salvo.`,
+      });
+    } else {
+      toast({
+        title: "Erro ao Criar",
+        description: `Não foi possível salvar o novo fluxo: ${result.error}`,
+        variant: "destructive",
+      });
+      // Rollback UI change if save fails
+      setWorkspaces(workspaces);
+      setActiveWorkspaceId(activeWorkspaceId);
+    }
+  }, [workspaces, hasMounted, user, activeWorkspaceId, toast]);
 
   const switchWorkspace = useCallback((workspaceId: string) => {
     if (workspaces.find(ws => ws.id === workspaceId)) {
@@ -299,11 +318,13 @@ export default function FlowBuilderClient() {
                 }
             });
             if (n.type === 'start' && Array.isArray(n.triggers)) {
-                n.triggers.forEach(trigger => {
-                    if (trigger.type === 'webhook' && trigger.webhookPayloadVariable) {
-                        tempExistingVars.push(trigger.webhookPayloadVariable.replace(/\{\{/g, '').replace(/\}\}/g, ''));
-                    }
-                });
+              n.triggers.forEach(trigger => {
+                if (trigger.type === 'webhook' && Array.isArray(trigger.variableMappings)) {
+                  trigger.variableMappings.forEach(mapping => {
+                    if(mapping.flowVariable) tempExistingVars.push(mapping.flowVariable.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
+                  })
+                }
+              });
             }
         });
         tempExistingVars = Array.from(new Set(tempExistingVars));
@@ -326,12 +347,17 @@ export default function FlowBuilderClient() {
     
     if (item.type === 'start' && itemDefaultDataCopy.triggers) {
       itemDefaultDataCopy.triggers = (itemDefaultDataCopy.triggers as StartNodeTrigger[]).map(trigger => {
-        if (trigger.type === 'webhook' && trigger.webhookPayloadVariable) {
-          const uniqueWebhookVarName = generateUniqueVariableName(trigger.webhookPayloadVariable, tempExistingVars);
-          if (uniqueWebhookVarName !== trigger.webhookPayloadVariable.replace(/\{\{/g, '').replace(/\}\}/g, '').trim()) {
-            tempExistingVars.push(uniqueWebhookVarName);
-          }
-          return { ...trigger, webhookPayloadVariable: uniqueWebhookVarName };
+        if (trigger.type === 'webhook' && Array.isArray(trigger.variableMappings)) {
+            trigger.variableMappings = trigger.variableMappings.map(mapping => {
+                 if (mapping.flowVariable) {
+                    const uniqueWebhookVarName = generateUniqueVariableName(mapping.flowVariable, tempExistingVars);
+                    if (uniqueWebhookVarName !== mapping.flowVariable.replace(/\{\{/g, '').replace(/\}\}/g, '').trim()) {
+                        tempExistingVars.push(uniqueWebhookVarName);
+                    }
+                    return {...mapping, flowVariable: uniqueWebhookVarName};
+                }
+                return mapping;
+            });
         }
         return trigger;
       });
@@ -359,7 +385,7 @@ export default function FlowBuilderClient() {
       aiPromptText: 'Escreva um poema sobre {{tema}}', aiModelName: '', aiOutputVariable: 'texto_ia',
       agentName: 'Agente IA', agentSystemPrompt: 'Você é um assistente prestativo.',
       userInputVariable: '{{entrada_usuario_agente}}', agentResponseVariable: 'resposta_agente_ia', maxConversationTurns: 5, temperature: 0.7,
-      supabaseTableName: 'sua_tabela', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '{{id_registro}}', supabaseDataJson: '{ "coluna": "valor" }', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase',
+      supabaseTableName: '', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '{{id_registro}}', supabaseDataJson: '{ "coluna": "valor" }', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase',
     };
 
     const newNode: NodeData = {
@@ -367,7 +393,7 @@ export default function FlowBuilderClient() {
       type: item.type as NodeData['type'],
       title: item.label,
       ...baseNodeData, 
-      ...(item.type === 'start' && !itemDefaultDataCopy.triggers && { triggers: [{ id: uuidv4(), name: 'Gatilho Inicial', type: 'manual', webhookPayloadVariable: 'webhook_payload' }] }),
+      ...(item.type === 'start' && !itemDefaultDataCopy.triggers && { triggers: [{ id: uuidv4(), name: 'Gatilho Inicial', type: 'manual', variableMappings: [] }] }),
       ...itemDefaultDataCopy, 
       x: Math.round((logicalDropCoords.x - NODE_WIDTH / 2) / GRID_SIZE) * GRID_SIZE, 
       y: Math.round((logicalDropCoords.y - NODE_HEADER_HEIGHT_APPROX / 2) / GRID_SIZE) * GRID_SIZE, 
@@ -377,7 +403,7 @@ export default function FlowBuilderClient() {
       const updatedNodes = [...(ws.nodes || []), newNode]; 
       return { ...ws, nodes: updatedNodes };
     });
-  }, [activeWorkspaceId, updateActiveWorkspace, workspaces, definedVariablesInFlow]);
+  }, [activeWorkspaceId, updateActiveWorkspace, workspaces]);
 
   const updateNode = useCallback((id: string, changes: Partial<NodeData>) => {
     updateActiveWorkspace(ws => ({
@@ -666,3 +692,5 @@ export default function FlowBuilderClient() {
     </ErrorBoundary>
   );
 }
+
+    

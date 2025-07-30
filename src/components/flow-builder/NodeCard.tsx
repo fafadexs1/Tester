@@ -420,6 +420,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const handleVariableInsert = (
     fieldName: keyof NodeData,
     variableName: string,
+    isTextarea: boolean = false,
     isListItem: boolean = false,
     itemId?: string,
     itemKeyOrValue?: 'key' | 'value'
@@ -469,7 +470,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 key={varName}
                 variant="ghost"
                 className="w-full justify-start h-7 px-2 text-xs"
-                onClick={() => handleVariableInsert(fieldName, varName, isListItem, itemId, itemKeyOrValue)}
+                onClick={() => handleVariableInsert(fieldName, varName, isTextarea, isListItem, itemId, itemKeyOrValue)}
               >
                 {varName}
               </Button>
@@ -1672,3 +1673,5 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
+    

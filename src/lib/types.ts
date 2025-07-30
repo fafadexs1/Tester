@@ -1,5 +1,6 @@
 
 
+
 export interface DraggableBlockItemData {
   type: string;
   label: string;
@@ -65,7 +66,7 @@ export interface StartNodeTrigger {
   id: string;
   name: string;
   type: 'manual' | 'webhook';
-  webhookId?: string;
+  webhookId?: string; // Mantido para referência única se necessário
   variableMappings?: WebhookVariableMapping[];
 }
 
@@ -251,3 +252,5 @@ export interface FlowSession {
 export interface User {
     username: string;
 }
+
+    
