@@ -47,21 +47,23 @@ export default async function DashboardPage() {
         </div>
       </header>
       <main className="flex flex-1 flex-col p-4 sm:p-6 lg:p-8">
-        <div className="flex items-center">
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Meus Fluxos</h1>
-            <p className="text-muted-foreground mt-1">Gerencie, edite ou crie novas automações.</p>
-          </div>
-          <Link href="/flow/new">
-            <Button className="flex items-center gap-2">
-              <PlusCircle className="h-5 w-5" />
-              <span className="hidden sm:inline">Criar Novo Fluxo</span>
-            </Button>
-          </Link>
-        </div>
-        
-        <div className="flex-1 mt-8">
-           <WorkspaceList initialWorkspaces={workspaces} />
+        <div className="flex-1 flex flex-col">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Meus Fluxos</h1>
+                <p className="text-muted-foreground mt-1">Gerencie, edite ou crie novas automações.</p>
+              </div>
+              <Link href="/flow/new">
+                <Button className="flex items-center gap-2">
+                  <PlusCircle className="h-5 w-5" />
+                  <span className="hidden sm:inline">Criar Novo Fluxo</span>
+                </Button>
+              </Link>
+            </div>
+            
+            <div className="flex-1 mt-8">
+              <WorkspaceList initialWorkspaces={workspaces} />
+            </div>
         </div>
       </main>
     </div>
