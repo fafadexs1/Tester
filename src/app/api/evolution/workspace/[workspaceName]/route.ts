@@ -507,20 +507,27 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
                   }
                   nextNode = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
                 } else {
+                  // Resposta inválida, informa o usuário e não avança o fluxo
                   await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: "Opção inválida. Por favor, tente novamente."});
+                  nextNode = null; // Permanece no mesmo estado aguardando
+                  startExecution = false; // Não executa o fluxo, apenas salva a sessão
                 }
               }
-              session.awaiting_input_type = null;
-              session.awaiting_input_details = null;
-              session.current_node_id = nextNode;
-              startExecution = !!nextNode;
+              if (nextNode) {
+                session.awaiting_input_type = null;
+                session.awaiting_input_details = null;
+                session.current_node_id = nextNode;
+                startExecution = true;
+              }
           } else {
+              // Nó que estava aguardando não foi encontrado, um erro no fluxo. Reinicia.
               console.warn(`[API Evolution WS Route - ${sessionId}] Awaiting node ${originalNodeId} not found, restarting flow.`);
               session = null; 
           }
       } else {
-         console.log(`[API Evolution WS Route - ${sessionId}] Session was paused but not awaiting input. Restarting flow.`);
-         session = null;
+         // Sessão existe, mas não estava esperando entrada. Não reinicia, apenas atualiza a variável da mensagem.
+         console.log(`[API Evolution WS Route - ${sessionId}] Session exists but was not awaiting input. Flow remains paused. Message stored.`);
+         startExecution = false; // Não executa nada, a sessão está salva.
       }
     }
     
@@ -595,5 +602,3 @@ export async function PATCH(request: NextRequest, { params }: { params: { worksp
 export async function DELETE(request: NextRequest, { params }: { params: { workspaceName: string } }) {
   return POST(request, { params });
 }
-
-    
