@@ -1,20 +1,21 @@
 
 "use client";
 
-import React from 'react'; // Ensure React is imported
+import React from 'react';
 import type { DraggableBlockItemData } from '@/lib/types';
 import { ITEM_TYPE_BLOCK } from '@/lib/constants';
 import { useDrag } from 'react-dnd';
-// import { motion } from 'framer-motion'; // Temporarily remove framer-motion
+import { motion } from 'framer-motion';
 
 interface DraggableBlockProps extends DraggableBlockItemData {
   icon: React.ReactNode;
+  description: string;
 }
 
-const DraggableBlock: React.FC<DraggableBlockProps> = React.memo(({ type, label, icon, defaultData }) => {
+const DraggableBlock: React.FC<DraggableBlockProps> = React.memo(({ type, label, icon, description, defaultData }) => {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ITEM_TYPE_BLOCK,
-    item: { type: type, label: label, defaultData: defaultData } satisfies DraggableBlockItemData,
+    item: { type, label, defaultData } satisfies DraggableBlockItemData,
     collect: (monitor) => ({
       isDragging: !!monitor.isDragging(),
     }),
@@ -23,20 +24,26 @@ const DraggableBlock: React.FC<DraggableBlockProps> = React.memo(({ type, label,
   const dataAiHint = defaultData?.dataAiHint;
 
   return (
-    <div // Changed from motion.div
+    <motion.div
       ref={drag}
-      className="flex items-center p-2.5 bg-card border border-border rounded-lg shadow-sm cursor-move hover:shadow-md transition-shadow"
-      // whileHover={{ scale: 1.02 }} // Temporarily remove framer-motion props
-      // whileTap={{ scale: 0.98 }}  // Temporarily remove framer-motion props
+      className="flex items-start p-3 bg-card border border-border rounded-lg shadow-sm cursor-move hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5"
       role="button"
       aria-label={`Arraste o bloco ${label}`}
       data-testid={`draggable-block-${type}`}
-      style={{ opacity: isDragging ? 0.5 : 1 }}
+      style={{ opacity: isDragging ? 0.4 : 1 }}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
       {...(dataAiHint && { 'data-ai-hint': dataAiHint })}
     >
-      {icon}
-      <span className="ml-2.5 text-xs font-medium text-card-foreground truncate min-w-0">{label}</span>
-    </div>
+      <div className="p-2 bg-muted rounded-md mr-3">
+        {icon}
+      </div>
+      <div className="flex-1">
+        <p className="font-semibold text-sm text-card-foreground">{label}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+      </div>
+    </motion.div>
   );
 });
 
