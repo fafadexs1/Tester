@@ -5,85 +5,70 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import type { User } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { loginAction, logoutAction, registerAction } from '@/app/actions/authActions';
+import { getCurrentUser } from '@/lib/auth';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (formData: FormData, pass: string) => Promise<{ success: boolean, error?: string }>;
+  login: (formData: FormData) => Promise<{ success: boolean, error?: string }>;
   logout: () => Promise<void>;
-  register: (formData: FormData, pass: string) => Promise<{ success: boolean, error?: string }>;
+  register: (formData: FormData) => Promise<{ success: boolean, error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const SESSION_STORAGE_KEY = 'nexusflow_session_client';
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // Começa como true para verificar a sessão
   const router = useRouter();
 
   useEffect(() => {
-    // Apenas verifica a sessão do cliente uma vez na montagem inicial para evitar hydration errors.
-    try {
-        const sessionUser = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    // Verifica a sessão com o servidor ao carregar o provedor
+    const checkSession = async () => {
+      try {
+        const sessionUser = await getCurrentUser();
         if (sessionUser) {
-            setUser(JSON.parse(sessionUser));
+          setUser(sessionUser);
+        } else {
+          setUser(null);
         }
-    } catch (e) {
-        console.error("Failed to parse user session from sessionStorage", e);
-        sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    }
-    // Independentemente do resultado, a verificação terminou.
-    setLoading(false);
+      } catch (e) {
+        console.error("Falha ao verificar a sessão do servidor", e);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkSession();
   }, []);
 
-  const login = useCallback(async (formData: FormData, pass: string): Promise<{ success: boolean, error?: string }> => {
+  const login = useCallback(async (formData: FormData): Promise<{ success: boolean, error?: string }> => {
     const result = await loginAction(formData);
     
     if (result.success && result.user) {
         setUser(result.user);
-        sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(result.user));
-        // O redirecionamento agora é tratado pelo useEffect na página de login
+        // Após o login, o redirecionamento é tratado pela página de login
         return { success: true };
     } else {
-        return { success: false, error: result.error || "Falha ao criar sessão no servidor." };
+        return { success: false, error: result.error };
     }
   }, []);
 
-  const register = useCallback(async (formData: FormData, pass: string): Promise<{ success: boolean, error?: string }> => {
-    const username = formData.get('username') as string;
-
-    const usersData = localStorage.getItem('nexusflow_users');
-    const users = usersData ? JSON.parse(usersData) : {};
-    
-    if (users[username]) {
-       return { success: false, error: "Nome de usuário já existe." };
-    }
-    if(!username.trim() || !pass.trim()){
-       return { success: false, error: "Usuário e senha não podem ser vazios." };
-    }
-
-    users[username] = { password: pass };
-    localStorage.setItem('nexusflow_users', JSON.stringify(users));
-
+  const register = useCallback(async (formData: FormData): Promise<{ success: boolean, error?: string }> => {
     const result = await registerAction(formData);
-     if (result.success && result.user) {
+    if (result.success && result.user) {
         setUser(result.user);
-        sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(result.user));
         return { success: true };
     } else {
-        delete users[username];
-        localStorage.setItem('nexusflow_users', JSON.stringify(users));
-        return { success: false, error: result.error || "Falha ao criar sessão do servidor após o registro." };
+        return { success: false, error: result.error };
     }
   }, []);
 
   const logout = useCallback(async () => {
     await logoutAction();
     setUser(null);
-    sessionStorage.removeItem(SESSION_STORAGE_KEY);
     router.push('/login');
+    router.refresh(); // Garante que o estado do servidor seja atualizado
   }, [router]);
 
   const value = {

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, FormEvent, useEffect } from 'react';
@@ -22,32 +23,12 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Este efeito redireciona se o usuário já estiver logado (confirmado pelo AuthProvider)
+    // Redireciona se o usuário já estiver logado (confirmado pelo AuthProvider)
     if (!loading && user) {
       router.push('/');
     }
   }, [user, loading, router]);
   
-  // Exibe um loader principal enquanto o AuthProvider verifica a sessão.
-  if (loading) {
-      return (
-         <div className="flex h-screen w-full items-center justify-center bg-background">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        </div>
-      );
-  }
-  
-  // Se após a verificação o usuário já existir, não renderiza o formulário,
-  // pois o useEffect acima fará o redirecionamento. Isso evita um flash do formulário.
-  if (user) {
-      return (
-         <div className="flex h-screen w-full items-center justify-center bg-background">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            <span className="ml-4">Redirecionando...</span>
-         </div>
-      );
-  }
-
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
@@ -57,20 +38,19 @@ export default function LoginPage() {
     formData.append('password', password);
 
     if (isLoginView) {
-      result = await login(formData, password); 
+      result = await login(formData); 
     } else {
       if (password !== confirmPassword) {
         toast({ title: "Erro de Registro", description: "As senhas não coincidem.", variant: "destructive" });
         setIsSubmitting(false);
         return;
       }
-      result = await register(formData, password); 
+      result = await register(formData); 
     }
 
     if (result.success) {
-      toast({ title: isLoginView ? "Login bem-sucedido!" : "Registro bem-sucedido!", description: "Redirecionando..." });
-      // Não usamos mais router.push ou router.refresh aqui.
-      // O AuthProvider atualizará o estado 'user', e o useEffect cuidará do redirecionamento.
+      toast({ title: isLoginView ? "Login bem-sucedido!" : "Registro bem-sucedido!", description: "Redirecionando para o dashboard..." });
+      router.push('/');
     } else {
       toast({
           title: isLoginView ? "Erro no Login" : "Erro no Registro",
@@ -78,9 +58,17 @@ export default function LoginPage() {
           variant: "destructive",
         });
     }
-    // Apenas definimos isSubmitting como false. O redirecionamento é baseado no estado.
     setIsSubmitting(false);
   };
+  
+  if (loading || (!loading && user)) {
+      return (
+         <div className="flex h-screen w-full items-center justify-center bg-background">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+             <span className="ml-4 text-muted-foreground">Carregando sessão...</span>
+        </div>
+      );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4 relative overflow-hidden">
