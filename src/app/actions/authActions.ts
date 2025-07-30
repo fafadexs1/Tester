@@ -27,10 +27,12 @@ async function validateUser(username: string, pass: string): Promise<boolean> {
 
 
 export async function loginAction(formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> {
+  console.log('[authActions.ts] loginAction: Iniciando...');
   const username = formData.get('username') as string;
   const password = formData.get('password') as string;
 
   if (!username || !password) {
+    console.log('[authActions.ts] loginAction: Erro - Campos faltando.');
     return { success: false, error: "Nome de usuário e senha são obrigatórios." };
   }
   
@@ -46,20 +48,22 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
 
     const user: User = { username };
     await createSession(user);
-    console.log(`[loginAction] Sessão criada com sucesso para o usuário: ${username}`);
+    console.log(`[authActions.ts] loginAction: Sessão criada com sucesso para o usuário: ${username}`);
     return { success: true, user };
   } catch (error: any) {
-    console.error("[Login Action Error]:", error);
+    console.error("[authActions.ts] loginAction: Exceção durante a criação da sessão:", error);
     const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro no servidor durante o login.";
     return { success: false, error: errorMessage };
   }
 }
 
 export async function registerAction(formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> {
+    console.log('[authActions.ts] registerAction: Iniciando...');
     const username = formData.get('username') as string;
     // O password seria usado aqui para criar um hash e salvar no banco de dados.
     // Como não temos DB, essa lógica fica apenas conceitual.
      if (!username) {
+        console.log('[authActions.ts] registerAction: Erro - Nome de usuário faltando.');
         return { success: false, error: "Nome de usuário é obrigatório." };
     }
     
@@ -71,10 +75,10 @@ export async function registerAction(formData: FormData): Promise<{ success: boo
     try {
         const user: User = { username };
         await createSession(user);
-        console.log(`[registerAction] Sessão criada com sucesso para o novo usuário: ${username}`);
+        console.log(`[authActions.ts] registerAction: Sessão criada com sucesso para o novo usuário: ${username}`);
         return { success: true, user };
     } catch (error: any) {
-        console.error("[Register Action Error]:", error);
+        console.error("[authActions.ts] registerAction: Exceção durante a criação da sessão:", error);
         const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro no servidor durante o registro.";
         return { success: false, error: errorMessage };
     }
@@ -82,7 +86,8 @@ export async function registerAction(formData: FormData): Promise<{ success: boo
 
 
 export async function logoutAction(): Promise<{ success: boolean }> {
+  console.log('[authActions.ts] logoutAction: Deletando sessão...');
   await deleteSession();
-  console.log('[logoutAction] Sessão do usuário deletada.');
+  console.log('[authActions.ts] logoutAction: Sessão do usuário deletada.');
   return { success: true };
 }

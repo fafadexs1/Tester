@@ -22,16 +22,29 @@ export default function LoginPage() {
   const { user, login, register, loading } = useAuth();
   const { toast } = useToast();
 
+  console.log('[LoginPage] Renderizando. Estado atual:', { 
+    isLoginView, 
+    isSubmitting, 
+    loading, 
+    user: user ? user.username : 'null' 
+  });
+
   // Efeito para redirecionar o usuário se ele já estiver logado
   useEffect(() => {
+    console.log('[LoginPage] useEffect executado. Dependências:', { loading, user: user ? user.username : 'null' });
+    // Só redireciona se o carregamento inicial da sessão terminou e o usuário existe.
     if (!loading && user) {
+      console.log('[LoginPage] useEffect: Usuário detectado e carregamento concluído. Redirecionando para /');
       router.push('/');
+    } else {
+       console.log('[LoginPage] useEffect: Não redirecionando. Condições:', { isLoading: loading, isUserPresent: !!user });
     }
   }, [user, loading, router]);
 
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    console.log('[LoginPage] handleSubmit: Iniciando envio do formulário.');
     setIsSubmitting(true);
 
     const formData = new FormData();
@@ -40,12 +53,15 @@ export default function LoginPage() {
 
     let result;
     if (isLoginView) {
+      console.log('[LoginPage] handleSubmit: Tentando fazer login...');
       result = await login(formData);
       if (result.success) {
-        toast({ title: "Login bem-sucedido!", description: "Redirecionando para o dashboard..." });
-        router.push('/'); 
+        console.log('[LoginPage] handleSubmit: Login bem-sucedido. O AuthProvider deve agora atualizar o usuário e o useEffect deve redirecionar.');
+        toast({ title: "Login bem-sucedido!", description: "Você será redirecionado..." });
+        // O redirecionamento agora é responsabilidade do useEffect
       }
     } else {
+      console.log('[LoginPage] handleSubmit: Tentando registrar...');
       if (password !== confirmPassword) {
         toast({ title: "Erro de Registro", description: "As senhas não coincidem.", variant: "destructive" });
         setIsSubmitting(false);
@@ -53,12 +69,13 @@ export default function LoginPage() {
       }
       result = await register(formData);
        if (result.success) {
-        toast({ title: "Registro bem-sucedido!", description: "Redirecionando para o dashboard..." });
-        router.push('/');
+        console.log('[LoginPage] handleSubmit: Registro bem-sucedido. O AuthProvider deve agora atualizar o usuário e o useEffect deve redirecionar.');
+        toast({ title: "Registro bem-sucedido!", description: "Você será redirecionado..." });
       }
     }
 
     if (result && !result.success) {
+        console.log('[LoginPage] handleSubmit: Falha no login/registro.', result.error);
         toast({
             title: isLoginView ? "Erro no Login" : "Erro no Registro",
             description: result.error || (isLoginView ? "Usuário ou senha inválidos." : "Não foi possível registrar o usuário."),
@@ -66,15 +83,29 @@ export default function LoginPage() {
         });
     }
     
+    console.log('[LoginPage] handleSubmit: Fim do envio.');
     setIsSubmitting(false);
   };
   
-  if (loading || user) {
+  // Se a sessão ainda está sendo verificada, mostra um loader.
+  if (loading) {
       return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
              <span className="ml-4 text-muted-foreground">
-               {user ? "Redirecionando..." : "Verificando sessão..."}
+               Verificando sessão...
+             </span>
+        </div>
+      );
+  }
+  
+  // Se o carregamento terminou e o usuário já está logado, mostra a tela de redirecionamento.
+  if (user) {
+      return (
+         <div className="flex h-screen w-full items-center justify-center bg-background">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+             <span className="ml-4 text-muted-foreground">
+               Sessão encontrada. Redirecionando...
              </span>
         </div>
       );

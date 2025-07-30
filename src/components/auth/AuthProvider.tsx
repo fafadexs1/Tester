@@ -24,14 +24,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // once when the provider mounts on the client.
   useEffect(() => {
     const verifyUserSession = async () => {
+      console.log('[AuthProvider] useEffect: Verificando a sessão do usuário no servidor...');
       setLoading(true);
       try {
         const sessionUser = await getCurrentUser();
+        console.log('[AuthProvider] useEffect: Sessão do servidor retornou:', sessionUser ? sessionUser.username : 'null');
         setUser(sessionUser);
       } catch (e) {
-        console.error("Falha ao verificar a sessão do servidor no AuthProvider", e);
+        console.error("[AuthProvider] useEffect: Falha ao verificar a sessão do servidor.", e);
         setUser(null);
       } finally {
+        console.log('[AuthProvider] useEffect: Verificação da sessão concluída. setLoading(false).');
         setLoading(false);
       }
     };
@@ -39,30 +42,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
+    console.log('[AuthProvider] login: Iniciando chamada para loginAction.');
     setLoading(true);
     const result = await loginAction(formData);
     if (result.success && result.user) {
+        console.log('[AuthProvider] login: Sucesso. Atualizando estado do usuário para:', result.user.username);
         setUser(result.user);
+    } else {
+        console.log('[AuthProvider] login: Falha. Erro:', result.error);
     }
     setLoading(false);
+    console.log('[AuthProvider] login: Fim.');
     return result;
   }, []);
 
   const register = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
+    console.log('[AuthProvider] register: Iniciando chamada para registerAction.');
     setLoading(true);
     const result = await registerAction(formData);
     if (result.success && result.user) {
+        console.log('[AuthProvider] register: Sucesso. Atualizando estado do usuário para:', result.user.username);
         setUser(result.user);
+    } else {
+        console.log('[AuthProvider] register: Falha. Erro:', result.error);
     }
     setLoading(false);
+     console.log('[AuthProvider] register: Fim.');
     return result;
   }, []);
 
   const logout = useCallback(async () => {
+    console.log('[AuthProvider] logout: Iniciando logout.');
     setLoading(true);
     await logoutAction();
     setUser(null);
     setLoading(false);
+    console.log('[AuthProvider] logout: Fim. Usuário deslogado.');
   }, []);
 
   const value = {

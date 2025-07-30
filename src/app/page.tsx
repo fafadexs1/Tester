@@ -11,15 +11,20 @@ import { logoutAction } from './actions/authActions';
 
 // Esta página agora é um Server Component para carregamento rápido de dados.
 export default async function DashboardPage() {
+  console.log('[DashboardPage] Renderizando no servidor...');
   // A verificação de autenticação agora é a primeira coisa que acontece no servidor.
   const user = await getCurrentUser();
   if (!user) {
+    console.log('[DashboardPage] Usuário não encontrado, redirecionando para /login...');
     // Se não houver usuário, redireciona para o login. Simples e direto.
     return redirect('/login');
   }
+  
+  console.log(`[DashboardPage] Usuário "${user.username}" autenticado. Carregando workspaces...`);
 
   // Carrega os workspaces diretamente no servidor.
   const workspaces = await loadAllWorkspacesFromDB();
+  console.log(`[DashboardPage] ${workspaces.length} workspaces carregados.`);
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
