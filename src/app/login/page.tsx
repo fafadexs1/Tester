@@ -30,14 +30,12 @@ export default function LoginPage() {
   });
 
   // Efeito para redirecionar o usuário se ele já estiver logado
+  // ESTA É A LÓGICA CORRETA: Redireciona APENAS se o carregamento da sessão
+  // terminou e o usuário foi confirmado.
   useEffect(() => {
-    console.log('[LoginPage] useEffect executado. Dependências:', { loading, user: user ? user.username : 'null' });
-    // Só redireciona se o carregamento inicial da sessão terminou e o usuário existe.
     if (!loading && user) {
       console.log('[LoginPage] useEffect: Usuário detectado e carregamento concluído. Redirecionando para /');
       router.push('/');
-    } else {
-       console.log('[LoginPage] useEffect: Não redirecionando. Condições:', { isLoading: loading, isUserPresent: !!user });
     }
   }, [user, loading, router]);
 
@@ -55,11 +53,7 @@ export default function LoginPage() {
     if (isLoginView) {
       console.log('[LoginPage] handleSubmit: Tentando fazer login...');
       result = await login(formData);
-      if (result.success) {
-        console.log('[LoginPage] handleSubmit: Login bem-sucedido. O AuthProvider deve agora atualizar o usuário e o useEffect deve redirecionar.');
-        toast({ title: "Login bem-sucedido!", description: "Você será redirecionado..." });
-        // O redirecionamento agora é responsabilidade do useEffect
-      }
+      // O redirecionamento agora é responsabilidade do useEffect
     } else {
       console.log('[LoginPage] handleSubmit: Tentando registrar...');
       if (password !== confirmPassword) {
@@ -68,10 +62,7 @@ export default function LoginPage() {
         return;
       }
       result = await register(formData);
-       if (result.success) {
-        console.log('[LoginPage] handleSubmit: Registro bem-sucedido. O AuthProvider deve agora atualizar o usuário e o useEffect deve redirecionar.');
-        toast({ title: "Registro bem-sucedido!", description: "Você será redirecionado..." });
-      }
+      // O redirecionamento agora é responsabilidade do useEffect
     }
 
     if (result && !result.success) {
@@ -83,13 +74,16 @@ export default function LoginPage() {
         });
     }
     
+    // Não redirecionamos aqui para deixar o useEffect cuidar disso
+    // de forma consistente. Apenas paramos o estado de "submitting".
     console.log('[LoginPage] handleSubmit: Fim do envio.');
     setIsSubmitting(false);
   };
   
-  // Se a sessão ainda está sendo verificada (ou se o usuário já existe e estamos prestes a redirecionar),
-  // mostra um loader para evitar que o formulário pisque na tela.
-  if (loading || (!loading && user)) {
+  // Se a sessão ainda está sendo verificada, mostramos um loader global.
+  // Se o usuário já está logado, a tela também mostra o loader enquanto o useEffect
+  // prepara o redirecionamento. Isso evita o piscar do formulário.
+  if (loading || user) {
       return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -100,7 +94,7 @@ export default function LoginPage() {
       );
   }
 
-  // Se não houver usuário logado e não estiver carregando, mostra o formulário.
+  // Se não estiver carregando E não houver usuário, mostra o formulário.
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4 relative overflow-hidden">
        <div className="absolute top-0 left-0 -translate-x-1/3 -translate-y-1/3 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse"></div>
@@ -190,3 +184,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
