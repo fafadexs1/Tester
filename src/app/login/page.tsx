@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
@@ -18,12 +18,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const router = useRouter();
-  const { login, register, loading } = useAuth();
+  const { login, register, loading, user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    console.log(`[LoginPage] handleSubmit: Starting for ${isLoginView ? 'login' : 'register'}.`);
     setIsSubmitting(true);
 
     const formData = new FormData();
@@ -33,6 +34,7 @@ export default function LoginPage() {
     try {
       let result;
       if (isLoginView) {
+        console.log('[LoginPage] handleSubmit: Calling login action...');
         result = await login(formData);
       } else {
         if (password !== confirmPassword) {
@@ -40,30 +42,33 @@ export default function LoginPage() {
           setIsSubmitting(false);
           return;
         }
+        console.log('[LoginPage] handleSubmit: Calling register action...');
         result = await register(formData);
       }
 
-      if (result.success) {
-        // O AuthProvider agora cuidará do redirecionamento
-      } else {
+      console.log('[LoginPage] handleSubmit: Auth action returned:', result);
+      
+      if (!result.success) {
         toast({
           title: isLoginView ? "Erro no Login" : "Erro no Registro",
           description: result.error || (isLoginView ? "Usuário ou senha inválidos." : "Não foi possível registrar o usuário."),
           variant: "destructive",
         });
       }
+      // O redirecionamento agora é tratado pelo AuthProvider
     } catch (error: any) {
+        console.error('[LoginPage] handleSubmit: Caught exception:', error);
         toast({
           title: "Erro Inesperado",
           description: error.message || "Ocorreu um erro durante a operação.",
           variant: "destructive",
         });
     } finally {
+      console.log('[LoginPage] handleSubmit: Finished.');
       setIsSubmitting(false);
     }
   };
   
-  // Se a sessão ainda está sendo verificada pelo AuthProvider, mostramos um loader global.
   if (loading) {
       return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
@@ -75,7 +80,9 @@ export default function LoginPage() {
       );
   }
 
-  // Se não estiver carregando, mostra o formulário. O AuthProvider cuidará do redirecionamento se o usuário já estiver logado.
+  // A lógica de redirecionamento agora vive no AuthProvider para evitar loops
+  // Esta página só renderiza o formulário se não estiver carregando a sessão.
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4 relative overflow-hidden">
        <div className="absolute top-0 left-0 -translate-x-1/3 -translate-y-1/3 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse"></div>

@@ -23,16 +23,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  // This effect runs once on mount to check the session from the server
-  // and handles redirection logic.
   useEffect(() => {
     const verifyUserSession = async () => {
+      setLoading(true);
       try {
         const sessionUser = await getCurrentUser();
+        console.log('[AuthProvider] verifyUserSession: sessionUser from server:', sessionUser);
         setUser(sessionUser);
         
-        // Redirection logic now lives inside AuthProvider
         if (sessionUser && pathname === '/login') {
+          console.log('[AuthProvider] User is on login page but already has a session. Redirecting to /');
           router.push('/');
         }
       } catch (e) {
@@ -45,38 +45,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     verifyUserSession();
   }, [pathname, router]);
 
-  const handleAuthSuccess = (newUser: User) => {
+  const handleAuthSuccess = useCallback((newUser: User) => {
+    console.log('[AuthProvider] handleAuthSuccess: Setting user and redirecting to /');
     setUser(newUser);
     router.push('/');
-  };
+  }, [router]);
 
   const login = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
-    setLoading(true);
     const result = await loginAction(formData);
     if (result.success && result.user) {
       handleAuthSuccess(result.user);
     }
-    setLoading(false);
     return result;
-  }, [router]);
+  }, [handleAuthSuccess]);
 
   const register = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
-    setLoading(true);
     const result = await registerAction(formData);
     if (result.success && result.user) {
       handleAuthSuccess(result.user);
     }
-    setLoading(false);
     return result;
-  }, [router]);
+  }, [handleAuthSuccess]);
 
   const logout = useCallback(async () => {
-    setLoading(true);
     await logoutAction();
     setUser(null);
-    setLoading(false);
-    // No need to push to /login here, as the protected routes will handle it.
-  }, []);
+    router.push('/login');
+  }, [router]);
 
   const value = {
     user,
