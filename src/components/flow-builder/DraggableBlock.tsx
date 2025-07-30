@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -45,6 +44,7 @@ const DraggableBlock = React.memo(React.forwardRef<HTMLDivElement, DraggableBloc
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
+        onPointerDown={(e) => e.stopPropagation()}
         {...(dataAiHint && { 'data-ai-hint': dataAiHint })}
       >
         <div className="p-2 bg-muted rounded-md mr-3">
