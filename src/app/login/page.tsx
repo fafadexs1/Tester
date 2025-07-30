@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
@@ -18,15 +18,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login, register, loading, user } = useAuth();
+  const { login, register, loading } = useAuth(); // Removed user from here
   const { toast } = useToast();
   const router = useRouter();
   
-  // O redirecionamento agora é gerenciado centralmente pelo AuthProvider
-  // Este useEffect apenas lida com a submissão do formulário.
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    console.log(`[LoginPage] handleSubmit: Iniciando para ${isLoginView ? 'login' : 'register'}.`);
     setIsSubmitting(true);
 
     const formData = new FormData();
@@ -53,23 +50,24 @@ export default function LoginPage() {
           variant: "destructive",
         });
       }
-      // O redirecionamento é tratado pelo AuthProvider useEffect
+      // O AuthProvider agora é o único responsável pelo redirecionamento.
+      // A página de login não precisa mais fazer isso.
       
     } catch (error: any) {
-        console.error('[LoginPage] handleSubmit: Exceção capturada:', error);
         toast({
           title: "Erro Inesperado",
           description: error.message || "Ocorreu um erro durante a operação.",
           variant: "destructive",
         });
     } finally {
-      console.log('[LoginPage] handleSubmit: Finalizado.');
       setIsSubmitting(false);
     }
   };
   
+  // O AuthProvider renderiza um loader global. 
+  // Esta página só renderiza o formulário.
   if (loading) {
-      return (
+     return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
              <span className="ml-4 text-muted-foreground">
@@ -78,9 +76,6 @@ export default function LoginPage() {
         </div>
       );
   }
-
-  // O AuthProvider agora lida com o redirecionamento de usuários já logados.
-  // Esta página só renderiza o formulário se o carregamento inicial estiver concluído e não houver usuário.
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4 relative overflow-hidden">

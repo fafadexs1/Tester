@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const verifyUserSession = async () => {
       console.log('[AuthProvider] Iniciando verificação de sessão...');
-      setLoading(true);
+      // Não definimos setLoading(true) aqui para evitar piscar. O estado inicial já é true.
       try {
         const sessionUser = await getCurrentUser();
         console.log('[AuthProvider] Usuário da sessão do servidor:', sessionUser);
@@ -44,60 +44,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Este useEffect agora gerencia os redirecionamentos após a verificação de sessão.
-    console.log(`[AuthProvider Redirect] Verificando... loading: ${loading}, user: ${user?.username}, pathname: ${pathname}`);
-    if (!loading) {
-      if (user && pathname === '/login') {
-        console.log('[AuthProvider Redirect] Usuário logado na página de login. Redirecionando para /');
-        router.push('/');
-      } else if (!user && pathname !== '/login') {
-        console.log('[AuthProvider Redirect] Usuário não logado fora da página de login. Redirecionando para /login');
-        router.push('/login');
-      }
+    console.log(`[AuthProvider Redirect Check] loading: ${loading}, user: ${!!user}, pathname: ${pathname}`);
+    if (loading) {
+      return; // Não faz nada enquanto a verificação inicial da sessão está em andamento.
     }
+
+    const isAuthPage = pathname === '/login';
+
+    if (user && isAuthPage) {
+      console.log('[AuthProvider] Usuário logado na página de login. Redirecionando para /');
+      router.push('/');
+    } else if (!user && !isAuthPage) {
+      console.log('[AuthProvider] Usuário não logado fora da página de login. Redirecionando para /login');
+      router.push('/login');
+    }
+
   }, [user, loading, pathname, router]);
+
+  const handleAuthSuccess = useCallback((newUser: User) => {
+    setUser(newUser);
+    // O useEffect acima cuidará do redirecionamento de forma centralizada.
+  }, []);
 
   const login = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
     const result = await loginAction(formData);
     if (result.success && result.user) {
-      console.log('[AuthProvider] Login bem-sucedido. Atualizando estado do usuário.');
-      setUser(result.user); // Apenas atualiza o estado, o useEffect cuidará do redirect.
+      handleAuthSuccess(result.user);
     }
     return result;
-  }, []);
+  }, [handleAuthSuccess]);
 
   const register = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
     const result = await registerAction(formData);
     if (result.success && result.user) {
-      console.log('[AuthProvider] Registro bem-sucedido. Atualizando estado do usuário.');
-      setUser(result.user); // Apenas atualiza o estado, o useEffect cuidará do redirect.
+      handleAuthSuccess(result.user);
     }
     return result;
-  }, []);
+  }, [handleAuthSuccess]);
 
   const logout = useCallback(async () => {
-    console.log('[AuthProvider] Executando logout...');
     await logoutAction();
-    setUser(null); // O useEffect cuidará de redirecionar para /login
+    setUser(null);
+    // O useEffect acima cuidará do redirecionamento para /login.
   }, []);
 
-  const value = {
-    user,
-    loading,
-    login,
-    logout,
-    register,
-  };
+  const value = { user, loading, login, logout, register };
   
-  // Renderiza os filhos apenas se a verificação inicial não estiver mais em andamento.
-  // E se a rota for protegida, espera ter um usuário.
-  const isProtectedRoute = pathname !== '/login';
-  if (loading || (isProtectedRoute && !user)) {
+  if (loading) {
      return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
              <span className="ml-4 text-muted-foreground">
-               {isProtectedRoute ? 'Verificando autenticação...' : 'Carregando...'}
+               Verificando sessão...
              </span>
         </div>
       );
