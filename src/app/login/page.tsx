@@ -27,12 +27,6 @@ export default function LoginPage() {
     setHasMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (hasMounted && !loading && user) {
-      router.push('/');
-    }
-  }, [user, loading, router, hasMounted]);
-  
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
@@ -43,14 +37,22 @@ export default function LoginPage() {
 
     let result;
     if (isLoginView) {
-      result = await login(formData); 
+      result = await login(formData);
+      if (result.success) {
+        toast({ title: "Login bem-sucedido!", description: "Redirecionando para o dashboard..." });
+        router.push('/'); // Redireciona após o sucesso
+      }
     } else {
       if (password !== confirmPassword) {
         toast({ title: "Erro de Registro", description: "As senhas não coincidem.", variant: "destructive" });
         setIsSubmitting(false);
         return;
       }
-      result = await register(formData); 
+      result = await register(formData);
+       if (result.success) {
+        toast({ title: "Registro bem-sucedido!", description: "Redirecionando para o dashboard..." });
+        router.push('/'); // Redireciona após o sucesso
+      }
     }
 
     if (result && !result.success) {
@@ -60,7 +62,7 @@ export default function LoginPage() {
             variant: "destructive",
         });
     }
-    // O redirecionamento é tratado pelo useEffect
+    
     setIsSubmitting(false);
   };
   
@@ -73,8 +75,10 @@ export default function LoginPage() {
       );
   }
 
-  // Se já estiver logado, o useEffect irá redirecionar, enquanto isso, mostramos o loading.
-  if(user) {
+  // Se o usuário navegou para /login enquanto já estava logado, redirecione-o.
+  // Isso acontece depois da verificação de carregamento para evitar loops.
+  if (user) {
+    router.push('/');
     return (
         <div className="flex h-screen w-full items-center justify-center bg-background">
            <Loader2 className="h-12 w-12 animate-spin text-primary" />

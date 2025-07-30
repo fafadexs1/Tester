@@ -11,9 +11,10 @@ import { logoutAction } from './actions/authActions';
 
 // Esta página agora é um Server Component para carregamento rápido de dados.
 export default async function DashboardPage() {
-  // A verificação de autenticação agora pode ser feita no servidor.
+  // A verificação de autenticação agora é a primeira coisa que acontece no servidor.
   const user = await getCurrentUser();
   if (!user) {
+    // Se não houver usuário, redireciona para o login. Simples e direto.
     redirect('/login');
   }
 
