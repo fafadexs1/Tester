@@ -68,19 +68,33 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
   // Garantir que o nó de início tenha os gatilhos padrão se não os tiver
   useEffect(() => {
-    if (node.type === 'start' && !node.triggers) {
-      const defaultTriggers: StartNodeTrigger[] = [
-        { id: uuidv4(), name: 'Manual', type: 'manual', enabled: true },
-        { 
-          id: uuidv4(), 
-          name: 'Webhook', 
-          type: 'webhook', 
-          enabled: false, 
-          variableMappings: [], 
-          sessionTimeoutSeconds: 0 
-        },
-      ];
-      onUpdate(node.id, { triggers: defaultTriggers });
+    if (node.type === 'start') {
+        const hasManual = (node.triggers || []).some(t => t.type === 'manual');
+        const hasWebhook = (node.triggers || []).some(t => t.type === 'webhook');
+
+        if (!hasManual || !hasWebhook) {
+            const defaultTriggers: StartNodeTrigger[] = [
+                { id: uuidv4(), name: 'Manual', type: 'manual', enabled: true },
+                { 
+                    id: uuidv4(), 
+                    name: 'Webhook', 
+                    type: 'webhook', 
+                    enabled: false, 
+                    variableMappings: [], 
+                    sessionTimeoutSeconds: 0 
+                },
+            ];
+            
+            let finalTriggers = [...(node.triggers || [])];
+            if (!hasManual) {
+                finalTriggers.push(defaultTriggers.find(t => t.type === 'manual')!);
+            }
+            if (!hasWebhook) {
+                finalTriggers.push(defaultTriggers.find(t => t.type === 'webhook')!);
+            }
+            
+            onUpdate(node.id, { triggers: finalTriggers });
+        }
     }
   }, [node.id, node.type, node.triggers, onUpdate]);
 
