@@ -87,25 +87,14 @@ export default function LoginPage() {
     setIsSubmitting(false);
   };
   
-  // Se a sessão ainda está sendo verificada, mostra um loader.
-  if (loading) {
+  // Se a sessão ainda está sendo verificada (ou se o usuário já existe e estamos prestes a redirecionar),
+  // mostra um loader para evitar que o formulário pisque na tela.
+  if (loading || (!loading && user)) {
       return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
              <span className="ml-4 text-muted-foreground">
-               Verificando sessão...
-             </span>
-        </div>
-      );
-  }
-  
-  // Se o carregamento terminou e o usuário já está logado, mostra a tela de redirecionamento.
-  if (user) {
-      return (
-         <div className="flex h-screen w-full items-center justify-center bg-background">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-             <span className="ml-4 text-muted-foreground">
-               Sessão encontrada. Redirecionando...
+               {loading ? 'Verificando sessão...' : 'Sessão encontrada. Redirecionando...'}
              </span>
         </div>
       );
