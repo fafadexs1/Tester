@@ -1,4 +1,6 @@
 
+'use server';
+
 import type { User } from '@/lib/types';
 import { cookies } from 'next/headers';
 
@@ -18,7 +20,7 @@ export async function createSession(user: User) {
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-  const sessionCookie = cookies().get(SESSION_COOKIE_NAME);
+  const sessionCookie = await cookies().get(SESSION_COOKIE_NAME);
 
   if (!sessionCookie) {
     return null;
