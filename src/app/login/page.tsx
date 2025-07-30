@@ -28,6 +28,7 @@ export default function LoginPage() {
   }, []);
 
   // Efeito para redirecionar o usuário se ele já estiver logado
+  // Este é o local correto para o redirecionamento para evitar atualizações durante a renderização
   useEffect(() => {
     if (user && !loading) {
       router.push('/');
@@ -48,7 +49,8 @@ export default function LoginPage() {
       result = await login(formData);
       if (result.success) {
         toast({ title: "Login bem-sucedido!", description: "Redirecionando para o dashboard..." });
-        router.push('/');
+        // O useEffect acima cuidará do redirecionamento quando o 'user' for atualizado.
+        // router.push('/'); // Removido daqui para evitar o loop
       }
     } else {
       if (password !== confirmPassword) {
@@ -59,7 +61,8 @@ export default function LoginPage() {
       result = await register(formData);
        if (result.success) {
         toast({ title: "Registro bem-sucedido!", description: "Redirecionando para o dashboard..." });
-        router.push('/');
+        // O useEffect acima cuidará do redirecionamento.
+        // router.push('/'); // Removido daqui
       }
     }
 
@@ -74,23 +77,17 @@ export default function LoginPage() {
     setIsSubmitting(false);
   };
   
-  if (!hasMounted || loading) {
+  // Renderiza um estado de carregamento enquanto a sessão está sendo verificada ou
+  // se o usuário já estiver logado e esperando o redirecionamento do useEffect.
+  if (!hasMounted || loading || user) {
       return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
-             <span className="ml-4 text-muted-foreground">Verificando sessão...</span>
+             <span className="ml-4 text-muted-foreground">
+               {user ? "Redirecionando..." : "Verificando sessão..."}
+             </span>
         </div>
       );
-  }
-
-  // Se o usuário estiver logado, mostra a tela de redirecionamento enquanto o useEffect faz o trabalho.
-  if (user) {
-    return (
-        <div className="flex h-screen w-full items-center justify-center bg-background">
-           <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            <span className="ml-4 text-muted-foreground">Redirecionando...</span>
-       </div>
-     );
   }
 
   // Se não houver usuário logado e não estiver carregando, mostra o formulário.
@@ -183,3 +180,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

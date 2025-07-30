@@ -50,7 +50,8 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
     return { success: true, user };
   } catch (error: any) {
     console.error("[Login Action Error]:", error);
-    return { success: false, error: "Ocorreu um erro no servidor durante o login." };
+    const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro no servidor durante o login.";
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -74,7 +75,8 @@ export async function registerAction(formData: FormData): Promise<{ success: boo
         return { success: true, user };
     } catch (error: any) {
         console.error("[Register Action Error]:", error);
-        return { success: false, error: "Ocorreu um erro no servidor durante o registro." };
+        const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro no servidor durante o registro.";
+        return { success: false, error: errorMessage };
     }
 }
 
