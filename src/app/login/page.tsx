@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, BotMessageSquare } from 'lucide-react';
+import { Zap, BotMessageSquare, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function LoginPage() {
@@ -17,11 +17,14 @@ export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const { user, login, register, loading } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
+    // Se o usuário já estiver logado (verificação do cliente), redireciona.
+    // A verificação principal agora é do lado do servidor na página do dashboard.
     if (!loading && user) {
       router.push('/');
     }
@@ -40,48 +43,56 @@ export default function LoginPage() {
       );
   }
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    setIsSubmitting(true);
+
     if (isLoginView) {
-      try {
-        login(username, password);
+      const result = await login(username, password);
+      if (result.success) {
         toast({ title: "Login bem-sucedido!", description: `Bem-vindo de volta, ${username}!` });
-        router.push('/');
-      } catch (error: any) {
+        // O redirecionamento é tratado pela função de login
+      } else {
         toast({
           title: "Erro no Login",
-          description: error.message || "Usuário ou senha inválidos.",
+          description: result.error || "Usuário ou senha inválidos.",
           variant: "destructive",
         });
       }
     } else {
       if (password !== confirmPassword) {
         toast({ title: "Erro de Registro", description: "As senhas não coincidem.", variant: "destructive" });
+        setIsSubmitting(false);
         return;
       }
-      try {
-        register(username, password);
+      const result = await register(username, password);
+      if (result.success) {
         toast({ title: "Registro bem-sucedido!", description: `Bem-vindo, ${username}! Você agora está logado.` });
-        router.push('/');
-      } catch (error: any) {
+         // O redirecionamento é tratado pela função de registro
+      } else {
         toast({
           title: "Erro no Registro",
-          description: error.message || "Não foi possível registrar o usuário.",
+          description: result.error || "Não foi possível registrar o usuário.",
           variant: "destructive",
         });
       }
     }
+    setIsSubmitting(false);
   };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4 relative overflow-hidden">
+      {/* Background decorative elements */}
+       <div className="absolute top-0 left-0 -translate-x-1/3 -translate-y-1/3 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse"></div>
+       <div className="absolute bottom-0 right-0 translate-x-1/3 translate-y-1/3 w-96 h-96 bg-accent/20 rounded-full blur-3xl animate-pulse delay-500"></div>
+
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.8 }}
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
         className="z-10"
       >
-        <Card className="w-full max-w-sm border-border/60 bg-card/80 backdrop-blur-sm">
+        <Card className="w-full max-w-sm border-border/60 bg-card/80 backdrop-blur-sm shadow-2xl">
           <CardHeader className="text-center">
               <motion.div 
                 initial={{ scale: 0.5, opacity: 0 }}
@@ -90,7 +101,7 @@ export default function LoginPage() {
                 className="flex justify-center items-center gap-3 mb-2"
               >
                   <Zap className="w-9 h-9 text-primary" />
-                  <CardTitle className="text-3xl font-bold tracking-tighter">NexusFlow</CardTitle>
+                  <h1 className="text-3xl font-bold tracking-tighter text-foreground">NexusFlow</h1>
               </motion.div>
             <CardDescription>
               {isLoginView ? 'Entre na sua conta para criar o futuro' : 'Crie uma conta para começar a automação'}
@@ -98,11 +109,7 @@ export default function LoginPage() {
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-              >
+              <div className="space-y-2">
                 <Label htmlFor="username">Usuário</Label>
                 <Input
                   id="username"
@@ -112,13 +119,10 @@ export default function LoginPage() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="bg-input/80"
+                  disabled={isSubmitting}
                 />
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-              >
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="password">Senha</Label>
                 <Input
                   id="password"
@@ -127,13 +131,15 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="bg-input/80"
+                  disabled={isSubmitting}
                 />
-              </motion.div>
+              </div>
               {!isLoginView && (
                 <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.5 }}
+                    className="space-y-2"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    transition={{ duration: 0.3 }}
                 >
                   <Label htmlFor="confirm-password">Confirmar Senha</Label>
                   <Input
@@ -143,32 +149,22 @@ export default function LoginPage() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="bg-input/80"
+                    disabled={isSubmitting}
                   />
                 </motion.div>
               )}
             </CardContent>
-            <CardFooter className="flex flex-col gap-4">
-              <motion.div
-                className='w-full'
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 }}
-              >
-                <Button type="submit" className="w-full font-semibold">
-                  {isLoginView ? 'Entrar' : 'Registrar'}
-                </Button>
-              </motion.div>
-              <Button variant="link" type="button" onClick={() => setIsLoginView(!isLoginView)} className="text-muted-foreground">
+            <CardFooter className="flex flex-col gap-4 pt-2">
+              <Button type="submit" className="w-full font-semibold" disabled={isSubmitting}>
+                 {isSubmitting ? <Loader2 className="animate-spin" /> : (isLoginView ? 'Entrar' : 'Registrar')}
+              </Button>
+              <Button variant="link" type="button" onClick={() => setIsLoginView(!isLoginView)} className="text-muted-foreground" disabled={isSubmitting}>
                 {isLoginView ? 'Não tem uma conta? Registre-se' : 'Já tem uma conta? Faça o login'}
               </Button>
             </CardFooter>
           </form>
         </Card>
       </motion.div>
-       {/* Background decorative elements */}
-       <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse"></div>
-       <div className="absolute bottom-0 right-0 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-accent/20 rounded-full blur-3xl animate-pulse delay-500"></div>
     </div>
   );
 }
-

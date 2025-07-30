@@ -470,36 +470,10 @@ export async function loadAllActiveSessionsFromDB(): Promise<FlowSession[]> {
   }
 }
 
-// Wrapper functions to be called from client components
-export async function clientSideLoadWorkspacesAction(): Promise<WorkspaceData[]> {
-  console.log('[DB Actions Client] Attempting to load all workspaces from DB...');
-  try {
-    const workspaces = await loadAllWorkspacesFromDB();
-    console.log(`[DB Actions Client] Loaded ${workspaces.length} workspaces from DB.`);
-    return workspaces;
-  } catch (error:any) {
-    console.error('[DB Actions Client] Error in clientSideLoadWorkspacesAction:', error.message);
-    return []; 
-  }
-}
+// Wrapper actions for client components (Server Actions)
 
-export async function clientSideSaveWorkspacesAction(workspaces: WorkspaceData[]): Promise<{ success: boolean; errors: { workspaceId: string; error: string }[] }> {
-  console.log(`[DB Actions Client] Attempting to save ${workspaces.length} workspaces to DB.`);
-  const errors: { workspaceId: string; error: string }[] = [];
-  let overallSuccess = true;
-
-  for (const ws of workspaces) {
-    const result = await saveWorkspaceToDB(ws);
-    if (!result.success) {
-      overallSuccess = false;
-      errors.push({ workspaceId: ws.id, error: result.error || 'Unknown error saving workspace' });
-    }
-  }
-
-  if (!overallSuccess) {
-    console.error(`[DB Actions Client] Errors saving some workspaces:`, errors);
-    return { success: false, errors };
-  }
-  console.log('[DB Actions Client] All workspaces saved successfully to DB.');
-  return { success: true, errors: [] };
+export async function deleteWorkspaceAction(workspaceId: string): Promise<{ success: boolean, error?: string }> {
+  console.log(`[DB Actions Client] Attempting to delete workspace ${workspaceId}`);
+  // Adicionar lógica de verificação de permissão aqui, se necessário (ex: verificar o proprietário)
+  return deleteWorkspaceFromDB(workspaceId);
 }
