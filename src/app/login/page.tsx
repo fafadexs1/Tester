@@ -48,7 +48,7 @@ export default function LoginPage() {
       result = await login(formData);
       if (result.success) {
         toast({ title: "Login bem-sucedido!", description: "Redirecionando para o dashboard..." });
-        // O redirecionamento será tratado pelo useEffect acima
+        router.push('/');
       }
     } else {
       if (password !== confirmPassword) {
@@ -59,7 +59,7 @@ export default function LoginPage() {
       result = await register(formData);
        if (result.success) {
         toast({ title: "Registro bem-sucedido!", description: "Redirecionando para o dashboard..." });
-        // O redirecionamento será tratado pelo useEffect acima
+        router.push('/');
       }
     }
 
