@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React from 'react'; // Ensure React is imported
@@ -7,22 +8,37 @@ import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, 
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle, Trash // Added Trash here
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle, Trash, MousePointerClick
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { v4 as uuidv4 } from 'uuid';
+import type { StartNodeTrigger } from '@/lib/types';
+
 
 interface FlowSidebarProps {}
 
 const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
   const iconProps = { className: "w-4 h-4" };
+  
+  const defaultTriggers: StartNodeTrigger[] = [
+    { id: uuidv4(), name: 'Manual', type: 'manual', enabled: true },
+    { 
+      id: uuidv4(), 
+      name: 'Webhook', 
+      type: 'webhook', 
+      enabled: false, 
+      variableMappings: [], 
+      sessionTimeoutSeconds: 0 
+    },
+  ];
 
   const blockCategories = [
     {
       value: "basic",
       title: "Básicos",
       blocks: [
-        { type: "start", label: "Início do Fluxo", icon: <PlayCircle {...iconProps} color="hsl(var(--primary))" />, defaultData: { triggers: [{ id: 'default-trigger-1', name: 'Gatilho Inicial', type: 'manual', webhookPayloadVariable: 'webhook_payload' }] } },
+        { type: "start", label: "Início do Fluxo", icon: <PlayCircle {...iconProps} color="hsl(var(--primary))" />, defaultData: { triggers: defaultTriggers } },
         { type: "message", label: "Exibir Texto", icon: <MessageSquareText {...iconProps} color="hsl(var(--accent))" />, defaultData: { text: 'Olá!'} },
         { type: "input", label: "Entrada do Usuário", icon: <Type {...iconProps} className="text-green-600" />, defaultData: { inputType: 'text', promptText: 'Qual é o seu nome?', variableToSaveResponse: 'nome_usuario' } },
         { type: "option", label: "Múltiplas Escolhas", icon: <ListChecks {...iconProps} className="text-purple-600" />, defaultData: { questionText: 'Escolha uma opção:', optionsList: 'Opção A\nOpção B', variableToSaveChoice: 'escolha_usuario' }},
@@ -122,4 +138,3 @@ const FlowSidebar = React.memo(FlowSidebarComponent);
 FlowSidebar.displayName = 'FlowSidebar'; // Adicionando displayName para o componente memoizado
 
 export default FlowSidebar;
-

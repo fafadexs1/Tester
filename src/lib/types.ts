@@ -63,12 +63,13 @@ export interface WebhookVariableMapping {
 
 export interface StartNodeTrigger {
   id: string;
-  name: string;
-  type: 'manual' | 'webhook';
-  webhookId?: string; // Mantido para referência única se necessário
+  name: string; // "Manual", "Webhook" - acts as a key now
+  type: 'manual' | 'webhook'; // The type of trigger
+  enabled: boolean;
   variableMappings?: WebhookVariableMapping[];
   sessionTimeoutSeconds?: number;
 }
+
 
 export interface NodeData {
   id: string;
