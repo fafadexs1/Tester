@@ -379,7 +379,7 @@ async function storeRequestDetails(
     headers: headers,
     ip: ip,
     extractedMessage: extractedMessage,
-    webhook_remoteJid: webhookRemoteJid,
+    webhook_remote_jid: webhookRemoteJid,
     payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
   };
 
@@ -434,7 +434,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
     
     const eventType = getProperty(actualEventPayload, 'event') as string;
     const instanceName = getProperty(actualEventPayload, 'instance') as string;
-    const senderJid = loggedEntry.webhook_remoteJid; 
+    const senderJid = loggedEntry.webhook_remote_jid; 
     const receivedMessageText = loggedEntry.extractedMessage;
     const evolutionApiBaseUrl = getProperty(actualEventPayload, 'server_url') as string;
     const evolutionApiKey = getProperty(actualEventPayload, 'apikey') as string;
@@ -455,21 +455,73 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
       let session = await loadSessionFromDB(sessionId);
       let continueProcessing = true;
 
-      // Check for session timeout
-      if (session && session.awaiting_input_type && session.session_timeout_seconds && session.session_timeout_seconds > 0) {
-        const lastInteraction = new Date(session.last_interaction_at || 0).getTime();
-        const now = new Date().getTime();
-        const secondsSinceLastInteraction = (now - lastInteraction) / 1000;
-        if (secondsSinceLastInteraction > session.session_timeout_seconds) {
-          console.log(`[API Evolution WS Route - ${sessionId}] Session timed out. Inactive for ${secondsSinceLastInteraction}s (limit: ${session.session_timeout_seconds}s). Deleting old session.`);
-          await deleteSessionFromDB(sessionId);
-          session = null; // Force creation of a new session
+      if (session) {
+        console.log(`[API Evolution WS Route - ${sessionId}] Existing session found. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}, Timeout: ${session.session_timeout_seconds}`);
+        
+        // Check for session timeout ONLY if it's awaiting input
+        if (session.awaiting_input_type && session.session_timeout_seconds && session.session_timeout_seconds > 0) {
+          const lastInteraction = new Date(session.last_interaction_at || 0).getTime();
+          const now = new Date().getTime();
+          const secondsSinceLastInteraction = (now - lastInteraction) / 1000;
+          if (secondsSinceLastInteraction > session.session_timeout_seconds) {
+            console.log(`[API Evolution WS Route - ${sessionId}] Session timed out while awaiting input. Inactive for ${secondsSinceLastInteraction}s (limit: ${session.session_timeout_seconds}s). Deleting old session.`);
+            await deleteSessionFromDB(sessionId);
+            session = null; // Force creation of a new session
+          }
         }
       }
 
+      if (session) {
+        // Session exists, let's process the message.
+        console.log(`[API Evolution WS Route - ${sessionId}] Continuing existing session. Awaiting: ${session.awaiting_input_type}`);
+        session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
 
+        if (session.awaiting_input_type && session.awaiting_input_details) {
+            const originalNodeId = session.awaiting_input_details.originalNodeId || session.current_node_id;
+            const awaitingNode = findNodeById(originalNodeId!, workspace.nodes);
+            
+            if (awaitingNode) {
+                if (session.awaiting_input_type === 'text' && session.awaiting_input_details.variableToSave) {
+                  session.flow_variables[session.awaiting_input_details.variableToSave] = receivedMessageText || '';
+                  session.current_node_id = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
+                } else if (session.awaiting_input_type === 'option' && Array.isArray(session.awaiting_input_details.options)) {
+                  const options = session.awaiting_input_details.options;
+                  const trimmedReceivedMessage = (receivedMessageText || '').trim();
+                  let chosenOptionText: string | undefined = undefined;
+
+                  const numericChoice = parseInt(trimmedReceivedMessage, 10);
+                  if (!isNaN(numericChoice) && numericChoice > 0 && numericChoice <= options.length) {
+                    chosenOptionText = options[numericChoice - 1];
+                  } else {
+                    chosenOptionText = options.find(opt => opt.toLowerCase() === trimmedReceivedMessage.toLowerCase());
+                  }
+
+                  if (chosenOptionText) {
+                    if (session.awaiting_input_details.variableToSave) {
+                      session.flow_variables[session.awaiting_input_details.variableToSave] = chosenOptionText;
+                    }
+                    session.current_node_id = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
+                    console.log(`[API Evolution WS Route - ${sessionId}] User chose option: "${chosenOptionText}". Next node: ${session.current_node_id}`);
+                  } else {
+                    console.log(`[API Evolution WS Route - ${sessionId}] Invalid option: "${trimmedReceivedMessage}". Re-prompting.`);
+                    await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: "Opção inválida. Por favor, tente novamente respondendo com o número ou o texto exato da opção."});
+                    continueProcessing = false; 
+                  }
+                }
+                session.awaiting_input_type = null;
+                session.awaiting_input_details = null;
+            } else {
+                console.warn(`[API Evolution WS Route - ${sessionId}] Awaiting node ${originalNodeId} not found. Restarting flow.`);
+                session = null; // Force restart
+            }
+        } else {
+            console.log(`[API Evolution WS Route - ${sessionId}] Session exists but was not awaiting input. Restarting flow.`);
+            session = null; // Force restart for a new interaction
+        }
+      }
+      
       if (!session) {
-        console.log(`[API Evolution WS Route - ${sessionId}] New session for workspace ${workspace.id}.`);
+        console.log(`[API Evolution WS Route - ${sessionId}] No active session or session was reset. Starting new one.`);
         const startNode = workspace.nodes.find(n => n.type === 'start');
         if (!startNode) {
           console.error(`[API Evolution WS Route - ${sessionId}] No start node in workspace ${workspace.id}.`);
@@ -511,67 +563,8 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
           awaiting_input_details: null,
           session_timeout_seconds: firstTrigger?.sessionTimeoutSeconds || 0,
         };
-      } else {
-        console.log(`[API Evolution WS Route - ${sessionId}] Existing session. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
-        session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
-        
-        if (session.awaiting_input_type && session.current_node_id && session.awaiting_input_details) {
-          const originalNodeId = session.awaiting_input_details.originalNodeId || session.current_node_id;
-          const awaitingNode = findNodeById(originalNodeId, workspace.nodes);
-
-          if (awaitingNode) {
-            if (session.awaiting_input_type === 'text' && session.awaiting_input_details.variableToSave) {
-              session.flow_variables[session.awaiting_input_details.variableToSave] = receivedMessageText || '';
-              session.current_node_id = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
-            } else if (session.awaiting_input_type === 'option' && Array.isArray(session.awaiting_input_details.options)) {
-              const options = session.awaiting_input_details.options;
-              const trimmedReceivedMessage = (receivedMessageText || '').trim();
-              let chosenOptionText: string | undefined = undefined;
-
-              const numericChoice = parseInt(trimmedReceivedMessage, 10);
-              if (!isNaN(numericChoice) && numericChoice > 0 && numericChoice <= options.length) {
-                chosenOptionText = options[numericChoice - 1];
-              } else {
-                chosenOptionText = options.find(opt => opt.toLowerCase() === trimmedReceivedMessage.toLowerCase());
-              }
-
-              if (chosenOptionText) {
-                if (session.awaiting_input_details.variableToSave) {
-                  session.flow_variables[session.awaiting_input_details.variableToSave] = chosenOptionText;
-                }
-                session.current_node_id = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
-                console.log(`[API Evolution WS Route - ${sessionId}] User chose option: "${chosenOptionText}". Next node: ${session.current_node_id}`);
-              } else {
-                console.log(`[API Evolution WS Route - ${sessionId}] Invalid option: "${trimmedReceivedMessage}". Re-prompting.`);
-                await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: "Opção inválida. Por favor, tente novamente respondendo com o número ou o texto exato da opção."});
-                // Don't change the current node, just save session and stop processing
-                // The flow will implicitly stay on the same node.
-                continueProcessing = false; 
-              }
-            }
-            session.awaiting_input_type = null;
-            session.awaiting_input_details = null;
-          } else {
-             console.warn(`[API Evolution WS Route - ${sessionId}] Awaiting node ${originalNodeId} not found. Resetting flow.`);
-             const startNode = workspace.nodes.find(n => n.type === 'start');
-             session.current_node_id = startNode ? findNextNodeId(startNode.id, startNode.triggers?.[0]?.name || 'default', workspace.connections || []) : null;
-             session.awaiting_input_type = null;
-             session.awaiting_input_details = null;
-          }
-        } else { 
-           const startNode = workspace.nodes.find(n => n.type === 'start');
-           if(startNode){
-              session.current_node_id = findNextNodeId(startNode.id, startNode.triggers?.[0]?.name || 'default', workspace.connections || []);
-              console.log(`[API Evolution WS Route - ${sessionId}] Session not awaiting input, (re)starting flow from: ${session.current_node_id}`);
-           } else {
-               session.current_node_id = null;
-           }
-           session.awaiting_input_type = null;
-           session.awaiting_input_details = null;
-        }
       }
       
-      await saveSessionToDB(session);
       if (continueProcessing && session.current_node_id) {
         await executeFlowStep(session, workspace.nodes, workspace.connections || [], apiConfig);
       } else if (continueProcessing && !session.current_node_id && session.awaiting_input_type === null) {
@@ -579,6 +572,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
         await saveSessionToDB(session);
       } else {
         console.log(`[API Evolution WS Route - ${sessionId}] Flow execution paused for session or no current node to execute (Current Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}). Session saved.`);
+        await saveSessionToDB(session); // Save session state even if paused (e.g. for invalid option)
       }
       return NextResponse.json({ message: "Webhook processed." }, { status: 200 });
 
@@ -632,3 +626,5 @@ export async function DELETE(request: NextRequest, { params }: { params: { works
   console.log(`[API Evolution WS Route - DELETE] Received DELETE for workspace: "${params.workspaceName}". Delegating to POST logic.`);
   return POST(request, { params });
 }
+
+    
