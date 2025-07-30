@@ -456,7 +456,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
       let continueProcessing = true;
 
       // Check for session timeout
-      if (session && session.session_timeout_seconds && session.session_timeout_seconds > 0) {
+      if (session && session.awaiting_input_type && session.session_timeout_seconds && session.session_timeout_seconds > 0) {
         const lastInteraction = new Date(session.last_interaction_at || 0).getTime();
         const now = new Date().getTime();
         const secondsSinceLastInteraction = (now - lastInteraction) / 1000;
