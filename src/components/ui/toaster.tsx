@@ -40,7 +40,7 @@ export function Toaster() {
           </Toast>
         )
       })}
-      <ToastViewport suppressHydrationWarning={true} />
+      <ToastViewport />
     </ToastProvider>
   )
 }
