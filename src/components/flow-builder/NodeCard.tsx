@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger, WebhookVariableMapping } from '@/lib/types';
+import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger, WebhookVariableMapping, WorkspaceData } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -42,6 +42,7 @@ interface NodeCardProps {
   onDeleteNode: (id: string) => void;
   definedVariablesInFlow: string[];
   isSessionHighlighted?: boolean;
+  activeWorkspace: WorkspaceData | undefined | null;
 }
 
 const NodeCard: React.FC<NodeCardProps> = React.memo(({
@@ -50,7 +51,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   onStartConnection,
   onDeleteNode,
   definedVariablesInFlow,
-  isSessionHighlighted
+  isSessionHighlighted,
+  activeWorkspace
 }) => {
   const { toast } = useToast();
   const isDraggingNode = useRef(false);
@@ -684,7 +686,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </TabsList>
               
               <TabsContent value="manual" className="mt-4">
-                {manualTrigger && (
+                {manualTrigger ? (
                   <div className="space-y-3">
                     <div className="flex items-center space-x-2">
                       <Switch 
@@ -698,16 +700,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                       Permite iniciar o fluxo manualmente através do painel de teste.
                     </p>
                   </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground italic">
+                    Gatilho manual não encontrado na estrutura do nó. Isso não deveria acontecer.
+                  </div>
                 )}
-                 {!manualTrigger && (
-                    <div className="text-xs text-muted-foreground italic">
-                      Gatilho manual não encontrado na estrutura do nó. Isso não deveria acontecer.
-                    </div>
-                  )}
               </TabsContent>
               
               <TabsContent value="webhook" className="mt-4">
-                {webhookTrigger && (
+                {webhookTrigger ? (
                   <div className="space-y-4">
                     <div className="flex items-center space-x-2">
                       <Switch 
@@ -793,12 +794,11 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                       </div>
                     </div>
                   </div>
-                )}
-                 {!webhookTrigger && (
+                ) : (
                     <div className="text-xs text-muted-foreground italic">
                       Gatilho de webhook não encontrado na estrutura do nó. Isso não deveria acontecer.
                     </div>
-                  )}
+                )}
               </TabsContent>
             </Tabs>
           </div>

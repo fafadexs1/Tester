@@ -679,6 +679,7 @@ export default function FlowBuilderClient() {
                 setHighlightedConnectionId={setHighlightedConnectionId}
                 definedVariablesInFlow={definedVariablesInFlow}
                 highlightedNodeIdBySession={highlightedNodeIdBySession}
+                activeWorkspace={activeWorkspace}
               />
             </div>
             {hasMounted && isChatPanelOpen && (

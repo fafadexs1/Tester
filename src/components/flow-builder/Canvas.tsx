@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import NodeCard from './NodeCard';
 
 import type {
-  NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData
+  NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, WorkspaceData
 } from '@/lib/types';
 import {
   ITEM_TYPE_BLOCK, NODE_WIDTH, GRID_SIZE,
@@ -32,6 +32,7 @@ interface CanvasProps {
   setHighlightedConnectionId: (id: string | null) => void;
   definedVariablesInFlow: string[];
   highlightedNodeIdBySession: string | null;
+  activeWorkspace: WorkspaceData | undefined | null;
 }
 
 const SVG_CANVAS_DIMENSION = 50000; 
@@ -40,7 +41,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   nodes, connections, drawingLine, canvasOffset, zoomLevel,
   onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDeleteConnection,
   onCanvasMouseDown, highlightedConnectionId, setHighlightedConnectionId,
-  definedVariablesInFlow, highlightedNodeIdBySession
+  definedVariablesInFlow, highlightedNodeIdBySession, activeWorkspace
 }, ref) => {
   const localCanvasRef = useRef<HTMLDivElement>(null);
   const flowContentWrapperRef = useRef<HTMLDivElement>(null);
@@ -153,10 +154,11 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
           onDeleteNode={onDeleteNode}
           definedVariablesInFlow={definedVariablesInFlow}
           isSessionHighlighted={node.id === highlightedNodeIdBySession}
+          activeWorkspace={activeWorkspace}
         />
       </motion.div>
     ))
-  ), [nodes, onUpdateNode, onStartConnection, onDeleteNode, definedVariablesInFlow, highlightedNodeIdBySession]);
+  ), [nodes, onUpdateNode, onStartConnection, onDeleteNode, definedVariablesInFlow, highlightedNodeIdBySession, activeWorkspace]);
 
   const renderedConnections = useMemo(() => (
     (connections || []).map((conn) => {
@@ -291,4 +293,5 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
 
 Canvas.displayName = 'Canvas';
 export default Canvas;
+
 
