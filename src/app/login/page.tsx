@@ -22,34 +22,30 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // This effect now reliably redirects AFTER the user state is confirmed client-side
-    // and the server session is likely established (post-refresh).
-    if (user) {
+    // Este efeito redireciona se o usuário já estiver logado (confirmado pelo AuthProvider)
+    if (!loading && user) {
       router.push('/');
     }
-  }, [user, router]);
+  }, [user, loading, router]);
   
-  // This loading state is for initial page load check, not for post-login.
+  // Exibe um loader principal enquanto o AuthProvider verifica a sessão.
   if (loading) {
       return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
-            <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-            >
-                <Zap className="h-12 w-12 text-primary" />
-            </motion.div>
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
       );
   }
   
-  // If user object exists (e.g., from a previous session), show loading while redirecting.
+  // Se após a verificação o usuário já existir, não renderiza o formulário,
+  // pois o useEffect acima fará o redirecionamento. Isso evita um flash do formulário.
   if (user) {
       return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <span className="ml-4">Redirecionando...</span>
          </div>
-      )
+      );
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -58,33 +54,32 @@ export default function LoginPage() {
     let result;
     const formData = new FormData();
     formData.append('username', username);
-    // Password is now sent to the server for validation in loginAction
     formData.append('password', password);
 
     if (isLoginView) {
-      result = await login(formData, password); // Pass password for client-side storage
+      result = await login(formData, password); 
     } else {
       if (password !== confirmPassword) {
         toast({ title: "Erro de Registro", description: "As senhas não coincidem.", variant: "destructive" });
         setIsSubmitting(false);
         return;
       }
-      result = await register(formData, password); // Pass password for client-side storage
+      result = await register(formData, password); 
     }
 
     if (result.success) {
       toast({ title: isLoginView ? "Login bem-sucedido!" : "Registro bem-sucedido!", description: "Redirecionando..." });
-      // CRITICAL FIX: Refresh the router to make sure client-side cache and server-side session are in sync.
-      router.refresh(); 
-      // The useEffect will handle the redirect once the user object is updated.
+      // Não usamos mais router.push ou router.refresh aqui.
+      // O AuthProvider atualizará o estado 'user', e o useEffect cuidará do redirecionamento.
     } else {
       toast({
           title: isLoginView ? "Erro no Login" : "Erro no Registro",
           description: result.error || (isLoginView ? "Usuário ou senha inválidos." : "Não foi possível registrar o usuário."),
           variant: "destructive",
         });
-      setIsSubmitting(false);
     }
+    // Apenas definimos isSubmitting como false. O redirecionamento é baseado no estado.
+    setIsSubmitting(false);
   };
 
   return (

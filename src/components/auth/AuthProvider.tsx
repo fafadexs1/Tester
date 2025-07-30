@@ -16,7 +16,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const USERS_STORAGE_KEY = 'nexusflow_users';
 const SESSION_STORAGE_KEY = 'nexusflow_session_client';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -25,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    // Apenas verifica a sessão do cliente uma vez na montagem inicial para evitar hydration errors.
     try {
         const sessionUser = sessionStorage.getItem(SESSION_STORAGE_KEY);
         if (sessionUser) {
@@ -34,17 +34,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error("Failed to parse user session from sessionStorage", e);
         sessionStorage.removeItem(SESSION_STORAGE_KEY);
     }
+    // Independentemente do resultado, a verificação terminou.
     setLoading(false);
   }, []);
 
   const login = useCallback(async (formData: FormData, pass: string): Promise<{ success: boolean, error?: string }> => {
-    // This now correctly calls the server action which handles ALL validation.
     const result = await loginAction(formData);
     
     if (result.success && result.user) {
         setUser(result.user);
         sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(result.user));
-        // We will no longer push here. The login page will handle the refresh and redirect.
+        // O redirecionamento agora é tratado pelo useEffect na página de login
         return { success: true };
     } else {
         return { success: false, error: result.error || "Falha ao criar sessão no servidor." };
@@ -54,8 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(async (formData: FormData, pass: string): Promise<{ success: boolean, error?: string }> => {
     const username = formData.get('username') as string;
 
-    // Client-side registration logic to store the user "account"
-    const usersData = localStorage.getItem(USERS_STORAGE_KEY);
+    const usersData = localStorage.getItem('nexusflow_users');
     const users = usersData ? JSON.parse(usersData) : {};
     
     if (users[username]) {
@@ -66,19 +65,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     users[username] = { password: pass };
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+    localStorage.setItem('nexusflow_users', JSON.stringify(users));
 
-    // After registering client-side, call the server action to create the session cookie.
     const result = await registerAction(formData);
      if (result.success && result.user) {
         setUser(result.user);
         sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(result.user));
-        // We will no longer push here. The login page will handle the refresh and redirect.
         return { success: true };
     } else {
-        // If session creation fails, roll back the client-side registration.
         delete users[username];
-        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+        localStorage.setItem('nexusflow_users', JSON.stringify(users));
         return { success: false, error: result.error || "Falha ao criar sessão do servidor após o registro." };
     }
   }, []);
