@@ -18,54 +18,43 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true); // Começa como true para verificar a sessão
+  const [loading, setLoading] = useState(true); 
+
+  const verifySession = useCallback(async () => {
+    try {
+      const sessionUser = await getCurrentUser();
+      setUser(sessionUser);
+    } catch (e) {
+      console.error("Falha ao verificar a sessão do servidor", e);
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    // Verifica a sessão com o servidor ao carregar o provedor
-    const checkSession = async () => {
-      try {
-        const sessionUser = await getCurrentUser();
-        if (sessionUser) {
-          setUser(sessionUser);
-        } else {
-          setUser(null);
-        }
-      } catch (e) {
-        console.error("Falha ao verificar a sessão do servidor", e);
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    checkSession();
-  }, []);
+    verifySession();
+  }, [verifySession]);
 
   const login = useCallback(async (formData: FormData): Promise<{ success: boolean, error?: string }> => {
     const result = await loginAction(formData);
-    
     if (result.success && result.user) {
         setUser(result.user);
-        return { success: true };
-    } else {
-        return { success: false, error: result.error };
     }
+    return result;
   }, []);
 
   const register = useCallback(async (formData: FormData): Promise<{ success: boolean, error?: string }> => {
     const result = await registerAction(formData);
     if (result.success && result.user) {
         setUser(result.user);
-        return { success: true };
-    } else {
-        return { success: false, error: result.error };
     }
+    return result;
   }, []);
 
   const logout = useCallback(async () => {
     await logoutAction();
     setUser(null);
-    // O redirecionamento será tratado pela página ou por um componente wrapper
-    // que observa o estado de autenticação.
   }, []);
 
   const value = {

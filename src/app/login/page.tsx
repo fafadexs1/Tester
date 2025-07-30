@@ -23,7 +23,7 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Redireciona se o usuário já estiver logado (confirmado pelo AuthProvider)
+    // This effect now reliably redirects after the AuthProvider confirms the user state.
     if (!loading && user) {
       router.push('/');
     }
@@ -48,26 +48,36 @@ export default function LoginPage() {
       result = await register(formData); 
     }
 
-    if (result.success) {
-      toast({ title: isLoginView ? "Login bem-sucedido!" : "Registro bem-sucedido!", description: "Redirecionando para o dashboard..." });
-      router.push('/');
-    } else {
-      toast({
-          title: isLoginView ? "Erro no Login" : "Erro no Registro",
-          description: result.error || (isLoginView ? "Usuário ou senha inválidos." : "Não foi possível registrar o usuário."),
-          variant: "destructive",
+    if (!result.success) {
+        toast({
+            title: isLoginView ? "Erro no Login" : "Erro no Registro",
+            description: result.error || (isLoginView ? "Usuário ou senha inválidos." : "Não foi possível registrar o usuário."),
+            variant: "destructive",
         });
+        setIsSubmitting(false);
     }
-    setIsSubmitting(false);
+    // No router.push here. The useEffect handles redirection once the user state is confirmed.
   };
   
-  if (loading || (!loading && user)) {
+  if (loading) {
       return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
              <span className="ml-4 text-muted-foreground">Verificando sessão...</span>
         </div>
       );
+  }
+
+  // If loading is false and user exists, the useEffect will redirect.
+  // We can show the form while that happens, or a null state to avoid flashes.
+  // Showing the form is generally fine as the redirect is quick.
+  if(user) {
+    return (
+        <div className="flex h-screen w-full items-center justify-center bg-background">
+           <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <span className="ml-4 text-muted-foreground">Redirecionando...</span>
+       </div>
+     );
   }
 
   return (
