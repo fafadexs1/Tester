@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, FormEvent, useEffect } from 'react';
@@ -23,12 +22,13 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Se o usuário já estiver logado (verificação do cliente), redireciona.
-    // A verificação principal agora é do lado do servidor na página do dashboard.
-    if (!loading && user) {
+    // A verificação de rota principal agora é feita no lado do servidor.
+    // Este useEffect pode ser usado para UX, mas o redirecionamento
+    // forçado foi removido para evitar loops.
+    if (user) {
       router.push('/');
     }
-  }, [user, loading, router]);
+  }, [user, router]);
   
   if (loading || user) {
       return (
@@ -51,7 +51,7 @@ export default function LoginPage() {
       const result = await login(username, password);
       if (result.success) {
         toast({ title: "Login bem-sucedido!", description: `Bem-vindo de volta, ${username}!` });
-        // O redirecionamento é tratado pela função de login
+        // O redirecionamento agora é tratado pelo useEffect ou pela função de login.
       } else {
         toast({
           title: "Erro no Login",
@@ -68,7 +68,7 @@ export default function LoginPage() {
       const result = await register(username, password);
       if (result.success) {
         toast({ title: "Registro bem-sucedido!", description: `Bem-vindo, ${username}! Você agora está logado.` });
-         // O redirecionamento é tratado pela função de registro
+         // O redirecionamento é tratado pelo useEffect ou pela função de registro.
       } else {
         toast({
           title: "Erro no Registro",
