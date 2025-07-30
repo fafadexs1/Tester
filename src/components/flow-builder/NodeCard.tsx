@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
@@ -656,6 +655,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       case 'start': {
         const manualTrigger = (node.triggers || []).find(t => t.type === 'manual');
         const webhookTrigger = (node.triggers || []).find(t => t.type === 'webhook');
+        const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/workspace/${encodeURIComponent((node.title || 'workspace').replace(/\s+/g, '_'))}`;
 
         return (
           <div className="space-y-3" data-no-drag="true">
@@ -716,7 +716,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                             id="webhook-url"
                             type="text"
                             readOnly
-                            value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/workspace/${encodeURIComponent(node.title.replace(/\s+/g, '_'))}`}
+                            value={webhookUrl}
                             className="bg-input/50 h-7 text-xs"
                           />
                           <Button
@@ -724,7 +724,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                             size="icon"
                             className="h-7 w-7"
                             onClick={() => {
-                              const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/workspace/${encodeURIComponent(node.title.replace(/\s+/g, '_'))}`;
                               navigator.clipboard.writeText(webhookUrl)
                                 .then(() => toast({ title: "URL Copiada!", description: "URL do Webhook copiada."}))
                                 .catch(() => toast({ title: "Erro", description: "Não foi possível copiar a URL.", variant: "destructive"}));
@@ -772,6 +771,11 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     </div>
                   </div>
                 )}
+                 {!webhookTrigger && (
+                    <div className="text-xs text-muted-foreground italic">
+                      Gatilho de webhook não encontrado na estrutura do nó. Isso não deveria acontecer.
+                    </div>
+                  )}
               </TabsContent>
             </Tabs>
           </div>
@@ -1656,3 +1660,5 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
+    
