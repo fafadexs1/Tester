@@ -24,12 +24,11 @@ function getDbPool(): Pool {
         database: process.env.POSTGRES_DATABASE,
         ssl: useSSL ? { rejectUnauthorized: false } : false,
         idleTimeoutMillis: 60000,
-        connectionTimeoutMillis: 10000, // Diminuído para falhar mais rápido se não conseguir conectar
+        connectionTimeoutMillis: 10000,
     });
 
     pool.on('error', (err, client) => {
         console.error('[DB Actions] PostgreSQL Pool Error:', err);
-        // Reset pool on major errors
         pool = null;
     });
 
@@ -91,13 +90,11 @@ async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResu
         }
     } catch (error: any) {
         console.error(`[DB Actions] Query failed: ${query.substring(0, 100)}...`, { error: error.message, code: error.code });
-        // Se o erro for de conexão, reinicia o pool
         if (['ECONNRESET', 'ECONNREFUSED'].includes(error.code) || error.message.includes('timeout')) {
             if (pool) await pool.end();
             pool = null;
         }
-        // Se a relação não existe, tenta inicializar o schema e reexecutar a query.
-        if (error.code === '42P01') { // 'undefined_table'
+        if (error.code === '42P01') { 
             console.warn('[DB Actions] Table not found. Attempting to initialize schema and retry...');
             try {
                 await initializeDatabaseSchema();
@@ -198,7 +195,6 @@ export async function loadAllWorkspacesFromDB(): Promise<WorkspaceData[]> {
       }));
   } catch (error: any) {
     console.error('[DB Actions] loadAllWorkspacesFromDB Error:', error);
-    // Em caso de erro, retorna um array vazio para não quebrar a UI
     return [];
   }
 }
@@ -213,7 +209,6 @@ export async function deleteWorkspaceFromDB(workspaceId: string): Promise<{ succ
   }
 }
 
-// Wrapper action for client components
 export async function deleteWorkspaceAction(workspaceId: string): Promise<{ success: boolean, error?: string }> {
   console.log(`[DB Actions Client] Attempting to delete workspace ${workspaceId}`);
   return deleteWorkspaceFromDB(workspaceId);
@@ -298,7 +293,6 @@ export async function loadAllActiveSessionsFromDB(): Promise<FlowSession[]> {
   }
 }
 
-// Check database connection on module load for early feedback
 (async () => {
     try {
         console.log('[DB Actions] Performing initial connection check...');
