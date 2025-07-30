@@ -1,6 +1,10 @@
 
 'use server';
 
+import type { FlowSession, WorkspaceData } from '@/lib/types';
+import { loadSessionFromDB, saveSessionToDB, deleteSessionFromDB, loadWorkspaceByNameFromDB } from './databaseActions';
+
+
 interface SendWhatsAppMessageParams {
   baseUrl: string;
   apiKey?: string;
@@ -13,12 +17,7 @@ interface SendWhatsAppMessageParams {
 }
 
 interface EvolutionApiResponse {
-  // Define based on the actual API response structure
-  // For example:
-  // message: string;
-  // status?: string;
-  // key?: { remoteJid: string; fromMe: boolean; id: string };
-  [key: string]: any; // Allow for other properties
+  [key: string]: any; 
 }
 
 export async function sendWhatsAppMessageAction(
@@ -38,8 +37,7 @@ export async function sendWhatsAppMessageAction(
     endpoint = `${params.baseUrl.replace(/\/$/, '')}/message/sendText/${params.instanceName}`;
     body.number = params.recipientPhoneNumber;
     body.options = { presence: 'composing', delay: 1200 };
-    // CORREÇÃO APLICADA AQUI: "text" diretamente no corpo
-    body.text = params.textContent;
+    body.textMessage = { text: params.textContent };
   } else if (['image', 'video', 'document', 'audio'].includes(params.messageType)) {
     if (!params.mediaUrl) {
       return { success: false, error: 'URL da mídia ausente para mensagem de mídia.' };
@@ -51,9 +49,8 @@ export async function sendWhatsAppMessageAction(
       url: params.mediaUrl,
       caption: params.caption,
     };
-     // Add other media-specific options if needed, e.g., mimetype, filename
     if (params.messageType === 'document' && params.caption) {
-       body.mediaMessage.filename = params.caption; // Often filename is used as caption for docs
+       body.mediaMessage.filename = params.caption;
     }
   } else {
     return { success: false, error: `Tipo de mensagem '${params.messageType}' não suportado.` };
@@ -67,8 +64,6 @@ export async function sendWhatsAppMessageAction(
   }
 
   console.log(`[EvolutionAPI Action] Sending ${params.messageType} to ${params.recipientPhoneNumber} via ${params.instanceName}`);
-  console.log(`[EvolutionAPI Action] Endpoint: ${endpoint}`);
-  console.log(`[EvolutionAPI Action] Body:`, JSON.stringify(body, null, 2));
 
   try {
     const response = await fetch(endpoint, {
@@ -110,4 +105,5 @@ export async function sendWhatsAppMessageAction(
     return { success: false, error: `Falha ao enviar mensagem: ${error.message || 'Erro de rede desconhecido'}` };
   }
 }
+
     
