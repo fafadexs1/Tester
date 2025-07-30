@@ -9,34 +9,34 @@ import { getCurrentUser } from '@/lib/auth';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (formData: FormData) => Promise<{ success: boolean, error?: string }>;
+  login: (formData: FormData) => Promise<{ success: boolean; error?: string; user?: User }>;
   logout: () => Promise<void>;
-  register: (formData: FormData) => Promise<{ success: boolean, error?: string }>;
+  register: (formData: FormData) => Promise<{ success: boolean; error?: string; user?: User }>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true); 
+  const [loading, setLoading] = useState(true);
 
-  const verifySession = useCallback(async () => {
-    try {
-      const sessionUser = await getCurrentUser();
-      setUser(sessionUser);
-    } catch (e) {
-      console.error("Falha ao verificar a sessão do servidor", e);
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
+  // Garantir que a verificação de sessão só rode no cliente e uma vez
+  useEffect(() => {
+    const verifyUserSession = async () => {
+      try {
+        const sessionUser = await getCurrentUser();
+        setUser(sessionUser);
+      } catch (e) {
+        console.error("Falha ao verificar a sessão do servidor", e);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    verifyUserSession();
   }, []);
 
-  useEffect(() => {
-    verifySession();
-  }, [verifySession]);
-
-  const login = useCallback(async (formData: FormData): Promise<{ success: boolean, error?: string }> => {
+  const login = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
     const result = await loginAction(formData);
     if (result.success && result.user) {
         setUser(result.user);
@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return result;
   }, []);
 
-  const register = useCallback(async (formData: FormData): Promise<{ success: boolean, error?: string }> => {
+  const register = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
     const result = await registerAction(formData);
     if (result.success && result.user) {
         setUser(result.user);

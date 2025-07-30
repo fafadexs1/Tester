@@ -22,21 +22,26 @@ export default function LoginPage() {
   const { user, login, register, loading } = useAuth();
   const { toast } = useToast();
 
+  const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => {
-    // This effect now reliably redirects after the AuthProvider confirms the user state.
-    if (!loading && user) {
+    setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (hasMounted && !loading && user) {
       router.push('/');
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, hasMounted]);
   
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
-    let result;
+
     const formData = new FormData();
     formData.append('username', username);
     formData.append('password', password);
 
+    let result;
     if (isLoginView) {
       result = await login(formData); 
     } else {
@@ -48,18 +53,18 @@ export default function LoginPage() {
       result = await register(formData); 
     }
 
-    if (!result.success) {
+    if (result && !result.success) {
         toast({
             title: isLoginView ? "Erro no Login" : "Erro no Registro",
             description: result.error || (isLoginView ? "Usuário ou senha inválidos." : "Não foi possível registrar o usuário."),
             variant: "destructive",
         });
-        setIsSubmitting(false);
     }
-    // No router.push here. The useEffect handles redirection once the user state is confirmed.
+    // O redirecionamento é tratado pelo useEffect
+    setIsSubmitting(false);
   };
   
-  if (loading) {
+  if (!hasMounted || loading) {
       return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -68,9 +73,7 @@ export default function LoginPage() {
       );
   }
 
-  // If loading is false and user exists, the useEffect will redirect.
-  // We can show the form while that happens, or a null state to avoid flashes.
-  // Showing the form is generally fine as the redirect is quick.
+  // Se já estiver logado, o useEffect irá redirecionar, enquanto isso, mostramos o loading.
   if(user) {
     return (
         <div className="flex h-screen w-full items-center justify-center bg-background">
