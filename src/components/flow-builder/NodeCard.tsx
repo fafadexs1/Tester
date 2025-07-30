@@ -565,12 +565,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       return null;
     }
     if (node.type === 'start') {
-      return (node.triggers || []).filter(t => t.enabled).map((trigger, index) => {
+        const allTriggers = node.triggers || [];
+        return allTriggers.filter(t => t.enabled).map(trigger => {
+        const originalIndex = allTriggers.findIndex(t => t.id === trigger.id);
+        if (originalIndex === -1) return null; // Should not happen
+
         return (
           <div
             key={trigger.id}
             className="absolute -right-2.5 z-10 flex items-center"
-            style={{ top: `${START_NODE_TRIGGER_INITIAL_Y_OFFSET + index * START_NODE_TRIGGER_SPACING_Y - 10}px` }}
+            style={{ top: `${START_NODE_TRIGGER_INITIAL_Y_OFFSET + originalIndex * START_NODE_TRIGGER_SPACING_Y - 10}px` }}
             title={`Gatilho: ${trigger.name}`}
           >
             <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
@@ -669,7 +673,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       case 'start': {
         const manualTrigger = (node.triggers || []).find(t => t.type === 'manual');
         const webhookTrigger = (node.triggers || []).find(t => t.type === 'webhook');
-        const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/workspace/${encodeURIComponent((node.title || 'workspace').replace(/\s+/g, '_'))}`;
+        const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/workspace/${encodeURIComponent((activeWorkspace?.name || 'workspace').replace(/\s+/g, '_'))}`;
 
         return (
           <div className="space-y-3" data-no-drag="true">
@@ -695,6 +699,11 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     </p>
                   </div>
                 )}
+                 {!manualTrigger && (
+                    <div className="text-xs text-muted-foreground italic">
+                      Gatilho manual não encontrado na estrutura do nó. Isso não deveria acontecer.
+                    </div>
+                  )}
               </TabsContent>
               
               <TabsContent value="webhook" className="mt-4">
