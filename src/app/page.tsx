@@ -6,7 +6,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { PlusCircle, ArrowRight, BotMessageSquare, Loader2 } from 'lucide-react';
+import { PlusCircle, ArrowRight, BotMessageSquare, Loader2, Zap } from 'lucide-react';
 import { clientSideLoadWorkspacesAction } from '@/app/actions/databaseActions';
 import type { WorkspaceData } from '@/lib/types';
 import TopBar from '@/components/flow-builder/TopBar'; // Reutilizando para consistência
