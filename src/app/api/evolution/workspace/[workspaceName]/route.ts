@@ -469,7 +469,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
       const isAwaitingInput = !!session.awaiting_input_type;
 
       if (isAwaitingInput && timeoutSeconds > 0 && (now - lastInteraction > timeoutSeconds * 1000)) {
-        console.log(`[API Evolution WS Route - ${sessionId}] Session timed out. Deleting and creating a new one.`);
+        console.log(`[API Evolution WS Route - ${sessionId}] Session timed out while awaiting input. Deleting and creating a new one.`);
         await deleteSessionFromDB(sessionId);
         session = null;
       }
@@ -516,11 +516,12 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
               session.current_node_id = nextNode;
               startExecution = !!nextNode;
           } else {
-              session = null; // Force restart if awaiting node is gone
+              console.warn(`[API Evolution WS Route - ${sessionId}] Awaiting node ${originalNodeId} not found, restarting flow.`);
+              session = null; 
           }
       } else {
-         console.log(`[API Evolution WS Route - ${sessionId}] Session was paused but not awaiting input. Continuing from node ${session.current_node_id}.`);
-         startExecution = true;
+         console.log(`[API Evolution WS Route - ${sessionId}] Session was paused but not awaiting input. Restarting flow.`);
+         session = null;
       }
     }
     
@@ -595,3 +596,5 @@ export async function PATCH(request: NextRequest, { params }: { params: { worksp
 export async function DELETE(request: NextRequest, { params }: { params: { workspaceName: string } }) {
   return POST(request, { params });
 }
+
+    
