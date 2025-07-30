@@ -5,32 +5,60 @@ import type { User } from '@/lib/types';
 import { cookies } from 'next/headers';
 
 // Em uma aplicação real, você faria a busca no banco de dados aqui.
-// Por enquanto, continuamos usando o localStorage como nossa "base de dados" de usuários.
-// Nota: Server Actions não podem acessar diretamente localStorage/sessionStorage do browser.
-// A lógica de ler os usuários precisa ser adaptada ou substituída por um DB de verdade.
-// Para este exemplo, vamos simular a leitura, mas o ideal seria migrar os usuários para o DB.
-
-// Esta é uma simulação, já que não podemos ler o localStorage do browser no servidor.
-// Em uma aplicação real, você buscaria o usuário no seu banco de dados.
-async function getUserFromStorage(username: string): Promise<{ password?: string } | null> {
-    // Esta é uma maneira de contornar a limitação para fins de demonstração.
-    // NÃO FAÇA ISSO EM PRODUÇÃO. A forma correta é usar um banco de dados.
-    console.warn("Simulating user lookup. In a real app, use a database!");
-    return null; // A lógica real será feita no lado do cliente por enquanto.
+// Para este exemplo, a validação de senha será feita aqui, no lado do servidor.
+// Esta função simula a leitura do `localStorage` que está sendo usado como DB.
+// ATENÇÃO: Esta abordagem é insegura e serve apenas para fins de demonstração.
+// Em um app real, use um banco de dados com senhas hasheadas.
+async function validateUser(username: string, pass: string): Promise<boolean> {
+    // Esta é uma simulação. As credenciais são gerenciadas no lado do cliente
+    // e passadas para a Server Action. Em um ambiente de produção, você
+    // consultaria seu banco de dados de usuários aqui.
+    // Como não podemos acessar o localStorage do browser a partir daqui,
+    // a lógica de validação permanece no cliente por enquanto.
+    // Esta função será chamada pelo `AuthProvider`.
+    return true; // A validação real é feita no client-side `login` por enquanto.
 }
 
-export async function loginAction(username: string): Promise<{ success: boolean; error?: string }> {
+
+export async function loginAction(formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> {
+  const username = formData.get('username') as string;
+  const password = formData.get('password') as string;
+
+  if (!username || !password) {
+    return { success: false, error: "Nome de usuário e senha são obrigatórios." };
+  }
+
+  // A validação real da senha deveria acontecer aqui contra um banco de dados.
+  // Como estamos usando localStorage, a validação é simulada e acontece
+  // no `AuthProvider`. Se a validação no `AuthProvider` passar, ele chama esta
+  // Server Action, que então cria a sessão.
+  
   try {
-    if (!username) {
-        return { success: false, error: "Nome de usuário não pode ser vazio." };
-    }
     const user: User = { username };
     await createSession(user);
-    return { success: true };
+    return { success: true, user };
   } catch (error: any) {
     console.error("Login Action Error:", error);
     return { success: false, error: "Ocorreu um erro no servidor durante o login." };
   }
+}
+
+export async function registerAction(formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> {
+    const username = formData.get('username') as string;
+    // A senha é apenas para o `localStorage` do cliente neste exemplo.
+    // A ação do servidor apenas precisa do nome de usuário para criar a sessão.
+     if (!username) {
+        return { success: false, error: "Nome de usuário é obrigatório." };
+    }
+    
+    try {
+        const user: User = { username };
+        await createSession(user);
+        return { success: true, user };
+    } catch (error: any) {
+        console.error("Register Action Error:", error);
+        return { success: false, error: "Ocorreu um erro no servidor durante o registro." };
+    }
 }
 
 

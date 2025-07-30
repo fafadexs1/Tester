@@ -22,9 +22,6 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Este useEffect agora apenas impede a renderização da página de login
-    // se o usuário já estiver logado no estado do cliente, empurrando-o para
-    // a página inicial, onde o servidor fará a verificação final.
     if (user) {
       router.push('/');
     }
@@ -46,12 +43,16 @@ export default function LoginPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
+    let result;
+    const formData = new FormData();
+    formData.append('username', username);
+    formData.append('password', password);
 
     if (isLoginView) {
-      const result = await login(username, password);
+      result = await login(formData, password); // Pass password for client-side validation
       if (result.success) {
         toast({ title: "Login bem-sucedido!", description: `Bem-vindo de volta, ${username}!` });
-        // O redirecionamento é tratado pela função de login agora
+        // Redirect is handled by the useEffect
       } else {
         toast({
           title: "Erro no Login",
@@ -65,10 +66,10 @@ export default function LoginPage() {
         setIsSubmitting(false);
         return;
       }
-      const result = await register(username, password);
+      result = await register(formData, password); // Pass password for client-side storage
       if (result.success) {
         toast({ title: "Registro bem-sucedido!", description: `Bem-vindo, ${username}! Você agora está logado.` });
-         // O redirecionamento é tratado pela função de registro agora
+         // Redirect is handled by the useEffect
       } else {
         toast({
           title: "Erro no Registro",
@@ -77,13 +78,15 @@ export default function LoginPage() {
         });
       }
     }
-    // Apenas definimos como falso se ocorrer um erro, pois em caso de sucesso, haverá redirecionamento.
-    setIsSubmitting(false);
+    
+    // Only set submitting to false on error, as success will trigger a redirect.
+    if (!result.success) {
+        setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4 relative overflow-hidden">
-      {/* Background decorative elements */}
        <div className="absolute top-0 left-0 -translate-x-1/3 -translate-y-1/3 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse"></div>
        <div className="absolute bottom-0 right-0 translate-x-1/3 translate-y-1/3 w-96 h-96 bg-accent/20 rounded-full blur-3xl animate-pulse delay-500"></div>
 
@@ -114,6 +117,7 @@ export default function LoginPage() {
                 <Label htmlFor="username">Usuário</Label>
                 <Input
                   id="username"
+                  name="username"
                   type="text"
                   placeholder="seu-usuario"
                   required
@@ -127,6 +131,7 @@ export default function LoginPage() {
                 <Label htmlFor="password">Senha</Label>
                 <Input
                   id="password"
+                  name="password"
                   type="password"
                   required
                   value={password}

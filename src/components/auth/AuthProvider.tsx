@@ -4,14 +4,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { User } from '@/lib/types';
 import { useRouter } from 'next/navigation';
-import { loginAction, logoutAction } from '@/app/actions/authActions';
+import { loginAction, logoutAction, registerAction } from '@/app/actions/authActions';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (username: string, pass: string) => Promise<{ success: boolean, error?: string }>;
+  login: (formData: FormData, pass: string) => Promise<{ success: boolean, error?: string }>;
   logout: () => Promise<void>;
-  register: (username: string, pass: string) => Promise<{ success: boolean, error?: string }>;
+  register: (formData: FormData, pass: string) => Promise<{ success: boolean, error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -37,8 +37,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false);
   }, []);
 
-  const login = useCallback(async (username: string, pass: string): Promise<{ success: boolean, error?: string }> => {
-    // A validação da senha permanece no cliente, pois não temos um DB.
+  const login = useCallback(async (formData: FormData, pass: string): Promise<{ success: boolean, error?: string }> => {
+    const username = formData.get('username') as string;
+    
+    // Client-side validation because we use localStorage as a DB.
+    // In a real app, this validation logic would be inside the server action.
     const usersData = localStorage.getItem(USERS_STORAGE_KEY);
     if (!usersData) {
       return { success: false, error: "Nenhum usuário registrado." };
@@ -46,25 +49,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const users = JSON.parse(usersData);
     const foundUser = users[username];
     
-    if (foundUser && foundUser.password === pass) {
-        // Se a senha estiver correta, chame a Server Action para criar o cookie.
-        const result = await loginAction(username);
-        if (result.success) {
-            const userData = { username };
-            setUser(userData);
-            sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(userData));
-            router.push('/');
-            return { success: true };
-        } else {
-            return { success: false, error: result.error };
-        }
+    if (!foundUser || foundUser.password !== pass) {
+        return { success: false, error: "Usuário ou senha inválidos." };
+    }
+
+    // If password is correct, call Server Action to create the cookie session.
+    const result = await loginAction(formData);
+    if (result.success && result.user) {
+        setUser(result.user);
+        sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(result.user));
+        router.push('/');
+        return { success: true };
     } else {
-      return { success: false, error: "Usuário ou senha inválidos." };
+        return { success: false, error: result.error || "Falha ao criar sessão no servidor." };
     }
   }, [router]);
 
-  const register = useCallback(async (username: string, pass: string): Promise<{ success: boolean, error?: string }> => {
-    // Registro ainda manipula o localStorage do cliente.
+  const register = useCallback(async (formData: FormData, pass: string): Promise<{ success: boolean, error?: string }> => {
+    const username = formData.get('username') as string;
+
+    // Client-side registration logic.
     const usersData = localStorage.getItem(USERS_STORAGE_KEY);
     const users = usersData ? JSON.parse(usersData) : {};
     
@@ -78,19 +82,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     users[username] = { password: pass };
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
 
-    // Após registrar, chame a Server Action para criar o cookie.
-    const result = await loginAction(username);
-     if (result.success) {
-        const userData = { username };
-        setUser(userData);
-        sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(userData));
+    // After registering, call the server action to create the session cookie.
+    const result = await registerAction(formData);
+     if (result.success && result.user) {
+        setUser(result.user);
+        sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(result.user));
         router.push('/');
         return { success: true };
     } else {
-        // Se a criação da sessão falhar, desfaça o registro (ou trate o erro de outra forma)
+        // If session creation fails, roll back the registration.
         delete users[username];
         localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-        return { success: false, error: result.error };
+        return { success: false, error: result.error || "Falha ao criar sessão do servidor após o registro." };
     }
   }, [router]);
 
