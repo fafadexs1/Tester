@@ -12,7 +12,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (formData: FormData) => Promise<{ success: boolean; error?: string; user?: User }>;
-  logout: () => Promise<void>;
+  logout: () => void; // A função logout agora não precisa ser async aqui
   register: (formData: FormData) => Promise<{ success: boolean; error?: string; user?: User }>;
 }
 
@@ -28,7 +28,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const verifyUserSession = async () => {
       console.log('[AuthProvider] Iniciando verificação de sessão...');
       try {
-        // Esta chamada do lado do cliente para uma Server Action é válida e ajuda a sincronizar o estado
         const sessionUser = await getCurrentUser();
         console.log('[AuthProvider] Usuário da sessão do servidor:', sessionUser);
         setUser(sessionUser);
@@ -67,7 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const result = await loginAction(formData);
     if (result.success && result.user) {
       setUser(result.user);
-      // O useEffect cuidará do redirecionamento
+      // O useEffect cuidará do redirecionamento para /
     }
     return result;
   }, []);
@@ -76,31 +75,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const result = await registerAction(formData);
     if (result.success && result.user) {
       setUser(result.user);
-       // O useEffect cuidará do redirecionamento
+       // O useEffect cuidará do redirecionamento para /
     }
     return result;
   }, []);
 
   const logout = useCallback(async () => {
+    console.log('[AuthProvider] Iniciando logout...');
     await logoutAction();
     setUser(null);
-    // O useEffect acima cuidará do redirecionamento para /login se não estiver na página de login.
-  }, []);
+    console.log('[AuthProvider] Estado do usuário definido como nulo, redirecionando para /login...');
+    // O redirecionamento será tratado pelo useEffect, que verá que o usuário é nulo e não está na página de login.
+    // Forçar a navegação aqui para uma resposta mais imediata.
+    router.push('/login');
+  }, [router]);
 
   const value = { user, loading, login, logout, register };
   
-  // Renderiza o loader globalmente enquanto a sessão inicial é verificada
-  // ou enquanto um redirecionamento está prestes a acontecer.
-  if (loading || (user && pathname === '/login') || (!user && pathname !== '/login')) {
+  if (loading) {
      return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
              <span className="ml-4 text-muted-foreground">
-               {loading ? 'Verificando sessão...' : 'Redirecionando...'}
+               Verificando sessão...
              </span>
         </div>
       );
   }
+  
+  // Se o usuário não está logado e não está na página de login, o useEffect irá redirecionar,
+  // mas podemos mostrar o loader para evitar um piscar de conteúdo indesejado.
+  if (!user && pathname !== '/login') {
+     return (
+         <div className="flex h-screen w-full items-center justify-center bg-background">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+             <span className="ml-4 text-muted-foreground">
+               Redirecionando para o login...
+             </span>
+        </div>
+      );
+  }
+
+  // Similarmente, se o usuário está logado e na página de login, mostramos o loader enquanto redirecionamos.
+  if (user && pathname === '/login') {
+     return (
+         <div className="flex h-screen w-full items-center justify-center bg-background">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+             <span className="ml-4 text-muted-foreground">
+               Redirecionando para o dashboard...
+             </span>
+        </div>
+      );
+  }
+
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

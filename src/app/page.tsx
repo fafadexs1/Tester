@@ -1,29 +1,53 @@
+
+'use client'; // Converter para Client Component para usar o hook useAuth
+
 import React from 'react';
-import { redirect } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, Zap } from 'lucide-react';
 import { loadAllWorkspacesFromDB } from '@/app/actions/databaseActions';
 import Link from 'next/link';
 import WorkspaceList from '@/components/dashboard/WorkspaceList';
-import { getCurrentUser } from '@/lib/auth';
-import { logoutAction } from './actions/authActions';
+import { useAuth } from '@/components/auth/AuthProvider';
+import type { WorkspaceData } from '@/lib/types';
 
-// Esta página agora é um Server Component para carregamento rápido de dados.
-export default async function DashboardPage() {
-  console.log('[DashboardPage] Renderizando no servidor...');
-  // A verificação de autenticação agora é a primeira coisa que acontece no servidor.
-  const user = await getCurrentUser();
-  if (!user) {
-    console.log('[DashboardPage] Usuário não encontrado, redirecionando para /login...');
-    // Se não houver usuário, redireciona para o login. Simples e direto.
-    redirect('/login');
-  }
+// O Dashboard agora precisa ser um Client Component para usar o hook useAuth para o logout.
+// Os dados iniciais ainda podem ser carregados no servidor e passados como props,
+// mas para este caso, vamos simplificar e fazer o carregamento no cliente
+// para garantir a funcionalidade do logout.
+export default function DashboardPage() {
+  const { user, logout, loading } = useAuth();
+  const [workspaces, setWorkspaces] = React.useState<WorkspaceData[]>([]);
+  const [isLoadingData, setIsLoadingData] = React.useState(true);
   
-  console.log(`[DashboardPage] Usuário "${user.username}" autenticado. Carregando workspaces...`);
+  React.useEffect(() => {
+    // Carrega os workspaces no lado do cliente, pois a página agora é um client component
+    async function loadWorkspaces() {
+      if (user) {
+        console.log(`[DashboardPage Client] Usuário "${user.username}" autenticado. Carregando workspaces...`);
+        setIsLoadingData(true);
+        try {
+          const loadedWorkspaces = await loadAllWorkspacesFromDB();
+          setWorkspaces(loadedWorkspaces);
+          console.log(`[DashboardPage Client] ${loadedWorkspaces.length} workspaces carregados.`);
+        } catch (error) {
+          console.error("[DashboardPage Client] Erro ao carregar workspaces:", error);
+        } finally {
+          setIsLoadingData(false);
+        }
+      }
+    }
+    
+    if (!loading) {
+       loadWorkspaces();
+    }
+  }, [user, loading]);
 
-  // Carrega os workspaces diretamente no servidor.
-  const workspaces = await loadAllWorkspacesFromDB();
-  console.log(`[DashboardPage] ${workspaces.length} workspaces carregados.`);
+
+  // O AuthProvider já mostra um loader global, então não precisamos de um aqui
+  // a menos que o carregamento dos workspaces seja demorado.
+  if (loading || !user) {
+    return null; // O AuthProvider cuida do redirecionamento ou da tela de carregamento global
+  }
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
@@ -36,13 +60,8 @@ export default async function DashboardPage() {
            <span className="text-sm text-muted-foreground hidden sm:inline">
             Olá, {user.username}
           </span>
-          <form action={async () => {
-            'use server';
-            await logoutAction();
-            redirect('/login');
-          }}>
-            <Button variant="outline" type="submit">Sair</Button>
-          </form>
+          {/* O botão de sair agora é um botão simples que chama a função logout do useAuth */}
+          <Button variant="outline" onClick={logout}>Sair</Button>
         </div>
       </header>
       <main className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
@@ -60,7 +79,11 @@ export default async function DashboardPage() {
         </div>
         
         <div className="flex-1">
-          <WorkspaceList initialWorkspaces={workspaces} />
+          {isLoadingData ? (
+             <p className="text-muted-foreground">Carregando seus fluxos...</p>
+          ) : (
+             <WorkspaceList initialWorkspaces={workspaces} />
+          )}
         </div>
       </main>
     </div>
