@@ -1,43 +1,29 @@
-
-'use client';
-
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/components/auth/AuthProvider";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import FlowBuilderClient from "@/components/flow-builder/FlowBuilderClient";
-import { Loader2 } from "lucide-react";
 
-// Esta página agora lidará com a renderização do editor de fluxo para um ID específico.
-export default function FlowEditorPage({ params }: { params: { workspaceId: string } }) {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  
+// This page now handles the rendering of the flow editor for a specific ID.
+export default async function FlowEditorPage({ params }: { params: { workspaceId: string } }) {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    // Add a small delay before redirecting to give client-side session a chance to load
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const userAfterDelay = await getCurrentUser(); // Check again after delay
+    if (!userAfterDelay) {
+      redirect('/login');
+    }
+  }
+
   const { workspaceId } = params;
 
-  // Um estado para garantir que a verificação do cliente seja feita antes de renderizar
-  const [isClient, setIsClient] = useState(false);
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  useEffect(() => {
-    if (isClient && !loading && !user) {
-      router.push('/login');
-    }
-  }, [user, loading, router, isClient]);
-
-  if (!isClient || loading || !user) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-muted/20">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    );
-  }
+  // We are now sure that the user is logged in at this point on the server (or after the delay check).
+  // The FlowBuilderClient can be a client component and will receive the user info if needed.
 
   return (
     <ErrorBoundary>
-        <FlowBuilderClient workspaceId={workspaceId} />
+        <FlowBuilderClient workspaceId={workspaceId} user={user} />
     </ErrorBoundary>
   );
 }

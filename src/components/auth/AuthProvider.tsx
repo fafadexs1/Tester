@@ -45,19 +45,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     console.log(`[AuthProvider Redirect Check] loading: ${loading}, user: ${!!user}, pathname: ${pathname}`);
+
+    // Do nothing while the initial session verification is in progress.
     if (loading) {
-      return; // Não faz nada enquanto a verificação inicial da sessão está em andamento.
+      return;
     }
 
     const isAuthPage = pathname === '/login';
 
     if (user && isAuthPage) {
-      console.log('[AuthProvider] Usuário logado na página de login. Redirecionando para /');
-      router.push('/');
+      // If user is logged in and is on the auth page AFTER initial load,
+      // do NOT redirect immediately. The user might have just logged in
+      // or the session was restored client-side. Let them stay or navigate manually.
+      console.log('[AuthProvider] Usuário logado na página de login após carga inicial. Não redirecionando imediatamente.');
+      // Potentially add a small delay or a different indicator if needed,
+      // but direct redirection here causes the loop.
     } else if (!user && !isAuthPage) {
       console.log('[AuthProvider] Usuário não logado fora da página de login. Redirecionando para /login');
       router.push('/login');
     }
+    // If user is logged in and not on auth page, do nothing (they are where they should be).
+    // If user is not logged in and on auth page, do nothing (they are where they should be).
 
   }, [user, loading, pathname, router]);
 
@@ -70,22 +78,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const result = await loginAction(formData);
     if (result.success && result.user) {
       handleAuthSuccess(result.user);
+       // Redirect to home only after successful login
+      router.push('/');
     }
     return result;
-  }, [handleAuthSuccess]);
+  }, [handleAuthSuccess, router]);
 
   const register = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
     const result = await registerAction(formData);
     if (result.success && result.user) {
       handleAuthSuccess(result.user);
+      // Redirect to home only after successful registration
+      router.push('/');
     }
     return result;
-  }, [handleAuthSuccess]);
+  }, [handleAuthSuccess, router]);
 
   const logout = useCallback(async () => {
     await logoutAction();
     setUser(null);
-    // O useEffect acima cuidará do redirecionamento para /login.
+    // The useEffect above will handle the redirection to /login if not on auth page.
   }, []);
 
   const value = { user, loading, login, logout, register };

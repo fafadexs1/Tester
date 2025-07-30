@@ -61,7 +61,7 @@ const PostgresIcon = () => (
   </svg>
 );
 
-type SettingsCategory = 'database' | 'integrations';
+type SettingsCategory = 'integrations';
 interface WebhookLogEntry {
   timestamp: string;
   method?: string;
@@ -105,7 +105,7 @@ const TopBar: React.FC<TopBarProps> = ({
   const { toast } = useToast();
   const { user, logout } = useAuth();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-  const [activeSettingsCategory, setActiveSettingsCategory] = useState<SettingsCategory>('database');
+  const [activeSettingsCategory, setActiveSettingsCategory] = useState<SettingsCategory>('integrations');
 
   const [isWebhookLogsDialogOpen, setIsWebhookLogsDialogOpen] = useState(false);
   const [evolutionWebhookLogEntries, setEvolutionWebhookLogEntries] = useState<WebhookLogEntry[]>([]);
@@ -119,21 +119,10 @@ const TopBar: React.FC<TopBarProps> = ({
   const [selectedSessionVariables, setSelectedSessionVariables] = useState<Record<string, any> | null>(null);
   const [isSessionVariablesModalOpen, setIsSessionVariablesModalOpen] = useState(false);
 
-  // Supabase States
+  // States are kept for potential future use but UI is removed
   const [supabaseUrl, setSupabaseUrl] = useState('');
-  const [supabaseAnonKey, setSupabaseAnonKey] = useState('');
   const [supabaseServiceKey, setSupabaseServiceKey] = useState('');
   const [isSupabaseEnabled, setIsSupabaseEnabled] = useState(false);
-
-  // PostgreSQL States
-  const [postgresHost, setPostgresHost] = useState('');
-  const [postgresPort, setPostgresPort] = useState('');
-  const [postgresUser, setPostgresUser] = useState('');
-  const [postgresPassword, setPostgresPassword] = useState('');
-  const [postgresDatabase, setPostgresDatabase] = useState('');
-  const [isPostgresEnabled, setIsPostgresEnabled] = useState(false);
-  const [postgresSsl, setPostgresSsl] = useState(false);
-
 
   // Evolution API States
   const [evolutionApiBaseUrl, setEvolutionApiBaseUrl] = useState('');
@@ -161,19 +150,12 @@ const TopBar: React.FC<TopBarProps> = ({
 
   useEffect(() => {
     if (isSettingsDialogOpen) {
+      // Load Supabase settings for reference if needed, though UI is gone
       setSupabaseUrl(localStorage.getItem('supabaseUrl') || '');
-      setSupabaseAnonKey(localStorage.getItem('supabaseAnonKey') || '');
       setSupabaseServiceKey(localStorage.getItem('supabaseServiceKey') || '');
       setIsSupabaseEnabled(localStorage.getItem('isSupabaseEnabled') === 'true');
-
-      setPostgresHost(localStorage.getItem('postgresHost') || '');
-      setPostgresPort(localStorage.getItem('postgresPort') || '5432');
-      setPostgresUser(localStorage.getItem('postgresUser') || '');
-      setPostgresPassword(localStorage.getItem('postgresPassword') || '');
-      setPostgresDatabase(localStorage.getItem('postgresDatabase') || '');
-      setIsPostgresEnabled(localStorage.getItem('isPostgresEnabled') === 'true');
-      setPostgresSsl(localStorage.getItem('postgresSsl') === 'true');
-
+      
+      // Load Evolution settings
       setEvolutionApiBaseUrl(localStorage.getItem('evolutionApiBaseUrl') || '');
       setEvolutionGlobalApiKey(localStorage.getItem('evolutionApiKey') || '');
       setDefaultEvolutionInstanceName(localStorage.getItem('defaultEvolutionInstanceName') || '');
@@ -182,19 +164,12 @@ const TopBar: React.FC<TopBarProps> = ({
   }, [isSettingsDialogOpen]);
 
   const handleSaveSettings = () => {
+    // Save Supabase settings
     localStorage.setItem('supabaseUrl', supabaseUrl);
-    localStorage.setItem('supabaseAnonKey', supabaseAnonKey);
     localStorage.setItem('supabaseServiceKey', supabaseServiceKey);
     localStorage.setItem('isSupabaseEnabled', String(isSupabaseEnabled));
 
-    localStorage.setItem('postgresHost', postgresHost);
-    localStorage.setItem('postgresPort', postgresPort);
-    localStorage.setItem('postgresUser', postgresUser);
-    localStorage.setItem('postgresPassword', postgresPassword);
-    localStorage.setItem('postgresDatabase', postgresDatabase);
-    localStorage.setItem('isPostgresEnabled', String(isPostgresEnabled));
-    localStorage.setItem('postgresSsl', String(postgresSsl));
-
+    // Save Evolution settings
     localStorage.setItem('evolutionApiBaseUrl', evolutionApiBaseUrl);
     localStorage.setItem('evolutionApiKey', evolutionGlobalApiKey);
     localStorage.setItem('defaultEvolutionInstanceName', defaultEvolutionInstanceName);
@@ -328,7 +303,6 @@ const TopBar: React.FC<TopBarProps> = ({
 
 
   const settingsCategories: { id: SettingsCategory; label: string; icon: React.ReactNode }[] = [
-    { id: 'database', label: 'Banco de Dados', icon: <Database className="w-5 h-5 mr-2" /> },
     { id: 'integrations', label: 'Integrações', icon: <PlugZap className="w-5 h-5 mr-2" /> },
   ];
 
@@ -486,7 +460,7 @@ const TopBar: React.FC<TopBarProps> = ({
                 <CreditCard className="mr-2 h-4 w-4" />
                 <span>Assinatura</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setActiveSettingsCategory('database'); setIsSettingsDialogOpen(true); }}>
+              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setActiveSettingsCategory('integrations'); setIsSettingsDialogOpen(true); }}>
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Configurações Globais</span>
               </DropdownMenuItem>
@@ -505,6 +479,9 @@ const TopBar: React.FC<TopBarProps> = ({
         <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl bg-card max-h-[85vh] flex flex-col p-0">
           <DialogHeader className="px-6 py-4 border-b">
             <DialogTitle className="text-xl">Configurações Globais</DialogTitle>
+             <DialogDescription>
+              A configuração do banco de dados agora é gerenciada pelo arquivo <code className="bg-muted px-1 rounded-sm text-xs">.env</code>.
+            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-1 overflow-hidden">
             <aside className="w-1/4 min-w-[200px] border-r bg-muted/40 p-4 space-y-2 overflow-y-auto">
@@ -524,61 +501,6 @@ const TopBar: React.FC<TopBarProps> = ({
               ))}
             </aside>
             <main className="flex-1 p-6 overflow-y-auto space-y-6">
-              {activeSettingsCategory === 'database' && (
-                <section>
-                  <h3 className="text-lg font-semibold text-card-foreground mb-4">Configuração do Banco de Dados</h3>
-                  <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={isPostgresEnabled ? 'postgresql' : (isSupabaseEnabled ? 'supabase' : undefined) }>
-                    <AccordionItem value="postgresql" className="border rounded-lg shadow-sm">
-                      <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
-                        <div className="flex items-center space-x-3"><PostgresIcon /><span className="font-medium text-card-foreground">PostgreSQL</span></div>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-4 pt-3 pb-4 border-t">
-                        <div className="flex items-center space-x-2 mb-4">
-                          <Switch id="enable-postgres" checked={isPostgresEnabled} onCheckedChange={setIsPostgresEnabled} aria-label="Habilitar Conexão PostgreSQL"/>
-                          <Label htmlFor="enable-postgres" className="text-sm font-medium">Habilitar Conexão PostgreSQL (para persistência)</Label>
-                        </div>
-                        {isPostgresEnabled && (
-                          <div className="space-y-3 animate-in fade-in-0 slide-in-from-top-2 duration-300">
-                            <p className="text-xs text-muted-foreground">As credenciais de conexão são gerenciadas via variáveis de ambiente (arquivo `.env`). Os campos abaixo são apenas para sua referência.</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                              <div><Label htmlFor="postgres-host" className="text-card-foreground/90 text-sm">Host (Ref: POSTGRES_HOST)</Label><Input id="postgres-host" placeholder="localhost" value={postgresHost} onChange={e => setPostgresHost(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                              <div><Label htmlFor="postgres-port" className="text-card-foreground/90 text-sm">Porta (Ref: POSTGRES_PORT)</Label><Input id="postgres-port" placeholder="5432" value={postgresPort} onChange={e => setPostgresPort(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                              <div><Label htmlFor="postgres-user" className="text-card-foreground/90 text-sm">Usuário (Ref: POSTGRES_USER)</Label><Input id="postgres-user" placeholder="seu_usuario" value={postgresUser} onChange={(e) => setPostgresUser(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                              <div><Label htmlFor="postgres-db" className="text-card-foreground/90 text-sm">Banco (Ref: POSTGRES_DATABASE)</Label><Input id="postgres-db" placeholder="nexusflow_db" value={postgresDatabase} onChange={(e) => setPostgresDatabase(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                              <div className="md:col-span-2"><Label htmlFor="postgres-password" className="text-card-foreground/90 text-sm">Senha (Ref: POSTGRES_PASSWORD)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="postgres-password" type="password" placeholder="********" value={postgresPassword} onChange={e => setPostgresPassword(e.target.value)} className="bg-input text-foreground flex-1"/></div></div>
-                              <div className="flex items-center space-x-2">
-                                <Switch id="postgres-ssl" checked={postgresSsl} onCheckedChange={setPostgresSsl} />
-                                <Label htmlFor="postgres-ssl" className="text-sm">Usar SSL (Ref: POSTGRES_SSL=true)</Label>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </AccordionContent>
-                    </AccordionItem>
-                     <AccordionItem value="supabase" className="border rounded-lg shadow-sm">
-                      <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
-                        <div className="flex items-center space-x-3">
-                          <SupabaseIcon />
-                          <span className="font-medium text-card-foreground">Supabase</span>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-4 pt-3 pb-4 border-t">
-                        <div className="flex items-center space-x-2 mb-4">
-                          <Switch id="enable-supabase" checked={isSupabaseEnabled} onCheckedChange={setIsSupabaseEnabled} aria-label="Habilitar Integração Supabase"/>
-                          <Label htmlFor="enable-supabase" className="text-sm font-medium">Habilitar Integração Supabase (para schema e teste de nós)</Label>
-                        </div>
-                        {isSupabaseEnabled && (
-                          <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
-                            <div><Label htmlFor="supabase-url" className="text-card-foreground/90 text-sm">URL do Projeto Supabase</Label><Input id="supabase-url" placeholder="https://seunomeprojeto.supabase.co" value={supabaseUrl} onChange={(e) => setSupabaseUrl(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                            <div><Label htmlFor="supabase-anon-key" className="text-card-foreground/90 text-sm">Chave Pública (Anon Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-anon-key" type="password" placeholder="eyJhbGciOi..." value={supabaseAnonKey} onChange={(e) => setSupabaseAnonKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada para acesso no TestChatPanel (respeitando RLS).</p></div>
-                            <div><Label htmlFor="supabase-service-key" className="text-card-foreground/90 text-sm">Chave de Serviço (Service Role Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-service-key" type="password" placeholder="eyJhbGciOi..." value={supabaseServiceKey} onChange={(e) => setSupabaseServiceKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada por Server Actions para buscar schema. Mantenha em segredo.</p></div>
-                          </div>
-                        )}
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                </section>
-              )}
               {activeSettingsCategory === 'integrations' && (
                 <section>
                   <h3 className="text-lg font-semibold text-card-foreground mb-4">Integrações de Plataformas</h3>
@@ -626,6 +548,26 @@ const TopBar: React.FC<TopBarProps> = ({
                               </div>
                               <p className="text-xs text-muted-foreground mt-1">Payloads recebidos são logados no console do servidor e visíveis no "Console" do app.</p>
                             </div>
+                          </div>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                    <AccordionItem value="supabase-integration" className="border rounded-lg shadow-sm">
+                      <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
+                        <div className="flex items-center space-x-3">
+                          <SupabaseIcon />
+                          <span className="font-medium text-card-foreground">Supabase</span>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-4 pt-3 pb-4 border-t">
+                        <div className="flex items-center space-x-2 mb-4">
+                          <Switch id="enable-supabase" checked={isSupabaseEnabled} onCheckedChange={setIsSupabaseEnabled} aria-label="Habilitar Integração Supabase"/>
+                          <Label htmlFor="enable-supabase" className="text-sm font-medium">Habilitar Integração Supabase (para nós Supabase)</Label>
+                        </div>
+                        {isSupabaseEnabled && (
+                          <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
+                            <div><Label htmlFor="supabase-url" className="text-card-foreground/90 text-sm">URL do Projeto Supabase</Label><Input id="supabase-url" placeholder="https://seunomeprojeto.supabase.co" value={supabaseUrl} onChange={(e) => setSupabaseUrl(e.target.value)} className="bg-input text-foreground mt-1"/></div>
+                            <div><Label htmlFor="supabase-service-key" className="text-card-foreground/90 text-sm">Chave de Serviço (Service Role Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-service-key" type="password" placeholder="eyJhbGciOi..." value={supabaseServiceKey} onChange={(e) => setSupabaseServiceKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada pelas Ações de Servidor para buscar schema e executar operações.</p></div>
                           </div>
                         )}
                       </AccordionContent>
