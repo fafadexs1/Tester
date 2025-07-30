@@ -17,7 +17,7 @@ export default async function DashboardPage() {
   if (!user) {
     console.log('[DashboardPage] Usuário não encontrado, redirecionando para /login...');
     // Se não houver usuário, redireciona para o login. Simples e direto.
-    return redirect('/login');
+    redirect('/login');
   }
   
   console.log(`[DashboardPage] Usuário "${user.username}" autenticado. Carregando workspaces...`);

@@ -2,6 +2,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import type { User } from '@/lib/types';
 import { loginAction, logoutAction, registerAction } from '@/app/actions/authActions';
 import { getCurrentUser } from '@/lib/auth';
@@ -19,65 +20,62 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
 
-  // This effect ensures that we check the server-side session cookie
-  // once when the provider mounts on the client.
+  // This effect runs once on mount to check the session from the server
+  // and handles redirection logic.
   useEffect(() => {
     const verifyUserSession = async () => {
-      console.log('[AuthProvider] useEffect: Verificando a sessão do usuário no servidor...');
-      setLoading(true);
       try {
         const sessionUser = await getCurrentUser();
-        console.log('[AuthProvider] useEffect: Sessão do servidor retornou:', sessionUser ? sessionUser.username : 'null');
         setUser(sessionUser);
+        
+        // Redirection logic now lives inside AuthProvider
+        if (sessionUser && pathname === '/login') {
+          router.push('/');
+        }
       } catch (e) {
-        console.error("[AuthProvider] useEffect: Falha ao verificar a sessão do servidor.", e);
+        console.error("[AuthProvider] Failed to verify server session.", e);
         setUser(null);
       } finally {
-        console.log('[AuthProvider] useEffect: Verificação da sessão concluída. setLoading(false).');
         setLoading(false);
       }
     };
     verifyUserSession();
-  }, []);
+  }, [pathname, router]);
+
+  const handleAuthSuccess = (newUser: User) => {
+    setUser(newUser);
+    router.push('/');
+  };
 
   const login = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
-    console.log('[AuthProvider] login: Iniciando chamada para loginAction.');
     setLoading(true);
     const result = await loginAction(formData);
     if (result.success && result.user) {
-        console.log('[AuthProvider] login: Sucesso. Atualizando estado do usuário para:', result.user.username);
-        setUser(result.user);
-    } else {
-        console.log('[AuthProvider] login: Falha. Erro:', result.error);
+      handleAuthSuccess(result.user);
     }
     setLoading(false);
-    console.log('[AuthProvider] login: Fim.');
     return result;
-  }, []);
+  }, [router]);
 
   const register = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
-    console.log('[AuthProvider] register: Iniciando chamada para registerAction.');
     setLoading(true);
     const result = await registerAction(formData);
     if (result.success && result.user) {
-        console.log('[AuthProvider] register: Sucesso. Atualizando estado do usuário para:', result.user.username);
-        setUser(result.user);
-    } else {
-        console.log('[AuthProvider] register: Falha. Erro:', result.error);
+      handleAuthSuccess(result.user);
     }
     setLoading(false);
-     console.log('[AuthProvider] register: Fim.');
     return result;
-  }, []);
+  }, [router]);
 
   const logout = useCallback(async () => {
-    console.log('[AuthProvider] logout: Iniciando logout.');
     setLoading(true);
     await logoutAction();
     setUser(null);
     setLoading(false);
-    console.log('[AuthProvider] logout: Fim. Usuário deslogado.');
+    // No need to push to /login here, as the protected routes will handle it.
   }, []);
 
   const value = {

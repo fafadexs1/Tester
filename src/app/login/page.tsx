@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
@@ -19,82 +19,63 @@ export default function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
-  const { user, login, register, loading } = useAuth();
+  const { login, register, loading } = useAuth();
   const { toast } = useToast();
-
-  console.log('[LoginPage] Renderizando. Estado atual:', { 
-    isLoginView, 
-    isSubmitting, 
-    loading, 
-    user: user ? user.username : 'null' 
-  });
-
-  // Efeito para redirecionar o usuário se ele já estiver logado
-  // ESTA É A LÓGICA CORRETA: Redireciona APENAS se o carregamento da sessão
-  // terminou e o usuário foi confirmado.
-  useEffect(() => {
-    if (!loading && user) {
-      console.log('[LoginPage] useEffect: Usuário detectado e carregamento concluído. Redirecionando para /');
-      router.push('/');
-    }
-  }, [user, loading, router]);
-
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    console.log('[LoginPage] handleSubmit: Iniciando envio do formulário.');
     setIsSubmitting(true);
 
     const formData = new FormData();
     formData.append('username', username);
     formData.append('password', password);
 
-    let result;
-    if (isLoginView) {
-      console.log('[LoginPage] handleSubmit: Tentando fazer login...');
-      result = await login(formData);
-      // O redirecionamento agora é responsabilidade do useEffect
-    } else {
-      console.log('[LoginPage] handleSubmit: Tentando registrar...');
-      if (password !== confirmPassword) {
-        toast({ title: "Erro de Registro", description: "As senhas não coincidem.", variant: "destructive" });
-        setIsSubmitting(false);
-        return;
+    try {
+      let result;
+      if (isLoginView) {
+        result = await login(formData);
+      } else {
+        if (password !== confirmPassword) {
+          toast({ title: "Erro de Registro", description: "As senhas não coincidem.", variant: "destructive" });
+          setIsSubmitting(false);
+          return;
+        }
+        result = await register(formData);
       }
-      result = await register(formData);
-      // O redirecionamento agora é responsabilidade do useEffect
-    }
 
-    if (result && !result.success) {
-        console.log('[LoginPage] handleSubmit: Falha no login/registro.', result.error);
+      if (result.success) {
+        // O AuthProvider agora cuidará do redirecionamento
+      } else {
         toast({
-            title: isLoginView ? "Erro no Login" : "Erro no Registro",
-            description: result.error || (isLoginView ? "Usuário ou senha inválidos." : "Não foi possível registrar o usuário."),
-            variant: "destructive",
+          title: isLoginView ? "Erro no Login" : "Erro no Registro",
+          description: result.error || (isLoginView ? "Usuário ou senha inválidos." : "Não foi possível registrar o usuário."),
+          variant: "destructive",
         });
+      }
+    } catch (error: any) {
+        toast({
+          title: "Erro Inesperado",
+          description: error.message || "Ocorreu um erro durante a operação.",
+          variant: "destructive",
+        });
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    // Não redirecionamos aqui para deixar o useEffect cuidar disso
-    // de forma consistente. Apenas paramos o estado de "submitting".
-    console.log('[LoginPage] handleSubmit: Fim do envio.');
-    setIsSubmitting(false);
   };
   
-  // Se a sessão ainda está sendo verificada, mostramos um loader global.
-  // Se o usuário já está logado, a tela também mostra o loader enquanto o useEffect
-  // prepara o redirecionamento. Isso evita o piscar do formulário.
-  if (loading || user) {
+  // Se a sessão ainda está sendo verificada pelo AuthProvider, mostramos um loader global.
+  if (loading) {
       return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
              <span className="ml-4 text-muted-foreground">
-               {loading ? 'Verificando sessão...' : 'Sessão encontrada. Redirecionando...'}
+               Verificando sessão...
              </span>
         </div>
       );
   }
 
-  // Se não estiver carregando E não houver usuário, mostra o formulário.
+  // Se não estiver carregando, mostra o formulário. O AuthProvider cuidará do redirecionamento se o usuário já estiver logado.
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4 relative overflow-hidden">
        <div className="absolute top-0 left-0 -translate-x-1/3 -translate-y-1/3 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse"></div>
@@ -171,10 +152,10 @@ export default function LoginPage() {
               )}
             </CardContent>
             <CardFooter className="flex flex-col gap-4 pt-2">
-              <Button type="submit" className="w-full font-semibold" disabled={isSubmitting}>
+              <Button type="submit" className="w-full font-semibold" disabled={isSubmitting || loading}>
                  {isSubmitting ? <Loader2 className="animate-spin" /> : (isLoginView ? 'Entrar' : 'Registrar')}
               </Button>
-              <Button variant="link" type="button" onClick={() => setIsLoginView(!isLoginView)} className="text-muted-foreground" disabled={isSubmitting}>
+              <Button variant="link" type="button" onClick={() => setIsLoginView(!isLoginView)} className="text-muted-foreground" disabled={isSubmitting || loading}>
                 {isLoginView ? 'Não tem uma conta? Registre-se' : 'Já tem uma conta? Faça o login'}
               </Button>
             </CardFooter>
@@ -184,4 +165,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
