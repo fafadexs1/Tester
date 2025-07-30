@@ -6,8 +6,10 @@ import { cookies } from 'next/headers';
 
 const SESSION_COOKIE_NAME = 'nexusflow_session_cookie';
 
+// A função foi corrigida para ser totalmente assíncrona como o Next.js espera
 export async function getCurrentUser(): Promise<User | null> {
-  const cookieStore = cookies();
+  // Acessar a cookie store de forma assíncrona
+  const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME);
 
   if (sessionCookie && sessionCookie.value) {

@@ -28,6 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const verifyUserSession = async () => {
       console.log('[AuthProvider] Iniciando verificação de sessão...');
       try {
+        // Esta chamada do lado do cliente para uma Server Action é válida e ajuda a sincronizar o estado
         const sessionUser = await getCurrentUser();
         console.log('[AuthProvider] Usuário da sessão do servidor:', sessionUser);
         setUser(sessionUser);
@@ -83,14 +84,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     await logoutAction();
     setUser(null);
-    // O useEffect acima cuidará do redirecionamento para /login se não on na auth page.
+    // O useEffect acima cuidará do redirecionamento para /login se não estiver na página de login.
   }, []);
 
   const value = { user, loading, login, logout, register };
   
   // Renderiza o loader globalmente enquanto a sessão inicial é verificada
-  // ou enquanto o redirecionamento está prestes a acontecer.
-  if (loading || (user && pathname === '/login')) {
+  // ou enquanto um redirecionamento está prestes a acontecer.
+  if (loading || (user && pathname === '/login') || (!user && pathname !== '/login')) {
      return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
