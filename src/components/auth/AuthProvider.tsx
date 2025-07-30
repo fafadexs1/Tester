@@ -4,6 +4,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { User } from '@/lib/types';
 import { useRouter } from 'next/navigation';
+import { loginAction, logoutAction } from '@/app/actions/authActions';
 
 interface AuthContextType {
   user: User | null;
@@ -23,8 +24,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // Esta verificação agora é mais para sincronizar o estado do cliente
-  // A verificação principal de rota acontece no servidor
   useEffect(() => {
     try {
         const sessionUser = sessionStorage.getItem(SESSION_STORAGE_KEY);
@@ -39,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (username: string, pass: string): Promise<{ success: boolean, error?: string }> => {
+    // A validação da senha permanece no cliente, pois não temos um DB.
     const usersData = localStorage.getItem(USERS_STORAGE_KEY);
     if (!usersData) {
       return { success: false, error: "Nenhum usuário registrado." };
@@ -47,20 +47,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const foundUser = users[username];
     
     if (foundUser && foundUser.password === pass) {
-        const userData = { username };
-        setUser(userData);
-        sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(userData));
-        
-        // Server-side session creation would happen here, via a server action
-        // For now, we rely on the redirect triggering a server-side check.
-        router.push('/');
-        return { success: true };
+        // Se a senha estiver correta, chame a Server Action para criar o cookie.
+        const result = await loginAction(username);
+        if (result.success) {
+            const userData = { username };
+            setUser(userData);
+            sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(userData));
+            router.push('/');
+            return { success: true };
+        } else {
+            return { success: false, error: result.error };
+        }
     } else {
       return { success: false, error: "Usuário ou senha inválidos." };
     }
   }, [router]);
 
   const register = useCallback(async (username: string, pass: string): Promise<{ success: boolean, error?: string }> => {
+    // Registro ainda manipula o localStorage do cliente.
     const usersData = localStorage.getItem(USERS_STORAGE_KEY);
     const users = usersData ? JSON.parse(usersData) : {};
     
@@ -74,21 +78,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     users[username] = { password: pass };
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
 
-    const userData = { username };
-    setUser(userData);
-    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(userData));
-    
-    // Similar to login, server-side session would be created here
-    router.push('/');
-    return { success: true };
-
+    // Após registrar, chame a Server Action para criar o cookie.
+    const result = await loginAction(username);
+     if (result.success) {
+        const userData = { username };
+        setUser(userData);
+        sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(userData));
+        router.push('/');
+        return { success: true };
+    } else {
+        // Se a criação da sessão falhar, desfaça o registro (ou trate o erro de outra forma)
+        delete users[username];
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+        return { success: false, error: result.error };
+    }
   }, [router]);
 
   const logout = useCallback(async () => {
+    await logoutAction();
     setUser(null);
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    
-    // Server-side session deletion would happen here
     router.push('/login');
   }, [router]);
 

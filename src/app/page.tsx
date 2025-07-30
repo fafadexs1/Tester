@@ -1,6 +1,5 @@
 
 import React from 'react';
-import { useAuth } from '@/components/auth/AuthProvider';
 import { redirect } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, Zap } from 'lucide-react';
@@ -8,6 +7,7 @@ import { loadAllWorkspacesFromDB } from '@/app/actions/databaseActions';
 import Link from 'next/link';
 import WorkspaceList from '@/components/dashboard/WorkspaceList';
 import { getCurrentUser } from '@/lib/auth';
+import { logoutAction } from './actions/authActions';
 
 // Esta página agora é um Server Component para carregamento rápido de dados.
 export default async function DashboardPage() {
@@ -31,14 +31,12 @@ export default async function DashboardPage() {
            <span className="text-sm text-muted-foreground hidden sm:inline">
             Olá, {user.username}
           </span>
-          {/* O botão de logout precisará de um componente de cliente ou de uma server action */}
           <form action={async () => {
             'use server';
-            // Lógica de logout aqui se movida para server action, por enquanto link/botão simples
+            await logoutAction();
+            redirect('/login');
           }}>
-            <Link href="/login">
-                <Button variant="outline">Sair</Button>
-            </Link>
+            <Button variant="outline" type="submit">Sair</Button>
           </form>
         </div>
       </header>
@@ -57,7 +55,6 @@ export default async function DashboardPage() {
         </div>
         
         <div className="flex-1 mt-8">
-           {/* O componente WorkspaceList agora é um Client Component para lidar com interações */}
            <WorkspaceList initialWorkspaces={workspaces} />
         </div>
       </main>

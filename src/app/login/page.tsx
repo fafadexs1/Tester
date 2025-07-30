@@ -22,9 +22,9 @@ export default function LoginPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // A verificação de rota principal agora é feita no lado do servidor.
-    // Este useEffect pode ser usado para UX, mas o redirecionamento
-    // forçado foi removido para evitar loops.
+    // Este useEffect agora apenas impede a renderização da página de login
+    // se o usuário já estiver logado no estado do cliente, empurrando-o para
+    // a página inicial, onde o servidor fará a verificação final.
     if (user) {
       router.push('/');
     }
@@ -51,7 +51,7 @@ export default function LoginPage() {
       const result = await login(username, password);
       if (result.success) {
         toast({ title: "Login bem-sucedido!", description: `Bem-vindo de volta, ${username}!` });
-        // O redirecionamento agora é tratado pelo useEffect ou pela função de login.
+        // O redirecionamento é tratado pela função de login agora
       } else {
         toast({
           title: "Erro no Login",
@@ -68,7 +68,7 @@ export default function LoginPage() {
       const result = await register(username, password);
       if (result.success) {
         toast({ title: "Registro bem-sucedido!", description: `Bem-vindo, ${username}! Você agora está logado.` });
-         // O redirecionamento é tratado pelo useEffect ou pela função de registro.
+         // O redirecionamento é tratado pela função de registro agora
       } else {
         toast({
           title: "Erro no Registro",
@@ -77,6 +77,7 @@ export default function LoginPage() {
         });
       }
     }
+    // Apenas definimos como falso se ocorrer um erro, pois em caso de sucesso, haverá redirecionamento.
     setIsSubmitting(false);
   };
 
