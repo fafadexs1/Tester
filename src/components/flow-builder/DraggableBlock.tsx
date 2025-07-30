@@ -4,7 +4,6 @@ import React from 'react';
 import type { DraggableBlockItemData } from '@/lib/types';
 import { ITEM_TYPE_BLOCK } from '@/lib/constants';
 import { useDrag } from 'react-dnd';
-import { motion } from 'framer-motion';
 
 interface DraggableBlockProps extends DraggableBlockItemData {
   icon: React.ReactNode;
@@ -24,7 +23,7 @@ const DraggableBlock = React.memo(React.forwardRef<HTMLDivElement, DraggableBloc
     const dataAiHint = defaultData?.dataAiHint;
 
     // Combinar o ref do forwardRef com o ref do useDrag
-    const combinedRef = (node: HTMLDivElement) => {
+    const combinedRef = (node: HTMLDivElement | null) => {
         drag(node);
         if (typeof ref === 'function') {
             ref(node);
@@ -34,17 +33,14 @@ const DraggableBlock = React.memo(React.forwardRef<HTMLDivElement, DraggableBloc
     };
 
     return (
-      <motion.div
+      <div
         ref={combinedRef}
         className="flex items-start p-3 bg-card border border-border rounded-lg shadow-sm cursor-move hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5"
         role="button"
         aria-label={`Arraste o bloco ${label}`}
         data-testid={`draggable-block-${type}`}
         style={{ opacity: isDragging ? 0.4 : 1 }}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
-        onPointerDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()} // Keep this to prevent accordion interaction on drag start
         {...(dataAiHint && { 'data-ai-hint': dataAiHint })}
       >
         <div className="p-2 bg-muted rounded-md mr-3">
@@ -54,7 +50,7 @@ const DraggableBlock = React.memo(React.forwardRef<HTMLDivElement, DraggableBloc
           <p className="font-semibold text-sm text-card-foreground">{label}</p>
           <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
         </div>
-      </motion.div>
+      </div>
     );
   }
 ));
