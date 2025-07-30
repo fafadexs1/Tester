@@ -52,7 +52,8 @@ async function initializeDatabase(): Promise<void> {
         nodes JSONB,
         connections JSONB,
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW()
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        owner TEXT
       );
     `);
     console.log('[DB Actions] initializeDatabase: "workspaces" table checked/created (with UNIQUE name).');
@@ -206,19 +207,21 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
     client = await poolInstance.connect();
     console.log(`[DB Actions] saveWorkspaceToDB: Saving workspace to DB: ${workspaceData.id} (${workspaceData.name})`);
     const query = `
-      INSERT INTO workspaces (id, name, nodes, connections, updated_at)
-      VALUES ($1, $2, $3, $4, NOW())
+      INSERT INTO workspaces (id, name, nodes, connections, owner, updated_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
       ON CONFLICT (id) DO UPDATE
       SET name = EXCLUDED.name,
           nodes = EXCLUDED.nodes,
           connections = EXCLUDED.connections,
+          owner = EXCLUDED.owner,
           updated_at = NOW();
     `;
     await client.query(query, [
       workspaceData.id,
       workspaceData.name,
       JSON.stringify(workspaceData.nodes || []), 
-      JSON.stringify(workspaceData.connections || []), 
+      JSON.stringify(workspaceData.connections || []),
+      workspaceData.owner,
     ]);
     console.log(`[DB Actions] saveWorkspaceToDB: Query executed for workspace ${workspaceData.id}.`);
     return { success: true };
@@ -244,7 +247,7 @@ export async function loadWorkspaceFromDB(workspaceId: string): Promise<Workspac
     const poolInstance = await getDbPool();
     client = await poolInstance.connect();
     console.log(`[DB Actions] loadWorkspaceFromDB: Loading workspace from DB by ID: ${workspaceId}`);
-    const result: QueryResult<WorkspaceData> = await client.query('SELECT id, name, nodes, connections, created_at, updated_at FROM workspaces WHERE id = $1', [workspaceId]);
+    const result: QueryResult<WorkspaceData> = await client.query('SELECT id, name, nodes, connections, owner, created_at, updated_at FROM workspaces WHERE id = $1', [workspaceId]);
     if (result.rows.length > 0) {
       const row = result.rows[0];
       const nodes = typeof row.nodes === 'string' ? JSON.parse(row.nodes) : (row.nodes || []);
@@ -266,7 +269,7 @@ export async function loadWorkspaceByNameFromDB(name: string): Promise<Workspace
     const poolInstance = await getDbPool();
     client = await poolInstance.connect();
     console.log(`[DB Actions] loadWorkspaceByNameFromDB: Loading workspace from DB by name: "${name}"`);
-    const result: QueryResult<WorkspaceData> = await client.query('SELECT id, name, nodes, connections, created_at, updated_at FROM workspaces WHERE name = $1', [name]);
+    const result: QueryResult<WorkspaceData> = await client.query('SELECT id, name, nodes, connections, owner, created_at, updated_at FROM workspaces WHERE name = $1', [name]);
     if (result.rows.length > 0) {
       const row = result.rows[0];
       const nodes = typeof row.nodes === 'string' ? JSON.parse(row.nodes) : (row.nodes || []);
@@ -291,7 +294,7 @@ export async function loadAllWorkspacesFromDB(): Promise<WorkspaceData[]> {
     client = await poolInstance.connect();
     console.log('[DB Actions] loadAllWorkspacesFromDB: Loading all workspaces from DB...');
     const result: QueryResult<WorkspaceData> = await client.query(
-      'SELECT id, name, nodes, connections, created_at, updated_at FROM workspaces ORDER BY updated_at DESC'
+      'SELECT id, name, nodes, connections, owner, created_at, updated_at FROM workspaces ORDER BY updated_at DESC'
     );
      return result.rows.map(row => {
         const nodes = typeof row.nodes === 'string' ? JSON.parse(row.nodes) : (row.nodes || []);
@@ -313,7 +316,7 @@ export async function loadActiveWorkspaceFromDB(): Promise<WorkspaceData | null>
     client = await poolInstance.connect();
     console.log('[DB Actions] loadActiveWorkspaceFromDB: Loading most recent workspace from DB...');
     const result: QueryResult<WorkspaceData> = await client.query(
-      'SELECT id, name, nodes, connections, created_at, updated_at FROM workspaces ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST LIMIT 1'
+      'SELECT id, name, nodes, connections, owner, created_at, updated_at FROM workspaces ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST LIMIT 1'
     );
     if (result.rows.length > 0) {
       const row = result.rows[0];

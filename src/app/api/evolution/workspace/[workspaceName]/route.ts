@@ -3,14 +3,13 @@
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getProperty } from 'dot-prop';
+import { getProperty, setProperty } from 'dot-prop';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
 import {
   loadSessionFromDB,
   saveSessionToDB,
   deleteSessionFromDB,
   loadWorkspaceByNameFromDB,
-  loadActiveWorkspaceFromDB, // Para fallback se nenhum workspace for encontrado pelo nome
 } from '@/app/actions/databaseActions';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
@@ -101,7 +100,7 @@ async function executeFlow(
                 nextNodeId = findNextNodeId(currentNode.id, firstTrigger || 'default', connections);
                 break;
 
-            case 'message':
+            case 'message': {
                 const messageText = substituteVariablesInText(currentNode.text, session.flow_variables);
                 if (messageText) {
                     await sendWhatsAppMessageAction({
@@ -113,6 +112,7 @@ async function executeFlow(
                 }
                 nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
                 break;
+            }
 
             case 'input':
                 const promptText = substituteVariablesInText(currentNode.promptText, session.flow_variables);
@@ -160,7 +160,7 @@ async function executeFlow(
                 }
                 break;
 
-            case 'condition':
+            case 'condition': {
                 const varNameCond = currentNode.conditionVariable?.replace(/\{\{|\}\}/g, '').trim();
                 const actualValueCond = varNameCond ? getProperty(session.flow_variables, varNameCond) : undefined;
                 const compareValueCond = substituteVariablesInText(currentNode.conditionValue, session.flow_variables);
@@ -184,41 +184,142 @@ async function executeFlow(
                 console.log(`[Flow Engine - ${session.session_id}] Condition: Var ('${varNameCond}')='${actualValueCond}' ${currentNode.conditionOperator} '${compareValueCond}' -> ${conditionMet}`);
                 nextNodeId = findNextNodeId(currentNode.id, conditionMet ? 'true' : 'false', connections);
                 break;
+            }
 
-            case 'set-variable':
+            case 'set-variable': {
                 if (currentNode.variableName) {
                     const valueToSet = substituteVariablesInText(currentNode.variableValue, session.flow_variables);
-                    session.flow_variables[currentNode.variableName] = valueToSet;
+                    setProperty(session.flow_variables, currentNode.variableName, valueToSet);
                     console.log(`[Flow Engine - ${session.session_id}] Variable "${currentNode.variableName}" set to "${valueToSet}"`);
                 }
                 nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
                 break;
+            }
+            
+            case 'api-call': {
+                const varName = currentNode.apiOutputVariable;
+                try {
+                    let url = substituteVariablesInText(currentNode.apiUrl, session.flow_variables);
+                    const method = currentNode.apiMethod || 'GET';
+                    const headers = new Headers();
+                    (currentNode.apiHeadersList || []).forEach(h => headers.append(substituteVariablesInText(h.key, session.flow_variables), substituteVariablesInText(h.value, session.flow_variables)));
+
+                    if (currentNode.apiAuthType === 'bearer' && currentNode.apiAuthBearerToken) {
+                        headers.append('Authorization', `Bearer ${substituteVariablesInText(currentNode.apiAuthBearerToken, session.flow_variables)}`);
+                    } else if (currentNode.apiAuthType === 'basic' && currentNode.apiAuthBasicUser && currentNode.apiAuthBasicPassword) {
+                        const user = substituteVariablesInText(currentNode.apiAuthBasicUser, session.flow_variables);
+                        const pass = substituteVariablesInText(currentNode.apiAuthBasicPassword, session.flow_variables);
+                        headers.append('Authorization', `Basic ${btoa(`${user}:${pass}`)}`);
+                    }
+                    
+                    const queryParams = new URLSearchParams();
+                    (currentNode.apiQueryParamsList || []).forEach(p => queryParams.append(substituteVariablesInText(p.key, session.flow_variables), substituteVariablesInText(p.value, session.flow_variables)));
+                    const queryString = queryParams.toString();
+                    if(queryString) url += (url.includes('?') ? '&' : '?') + queryString;
+
+                    let body: BodyInit | null = null;
+                    if (method !== 'GET' && method !== 'HEAD') {
+                        if (currentNode.apiBodyType === 'json' && currentNode.apiBodyJson) {
+                            body = substituteVariablesInText(currentNode.apiBodyJson, session.flow_variables);
+                            if (!headers.has('Content-Type')) headers.append('Content-Type', 'application/json');
+                        } else if (currentNode.apiBodyType === 'raw' && currentNode.apiBodyRaw) {
+                            body = substituteVariablesInText(currentNode.apiBodyRaw, session.flow_variables);
+                        }
+                    }
+
+                    console.log(`[Flow Engine - ${session.session_id}] API Call: ${method} ${url}`);
+                    const response = await fetch(url, { method, headers, body });
+                    const responseData = await response.json().catch(() => response.text());
+                    
+                    if (varName) {
+                        setProperty(session.flow_variables, varName, { status: response.status, headers: Object.fromEntries(response.headers.entries()), body: responseData });
+                    }
+                } catch (error: any) {
+                    console.error(`[Flow Engine - ${session.session_id}] API Call Error:`, error);
+                    if (varName) {
+                         setProperty(session.flow_variables, varName, { error: error.message });
+                    }
+                }
+                nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+                break;
+            }
+            
+            case 'whatsapp-text':
+            case 'whatsapp-media': {
+                const recipientPhoneNumber = substituteVariablesInText(currentNode.phoneNumber, session.flow_variables) || session.session_id.split("@@")[0];
+                const instanceName = substituteVariablesInText(currentNode.instanceName, session.flow_variables) || apiConfig.instanceName;
+                
+                await sendWhatsAppMessageAction({
+                    ...apiConfig,
+                    instanceName,
+                    recipientPhoneNumber,
+                    messageType: currentNode.type === 'whatsapp-text' ? 'text' : currentNode.mediaType || 'image',
+                    textContent: currentNode.type === 'whatsapp-text' ? substituteVariablesInText(currentNode.textMessage, session.flow_variables) : undefined,
+                    mediaUrl: currentNode.type === 'whatsapp-media' ? substituteVariablesInText(currentNode.mediaUrl, session.flow_variables) : undefined,
+                    caption: currentNode.type === 'whatsapp-media' ? substituteVariablesInText(currentNode.caption, session.flow_variables) : undefined,
+                });
+                nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+                break;
+            }
+
+            case 'ai-text-generation': {
+                const varName = currentNode.aiOutputVariable;
+                if (varName && currentNode.aiPromptText) {
+                    try {
+                        const promptText = substituteVariablesInText(currentNode.aiPromptText, session.flow_variables);
+                        console.log(`[Flow Engine - ${session.session_id}] AI Text Gen: Calling genericTextGenerationFlow with prompt: "${promptText}"`);
+                        const aiResponse = await genericTextGenerationFlow({ promptText });
+                        setProperty(session.flow_variables, varName, aiResponse.generatedText);
+                    } catch (e: any) {
+                        console.error(`[Flow Engine - ${session.session_id}] AI Text Gen Error:`, e);
+                        setProperty(session.flow_variables, varName, `Error generating text: ${e.message}`);
+                    }
+                }
+                nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+                break;
+            }
+
+            case 'intelligent-agent': {
+                const responseVarName = currentNode.agentResponseVariable;
+                const inputVarName = currentNode.userInputVariable?.replace(/\{\{|\}\}/g, '').trim();
+                
+                if (responseVarName && inputVarName) {
+                    try {
+                        const userInputForAgent = getProperty(session.flow_variables, inputVarName);
+                        if (userInputForAgent) {
+                            console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: Calling simpleChatReply with input: "${userInputForAgent}"`);
+                            const agentReply = await simpleChatReply({ userMessage: String(userInputForAgent) });
+                            setProperty(session.flow_variables, responseVarName, agentReply.botReply);
+                        } else {
+                            console.warn(`[Flow Engine - ${session.session_id}] Intelligent Agent: Input variable '${inputVarName}' not found.`);
+                            setProperty(session.flow_variables, responseVarName, 'Error: User input not found.');
+                        }
+                    } catch(e:any) {
+                        console.error(`[Flow Engine - ${session.session_id}] Intelligent Agent Error:`, e);
+                        setProperty(session.flow_variables, responseVarName, `Error with agent: ${e.message}`);
+                    }
+                }
+                nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+                break;
+            }
+            
+            case 'delay': {
+                 await new Promise(resolve => setTimeout(resolve, currentNode.delayDuration || 1000));
+                 nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+                 break;
+            }
+            
+            case 'log-console': {
+                 console.log(`[FLOW LOG - ${session.session_id}] ${substituteVariablesInText(currentNode.logMessage, session.flow_variables)}`);
+                 nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+                 break;
+            }
 
             case 'end-flow':
                 console.log(`[Flow Engine - ${session.session_id}] Reached End Flow node. Deleting session.`);
                 await deleteSessionFromDB(session.session_id);
                 shouldContinue = false;
                 nextNodeId = null;
-                break;
-            
-            // Cases for other node types that don't pause execution
-            case 'api-call':
-            case 'ai-text-generation':
-            case 'intelligent-agent':
-                // Simplified simulation for this example, can be expanded
-                 console.log(`[Flow Engine - ${session.session_id}] Executing simulated node: ${currentNode.type}`);
-                 if (currentNode.type === 'ai-text-generation' && currentNode.aiOutputVariable) {
-                    const aiPromptText = substituteVariablesInText(currentNode.aiPromptText, session.flow_variables);
-                    const aiResponse = await genericTextGenerationFlow({ promptText: aiPromptText });
-                    session.flow_variables[currentNode.aiOutputVariable] = aiResponse.generatedText;
-                 } else if (currentNode.type === 'intelligent-agent' && currentNode.agentResponseVariable) {
-                    const userInputForAgent = substituteVariablesInText(currentNode.userInputVariable, session.flow_variables);
-                    const agentReply = await simpleChatReply({ userMessage: userInputForAgent });
-                    session.flow_variables[currentNode.agentResponseVariable] = agentReply.botReply;
-                 } else if (currentNode.type === 'api-call' && currentNode.apiOutputVariable) {
-                     session.flow_variables[currentNode.apiOutputVariable] = { success: true, data: "Simulated generic API response" };
-                 }
-                nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
                 break;
 
             default:
@@ -241,7 +342,6 @@ async function executeFlow(
 
 
 // Função para armazenar detalhes da requisição no log global (em memória)
-// (Mesma função storeRequestDetails que já tínhamos)
 async function storeRequestDetails(
   request: NextRequest,
   parsedPayload: any, 
@@ -361,6 +461,20 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
     const sessionId = `${senderJid.split('@')[0]}@@${workspace.id}`;
     let session = await loadSessionFromDB(sessionId);
     let startExecution = false;
+    
+    if (session) {
+      const now = new Date().getTime();
+      const lastInteraction = new Date(session.last_interaction_at || 0).getTime();
+      const timeoutSeconds = session.session_timeout_seconds || 0;
+      const isAwaitingInput = !!session.awaiting_input_type;
+
+      if (isAwaitingInput && timeoutSeconds > 0 && (now - lastInteraction > timeoutSeconds * 1000)) {
+        console.log(`[API Evolution WS Route - ${sessionId}] Session timed out. Deleting and creating a new one.`);
+        await deleteSessionFromDB(sessionId);
+        session = null;
+      }
+    }
+
 
     if (session) {
       console.log(`[API Evolution WS Route - ${sessionId}] Existing session found.`);
@@ -374,7 +488,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
           if (awaitingNode) {
               let nextNode: string | null = null;
               if (session.awaiting_input_type === 'text' && session.awaiting_input_details.variableToSave) {
-                session.flow_variables[session.awaiting_input_details.variableToSave] = receivedMessageText || '';
+                setProperty(session.flow_variables, session.awaiting_input_details.variableToSave, receivedMessageText || '');
                 nextNode = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
               } else if (session.awaiting_input_type === 'option' && Array.isArray(session.awaiting_input_details.options)) {
                 const options = session.awaiting_input_details.options;
@@ -390,7 +504,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
 
                 if (chosenOptionText) {
                   if (session.awaiting_input_details.variableToSave) {
-                    session.flow_variables[session.awaiting_input_details.variableToSave] = chosenOptionText;
+                    setProperty(session.flow_variables, session.awaiting_input_details.variableToSave, chosenOptionText);
                   }
                   nextNode = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
                 } else {
@@ -405,7 +519,6 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
               session = null; // Force restart if awaiting node is gone
           }
       } else {
-         // Session exists, but was not awaiting a specific input. Treat as a continuation from the last known point.
          console.log(`[API Evolution WS Route - ${sessionId}] Session was paused but not awaiting input. Continuing from node ${session.current_node_id}.`);
          startExecution = true;
       }
@@ -445,7 +558,6 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
     if (startExecution && session.current_node_id) {
       await executeFlow(session, workspace.nodes, workspace.connections || [], apiConfig);
     } else {
-      // If we don't start execution (e.g., invalid option), just save the current state.
       await saveSessionToDB(session);
     }
 
