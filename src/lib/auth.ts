@@ -20,7 +20,8 @@ export async function createSession(user: User) {
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-  const sessionCookie = await cookies().get(SESSION_COOKIE_NAME);
+  const cookieStore = cookies();
+  const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME);
 
   if (!sessionCookie) {
     return null;
