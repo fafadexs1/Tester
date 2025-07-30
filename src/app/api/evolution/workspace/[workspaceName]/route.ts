@@ -515,7 +515,6 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
               }
           } else {
               // Session exists, but was not awaiting a specific input. This means the flow was paused.
-              // Let's find the next node from the last known current_node_id.
               console.log(`[API Evolution WS Route - ${sessionId}] Session was paused. Continuing from node ${session.current_node_id}.`);
               const lastNodeId = session.current_node_id;
               if (lastNodeId) {
