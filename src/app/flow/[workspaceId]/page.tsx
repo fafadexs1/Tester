@@ -1,18 +1,20 @@
 
 'use client';
 
+import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import FlowBuilderClient from "@/components/flow-builder/FlowBuilderClient";
 import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 
 // Esta página agora lidará com a renderização do editor de fluxo para um ID específico.
 export default function FlowEditorPage({ params }: { params: { workspaceId: string } }) {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const { workspaceId } = params;
+  
+  // Use React.use() to unwrap the Promise-like params object
+  const { workspaceId } = use(Promise.resolve(params));
 
   // Um estado para garantir que a verificação do cliente seja feita antes de renderizar
   const [isClient, setIsClient] = useState(false);
@@ -40,3 +42,5 @@ export default function FlowEditorPage({ params }: { params: { workspaceId: stri
     </ErrorBoundary>
   );
 }
+
+    

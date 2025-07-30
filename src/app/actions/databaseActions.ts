@@ -17,20 +17,10 @@ async function initializeDatabase(): Promise<void> {
   console.log('[DB Actions] initializeDatabase: Starting schema initialization...');
   let client;
   try {
-    const tempPoolConfig = {
-      host: process.env.POSTGRES_HOST,
-      port: process.env.POSTGRES_PORT ? parseInt(process.env.POSTGRES_PORT, 10) : 5432,
-      user: process.env.POSTGRES_USER,
-      password: process.env.POSTGRES_PASSWORD,
-      database: process.env.POSTGRES_DATABASE,
-      ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
-      idleTimeoutMillis: 5000, 
-      connectionTimeoutMillis: 10000,
-    };
-    const tempPool = new Pool(tempPoolConfig);
-    
-    client = await tempPool.connect();
-    console.log('[DB Actions] initializeDatabase: Connected to DB for schema setup via temp pool.');
+    // Use the main pool for initialization to ensure consistent connection handling.
+    const poolInstance = getDbPoolInternal();
+    client = await poolInstance.connect();
+    console.log('[DB Actions] initializeDatabase: Connected to DB for schema setup via main pool.');
 
     await client.query('BEGIN');
 
@@ -117,7 +107,6 @@ async function initializeDatabase(): Promise<void> {
     await client.query('COMMIT');
     console.log('[DB Actions] initializeDatabase: Database schema initialized successfully.');
     dbInitializedSuccessfully = true;
-    await tempPool.end(); 
   } catch (error: any) {
     if (client) {
       try {
@@ -149,8 +138,8 @@ function getDbPoolInternal(logCreation: boolean = true): Pool {
       password: process.env.POSTGRES_PASSWORD,
       database: process.env.POSTGRES_DATABASE,
       ssl: useSSL ? { rejectUnauthorized: false } : false,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000, 
+      idleTimeoutMillis: 60000, // Increased idle timeout
+      connectionTimeoutMillis: 30000, // Increased connection timeout
     };
     pool = new Pool(poolConfig);
 
@@ -477,3 +466,5 @@ export async function deleteWorkspaceAction(workspaceId: string): Promise<{ succ
   // Adicionar lógica de verificação de permissão aqui, se necessário (ex: verificar o proprietário)
   return deleteWorkspaceFromDB(workspaceId);
 }
+
+    
