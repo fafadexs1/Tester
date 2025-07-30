@@ -716,7 +716,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                             id="webhook-url"
                             type="text"
                             readOnly
-                            value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/workspace/${encodeURIComponent(node.title)}`}
+                            value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/workspace/${encodeURIComponent(node.title.replace(/\s+/g, '_'))}`}
                             className="bg-input/50 h-7 text-xs"
                           />
                           <Button
@@ -724,7 +724,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                             size="icon"
                             className="h-7 w-7"
                             onClick={() => {
-                              const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/workspace/${encodeURIComponent(node.title)}`;
+                              const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/workspace/${encodeURIComponent(node.title.replace(/\s+/g, '_'))}`;
                               navigator.clipboard.writeText(webhookUrl)
                                 .then(() => toast({ title: "URL Copiada!", description: "URL do Webhook copiada."}))
                                 .catch(() => toast({ title: "Erro", description: "Não foi possível copiar a URL.", variant: "destructive"}));
