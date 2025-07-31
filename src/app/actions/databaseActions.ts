@@ -37,67 +37,6 @@ function getDbPool(): Pool {
     return pool;
 }
 
-async function initializeDatabaseSchema(): Promise<void> {
-  const poolInstance = getDbPool();
-  const client = await poolInstance.connect();
-  try {
-    console.log('[DB Actions] Initializing database schema if needed...');
-    await client.query('BEGIN');
-    
-    // Habilita a extensão para UUIDs se não existir
-    await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
-
-    // Tabela de usuários com ID UUID como chave primária
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        username TEXT NOT NULL UNIQUE,
-        password_hash TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'user',
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      );
-    `);
-
-    // Tabela de workspaces, referenciando users(id)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS workspaces (
-        id UUID PRIMARY KEY,
-        name TEXT NOT NULL,
-        nodes JSONB,
-        connections JSONB,
-        owner UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        CONSTRAINT workspaces_owner_name_key UNIQUE (owner, name)
-      );
-    `);
-    
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS flow_sessions (
-        session_id TEXT PRIMARY KEY,
-        workspace_id UUID,
-        current_node_id TEXT,
-        flow_variables JSONB,
-        awaiting_input_type TEXT,
-        awaiting_input_details JSONB,
-        session_timeout_seconds INTEGER NOT NULL DEFAULT 0,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        last_interaction_at TIMESTAMPTZ DEFAULT NOW()
-      );
-    `);
-    
-    await client.query('COMMIT');
-    console.log('[DB Actions] Schema initialization and migration check complete.');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('[DB Actions] Error initializing/migrating database schema, transaction rolled back.', error);
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-
 async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResult<T>> {
     const poolInstance = getDbPool();
     try {
@@ -131,6 +70,137 @@ async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResu
         }
         throw error;
     }
+}
+
+
+async function initializeDatabaseSchema(): Promise<void> {
+  const poolInstance = getDbPool();
+  const client = await poolInstance.connect();
+  try {
+    console.log('[DB Actions] Initializing database schema if needed...');
+    await client.query('BEGIN');
+    
+    // Habilita a extensão para UUIDs se não existir
+    await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
+    
+    // Cria a tabela de usuários se ela não existir
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    
+    // Verifica se a coluna 'id' existe na tabela 'users'
+    const idColumnExists = await client.query(`
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_name='users' AND column_name='id';
+    `);
+
+    // Se a coluna 'id' não existir, adiciona-a e a define como chave primária.
+    if (idColumnExists.rowCount === 0) {
+      console.log("[DB Actions] 'id' column not found in 'users' table. Migrating schema...");
+      // Remove a constraint de PK antiga se ela existir (baseada no username)
+      const pkConstraint = await client.query(`
+        SELECT conname FROM pg_constraint 
+        WHERE conrelid = 'users'::regclass AND contype = 'p';
+      `);
+      if (pkConstraint.rowCount > 0 && pkConstraint.rows[0].conname) {
+          await client.query(`ALTER TABLE users DROP CONSTRAINT "${pkConstraint.rows[0].conname}";`);
+          console.log(`[DB Actions] Dropped old primary key constraint: ${pkConstraint.rows[0].conname}`);
+      }
+
+      await client.query('ALTER TABLE users ADD COLUMN id UUID;');
+      await client.query('UPDATE users SET id = gen_random_uuid() WHERE id IS NULL;');
+      await client.query('ALTER TABLE users ALTER COLUMN id SET NOT NULL;');
+      await client.query('ALTER TABLE users ADD PRIMARY KEY (id);');
+      console.log("[DB Actions] 'id' column added and set as PRIMARY KEY on 'users' table.");
+    }
+    
+
+    // Tabela de workspaces, referenciando users(id)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS workspaces (
+        id UUID PRIMARY KEY,
+        name TEXT NOT NULL,
+        nodes JSONB,
+        connections JSONB,
+        owner UUID, 
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Adiciona a foreign key constraint se ela não existir
+    const fkConstraintExists = await client.query(`
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'workspaces_owner_fkey' AND conrelid = 'workspaces'::regclass;
+    `);
+
+    if(fkConstraintExists.rowCount === 0) {
+        // Antes de adicionar, remove a coluna 'owner' se ela for do tipo antigo (ex: text)
+        // Isso é uma medida drástica, mas necessária se o tipo da coluna mudou.
+        // Uma abordagem mais segura seria converter os dados, mas para o estado atual, isso é mais simples.
+        const ownerColumnInfo = await client.query(`
+            SELECT data_type FROM information_schema.columns 
+            WHERE table_name = 'workspaces' AND column_name = 'owner';
+        `);
+        if(ownerColumnInfo.rowCount > 0 && ownerColumnInfo.rows[0].data_type !== 'uuid') {
+             console.warn("[DB Actions] 'owner' column in 'workspaces' is not UUID. It will be dropped and recreated. Existing owner data will be lost.");
+             await client.query('ALTER TABLE workspaces DROP COLUMN owner;');
+             await client.query('ALTER TABLE workspaces ADD COLUMN owner UUID;');
+        }
+        await client.query(`
+            ALTER TABLE workspaces 
+            ADD CONSTRAINT workspaces_owner_fkey 
+            FOREIGN KEY (owner) REFERENCES users(id) ON DELETE CASCADE;
+        `);
+         console.log("[DB Actions] Foreign key 'workspaces_owner_fkey' added.");
+    }
+    
+    // Verifica e corrige a constraint de unicidade para (owner, name)
+    const uniqueConstraintName = 'workspaces_owner_name_key';
+    const oldUniqueConstraintName = 'workspaces_name_key';
+    
+    const correctUniqueConstraintExists = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = '${uniqueConstraintName}'`);
+    if(correctUniqueConstraintExists.rowCount === 0) {
+        // Tenta remover a constraint antiga (apenas no nome) se ela existir
+        const oldUniqueConstraintExists = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = '${oldUniqueConstraintName}'`);
+        if(oldUniqueConstraintExists.rowCount > 0) {
+            await client.query(`ALTER TABLE workspaces DROP CONSTRAINT ${oldUniqueConstraintName};`);
+            console.log(`[DB Actions] Dropped old unique constraint: ${oldUniqueConstraintName}`);
+        }
+        // Adiciona a constraint correta
+        await client.query(`ALTER TABLE workspaces ADD CONSTRAINT ${uniqueConstraintName} UNIQUE (owner, name);`);
+        console.log(`[DB Actions] Added correct unique constraint: ${uniqueConstraintName}`);
+    }
+
+    
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS flow_sessions (
+        session_id TEXT PRIMARY KEY,
+        workspace_id UUID,
+        current_node_id TEXT,
+        flow_variables JSONB,
+        awaiting_input_type TEXT,
+        awaiting_input_details JSONB,
+        session_timeout_seconds INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        last_interaction_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    
+    await client.query('COMMIT');
+    console.log('[DB Actions] Schema initialization and migration check complete.');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[DB Actions] Error initializing/migrating database schema, transaction rolled back.', error);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // --- User Actions ---
