@@ -129,13 +129,26 @@ async function initializeDatabaseSchema(): Promise<void> {
         connections JSONB,
         owner UUID, 
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        evolution_api_enabled BOOLEAN DEFAULT false,
-        evolution_api_url TEXT,
-        evolution_api_key TEXT,
-        evolution_instance_name TEXT
+        updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+    
+    // Adiciona as colunas da API Evolution se não existirem
+    const evolutionColumnCheck = await client.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'workspaces' AND column_name = 'evolution_api_enabled';
+    `);
+
+    if (evolutionColumnCheck.rowCount === 0) {
+        console.log('[DB Actions] Evolution API columns not found in "workspaces" table. Adding them...');
+        await client.query('ALTER TABLE workspaces ADD COLUMN evolution_api_enabled BOOLEAN DEFAULT false;');
+        await client.query('ALTER TABLE workspaces ADD COLUMN evolution_api_url TEXT;');
+        await client.query('ALTER TABLE workspaces ADD COLUMN evolution_api_key TEXT;');
+        await client.query('ALTER TABLE workspaces ADD COLUMN evolution_instance_name TEXT;');
+        console.log('[DB Actions] Evolution API columns added successfully.');
+    }
+
 
     // Adiciona a foreign key constraint se ela não existir
     const fkConstraintExists = await client.query(`
@@ -533,3 +546,5 @@ export async function loadWorkspaceByNameFromDB(name: string, owner: string): Pr
     return null;
   }
 }
+
+    
