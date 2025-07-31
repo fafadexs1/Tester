@@ -194,10 +194,15 @@ export async function loadWorkspaceByNameFromDB(name: string, owner?: string): P
 }
 
 
-export async function loadAllWorkspacesFromDB(): Promise<WorkspaceData[]> {
+export async function loadWorkspacesForOwnerFromDB(owner: string): Promise<WorkspaceData[]> {
   try {
+    if (!owner) {
+        console.warn("[DB Actions] loadWorkspacesForOwnerFromDB called without an owner.");
+        return [];
+    }
     const result = await runQuery<WorkspaceData>(
-      'SELECT id, name, nodes, connections, owner, created_at, updated_at FROM workspaces ORDER BY updated_at DESC'
+      'SELECT id, name, nodes, connections, owner, created_at, updated_at FROM workspaces WHERE owner = $1 ORDER BY updated_at DESC',
+      [owner]
     );
      return result.rows.map(row => ({
         ...row,
@@ -205,7 +210,7 @@ export async function loadAllWorkspacesFromDB(): Promise<WorkspaceData[]> {
         connections: row.connections || [],
       }));
   } catch (error: any) {
-    console.error('[DB Actions] loadAllWorkspacesFromDB Error:', error);
+    console.error(`[DB Actions] loadWorkspacesForOwnerFromDB Error for owner ${owner}:`, error);
     return [];
   }
 }

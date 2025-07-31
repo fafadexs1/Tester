@@ -4,7 +4,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, Zap } from 'lucide-react';
-import { loadAllWorkspacesFromDB } from '@/app/actions/databaseActions';
+import { loadWorkspacesForOwnerFromDB } from '@/app/actions/databaseActions';
 import Link from 'next/link';
 import WorkspaceList from '@/components/dashboard/WorkspaceList';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -26,9 +26,9 @@ export default function DashboardPage() {
         console.log(`[DashboardPage Client] Usuário "${user.username}" autenticado. Carregando workspaces...`);
         setIsLoadingData(true);
         try {
-          const loadedWorkspaces = await loadAllWorkspacesFromDB();
+          const loadedWorkspaces = await loadWorkspacesForOwnerFromDB(user.username);
           setWorkspaces(loadedWorkspaces);
-          console.log(`[DashboardPage Client] ${loadedWorkspaces.length} workspaces carregados.`);
+          console.log(`[DashboardPage Client] ${loadedWorkspaces.length} workspaces carregados para ${user.username}.`);
         } catch (error) {
           console.error("[DashboardPage Client] Erro ao carregar workspaces:", error);
         } finally {
