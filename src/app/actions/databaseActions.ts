@@ -128,16 +128,26 @@ async function initializeDatabaseSchema(): Promise<void> {
         evolution_instance_id UUID
       );
     `);
-
+    
+     await client.query(`
+      CREATE TABLE IF NOT EXISTS evolution_instances (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        base_url TEXT,
+        api_key TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, name)
+      );
+    `);
+    
     const ownerIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='owner_id'`);
     if(ownerIdColInfo.rowCount === 0) {
         console.log(`[DB Actions] Column 'owner_id' not found in 'workspaces'. Starting migration...`);
         const oldOwnerColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='owner'`);
         if(oldOwnerColInfo.rowCount > 0) {
              console.log(`[DB Actions] Found old 'owner' column. Attempting to rename to 'owner_id'...`);
-             // NOTE: This assumes the old 'owner' column was of a type compatible with UUID or needs casting.
-             // If the old 'owner' was username (TEXT), this migration is more complex.
-             // Given the context, we'll assume it needs to be created fresh.
              await client.query(`ALTER TABLE workspaces RENAME COLUMN owner TO owner_id;`);
              console.log(`[DB Actions] Renamed 'owner' to 'owner_id'.`);
         } else {
@@ -151,19 +161,12 @@ async function initializeDatabaseSchema(): Promise<void> {
             await client.query(`ALTER TABLE workspaces ADD CONSTRAINT workspaces_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE;`);
         }
     }
-    
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS evolution_instances (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        name TEXT NOT NULL,
-        base_url TEXT,
-        api_key TEXT,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(user_id, name)
-      );
-    `);
+
+    const evoInstanceIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='evolution_instance_id'`);
+    if (evoInstanceIdColInfo.rowCount === 0) {
+      console.log("[DB Actions] 'evolution_instance_id' column not found in 'workspaces'. Adding column...");
+      await client.query('ALTER TABLE workspaces ADD COLUMN evolution_instance_id UUID;');
+    }
     
     const fkConstraintExists = await client.query(`
         SELECT 1 FROM pg_constraint 
@@ -171,20 +174,17 @@ async function initializeDatabaseSchema(): Promise<void> {
     `);
 
     if (fkConstraintExists.rowCount === 0) {
-        const evoInstanceColExists = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='evolution_instance_id'`);
-        if (evoInstanceColExists.rowCount > 0) {
-            await client.query(`
-                ALTER TABLE workspaces 
-                ADD CONSTRAINT workspaces_evolution_instance_id_fkey 
-                FOREIGN KEY (evolution_instance_id) REFERENCES evolution_instances(id) ON DELETE SET NULL;
-            `);
-            console.log("[DB Actions] Foreign key 'workspaces_evolution_instance_id_fkey' added.");
-        }
+      console.log("[DB Actions] Foreign key for 'evolution_instance_id' not found. Adding constraint...");
+      await client.query(`
+        ALTER TABLE workspaces 
+        ADD CONSTRAINT workspaces_evolution_instance_id_fkey 
+        FOREIGN KEY (evolution_instance_id) REFERENCES evolution_instances(id) ON DELETE SET NULL;
+      `);
+      console.log("[DB Actions] Foreign key 'workspaces_evolution_instance_id_fkey' added.");
     }
 
     const correctUniqueConstraintExists = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_owner_id_name_key'`);
     if(correctUniqueConstraintExists.rowCount === 0) {
-        // Try to remove old constraint if it exists
         const oldUniqueConstraint = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_name_owner_id_key'`);
         if(oldUniqueConstraint.rowCount > 0) {
             await client.query(`ALTER TABLE workspaces DROP CONSTRAINT workspaces_name_owner_id_key;`);
