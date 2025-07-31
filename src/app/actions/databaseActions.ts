@@ -62,11 +62,33 @@ async function initializeDatabaseSchema(): Promise<void> {
         flow_variables JSONB,
         awaiting_input_type TEXT,
         awaiting_input_details JSONB,
-        session_timeout_seconds INTEGER DEFAULT 0,
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        last_interaction_at TIMESTAMPTZ DEFAULT NOW()
+        last_interaction_at TIMESTAMPTZ DEFAULT NOW(),
+        session_timeout_seconds INTEGER DEFAULT 0
       );
     `);
+    
+    // --- Schema Migration Section ---
+    // This section handles adding new columns to existing tables without dropping them.
+    console.log('[DB Actions] Checking for necessary schema migrations...');
+    
+    // Add 'session_timeout_seconds' to 'flow_sessions' if it doesn't exist
+    const checkColumnQuery = await client.query(`
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name='flow_sessions' AND column_name='session_timeout_seconds'
+    `);
+    if (checkColumnQuery.rowCount === 0) {
+        console.log("[DB Actions] Migration needed: 'session_timeout_seconds' column is missing from 'flow_sessions'. Adding it now...");
+        await client.query(`
+            ALTER TABLE flow_sessions
+            ADD COLUMN session_timeout_seconds INTEGER NOT NULL DEFAULT 0;
+        `);
+        console.log("[DB Actions] Migration complete: Successfully added 'session_timeout_seconds' column.");
+    } else {
+        console.log("[DB Actions] Migration check: 'session_timeout_seconds' column already exists. No action needed.");
+    }
+    // --- End of Schema Migration Section ---
+
 
     await client.query('COMMIT');
     console.log('[DB Actions] Schema initialization check complete.');
@@ -94,8 +116,13 @@ async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResu
             if (pool) await pool.end();
             pool = null;
         }
-        if (error.code === '42P01') { 
-            console.warn('[DB Actions] Table not found. Attempting to initialize schema and retry...');
+        if (error.code === '42P01' || (error.code === '42703' && error.message.includes('session_timeout_seconds'))) { // 42P01: undefined_table, 42703: undefined_column
+            const logMessage = error.code === '42P01' 
+                ? '[DB Actions] Table not found. Attempting to initialize schema and retry...'
+                : `[DB Actions] Column 'session_timeout_seconds' not found. Attempting to initialize schema and retry...`;
+            
+            console.warn(logMessage);
+
             try {
                 await initializeDatabaseSchema();
                 console.log('[DB Actions] Schema initialized. Retrying query...');
@@ -106,7 +133,7 @@ async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResu
                     client.release();
                 }
             } catch (initError) {
-                 console.error('[DB Actions] Fatal: Failed to initialize schema after table not found.', initError);
+                 console.error('[DB Actions] Fatal: Failed to initialize schema after table/column not found.', initError);
                  throw initError;
             }
         }
@@ -295,18 +322,17 @@ export async function loadAllActiveSessionsFromDB(): Promise<FlowSession[]> {
 
 (async () => {
     try {
-        console.log('[DB Actions] Performing initial connection check...');
-        const poolInstance = getDbPool();
-        const client = await poolInstance.connect();
-        console.log('[DB Actions] Database connection successful. PostgreSQL version:', (await client.query('SHOW server_version')).rows[0].server_version);
-        client.release();
+        console.log('[DB Actions] Performing initial connection check and schema initialization...');
+        await initializeDatabaseSchema();
+        console.log('[DB Actions] Database connection and schema are ready.');
     } catch (error: any) {
-        console.error('[DB Actions] FATAL: Initial database connection check failed.', {
+        console.error('[DB Actions] FATAL: Initial database setup failed.', {
             message: error.message,
             code: error.code,
             hint: "Please check your .env file and ensure the PostgreSQL server is running and accessible."
         });
     }
 })();
+    
 
     
