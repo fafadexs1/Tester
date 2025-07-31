@@ -81,7 +81,7 @@ interface TopBarProps {
   workspaceName: string;
   onSaveWorkspaces: () => void;
   onDiscardChanges: () => void;
-  onUpdateWorkspaceName: (newName: string, newSettings?: Partial<WorkspaceData>) => void;
+  onUpdateWorkspace: (newSettings: Partial<WorkspaceData>) => void;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
   onZoom: (direction: 'in' | 'out' | 'reset') => void;
@@ -94,7 +94,7 @@ const TopBar: React.FC<TopBarProps> = ({
   workspaceName,
   onSaveWorkspaces,
   onDiscardChanges,
-  onUpdateWorkspaceName,
+  onUpdateWorkspace,
   isChatPanelOpen,
   onToggleChatPanel,
   onZoom,
@@ -277,8 +277,9 @@ const TopBar: React.FC<TopBarProps> = ({
           <Input 
             className="text-lg font-semibold tracking-tight text-foreground whitespace-nowrap bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto"
             value={workspaceName}
-            onChange={(e) => onUpdateWorkspaceName(e.target.value)}
+            onChange={(e) => onUpdateWorkspace({ name: e.target.value })}
             disabled={!activeWorkspace}
+            name="workspaceName"
           />
            <Button
             onClick={() => setIsSettingsDialogOpen(true)}
@@ -450,7 +451,7 @@ const TopBar: React.FC<TopBarProps> = ({
                     <Switch
                       id="enable-evolution-api"
                       checked={activeWorkspace?.evolution_api_enabled}
-                      onCheckedChange={(checked) => onUpdateWorkspaceName(activeWorkspace?.name || '', { evolution_api_enabled: checked })}
+                      onCheckedChange={(checked) => onUpdateWorkspace({ evolution_api_enabled: checked })}
                       aria-label="Habilitar Integração API Evolution"
                     />
                     <Label htmlFor="enable-evolution-api">Habilitar para este fluxo</Label>
@@ -461,35 +462,39 @@ const TopBar: React.FC<TopBarProps> = ({
                         <Label htmlFor="evolution_api_url">URL Base</Label>
                         <Input
                           id="evolution_api_url"
+                          name="evolution_api_url"
                           placeholder="http://localhost:8080"
                           value={activeWorkspace?.evolution_api_url || ''}
-                          onChange={(e) => onUpdateWorkspaceName(activeWorkspace?.name || '', { evolution_api_url: e.target.value })}
+                          onChange={(e) => onUpdateWorkspace({ evolution_api_url: e.target.value })}
                         />
                       </div>
                       <div>
                         <Label htmlFor="evolution_instance_name">Nome da Instância</Label>
                         <Input
                           id="evolution_instance_name"
+                          name="evolution_instance_name"
                           placeholder="evolution_instance"
                           value={activeWorkspace?.evolution_instance_name || ''}
-                          onChange={(e) => onUpdateWorkspaceName(activeWorkspace?.name || '', { evolution_instance_name: e.target.value })}
+                          onChange={(e) => onUpdateWorkspace({ evolution_instance_name: e.target.value })}
                         />
                       </div>
                       <div>
                         <Label htmlFor="evolution_api_key">Chave da API (Opcional)</Label>
                         <Input
                           id="evolution_api_key"
+                          name="evolution_api_key"
                           type="password"
                           placeholder="Sua chave de API secreta"
                           value={activeWorkspace?.evolution_api_key || ''}
-                          onChange={(e) => onUpdateWorkspaceName(activeWorkspace?.name || '', { evolution_api_key: e.target.value })}
+                          onChange={(e) => onUpdateWorkspace({ evolution_api_key: e.target.value })}
                         />
                       </div>
                        <div className="pt-2">
-                        <Label className="text-card-foreground/90 text-sm font-medium">URL de Webhook para este Fluxo</Label>
+                        <Label className="text-card-foreground/90 text-sm font-medium" htmlFor="flow-webhook-url-for-evolution">URL de Webhook para este Fluxo</Label>
                         <div className="flex items-center space-x-2 mt-1">
                             <Input 
                             id="flow-webhook-url-for-evolution" 
+                            name="flow-webhook-url-for-evolution"
                             type="text" 
                             value={evolutionWebhookUrlForCurrentFlow} 
                             readOnly 
@@ -681,5 +686,3 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
-
-    

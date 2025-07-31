@@ -548,10 +548,10 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     setHighlightedNodeIdBySession(nodeId);
   }, []);
 
-  const handleUpdateWorkspaceName = useCallback((newName: string) => {
+  const handleUpdateWorkspace = useCallback((newSettings: Partial<WorkspaceData>) => {
     updateActiveWorkspace(ws => ({
       ...ws,
-      name: newName,
+      ...newSettings,
     }));
   }, [updateActiveWorkspace]);
 
@@ -572,7 +572,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
           workspaceName={activeWorkspace?.name || 'Carregando...'}
           onSaveWorkspaces={handleSaveWorkspace}
           onDiscardChanges={handleDiscardChanges}
-          onUpdateWorkspaceName={handleUpdateWorkspaceName}
+          onUpdateWorkspace={handleUpdateWorkspace}
           isChatPanelOpen={isChatPanelOpen}
           onToggleChatPanel={toggleChatPanel}
           onZoom={handleZoom}
