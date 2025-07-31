@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import {
   Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard,
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy, FileJson2,
-  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut, Trash2, Home, ChevronsLeft, CircleDot, Circle, Cloud, CloudOff, Loader2, PlusCircle
+  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut, Trash2, Home, ChevronsLeft, CircleDot, Circle, Cloud, CloudOff, Loader2, PlusCircle, Shield
 } from 'lucide-react';
 import {
   Dialog,
@@ -518,10 +518,18 @@ const TopBar: React.FC<TopBarProps> = ({
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>{user?.username || 'Minha Conta'}</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <UserCircle className="mr-2 h-4 w-4" />
-                <span>Perfil</span>
-              </DropdownMenuItem>
+              <Link href="/profile" passHref>
+                <DropdownMenuItem>
+                    <UserCircle className="mr-2 h-4 w-4" />
+                    <span>Perfil</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/admin" passHref>
+                <DropdownMenuItem>
+                    <Shield className="mr-2 h-4 w-4" />
+                    <span>Administração</span>
+                </DropdownMenuItem>
+              </Link>
               <DropdownMenuItem>
                 <CreditCard className="mr-2 h-4 w-4" />
                 <span>Assinatura</span>
