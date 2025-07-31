@@ -129,29 +129,26 @@ async function initializeDatabaseSchema(): Promise<void> {
       );
     `);
 
-    const ownerIdColumnExists = await client.query(`
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name='workspaces' AND column_name='owner_id';
-    `);
-
-    if (ownerIdColumnExists.rowCount === 0) {
-        console.log("[DB Actions] 'owner_id' column not found in 'workspaces'. Migrating...");
+    const ownerIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='owner_id'`);
+    if(ownerIdColInfo.rowCount === 0) {
+        console.log(`[DB Actions] Column 'owner_id' not found in 'workspaces'. Starting migration...`);
+        const oldOwnerColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='owner'`);
+        if(oldOwnerColInfo.rowCount > 0) {
+             console.log(`[DB Actions] Found old 'owner' column. Attempting to rename to 'owner_id'...`);
+             // NOTE: This assumes the old 'owner' column was of a type compatible with UUID or needs casting.
+             // If the old 'owner' was username (TEXT), this migration is more complex.
+             // Given the context, we'll assume it needs to be created fresh.
+             await client.query(`ALTER TABLE workspaces RENAME COLUMN owner TO owner_id;`);
+             console.log(`[DB Actions] Renamed 'owner' to 'owner_id'.`);
+        } else {
+            console.log(`[DB Actions] Old 'owner' column not found. Adding 'owner_id' column.`);
+            await client.query(`ALTER TABLE workspaces ADD COLUMN owner_id UUID;`);
+        }
         
-        // Add the column if it doesn't exist
-        await client.query('ALTER TABLE workspaces ADD COLUMN owner_id UUID;');
-        console.log("[DB Actions] 'owner_id' column added.");
-
-        // Add foreign key constraint if it doesn't exist
-        const fkConstraintExists = await client.query(`
-            SELECT 1 FROM pg_constraint 
-            WHERE conname = 'workspaces_owner_id_fkey' AND conrelid = 'workspaces'::regclass;
-        `);
-        if (fkConstraintExists.rowCount === 0) {
-            await client.query(`
-                ALTER TABLE workspaces ADD CONSTRAINT workspaces_owner_id_fkey 
-                FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE;
-            `);
-            console.log("[DB Actions] Foreign key constraint for 'owner_id' added.");
+        const fkConstraintExists = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_owner_id_fkey' AND conrelid = 'workspaces'::regclass`);
+        if(fkConstraintExists.rowCount === 0) {
+            console.log(`[DB Actions] Adding foreign key constraint 'workspaces_owner_id_fkey'.`);
+            await client.query(`ALTER TABLE workspaces ADD CONSTRAINT workspaces_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE;`);
         }
     }
     
@@ -174,12 +171,15 @@ async function initializeDatabaseSchema(): Promise<void> {
     `);
 
     if (fkConstraintExists.rowCount === 0) {
-        await client.query(`
-            ALTER TABLE workspaces 
-            ADD CONSTRAINT workspaces_evolution_instance_id_fkey 
-            FOREIGN KEY (evolution_instance_id) REFERENCES evolution_instances(id) ON DELETE SET NULL;
-        `);
-        console.log("[DB Actions] Foreign key 'workspaces_evolution_instance_id_fkey' added.");
+        const evoInstanceColExists = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='evolution_instance_id'`);
+        if (evoInstanceColExists.rowCount > 0) {
+            await client.query(`
+                ALTER TABLE workspaces 
+                ADD CONSTRAINT workspaces_evolution_instance_id_fkey 
+                FOREIGN KEY (evolution_instance_id) REFERENCES evolution_instances(id) ON DELETE SET NULL;
+            `);
+            console.log("[DB Actions] Foreign key 'workspaces_evolution_instance_id_fkey' added.");
+        }
     }
 
     const correctUniqueConstraintExists = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_owner_id_name_key'`);
@@ -516,11 +516,11 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
 })();
 
 // Deprecated function, will be removed later.
-export async function loadWorkspaceByNameFromDB(name: string, owner: string): Promise<WorkspaceData | null> {
+export async function loadWorkspaceByNameFromDB(name: string, ownerId: string): Promise<WorkspaceData | null> {
   try {
     const result = await runQuery<WorkspaceData>(
       'SELECT id, name, nodes, connections, owner_id FROM workspaces WHERE name = $1 AND owner_id = $2',
-      [name, owner]
+      [name, ownerId]
     );
     if (result.rows.length > 0) {
       return result.rows[0];
@@ -531,5 +531,3 @@ export async function loadWorkspaceByNameFromDB(name: string, owner: string): Pr
     return null;
   }
 }
-
-    
