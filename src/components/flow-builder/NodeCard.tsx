@@ -738,7 +738,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const renderNodeContent = (): React.ReactNode => {
     switch (node.type) {
       case 'start': {
-        const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/webhook/${(activeWorkspace?.owner || 'USUARIO').replace(/\s+/g, '_')}/${(activeWorkspace?.name || 'NOME_DO_FLUXO').replace(/\s+/g, '_')}`;
+        const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/trigger/${activeWorkspace?.id || '[ID_DO_FLUXO]'}`;
         
         return (
           <div className="space-y-3" data-no-drag="true">

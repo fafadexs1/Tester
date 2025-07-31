@@ -132,13 +132,12 @@ const TopBar: React.FC<TopBarProps> = ({
   
   const evolutionWebhookUrlForCurrentFlow = useMemo(() => {
     const baseUrl = nexusFlowAppBaseUrl || (typeof window !== 'undefined' ? window.location.origin : '');
-    const safeWorkspaceName = (workspaceName || '[NOME_DO_FLUXO]').replace(/\s+/g, '_');
-    const safeUsername = (activeWorkspace?.owner || '[USUARIO]').replace(/\s+/g, '_');
+    const webhookId = activeWorkspace?.id || '[ID_DO_FLUXO]';
     if (baseUrl) {
-      return `${baseUrl}/api/evolution/webhook/${safeUsername}/${safeWorkspaceName}`;
+      return `${baseUrl}/api/evolution/trigger/${webhookId}`;
     }
-    return `[URL_BASE]/api/evolution/webhook/${safeUsername}/${safeWorkspaceName}`;
-  }, [nexusFlowAppBaseUrl, workspaceName, activeWorkspace?.owner]);
+    return `[URL_BASE]/api/evolution/trigger/${webhookId}`;
+  }, [nexusFlowAppBaseUrl, activeWorkspace?.id]);
 
 
   useEffect(() => {
@@ -617,7 +616,6 @@ const TopBar: React.FC<TopBarProps> = ({
                                 <Label className="text-card-foreground/90 text-sm font-medium">Recepção de Webhooks da API Evolution</Label>
                                 <p className="text-xs text-muted-foreground mt-1 mb-2">
                                     Configure a URL abaixo na sua API Evolution para o NexusFlow receber eventos.
-                                    O nome do fluxo é pego automaticamente do fluxo ativo.
                                 </p>
                                 <div className="flex items-center space-x-2">
                                     <Input 
@@ -682,7 +680,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <DialogHeader>
             <DialogTitle>Logs de Eventos da API Evolution</DialogTitle>
             <DialogDescription>
-              Webhooks HTTP recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{`${nexusFlowAppBaseUrl}/api/evolution/webhook/[USERNAME]/[FLOW_NAME]`}</code>.
+              Webhooks HTTP recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{`${nexusFlowAppBaseUrl}/api/evolution/trigger/[ID_DO_FLUXO]`}</code>.
               Os logs são armazenados em memória no servidor (máx. 50) e zerados ao reiniciar.
             </DialogDescription>
           </DialogHeader>
