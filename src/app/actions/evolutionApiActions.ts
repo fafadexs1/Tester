@@ -37,6 +37,7 @@ export async function sendWhatsAppMessageAction(
     endpoint = `${params.baseUrl.replace(/\/$/, '')}/message/sendText/${params.instanceName}`;
     body.number = params.recipientPhoneNumber;
     body.options = { presence: 'composing', delay: 1200 };
+    // CORREÇÃO: O texto deve estar dentro de um objeto textMessage.
     body.textMessage = { text: params.textContent };
   } else if (['image', 'video', 'document', 'audio'].includes(params.messageType)) {
     if (!params.mediaUrl) {
