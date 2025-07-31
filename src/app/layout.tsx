@@ -3,8 +3,7 @@ import type {Metadata} from 'next';
 import { Inter as FontSans } from "next/font/google" 
 import './globals.css';
 import { cn } from "@/lib/utils";
-import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider } from '@/components/auth/AuthProvider';
+import Providers from '@/components/Providers';
 
 
 const fontSans = FontSans({
@@ -29,12 +28,10 @@ export default function RootLayout({
                 "min-h-screen bg-background font-sans antialiased",
                 fontSans.variable
             )}
-            suppressHydrationWarning={true}
         >
-        <AuthProvider>
-            {children}
-        </AuthProvider>
-        <Toaster />
+            <Providers>
+              {children}
+            </Providers>
         </body>
         </html>
     );
