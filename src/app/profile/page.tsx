@@ -1,23 +1,61 @@
 
+'use client';
+
+import { useState, useEffect } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import type { User } from '@/lib/types';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Copy, Home, Workflow } from "lucide-react";
+import { Copy, Home, Workflow, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 
-export default async function ProfilePage() {
-    const user = await getCurrentUser();
+export default function ProfilePage() {
+    const [user, setUser] = useState<User | null>(null);
+    const [loading, setLoading] = useState(true);
+    const { toast } = useToast();
 
-    if (!user) {
-        redirect('/login');
+    useEffect(() => {
+        const fetchUser = async () => {
+            const currentUser = await getCurrentUser();
+            if (!currentUser) {
+                redirect('/login');
+            } else {
+                setUser(currentUser);
+            }
+            setLoading(false);
+        };
+        fetchUser();
+    }, []);
+
+    const apiToken = user ? `nexus_tk_${Buffer.from(user.username).toString('hex')}_${new Date().getFullYear()}` : '';
+
+    const handleCopyToken = () => {
+        if (!apiToken) return;
+        navigator.clipboard.writeText(apiToken).then(() => {
+            toast({ title: "Token de API Copiado!" });
+        }).catch(err => {
+            toast({ title: "Erro ao copiar", description: "Não foi possível copiar o token.", variant: "destructive" });
+            console.error("Failed to copy token: ", err);
+        });
+    };
+
+    if (loading) {
+        return (
+            <div className="flex h-screen w-full items-center justify-center bg-muted/40">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            </div>
+        );
     }
-
-    // Gerar um token de API de exemplo
-    const apiToken = `nexus_tk_${Buffer.from(user.username).toString('hex')}_${new Date().getFullYear()}`;
+    
+    if (!user) {
+        // O redirect no useEffect já deve ter sido acionado, mas isso é uma garantia.
+        return null; 
+    }
 
     return (
         <div className="flex min-h-screen w-full flex-col bg-muted/40">
@@ -53,10 +91,7 @@ export default async function ProfilePage() {
                             <Label htmlFor="apiToken">Seu Token de API</Label>
                             <div className="flex items-center space-x-2">
                                 <Input id="apiToken" readOnly type="password" value={apiToken} />
-                                <Button variant="outline" size="icon" onClick={() => {
-                                    // A cópia precisa ser feita no cliente, mas podemos preparar a estrutura
-                                    // Esta é uma simulação, a lógica real estaria em um client component.
-                                }}>
+                                <Button variant="outline" size="icon" onClick={handleCopyToken}>
                                     <Copy className="h-4 w-4" />
                                 </Button>
                             </div>
@@ -73,4 +108,3 @@ export default async function ProfilePage() {
         </div>
     );
 }
-
