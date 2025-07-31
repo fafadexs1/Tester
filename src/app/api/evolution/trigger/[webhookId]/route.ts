@@ -484,6 +484,20 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
                       setProperty(session.flow_variables, session.awaiting_input_details.variableToSave, chosenOptionText);
                     }
                     nextNode = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
+                     if (nextNode) {
+                        session.awaiting_input_type = null;
+                        session.awaiting_input_details = null;
+                        session.current_node_id = nextNode;
+                        startExecution = true;
+                    } else {
+                        // The chosen option leads to a dead end. Pause the flow.
+                        session.awaiting_input_type = null;
+                        session.awaiting_input_details = null;
+                        session.current_node_id = null; // Explicitly pause
+                        startExecution = false;
+                        await saveSessionToDB(session); // Save the paused state
+                        return NextResponse.json({ message: "Flow paused at dead end." }, { status: 200 });
+                    }
                   } else {
                     await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: "Opção inválida. Por favor, tente novamente."});
                     nextNode = null;
