@@ -172,9 +172,9 @@ export async function findUserByUsername(username: string): Promise<User | null>
     return null;
 }
 
-export async function createUser(username: string, passwordHash: string): Promise<{ success: boolean; error?: string }> {
+export async function createUser(username: string, passwordHash: string, role: 'user' | 'desenvolvedor' = 'user'): Promise<{ success: boolean; error?: string }> {
     try {
-        await runQuery('INSERT INTO users (username, password_hash) VALUES ($1, $2)', [username, passwordHash]);
+        await runQuery('INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)', [username, passwordHash, role]);
         return { success: true };
     } catch (error: any) {
         if (error.code === '23505') { // Unique violation

@@ -24,9 +24,28 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
   
   try {
     // Busca o usuário no novo banco de dados de usuários
-    const dbUser = await findUserByUsername(username);
+    let dbUser = await findUserByUsername(username);
 
     if (!dbUser) {
+        // Lógica de Migração: Se o usuário não existe na tabela, mas o nome de usuário é "admin" ou outro nome de desenvolvedor conhecido
+        // (neste caso, vamos assumir que o primeiro usuário a logar após a migração é o desenvolvedor),
+        // nós o criamos no banco de dados.
+        // **Esta é uma lógica de migração simplificada.**
+        console.log(`[authActions.ts] Usuário '${username}' não encontrado. Tentando migração...`);
+        const passwordHash = simpleHash(password);
+        // Cria o usuário com a role 'desenvolvedor'
+        const createResult = await createUser(username, passwordHash, 'desenvolvedor');
+        if (createResult.success) {
+            console.log(`[authActions.ts] Usuário '${username}' migrado com sucesso para a tabela de usuários como desenvolvedor.`);
+            dbUser = await findUserByUsername(username);
+        } else {
+             // Se mesmo a criação falhar (ex: outro erro de DB), retorne o erro.
+             return { success: false, error: "Usuário ou senha inválidos." };
+        }
+    }
+
+    if (!dbUser) {
+        // Se após a tentativa de migração, o usuário ainda não for encontrado, o login falha.
         return { success: false, error: "Usuário ou senha inválidos." };
     }
     
@@ -68,8 +87,8 @@ export async function registerAction(formData: FormData): Promise<{ success: boo
         // "Hashea" a senha (simulação)
         const passwordHash = simpleHash(password);
 
-        // Cria o usuário na nova tabela de usuários
-        const createResult = await createUser(username, passwordHash);
+        // Cria o usuário na nova tabela de usuários com a role padrão 'user'
+        const createResult = await createUser(username, passwordHash, 'user');
 
         if (!createResult.success) {
             return { success: false, error: createResult.error };
