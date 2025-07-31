@@ -53,9 +53,10 @@ export default function DashboardPage() {
   };
   
   useEffect(() => {
-    if (!loading) {
+    if (!loading && user) {
        loadWorkspaces();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, loading]);
 
   useEffect(() => {

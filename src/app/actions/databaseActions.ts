@@ -193,26 +193,34 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
     const query = `
       INSERT INTO workspaces (id, name, nodes, connections, owner, updated_at)
       VALUES ($1, $2, $3, $4, $5, NOW())
-      ON CONFLICT (id) DO UPDATE
-      SET name = EXCLUDED.name,
-          nodes = EXCLUDED.nodes,
+      ON CONFLICT (owner, name) DO UPDATE
+      SET nodes = EXCLUDED.nodes,
           connections = EXCLUDED.connections,
-          owner = EXCLUDED.owner,
-          updated_at = NOW();
+          updated_at = NOW()
+      WHERE workspaces.id = $1;
     `;
-    await runQuery(query, [
+    const result = await runQuery(query, [
       workspaceData.id,
       workspaceData.name,
       JSON.stringify(workspaceData.nodes || []), 
       JSON.stringify(workspaceData.connections || []),
       workspaceData.owner,
     ]);
+     if (result.rowCount === 0) {
+        // This case can happen if the ON CONFLICT is on (owner, name) but the ID is different,
+        // which means the user is trying to rename a workspace to a name that already exists.
+        const checkExistingQuery = `SELECT id FROM workspaces WHERE owner = $1 AND name = $2`;
+        const existingResult = await runQuery(checkExistingQuery, [workspaceData.owner, workspaceData.name]);
+        if (existingResult.rows.length > 0 && existingResult.rows[0].id !== workspaceData.id) {
+            return { success: false, error: `Erro: O nome do fluxo '${workspaceData.name}' já existe. Por favor, escolha um nome único.` };
+        }
+    }
     return { success: true };
   } catch (error: any) {
     console.error(`[DB Actions] saveWorkspaceToDB Error:`, error);
      let errorMessage = `PG Error: ${error.message || 'Unknown DB error'} (Code: ${error.code || 'N/A'})`;
      if (error.constraint === 'workspaces_owner_name_key') {
-        errorMessage = `Erro: O nome do fluxo '${workspaceData.name}' já existe para este usuário. Por favor, use um nome único.`;
+        errorMessage = `Erro: O nome do fluxo '${workspaceData.name}' já existe. Por favor, escolha um nome único.`;
     }
     return { success: false, error: errorMessage };
   }
@@ -355,13 +363,20 @@ export async function loadSessionFromDB(sessionId: string): Promise<FlowSession 
 
 export async function deleteSessionFromDB(sessionId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    await runQuery('DELETE FROM flow_sessions WHERE id = $1', [sessionId]);
-    return { success: true };
+    const result = await runQuery('DELETE FROM flow_sessions WHERE session_id = $1', [sessionId]);
+     if (result.rowCount > 0) {
+        return { success: true };
+    } else {
+        // Isso pode acontecer se a sessão já foi deletada, o que não é um erro crítico.
+        console.warn(`[DB Actions] deleteSessionFromDB: Session ID ${sessionId} not found for deletion.`);
+        return { success: true }; // Retorna sucesso mesmo se não encontrou, a sessão não existe mais.
+    }
   } catch (error: any) {
     console.error(`[DB Actions] deleteSessionFromDB Error for ID ${sessionId}:`, error);
     return { success: false, error: error.message };
   }
 }
+
 
 export async function loadAllActiveSessionsFromDB(): Promise<FlowSession[]> {
   try {
@@ -392,6 +407,3 @@ export async function loadAllActiveSessionsFromDB(): Promise<FlowSession[]> {
         });
     }
 })();
-    
-
-    
