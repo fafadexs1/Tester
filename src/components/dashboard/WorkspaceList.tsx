@@ -26,12 +26,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface WorkspaceListProps {
   initialWorkspaces: WorkspaceData[];
+  onWorkspacesChange: () => void; // Callback para recarregar a lista
 }
 
-export default function WorkspaceList({ initialWorkspaces }: WorkspaceListProps) {
+export default function WorkspaceList({ initialWorkspaces, onWorkspacesChange }: WorkspaceListProps) {
   const [workspaces, setWorkspaces] = useState<WorkspaceData[]>(initialWorkspaces);
   const router = useRouter();
   const { toast } = useToast();
+
+  React.useEffect(() => {
+    setWorkspaces(initialWorkspaces);
+  }, [initialWorkspaces]);
 
   const handleOpenWorkspace = (workspaceId: string) => {
     router.push(`/flow/${workspaceId}`);
@@ -41,6 +46,7 @@ export default function WorkspaceList({ initialWorkspaces }: WorkspaceListProps)
     const result = await deleteWorkspaceAction(workspaceId);
     if (result.success) {
       setWorkspaces(prev => prev.filter(ws => ws.id !== workspaceId));
+      onWorkspacesChange(); // Notifica o pai para recarregar
       toast({
         title: "Fluxo Excluído",
         description: "O fluxo foi excluído com sucesso.",
@@ -148,12 +154,7 @@ export default function WorkspaceList({ initialWorkspaces }: WorkspaceListProps)
               <BotMessageSquare className="w-16 h-16 text-muted-foreground/70 mb-4"/>
               <h3 className="text-xl font-semibold">Nenhum fluxo encontrado</h3>
               <p className="text-muted-foreground mt-2 mb-6 max-w-sm">Parece que você ainda não criou nenhum fluxo. Que tal começar agora?</p>
-              <Link href="/flow/new">
-                <Button className="flex items-center gap-2">
-                    <PlusCircle className="h-5 w-5" />
-                    Criar seu Primeiro Fluxo
-                </Button>
-              </Link>
+              {/* O botão de criar foi movido para o componente pai (DashboardPage) para controlar o diálogo */}
           </div>
         )}
       </AnimatePresence>

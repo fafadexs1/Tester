@@ -19,8 +19,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import { 
     saveWorkspaceToDB,
-    loadWorkspaceFromDB,
-    loadWorkspacesForOwnerFromDB
+    loadWorkspaceFromDB
 } from '@/app/actions/databaseActions';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
@@ -63,7 +62,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const router = useRouter();
   
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceData | null>(initialWorkspace);
-  const [isLoading, setIsLoading] = useState(!initialWorkspace && workspaceId !== 'new'); 
+  const [isLoading, setIsLoading] = useState(!initialWorkspace); 
   
   const [drawingLine, setDrawingLine] = useState<DrawingLineData | null>(null);
   const [highlightedConnectionId, setHighlightedConnectionId] = useState<string | null>(null);
@@ -156,7 +155,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   }, [hasMounted]);
   
   const loadWorkspace = useCallback(async () => {
-    if (!user || !workspaceId || workspaceId === 'new') return;
+    if (!user || !workspaceId) return;
     setIsLoading(true);
     console.log(`[FlowBuilderClient] Loading workspace ${workspaceId} from DB...`);
     
@@ -176,45 +175,12 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     setIsLoading(false);
   }, [user, workspaceId, toast, router]);
 
-  const createNewWorkspace = useCallback(async () => {
-    if (!user) return;
-    setIsLoading(true);
-    
-    const existingWorkspaces = await loadWorkspacesForOwnerFromDB(user.username);
-    const existingNames = existingWorkspaces.map(ws => ws.name);
-    
-    let newName = 'Meu Novo Fluxo';
-    let counter = 1;
-    while (existingNames.includes(newName)) {
-        newName = `Meu Novo Fluxo (${counter})`;
-        counter++;
-    }
-
-    const newId = uuidv4();
-    const newWorkspace: WorkspaceData = {
-        id: newId,
-        name: newName,
-        nodes: [],
-        connections: [],
-        owner: user.username
-    };
-    const saveResult = await saveWorkspaceToDB(newWorkspace);
-    if(saveResult.success) {
-        router.replace(`/flow/${newId}`, { scroll: false });
-        setActiveWorkspace(newWorkspace);
-    } else {
-         toast({ title: "Erro", description: `Não foi possível criar o novo fluxo: ${saveResult.error}`, variant: "destructive" });
-         router.push('/');
-    }
-    setIsLoading(false);
-  }, [user, toast, router]);
-
 
   useEffect(() => {
-    if (workspaceId === 'new' && hasMounted) {
-        createNewWorkspace();
+    if (workspaceId && hasMounted) {
+      loadWorkspace();
     }
-  }, [workspaceId, hasMounted, createNewWorkspace]);
+  }, [workspaceId, hasMounted, loadWorkspace]);
 
   const handleSaveWorkspace = useCallback(async () => {
     if (!activeWorkspace) {
@@ -590,7 +556,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   }, [updateActiveWorkspace]);
 
 
-  if (isLoading || (workspaceId === 'new' && !activeWorkspace)) {
+  if (isLoading) {
     return (
         <div className="flex h-screen w-full items-center justify-center bg-muted/20">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />

@@ -4,6 +4,8 @@
 import { Pool, type QueryResult } from 'pg';
 import dotenv from 'dotenv';
 import type { WorkspaceData, FlowSession, NodeData, Connection } from '@/lib/types';
+import { v4 as uuidv4 } from 'uuid';
+import { redirect } from 'next/navigation';
 
 dotenv.config();
 
@@ -55,6 +57,7 @@ async function initializeDatabaseSchema(): Promise<void> {
       );
     `);
 
+    // Adicionado para suportar o tempo de expiração da sessão
     await client.query(`
       CREATE TABLE IF NOT EXISTS flow_sessions (
         session_id TEXT PRIMARY KEY,
@@ -69,6 +72,26 @@ async function initializeDatabaseSchema(): Promise<void> {
       );
     `);
     
+    // Verificação de migração: Adiciona a coluna se não existir.
+    const checkColumnQuery = `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'flow_sessions'
+        AND column_name = 'session_timeout_seconds';
+    `;
+    const { rows } = await client.query(checkColumnQuery);
+    if (rows.length === 0) {
+      console.log("[DB Actions] Migration needed: Adding 'session_timeout_seconds' column to 'flow_sessions' table.");
+      await client.query(`
+        ALTER TABLE flow_sessions
+        ADD COLUMN session_timeout_seconds INTEGER NOT NULL DEFAULT 0;
+      `);
+      console.log("[DB Actions] Migration completed successfully.");
+    } else {
+        // console.log("[DB Actions] Migration check: 'session_timeout_seconds' column already exists. No action needed.");
+    }
+    
     await client.query('COMMIT');
     console.log('[DB Actions] Schema initialization check complete.');
   } catch (error) {
@@ -79,6 +102,7 @@ async function initializeDatabaseSchema(): Promise<void> {
     client.release();
   }
 }
+
 
 async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResult<T>> {
     const poolInstance = getDbPool();
@@ -117,6 +141,50 @@ async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResu
 
 
 // --- Workspace Actions ---
+export async function createWorkspaceAction(
+    name: string,
+    owner: string
+): Promise<{ success: boolean; workspaceId?: string; error?: string }> {
+    try {
+        if (!name || !owner) {
+            return { success: false, error: 'Nome do fluxo e proprietário são obrigatórios.' };
+        }
+
+        const newId = uuidv4();
+        const defaultStartNode: NodeData = {
+          id: uuidv4(),
+          type: 'start',
+          title: 'Início do Fluxo',
+          x: 100,
+          y: 150,
+          triggers: [
+              { id: uuidv4(), name: 'Manual', type: 'manual', enabled: true },
+              { id: uuidv4(), name: 'Webhook', type: 'webhook', enabled: false, variableMappings: [], sessionTimeoutSeconds: 0 }
+          ]
+        };
+
+        const newWorkspace: WorkspaceData = {
+            id: newId,
+            name: name,
+            nodes: [defaultStartNode],
+            connections: [],
+            owner: owner,
+        };
+
+        const saveResult = await saveWorkspaceToDB(newWorkspace);
+
+        if (!saveResult.success) {
+            return { success: false, error: saveResult.error };
+        }
+        
+        return { success: true, workspaceId: newId };
+    } catch (error: any) {
+        console.error('[DB Actions] createWorkspaceAction Error:', error);
+        return { success: false, error: `Erro do servidor: ${error.message}` };
+    }
+}
+
+
 export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{ success: boolean; error?: string }> {
   try {
     if (!workspaceData.owner) {
@@ -144,7 +212,7 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
     console.error(`[DB Actions] saveWorkspaceToDB Error:`, error);
      let errorMessage = `PG Error: ${error.message || 'Unknown DB error'} (Code: ${error.code || 'N/A'})`;
      if (error.constraint === 'workspaces_owner_name_key') {
-        errorMessage = `Error: Workspace name '${workspaceData.name}' already exists for this user. Please use a unique name.`;
+        errorMessage = `Erro: O nome do fluxo '${workspaceData.name}' já existe para este usuário. Por favor, use um nome único.`;
     }
     return { success: false, error: errorMessage };
   }
@@ -287,7 +355,7 @@ export async function loadSessionFromDB(sessionId: string): Promise<FlowSession 
 
 export async function deleteSessionFromDB(sessionId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    await runQuery('DELETE FROM flow_sessions WHERE session_id = $1', [sessionId]);
+    await runQuery('DELETE FROM flow_sessions WHERE id = $1', [sessionId]);
     return { success: true };
   } catch (error: any) {
     console.error(`[DB Actions] deleteSessionFromDB Error for ID ${sessionId}:`, error);
