@@ -417,18 +417,38 @@ export async function deleteSessionFromDB(sessionId: string): Promise<{ success:
 }
 
 
-export async function loadAllActiveSessionsFromDB(): Promise<FlowSession[]> {
+export async function loadAllActiveSessionsFromDB(owner: string): Promise<FlowSession[]> {
   try {
-    const result = await runQuery<FlowSession>(
-      'SELECT session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, session_timeout_seconds, created_at, last_interaction_at FROM flow_sessions ORDER BY last_interaction_at DESC'
-    );
+    if (!owner) {
+      console.warn('[DB Actions] loadAllActiveSessionsFromDB called without an owner. Returning empty array.');
+      return [];
+    }
+
+    const query = `
+      SELECT 
+        fs.session_id, 
+        fs.workspace_id, 
+        fs.current_node_id, 
+        fs.flow_variables, 
+        fs.awaiting_input_type, 
+        fs.awaiting_input_details, 
+        fs.session_timeout_seconds, 
+        fs.created_at, 
+        fs.last_interaction_at
+      FROM flow_sessions fs
+      JOIN workspaces ws ON fs.workspace_id = ws.id
+      WHERE ws.owner = $1
+      ORDER BY fs.last_interaction_at DESC;
+    `;
+    const result = await runQuery<FlowSession>(query, [owner]);
+
     return result.rows.map(row => ({
       ...row,
       flow_variables: row.flow_variables || {},
       awaiting_input_details: row.awaiting_input_details || null,
     }));
   } catch (error: any) {
-    console.error('[DB Actions] loadAllActiveSessionsFromDB Error:', error);
+    console.error(`[DB Actions] loadAllActiveSessionsFromDB Error for owner ${owner}:`, error);
     return [];
   }
 }
