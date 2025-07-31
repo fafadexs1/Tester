@@ -118,10 +118,10 @@ const TopBar: React.FC<TopBarProps> = ({
   }, [toast]);
 
   useEffect(() => {
-    if (isGlobalSettingsOpen || isSettingsDialogOpen) {
+    if (isGlobalSettingsOpen) {
       fetchEvolutionInstances();
     }
-  }, [isGlobalSettingsOpen, isSettingsDialogOpen, fetchEvolutionInstances]);
+  }, [isGlobalSettingsOpen, fetchEvolutionInstances]);
 
   const handleEditInstance = (instance: EvolutionInstance) => {
     setEditingInstance(instance);
@@ -424,7 +424,7 @@ const TopBar: React.FC<TopBarProps> = ({
                     <div>
                         <Label htmlFor="evolution_instance_id">Instância da API Evolution</Label>
                         <Select
-                          value={activeWorkspace?.evolution_instance_id || ''}
+                          value={activeWorkspace?.evolution_instance_id || 'none'}
                           onValueChange={(value) => onUpdateWorkspace({ evolution_instance_id: value === 'none' ? undefined : value })}
                         >
                           <SelectTrigger id="evolution_instance_id">
@@ -443,7 +443,7 @@ const TopBar: React.FC<TopBarProps> = ({
                         </Select>
                          <p className="text-xs text-muted-foreground mt-1.5">
                           Precisa adicionar ou alterar uma instância?
-                          <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => setIsGlobalSettingsOpen(true)}>
+                          <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => { setIsSettingsDialogOpen(false); setIsGlobalSettingsOpen(true); }}>
                             Gerenciar Instâncias
                           </Button>
                         </p>
@@ -550,7 +550,7 @@ const TopBar: React.FC<TopBarProps> = ({
                 </div>
             </div>
             <DialogFooter>
-                <DialogClose asChild><Button type="button" variant="secondary">Fechar</Button></DialogClose>
+                <DialogClose asChild><Button type="button" variant="secondary" onClick={() => { if (!editingInstance) { setIsGlobalSettingsOpen(false); setIsSettingsDialogOpen(true); } }}>Fechar</Button></DialogClose>
             </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -658,3 +658,4 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
+
