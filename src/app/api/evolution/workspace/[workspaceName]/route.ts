@@ -372,16 +372,8 @@ async function storeRequestDetails(
       }
     }
 
-    const remoteJidPaths = [
-      'data.key.remoteJid', 'key.remoteJid',
-    ];
-    for (const path of remoteJidPaths) {
-      const jid = getProperty(actualPayloadToExtractFrom, path);
-      if (typeof jid === 'string' && jid.includes('@s.whatsapp.net')) {
-        webhookRemoteJid = jid.trim();
-        break;
-      }
-    }
+    // Corrigido para pegar o remoteJid do caminho correto
+    webhookRemoteJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid');
   }
 
   const logEntry: Record<string, any> = {
@@ -429,25 +421,23 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
     }
     
     loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, decodedWorkspaceName);
-
-    let actualEventPayload = parsedBody;
-    if (Array.isArray(parsedBody) && parsedBody.length === 1 && typeof parsedBody[0] === 'object') {
-      actualEventPayload = parsedBody[0];
-    }
     
-    const eventType = getProperty(actualEventPayload, 'event') as string;
-    const instanceName = getProperty(actualEventPayload, 'instance') as string;
+    const eventType = getProperty(parsedBody, 'event') as string;
+    const instanceName = getProperty(parsedBody, 'instance') as string;
     const senderJid = loggedEntry.webhook_remote_jid; 
     const receivedMessageText = loggedEntry.extractedMessage;
-    const evolutionApiBaseUrl = getProperty(actualEventPayload, 'server_url') as string;
-    const evolutionApiKey = getProperty(actualEventPayload, 'apikey') as string;
+    const evolutionApiBaseUrl = getProperty(parsedBody, 'server_url') as string;
+    const evolutionApiKey = getProperty(parsedBody, 'apikey') as string;
 
     if (eventType !== 'messages.upsert' || !senderJid || !receivedMessageText || !instanceName || !evolutionApiBaseUrl) {
       let reason = "Not a 'messages.upsert' event or missing critical data.";
+      if (getProperty(parsedBody, 'data.key.fromMe') === true) {
+        reason = "Ignoring message because it is fromMe (sent by the bot itself).";
+      }
       console.log(`[API Evolution WS Route] Webhook for workspace "${decodedWorkspaceName}" logged, but no flow execution triggered. Reason: ${reason}.`);
       return NextResponse.json({ message: `Webhook logged, but no flow execution: ${reason}.` }, { status: 200 });
     }
-
+    
     const workspace = await loadWorkspaceByNameFromDB(decodedWorkspaceName);
 
     if (!workspace || !workspace.nodes || workspace.nodes.length === 0) {
@@ -462,20 +452,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
     let startExecution = false;
     
     if (session) {
-      const now = new Date().getTime();
-      const lastInteraction = new Date(session.last_interaction_at || 0).getTime();
-      const timeoutSeconds = session.session_timeout_seconds || 0;
-      const isAwaitingInput = !!session.awaiting_input_type;
-
-      if (isAwaitingInput && timeoutSeconds > 0 && (now - lastInteraction > timeoutSeconds * 1000)) {
-        console.log(`[API Evolution WS Route - ${sessionId}] Session timed out while awaiting input. Deleting and creating a new one.`);
-        await deleteSessionFromDB(sessionId);
-        session = null;
-      }
-    }
-
-
-    if (session) {
+      // Sessão existente, continuar o fluxo a partir da entrada do usuário
       console.log(`[API Evolution WS Route - ${sessionId}] Existing session found.`);
       session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
 
@@ -520,14 +497,12 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
                 startExecution = true;
               }
           } else {
-              // Nó que estava aguardando não foi encontrado, um erro no fluxo. Reinicia.
               console.warn(`[API Evolution WS Route - ${sessionId}] Awaiting node ${originalNodeId} not found, restarting flow.`);
               session = null; 
           }
       } else {
-         // Sessão existe, mas não estava esperando entrada. Não reinicia, apenas atualiza a variável da mensagem.
-         console.log(`[API Evolution WS Route - ${sessionId}] Session exists but was not awaiting input. Flow remains paused. Message stored.`);
-         startExecution = false; // Não executa nada, a sessão está salva.
+         console.log(`[API Evolution WS Route - ${sessionId}] Session exists but was not awaiting input. Checking for keyword triggers to restart.`);
+         session = null; // Força a verificação de um novo fluxo por palavra-chave.
       }
     }
     
@@ -538,17 +513,57 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
         return NextResponse.json({ error: "Flow has no start node." }, { status: 500 });
       }
       
-      const firstTrigger = startNode.triggers?.[0];
-      const initialNodeId = findNextNodeId(startNode.id, firstTrigger?.name || 'default', workspace.connections || []);
+      // Lógica de roteamento por palavra-chave
+      let triggerNameToUse: string | null = null;
+      let webhookTrigger: StartNodeTrigger | undefined = undefined;
+
+      if (startNode.triggers && startNode.triggers.length > 0) {
+        // Encontrar gatilho por palavra-chave
+        for (const trigger of startNode.triggers) {
+            if (trigger.enabled && trigger.keyword && receivedMessageText?.toLowerCase() === trigger.keyword.toLowerCase()) {
+                triggerNameToUse = trigger.name;
+                break;
+            }
+        }
+        
+        // Se nenhuma palavra-chave corresponder, usar o gatilho de webhook padrão
+        if (!triggerNameToUse) {
+            webhookTrigger = startNode.triggers.find(t => t.type === 'webhook' && t.enabled);
+            if (webhookTrigger) {
+                triggerNameToUse = webhookTrigger.name;
+            }
+        }
+      }
+      
+      // Se ainda não encontrou um gatilho, usa 'default' como fallback
+      if (!triggerNameToUse) {
+        triggerNameToUse = 'default';
+      }
+
+      const initialNodeId = findNextNodeId(startNode.id, triggerNameToUse, workspace.connections || []);
 
       if(!initialNodeId){
-          return NextResponse.json({ error: "Start node is not connected." }, { status: 500 });
+          console.error(`[API Evolution WS Route] Start node trigger '${triggerNameToUse}' is not connected.`);
+          return NextResponse.json({ error: `Start node trigger '${triggerNameToUse}' is not connected.` }, { status: 500 });
       }
       
       const initialVars: Record<string, any> = {
         whatsapp_sender_jid: senderJid.split('@')[0],
         mensagem_whatsapp: receivedMessageText || '',
+        webhook_payload: parsedBody
       };
+
+      // Mapeamento de variáveis do gatilho de webhook, se aplicável
+      if (webhookTrigger && webhookTrigger.variableMappings) {
+        webhookTrigger.variableMappings.forEach(mapping => {
+          if (mapping.jsonPath && mapping.flowVariable) {
+            const value = getProperty(parsedBody, mapping.jsonPath);
+            if (value !== undefined) {
+              setProperty(initialVars, mapping.flowVariable, value);
+            }
+          }
+        });
+      }
 
       session = {
         session_id: sessionId,
@@ -557,7 +572,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
         flow_variables: initialVars,
         awaiting_input_type: null,
         awaiting_input_details: null,
-        session_timeout_seconds: firstTrigger?.sessionTimeoutSeconds || 0,
+        session_timeout_seconds: webhookTrigger?.sessionTimeoutSeconds || 0,
       };
       startExecution = true;
     }

@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, Trash, MousePointerClick, History, AlertCircle, FileText
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -102,12 +102,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
         if (!hasManual || !hasWebhook) {
             const defaultTriggers: StartNodeTrigger[] = [
-                { id: uuidv4(), name: 'Manual', type: 'manual', enabled: true },
+                { id: uuidv4(), name: 'Manual', type: 'manual', enabled: true, keyword: '' },
                 { 
                     id: uuidv4(), 
                     name: 'Webhook', 
                     type: 'webhook', 
-                    enabled: false, 
+                    enabled: false,
+                    keyword: '', // Webhook padrão não tem palavra-chave
                     variableMappings: [], 
                     sessionTimeoutSeconds: 0 
                 },
@@ -277,9 +278,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     onDeleteNode(node.id);
   }, [node.id, onDeleteNode]);
   
-  const handleStartTriggerChange = (triggerType: 'manual' | 'webhook', field: keyof StartNodeTrigger, value: any) => {
+  const handleStartTriggerChange = (triggerId: string, field: keyof StartNodeTrigger, value: any) => {
     const updatedTriggers = (node.triggers || []).map(t => 
-      t.type === triggerType ? { ...t, [field]: value } : t
+      t.id === triggerId ? { ...t, [field]: value } : t
     );
     onUpdate(node.id, { triggers: updatedTriggers });
   };
@@ -619,7 +620,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       'supabase-create-row': <Rows {...iconProps} className="text-green-500" />,
       'supabase-read-row': <Search {...iconProps} className="text-blue-500" />,
       'supabase-update-row': <Edit3 {...iconProps} className="text-yellow-500" />,
-      'supabase-delete-row': <Trash {...iconProps} className="text-red-500" />,
+      'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />,
       'end-flow': <StopCircle {...iconProps} className="text-destructive" />,
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
@@ -737,60 +738,48 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const renderNodeContent = (): React.ReactNode => {
     switch (node.type) {
       case 'start': {
-        const manualTrigger = (node.triggers || []).find(t => t.type === 'manual');
-        const webhookTrigger = (node.triggers || []).find(t => t.type === 'webhook');
         const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/workspace/${encodeURIComponent((activeWorkspace?.name || 'workspace').replace(/\s+/g, '_'))}`;
 
         return (
           <div className="space-y-3" data-no-drag="true">
-            <Tabs defaultValue="manual" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="manual"><MousePointerClick className="w-4 h-4 mr-1.5"/>Manual</TabsTrigger>
-                <TabsTrigger value="webhook"><Webhook className="w-4 h-4 mr-1.5"/>Webhook</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="manual" className="mt-4">
-                {manualTrigger ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <Switch 
-                        id={`manual-enabled-${manualTrigger.id}`} 
-                        checked={manualTrigger.enabled} 
-                        onCheckedChange={(checked) => handleStartTriggerChange('manual', 'enabled', checked)}
-                      />
-                      <Label htmlFor={`manual-enabled-${manualTrigger.id}`} className="text-sm font-medium">Ativar Gatilho Manual</Label>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Permite iniciar o fluxo manualmente através do painel de teste.
-                    </p>
+            <p className="text-xs text-muted-foreground">Configure os gatilhos que iniciam este fluxo. A ordem aqui define a prioridade de verificação.</p>
+            {(node.triggers || []).map(trigger => (
+              <div key={trigger.id} className="p-3 border rounded-md bg-muted/30">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id={`trigger-enabled-${trigger.id}`}
+                      checked={trigger.enabled}
+                      onCheckedChange={(checked) => handleStartTriggerChange(trigger.id, 'enabled', checked)}
+                    />
+                    <Label htmlFor={`trigger-enabled-${trigger.id}`} className="font-medium">{trigger.name}</Label>
+                    {trigger.type === 'webhook' && <Webhook className="w-4 h-4 text-muted-foreground" />}
+                    {trigger.type === 'manual' && <MousePointerClick className="w-4 h-4 text-muted-foreground" />}
                   </div>
-                ) : (
-                  <div className="text-xs text-muted-foreground italic">
-                    Gatilho manual não encontrado na estrutura do nó. Isso não deveria acontecer.
-                  </div>
-                )}
-              </TabsContent>
-              
-              <TabsContent value="webhook" className="mt-4">
-                {webhookTrigger ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <Switch 
-                        id={`webhook-enabled-${webhookTrigger.id}`} 
-                        checked={webhookTrigger.enabled}
-                        onCheckedChange={(checked) => handleStartTriggerChange('webhook', 'enabled', checked)}
-                      />
-                      <Label htmlFor={`webhook-enabled-${webhookTrigger.id}`} className="text-sm font-medium">Ativar Gatilho Webhook</Label>
-                    </div>
+                </div>
 
-                    <div className={cn("space-y-4", !webhookTrigger.enabled && "opacity-50 pointer-events-none")}>
-                       <div>
-                        <Label htmlFor={`${node.id}-${webhookTrigger.id}-timeout`} className="text-xs font-medium">Tempo limite da sessão (segundos)</Label>
+                <div className={cn("space-y-3", !trigger.enabled && "opacity-50 pointer-events-none")}>
+                   <div>
+                    <Label htmlFor={`trigger-keyword-${trigger.id}`} className="text-xs font-medium">Palavra-chave de Ativação (opcional)</Label>
+                    <Input
+                      id={`trigger-keyword-${trigger.id}`}
+                      value={trigger.keyword || ''}
+                      onChange={(e) => handleStartTriggerChange(trigger.id, 'keyword', e.target.value)}
+                      placeholder="Ex: 'ajuda', 'cardapio'"
+                      className="h-8 text-xs mt-1"
+                    />
+                     <p className="text-xs text-muted-foreground mt-1">Se preenchido, este caminho só será ativado se a mensagem do usuário corresponder exatamente.</p>
+                  </div>
+                  
+                  {trigger.type === 'webhook' && (
+                    <div className="space-y-3 pt-2 border-t">
+                      <div>
+                        <Label htmlFor={`${node.id}-${trigger.id}-timeout`} className="text-xs font-medium">Tempo limite da sessão (segundos)</Label>
                         <Input
-                          id={`${node.id}-${webhookTrigger.id}-timeout`}
+                          id={`${node.id}-${trigger.id}-timeout`}
                           type="number"
-                          value={webhookTrigger.sessionTimeoutSeconds || 0}
-                          onChange={(e) => handleStartTriggerChange('webhook', 'sessionTimeoutSeconds', parseInt(e.target.value, 10) || 0)}
+                          value={trigger.sessionTimeoutSeconds || 0}
+                          onChange={(e) => handleStartTriggerChange(trigger.id, 'sessionTimeoutSeconds', parseInt(e.target.value, 10) || 0)}
                           placeholder="0 (sem limite)"
                           className="h-8 text-xs mt-1"
                         />
@@ -800,80 +789,38 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                       <div>
                         <Label htmlFor="webhook-url" className="text-xs font-medium">URL do Webhook (POST)</Label>
                         <div className="flex items-center space-x-1.5 mt-1">
-                          <Input
-                            id="webhook-url"
-                            type="text"
-                            readOnly
-                            value={webhookUrl}
-                            className="bg-input/50 h-7 text-xs"
-                          />
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => {
-                              navigator.clipboard.writeText(webhookUrl)
-                                .then(() => toast({ title: "URL Copiada!", description: "URL do Webhook copiada."}))
-                                .catch(() => toast({ title: "Erro", description: "Não foi possível copiar a URL.", variant: "destructive"}));
-                            }}
-                            title="Copiar URL"
-                          >
+                          <Input id="webhook-url" type="text" readOnly value={webhookUrl} className="bg-input/50 h-7 text-xs"/>
+                          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => { navigator.clipboard.writeText(webhookUrl).then(() => toast({ title: "URL Copiada!" })).catch(() => toast({ title: "Erro ao copiar", variant:"destructive"})); }} title="Copiar URL">
                             <Copy className="w-3 h-3"/>
                           </Button>
                         </div>
-                         <Button
-                            variant="link"
-                            size="sm"
-                            className="text-xs h-auto p-0 mt-1.5 text-accent"
-                            onClick={handleOpenWebhookHistory}
-                          >
-                            <History className="w-3.5 h-3.5 mr-1" />
-                            Ver Histórico de Webhooks
+                         <Button variant="link" size="sm" className="text-xs h-auto p-0 mt-1.5 text-accent" onClick={handleOpenWebhookHistory}>
+                            <History className="w-3.5 h-3.5 mr-1" /> Ver Histórico de Webhooks
                           </Button>
                       </div>
-
+                      
                       <div className="pt-2">
                         <Label className="text-xs font-medium">Mapeamento de Variáveis do Webhook</Label>
-                        <p className="text-xs text-muted-foreground mb-2">Extraia dados do JSON do webhook para variáveis do fluxo.</p>
-                        <div className="space-y-2">
-                          {(webhookTrigger.variableMappings || []).map(mapping => (
+                        <div className="space-y-2 mt-1">
+                          {(trigger.variableMappings || []).map(mapping => (
                             <div key={mapping.id} className="flex items-center space-x-2">
-                              <Input
-                                placeholder="Caminho (ex: data.message.conversation)"
-                                value={mapping.jsonPath}
-                                onChange={(e) => handleVariableMappingChange(webhookTrigger.id, mapping.id, 'jsonPath', e.target.value)}
-                                className="h-7 text-xs flex-1"
-                              />
-                              <Input
-                                placeholder="Variável (ex: mensagem_usuario)"
-                                value={mapping.flowVariable}
-                                onChange={(e) => handleVariableMappingChange(webhookTrigger.id, mapping.id, 'flowVariable', e.target.value)}
-                                className="h-7 text-xs flex-1"
-                              />
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleRemoveVariableMapping(webhookTrigger.id, mapping.id)}
-                                className="text-destructive hover:text-destructive/80 w-6 h-6"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
+                              <Input placeholder="Caminho (ex: data.message.conversation)" value={mapping.jsonPath} onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', e.target.value)} className="h-7 text-xs"/>
+                              <Input placeholder="Variável (ex: mensagem_usuario)" value={mapping.flowVariable} onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs"/>
+                              <Button variant="ghost" size="icon" onClick={() => handleRemoveVariableMapping(trigger.id, mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6"><Trash2 className="w-3.5 h-3.5" /></Button>
                             </div>
                           ))}
                         </div>
-                        <Button onClick={() => handleAddVariableMapping(webhookTrigger.id)} variant="outline" size="sm" className="mt-2 text-xs h-7">
-                           <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Mapeamento
+                        <Button onClick={() => handleAddVariableMapping(trigger.id)} variant="outline" size="sm" className="mt-2 text-xs h-7">
+                           <PlusCircle className="w-3 h-3 mr-1" /> Adicionar
                         </Button>
                       </div>
+
                     </div>
-                  </div>
-                ) : (
-                    <div className="text-xs text-muted-foreground italic">
-                      Gatilho de webhook não encontrado na estrutura do nó. Isso não deveria acontecer.
-                    </div>
-                )}
-              </TabsContent>
-            </Tabs>
+                  )}
+
+                </div>
+              </div>
+            ))}
           </div>
         );
       }
@@ -1878,5 +1825,3 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
-    
