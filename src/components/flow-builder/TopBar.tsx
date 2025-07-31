@@ -131,10 +131,12 @@ const TopBar: React.FC<TopBarProps> = ({
   const [nexusFlowAppBaseUrl, setNexusFlowAppBaseUrl] = useState('');
   
   const evolutionWebhookUrlForCurrentFlow = useMemo(() => {
-    if (nexusFlowAppBaseUrl && workspaceName) {
-      return `${nexusFlowAppBaseUrl}/api/evolution/workspace/${encodeURIComponent(workspaceName)}`;
+    const baseUrl = nexusFlowAppBaseUrl || (typeof window !== 'undefined' ? window.location.origin : '');
+    const safeWorkspaceName = (workspaceName || '[NOME_DO_FLUXO]').replace(/\s+/g, '_');
+    if (baseUrl) {
+      return `${baseUrl}/api/evolution/workspace/${safeWorkspaceName}`;
     }
-    return `${nexusFlowAppBaseUrl}/api/evolution/workspace/[NOME_DO_FLUXO]`;
+    return `[URL_BASE]/api/evolution/workspace/${safeWorkspaceName}`;
   }, [nexusFlowAppBaseUrl, workspaceName]);
 
 
@@ -830,5 +832,3 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
-
-    

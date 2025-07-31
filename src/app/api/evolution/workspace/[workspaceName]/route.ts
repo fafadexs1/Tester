@@ -371,8 +371,7 @@ async function storeRequestDetails(
         break;
       }
     }
-
-    // Corrigido para pegar o remoteJid do caminho correto
+    
     webhookRemoteJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid');
   }
 
@@ -400,7 +399,7 @@ async function storeRequestDetails(
 
 
 export async function POST(request: NextRequest, { params }: { params: { workspaceName: string } }) {
-  const decodedWorkspaceName = decodeURIComponent(params.workspaceName);
+  const decodedWorkspaceName = decodeURIComponent(params.workspaceName.replace(/_/g, ' '));
   console.log(`[API Evolution WS Route] POST request received for workspace: "${decodedWorkspaceName}"`);
 
   let rawBody: string | null = null;
@@ -592,7 +591,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
 }
 
 export async function GET(request: NextRequest, { params }: { params: { workspaceName: string } }) {
-  const decodedWorkspaceName = decodeURIComponent(params.workspaceName);
+  const decodedWorkspaceName = decodeURIComponent(params.workspaceName.replace(/_/g, ' '));
   try {
     const workspace = await loadWorkspaceByNameFromDB(decodedWorkspaceName);
     if (workspace) {
