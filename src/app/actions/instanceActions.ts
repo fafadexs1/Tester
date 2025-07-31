@@ -24,7 +24,7 @@ function getDbPool(): Pool {
 }
 
 const InstanceSchema = z.object({
-    id: z.string().uuid().optional(),
+    id: z.string().uuid().optional().or(z.literal('')),
     name: z.string().min(1, "O nome não pode estar vazio."),
     baseUrl: z.string().url("URL inválida."),
     apiKey: z.string().optional(),
@@ -59,12 +59,12 @@ export async function saveEvolutionInstanceAction(
     }
 
     const rawData = {
-        id: formData.get('id') as string || undefined,
+        id: formData.get('id') as string | undefined,
         name: formData.get('name') as string,
         baseUrl: formData.get('baseUrl') as string,
         apiKey: formData.get('apiKey') as string,
     };
-
+    
     const validation = InstanceSchema.safeParse(rawData);
 
     if (!validation.success) {
@@ -83,14 +83,14 @@ export async function saveEvolutionInstanceAction(
                  SET name = $1, base_url = $2, api_key = $3, updated_at = NOW() 
                  WHERE id = $4 AND user_id = $5 
                  RETURNING id, name, base_url, api_key`,
-                [name, baseUrl, apiKey, id, user.id]
+                [name, baseUrl, apiKey || '', id, user.id]
             );
         } else { // Create
             result = await poolInstance.query<EvolutionInstance>(
                 `INSERT INTO evolution_instances (user_id, name, base_url, api_key) 
                  VALUES ($1, $2, $3, $4) 
                  RETURNING id, name, base_url, api_key`,
-                [user.id, name, baseUrl, apiKey]
+                [user.id, name, baseUrl, apiKey || '']
             );
         }
 
