@@ -29,7 +29,7 @@ export async function getEvolutionInstancesForUser(): Promise<{ data?: Evolution
         const instances = result.rows.map(row => ({
             id: row.id,
             name: row.name,
-            baseUrl: (row as any).baseurl || (row as any).baseUrl, // Handle potential case-insensitivity from DB driver
+            baseUrl: (row as any).baseUrl || (row as any).baseurl, // Handle potential case-insensitivity from DB driver
             apiKey: row.api_key,
             status: 'unconfigured' // Default status
         }));
