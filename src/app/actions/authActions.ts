@@ -24,34 +24,18 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
   
   try {
     // Busca o usuário no novo banco de dados de usuários
-    let dbUser = await findUserByUsername(username);
+    const dbUser = await findUserByUsername(username);
 
+    // Se o usuário não for encontrado no banco de dados, o login falha.
     if (!dbUser) {
-        // Lógica de Migração: Se o usuário não existe na tabela, mas o nome de usuário é "admin" ou outro nome de desenvolvedor conhecido
-        // (neste caso, vamos assumir que o primeiro usuário a logar após a migração é o desenvolvedor),
-        // nós o criamos no banco de dados.
-        // **Esta é uma lógica de migração simplificada.**
-        console.log(`[authActions.ts] Usuário '${username}' não encontrado. Tentando migração...`);
-        const passwordHash = simpleHash(password);
-        // Cria o usuário com a role 'desenvolvedor'
-        const createResult = await createUser(username, passwordHash, 'desenvolvedor');
-        if (createResult.success) {
-            console.log(`[authActions.ts] Usuário '${username}' migrado com sucesso para a tabela de usuários como desenvolvedor.`);
-            dbUser = await findUserByUsername(username);
-        } else {
-             // Se mesmo a criação falhar (ex: outro erro de DB), retorne o erro.
-             return { success: false, error: "Usuário ou senha inválidos." };
-        }
-    }
-
-    if (!dbUser) {
-        // Se após a tentativa de migração, o usuário ainda não for encontrado, o login falha.
+        console.log(`[authActions.ts] loginAction: Usuário '${username}' não encontrado.`);
         return { success: false, error: "Usuário ou senha inválidos." };
     }
     
-    // Futuramente, a verificação de senha usará o hash real.
+    // A verificação de senha real deve ser feita com uma biblioteca como bcrypt no futuro.
     // const passwordMatches = await verifyPassword(password, dbUser.password_hash);
     // if (!passwordMatches) {
+    //     console.log(`[authActions.ts] loginAction: Senha inválida para o usuário '${username}'.`);
     //     return { success: false, error: "Usuário ou senha inválidos." };
     // }
 
