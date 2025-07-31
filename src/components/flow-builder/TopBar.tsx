@@ -109,19 +109,63 @@ const TopBar: React.FC<TopBarProps> = ({
       const response = await fetch('/api/instances/evolution');
       if (!response.ok) throw new Error('Falha ao buscar instâncias.');
       const data = await response.json();
-      setEvolutionInstances(data.map((d: any) => ({ ...d, status: 'unconfigured' })));
+      setEvolutionInstances(data);
+      return data;
     } catch (error: any) {
       toast({ title: "Erro ao Carregar Instâncias", description: error.message, variant: "destructive" });
+      setEvolutionInstances([]);
+      return [];
     } finally {
       setIsLoadingInstances(false);
     }
   }, [toast]);
 
+  const handleCheckInstanceStatus = useCallback(async (instance: EvolutionInstance) => {
+    setEvolutionInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: 'connecting' } : i));
+    const result = await checkEvolutionInstanceStatus(instance.baseUrl, instance.name, instance.apiKey);
+    setEvolutionInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: result.status } : i));
+    return result.status;
+  }, []);
+
+  const checkAllInstances = useCallback(async (instancesToCheck: EvolutionInstance[]) => {
+    for (const instance of instancesToCheck) {
+        handleCheckInstanceStatus(instance);
+    }
+  }, [handleCheckInstanceStatus]);
+  
   useEffect(() => {
-    if (isInstanceManagerOpen || isSettingsDialogOpen) {
+    let statusInterval: NodeJS.Timeout | null = null;
+    if (isInstanceManagerOpen && !editingInstance) {
+      fetchEvolutionInstances().then(initialInstances => {
+        if(initialInstances.length > 0) {
+            checkAllInstances(initialInstances);
+            statusInterval = setInterval(() => {
+                 // Use a function with the state setter to get the latest state
+                 setEvolutionInstances(currentInstances => {
+                    if (currentInstances.length > 0) {
+                        console.log('[TopBar] Periodic status check triggered.');
+                        checkAllInstances(currentInstances);
+                    }
+                    return currentInstances;
+                 });
+            }, 15000); // Check every 15 seconds
+        }
+      });
+    }
+    
+    return () => {
+        if (statusInterval) {
+            clearInterval(statusInterval);
+            console.log('[TopBar] Periodic status check interval cleared.');
+        }
+    };
+  }, [isInstanceManagerOpen, editingInstance, fetchEvolutionInstances, checkAllInstances]);
+
+  useEffect(() => {
+    if (isSettingsDialogOpen) {
       fetchEvolutionInstances();
     }
-  }, [isInstanceManagerOpen, isSettingsDialogOpen, fetchEvolutionInstances]);
+  }, [isSettingsDialogOpen, fetchEvolutionInstances]);
 
   const handleEditInstance = (instance: EvolutionInstance) => {
     setEditingInstance(instance);
@@ -137,21 +181,13 @@ const TopBar: React.FC<TopBarProps> = ({
 
   const handleSaveInstance = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    console.log('[TopBar] handleSaveInstance: Formulário submetido.');
     const formData = new FormData(event.currentTarget);
-    
-    // Log para depuração
-    console.log('[TopBar] handleSaveInstance: FormData entries:');
-    for (let [key, value] of formData.entries()) {
-      console.log(`- ${key}: ${value}`);
-    }
-
     const result = await saveEvolutionInstanceAction(formData);
 
     if (result.success && result.instance) {
       toast({ title: "Sucesso", description: "Instância salva com sucesso." });
       setEditingInstance(null);
-      await fetchEvolutionInstances(); // This should refresh the list
+      await fetchEvolutionInstances().then(instances => checkAllInstances(instances));
     } else {
       toast({ title: "Erro ao Salvar", description: result.error || "Ocorreu um erro desconhecido.", variant: "destructive" });
     }
@@ -165,17 +201,6 @@ const TopBar: React.FC<TopBarProps> = ({
     } else {
       toast({ title: "Erro ao Excluir", description: result.error, variant: "destructive" });
     }
-  };
-
-  const handleCheckInstanceStatus = async (instance: EvolutionInstance) => {
-    setEvolutionInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: 'connecting' } : i));
-    const result = await checkEvolutionInstanceStatus(instance.baseUrl, instance.name, instance.apiKey);
-    setEvolutionInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: result.status } : i));
-    toast({
-      title: `Status da Instância '${instance.name}'`,
-      description: result.status === 'online' ? 'A instância está online.' : `Offline: ${result.error}`,
-      variant: result.status === 'online' ? 'default' : 'destructive',
-    });
   };
 
   useEffect(() => {
@@ -529,7 +554,13 @@ const TopBar: React.FC<TopBarProps> = ({
                                     evolutionInstances.map(instance => (
                                       <TableRow key={instance.id}>
                                         <TableCell>
-                                          <div className={cn("w-3 h-3 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')} title={instance.status}/>
+                                            <div className="flex items-center gap-2">
+                                                <span
+                                                    className={cn("w-3 h-3 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
+                                                    title={instance.status}
+                                                />
+                                                <span className="text-xs capitalize text-muted-foreground">{instance.status}</span>
+                                            </div>
                                         </TableCell>
                                         <TableCell className="font-medium">{instance.name}</TableCell>
                                         <TableCell>{instance.baseUrl}</TableCell>
@@ -558,7 +589,7 @@ const TopBar: React.FC<TopBarProps> = ({
                 </div>
             </div>
             <DialogFooter>
-                <DialogClose asChild><Button type="button" variant="secondary" onClick={() => { setIsInstanceManagerOpen(false); if (!editingInstance) setIsSettingsDialogOpen(true); }}>Fechar</Button></DialogClose>
+                <DialogClose asChild><Button type="button" variant="secondary" onClick={() => { setIsInstanceManagerOpen(false); setEditingInstance(null); }}>Fechar</Button></DialogClose>
             </DialogFooter>
         </DialogContent>
       </Dialog>
