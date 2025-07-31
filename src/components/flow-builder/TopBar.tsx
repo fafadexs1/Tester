@@ -133,11 +133,12 @@ const TopBar: React.FC<TopBarProps> = ({
   const evolutionWebhookUrlForCurrentFlow = useMemo(() => {
     const baseUrl = nexusFlowAppBaseUrl || (typeof window !== 'undefined' ? window.location.origin : '');
     const safeWorkspaceName = (workspaceName || '[NOME_DO_FLUXO]').replace(/\s+/g, '_');
+    const safeUsername = (activeWorkspace?.owner || '[USUARIO]').replace(/\s+/g, '_');
     if (baseUrl) {
-      return `${baseUrl}/api/evolution/workspace/${safeWorkspaceName}`;
+      return `${baseUrl}/api/evolution/webhook/${safeUsername}/${safeWorkspaceName}`;
     }
-    return `[URL_BASE]/api/evolution/workspace/${safeWorkspaceName}`;
-  }, [nexusFlowAppBaseUrl, workspaceName]);
+    return `[URL_BASE]/api/evolution/webhook/${safeUsername}/${safeWorkspaceName}`;
+  }, [nexusFlowAppBaseUrl, workspaceName, activeWorkspace?.owner]);
 
 
   useEffect(() => {
@@ -681,7 +682,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <DialogHeader>
             <DialogTitle>Logs de Eventos da API Evolution</DialogTitle>
             <DialogDescription>
-              Webhooks HTTP recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{`${nexusFlowAppBaseUrl}/api/evolution/workspace/[NOME_DO_FLUXO]`}</code>.
+              Webhooks HTTP recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{`${nexusFlowAppBaseUrl}/api/evolution/webhook/[USERNAME]/[FLOW_NAME]`}</code>.
               Os logs são armazenados em memória no servidor (máx. 50) e zerados ao reiniciar.
             </DialogDescription>
           </DialogHeader>

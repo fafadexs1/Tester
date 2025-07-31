@@ -45,51 +45,30 @@ async function initializeDatabaseSchema(): Promise<void> {
     await client.query(`
       CREATE TABLE IF NOT EXISTS workspaces (
         id TEXT PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
         nodes JSONB,
         connections JSONB,
-        owner TEXT,
+        owner TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW()
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(owner, name)
       );
     `);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS flow_sessions (
         session_id TEXT PRIMARY KEY,
-        workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+        workspace_id TEXT,
         current_node_id TEXT,
         flow_variables JSONB,
         awaiting_input_type TEXT,
         awaiting_input_details JSONB,
+        session_timeout_seconds INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        last_interaction_at TIMESTAMPTZ DEFAULT NOW(),
-        session_timeout_seconds INTEGER DEFAULT 0
+        last_interaction_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
     
-    // --- Schema Migration Section ---
-    // This section handles adding new columns to existing tables without dropping them.
-    console.log('[DB Actions] Checking for necessary schema migrations...');
-    
-    // Add 'session_timeout_seconds' to 'flow_sessions' if it doesn't exist
-    const checkColumnQuery = await client.query(`
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name='flow_sessions' AND column_name='session_timeout_seconds'
-    `);
-    if (checkColumnQuery.rowCount === 0) {
-        console.log("[DB Actions] Migration needed: 'session_timeout_seconds' column is missing from 'flow_sessions'. Adding it now...");
-        await client.query(`
-            ALTER TABLE flow_sessions
-            ADD COLUMN session_timeout_seconds INTEGER NOT NULL DEFAULT 0;
-        `);
-        console.log("[DB Actions] Migration complete: Successfully added 'session_timeout_seconds' column.");
-    } else {
-        console.log("[DB Actions] Migration check: 'session_timeout_seconds' column already exists. No action needed.");
-    }
-    // --- End of Schema Migration Section ---
-
-
     await client.query('COMMIT');
     console.log('[DB Actions] Schema initialization check complete.');
   } catch (error) {
@@ -116,13 +95,8 @@ async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResu
             if (pool) await pool.end();
             pool = null;
         }
-        if (error.code === '42P01' || (error.code === '42703' && error.message.includes('session_timeout_seconds'))) { // 42P01: undefined_table, 42703: undefined_column
-            const logMessage = error.code === '42P01' 
-                ? '[DB Actions] Table not found. Attempting to initialize schema and retry...'
-                : `[DB Actions] Column 'session_timeout_seconds' not found. Attempting to initialize schema and retry...`;
-            
-            console.warn(logMessage);
-
+        if (error.code === '42P01') { 
+            console.warn('[DB Actions] Table not found. Attempting to initialize schema and retry...');
             try {
                 await initializeDatabaseSchema();
                 console.log('[DB Actions] Schema initialized. Retrying query...');
@@ -133,7 +107,7 @@ async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResu
                     client.release();
                 }
             } catch (initError) {
-                 console.error('[DB Actions] Fatal: Failed to initialize schema after table/column not found.', initError);
+                 console.error('[DB Actions] Fatal: Failed to initialize schema after table not found.', initError);
                  throw initError;
             }
         }
@@ -145,6 +119,9 @@ async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResu
 // --- Workspace Actions ---
 export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{ success: boolean; error?: string }> {
   try {
+    if (!workspaceData.owner) {
+        return { success: false, error: "Workspace owner is required." };
+    }
     const query = `
       INSERT INTO workspaces (id, name, nodes, connections, owner, updated_at)
       VALUES ($1, $2, $3, $4, $5, NOW())
@@ -166,8 +143,8 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
   } catch (error: any) {
     console.error(`[DB Actions] saveWorkspaceToDB Error:`, error);
      let errorMessage = `PG Error: ${error.message || 'Unknown DB error'} (Code: ${error.code || 'N/A'})`;
-     if (error.constraint === 'workspaces_name_key') {
-        errorMessage = `Error: Workspace name '${workspaceData.name}' already exists. Please use a unique name.`;
+     if (error.constraint === 'workspaces_owner_name_key') {
+        errorMessage = `Error: Workspace name '${workspaceData.name}' already exists for this user. Please use a unique name.`;
     }
     return { success: false, error: errorMessage };
   }
@@ -191,9 +168,16 @@ export async function loadWorkspaceFromDB(workspaceId: string): Promise<Workspac
   }
 }
 
-export async function loadWorkspaceByNameFromDB(name: string): Promise<WorkspaceData | null> {
+export async function loadWorkspaceByNameFromDB(name: string, owner?: string): Promise<WorkspaceData | null> {
     try {
-        const result = await runQuery<WorkspaceData>('SELECT id, name, nodes, connections, owner, created_at, updated_at FROM workspaces WHERE name = $1', [name]);
+        let query = 'SELECT id, name, nodes, connections, owner, created_at, updated_at FROM workspaces WHERE name = $1';
+        const params: any[] = [name];
+        if(owner) {
+            query += ' AND owner = $2';
+            params.push(owner);
+        }
+        
+        const result = await runQuery<WorkspaceData>(query, params);
         if (result.rows.length > 0) {
             const row = result.rows[0];
             return {
@@ -204,7 +188,7 @@ export async function loadWorkspaceByNameFromDB(name: string): Promise<Workspace
         }
         return null;
     } catch (error: any) {
-        console.error(`[DB Actions] loadWorkspaceByNameFromDB Error for name "${name}":`, error);
+        console.error(`[DB Actions] loadWorkspaceByNameFromDB Error for name "${name}" and owner "${owner}":`, error);
         return null;
     }
 }
