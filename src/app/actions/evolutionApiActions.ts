@@ -34,15 +34,17 @@ export async function sendWhatsAppMessageAction(
     if (!params.textContent) {
       return { success: false, error: 'Conteúdo do texto ausente para mensagem de texto.' };
     }
+    // CORREÇÃO PARA API v2: O endpoint mudou e a estrutura do body também.
     endpoint = `${params.baseUrl.replace(/\/$/, '')}/message/sendText/${params.instanceName}`;
     body.number = params.recipientPhoneNumber.split('@')[0];
-    body.options = { presence: 'composing', delay: 1200 };
-    // CORREÇÃO: O texto deve estar dentro de um objeto textMessage.
-    body.textMessage = { text: params.textContent };
+    body.text = params.textContent; // O texto vai no campo 'text' no nível raiz
+    // Opções como 'presence' e 'delay' devem ser adicionadas aqui se necessário, conforme a v2
+    // Ex: body.delay = 1200;
   } else if (['image', 'video', 'document', 'audio'].includes(params.messageType)) {
     if (!params.mediaUrl) {
       return { success: false, error: 'URL da mídia ausente para mensagem de mídia.' };
     }
+    // CORREÇÃO PARA API v2: O endpoint mudou e a estrutura do body também.
     endpoint = `${params.baseUrl.replace(/\/$/, '')}/message/sendMedia/${params.instanceName}`;
     body.number = params.recipientPhoneNumber.split('@')[0];
     body.mediaMessage = {
@@ -64,7 +66,7 @@ export async function sendWhatsAppMessageAction(
     headers['apikey'] = params.apiKey;
   }
 
-  console.log(`[EvolutionAPI Action] Sending ${params.messageType} to ${params.recipientPhoneNumber} via ${params.instanceName}`);
+  console.log(`[EvolutionAPI Action] Sending ${params.messageType} to ${params.recipientPhoneNumber} via ${params.instanceName}. Payload:`, JSON.stringify(body));
 
   try {
     const response = await fetch(endpoint, {
