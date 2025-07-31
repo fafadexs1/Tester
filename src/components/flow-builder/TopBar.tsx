@@ -51,33 +51,8 @@ import Link from 'next/link';
 import { v4 as uuidv4 } from 'uuid';
 import { checkEvolutionInstanceStatus } from '@/app/actions/evolutionApiActions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { saveEvolutionInstanceAction, deleteEvolutionInstanceAction } from '@/app/actions/instanceActions';
 
-
-const SupabaseIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-    <path d="M12.1721 2.00244C12.8801 1.98791 13.576 2.21863 14.1116 2.64953C14.6472 3.08043 14.9816 3.68122 15.0491 4.32663L15.0536 4.43311L15.2402 13.4907C15.2811 14.5963 14.4145 15.5223 13.3045 15.5629C12.9977 15.5745 12.6978 15.5302 12.4233 15.4326L12.1933 15.3496C11.2835 14.9872 10.7389 13.9861 10.9305 13.005L11.9976 7.54346C11.7963 7.44211 11.5823 7.36858 11.3608 7.32471L8.75981 8.00806C7.7488 8.25358 6.85304 7.43087 6.85179 6.39187C6.85091 5.69923 7.32011 5.09048 7.97152 4.89367L8.08993 4.85168L12.0001 3.56348V2.09302C12.0001 2.06352 12.0025 2.03488 12.007 2.00767L12.1721 2.00244ZM12.0001 16.8091L11.9425 16.8323C10.3604 17.5281 8.97375 18.6318 8.06805 20.0061C7.51501 20.8504 7.84881 22.0024 8.78293 22.0024H15.2172C16.1513 22.0024 16.4851 20.8504 15.9321 20.0061C15.0264 18.6318 13.6397 17.5281 12.0577 16.8323L12.0001 16.8091Z" />
-  </svg>
-);
-
-const PostgresIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-    <path d="M5.10526 2H18.8947C19.9381 2 20.7895 2.82911 20.7895 3.8421V7.52631H16.6316V14.0526C16.6316 15.3461 15.5772 16.3684 14.2632 16.3684H9.73684C8.42283 16.3684 7.36842 15.3461 7.36842 14.0526V7.52631H3.21053V3.8421C3.21053 2.82911 4.06193 2 5.10526 2ZM12.5789 7.52631H16.6316V3.8421H12.5789V7.52631ZM7.36842 7.52631H11.4211V3.8421H7.36842V7.52631ZM9.73684 17.6316H14.2632C16.3051 17.6316 17.9474 19.2293 17.9474 21.2105C17.9474 21.6453 17.6047 22 17.1579 22H6.84211C6.39526 22 6.05263 21.6453 6.05263 21.2105C6.05263 19.2293 7.69491 17.6316 9.73684 17.6316ZM13.7368 11.2105H10.2632C9.91571 11.2105 9.73684 11.0373 9.73684 10.7895C9.73684 10.5416 9.71571 10.3684 10.2632 10.3684H13.7368C14.0843 10.3684 14.2632 10.5416 14.2632 10.7895C14.2632 11.0373 14.0843 11.2105 13.7368 11.2105Z" />
-  </svg>
-);
-
-type SettingsCategory = 'integrations';
-interface WebhookLogEntry {
-  timestamp: string;
-  method?: string;
-  url?: string;
-  headers?: Record<string, string>;
-  payload?: any;
-  ip?: string;
-  geo?: any;
-  extractedMessage?: string | null;
-  webhook_remoteJid?: string | null;
-  workspaceNameParam?: string;
-}
 
 interface TopBarProps {
   workspaceName: string;
@@ -109,7 +84,7 @@ const TopBar: React.FC<TopBarProps> = ({
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   
   const [isWebhookLogsDialogOpen, setIsWebhookLogsDialogOpen] = useState(false);
-  const [evolutionWebhookLogEntries, setEvolutionWebhookLogEntries] = useState<WebhookLogEntry[]>([]);
+  const [evolutionWebhookLogEntries, setEvolutionWebhookLogEntries] = useState<any[]>([]);
   const [isLoadingEvolutionLogs, setIsLoadingEvolutionLogs] = useState(false);
   const [evolutionLogsError, setEvolutionLogsError] = useState<string | null>(null);
   
@@ -122,47 +97,83 @@ const TopBar: React.FC<TopBarProps> = ({
   
   const [nexusFlowAppBaseUrl, setNexusFlowAppBaseUrl] = useState('');
   
-  const evolutionWebhookUrlForCurrentFlow = useMemo(() => {
-    const baseUrl = nexusFlowAppBaseUrl || (typeof window !== 'undefined' ? window.location.origin : '');
-    const webhookId = activeWorkspace?.id || '[ID_DO_FLUXO]';
-    if (baseUrl) {
-      return `${baseUrl}/api/evolution/trigger/${webhookId}`;
-    }
-    return `[URL_BASE]/api/evolution/trigger/${webhookId}`;
-  }, [nexusFlowAppBaseUrl, activeWorkspace?.id]);
+  const [isGlobalSettingsOpen, setIsGlobalSettingsOpen] = useState(false);
+  const [evolutionInstances, setEvolutionInstances] = useState<EvolutionInstance[]>([]);
+  const [isLoadingInstances, setIsLoadingInstances] = useState(false);
+  const [editingInstance, setEditingInstance] = useState<EvolutionInstance | null>(null);
 
+  const fetchEvolutionInstances = useCallback(async () => {
+    setIsLoadingInstances(true);
+    try {
+      const response = await fetch('/api/instances/evolution');
+      if (!response.ok) throw new Error('Falha ao buscar instâncias.');
+      const data = await response.json();
+      setEvolutionInstances(data.map((d: any) => ({ ...d, status: 'unconfigured' })));
+    } catch (error: any) {
+      toast({ title: "Erro ao Carregar Instâncias", description: error.message, variant: "destructive" });
+    } finally {
+      setIsLoadingInstances(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (isGlobalSettingsOpen) {
+      fetchEvolutionInstances();
+    }
+  }, [isGlobalSettingsOpen, fetchEvolutionInstances]);
+
+  const handleEditInstance = (instance: EvolutionInstance) => {
+    setEditingInstance(instance);
+  };
+
+  const handleAddNewInstance = () => {
+    setEditingInstance({ id: '', name: '', baseUrl: '', apiKey: '', status: 'unconfigured' });
+  };
+  
+  const handleCancelEdit = () => {
+    setEditingInstance(null);
+  };
+
+  const handleSaveInstance = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const result = await saveEvolutionInstanceAction(formData);
+
+    if (result.success && result.instance) {
+      toast({ title: "Sucesso", description: "Instância salva com sucesso." });
+      setEditingInstance(null);
+      fetchEvolutionInstances();
+    } else {
+      toast({ title: "Erro ao Salvar", description: result.error || "Ocorreu um erro desconhecido.", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteInstance = async (instanceId: string) => {
+    const result = await deleteEvolutionInstanceAction(instanceId);
+    if (result.success) {
+      toast({ title: "Sucesso", description: "Instância excluída com sucesso." });
+      fetchEvolutionInstances();
+    } else {
+      toast({ title: "Erro ao Excluir", description: result.error, variant: "destructive" });
+    }
+  };
+
+  const handleCheckInstanceStatus = async (instance: EvolutionInstance) => {
+    setEvolutionInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: 'connecting' } : i));
+    const result = await checkEvolutionInstanceStatus(instance.baseUrl, instance.name, instance.apiKey);
+    setEvolutionInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: result.status } : i));
+    toast({
+      title: `Status da Instância '${instance.name}'`,
+      description: result.status === 'online' ? 'A instância está online.' : `Offline: ${result.error}`,
+      variant: result.status === 'online' ? 'default' : 'destructive',
+    });
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setNexusFlowAppBaseUrl(window.location.origin);
     }
   }, []);
-
-  const fetchEvolutionWebhookLogs = useCallback(async () => {
-    setIsLoadingEvolutionLogs(true);
-    setEvolutionLogsError(null);
-    try {
-      const response = await fetch('/api/evolution/webhook-logs');
-      if (!response.ok) {
-        const errorData = await response.text();
-        throw new Error(`Erro ao buscar logs: ${response.status} - ${errorData}`);
-      }
-      const data: WebhookLogEntry[] = await response.json();
-      setEvolutionWebhookLogEntries(data);
-    } catch (error: any) {
-      console.error("Erro ao buscar logs do webhook da API Evolution:", error);
-      setEvolutionLogsError(error.message || "Falha ao buscar logs.");
-      setEvolutionWebhookLogEntries([]);
-    } finally {
-      setIsLoadingEvolutionLogs(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isWebhookLogsDialogOpen) {
-      fetchEvolutionWebhookLogs();
-    }
-  }, [isWebhookLogsDialogOpen, fetchEvolutionWebhookLogs]);
 
   const fetchActiveSessions = useCallback(async () => {
     setIsLoadingSessions(true);
@@ -240,33 +251,6 @@ const TopBar: React.FC<TopBarProps> = ({
     }
   };
 
-  const handleCopyToClipboard = (e: React.MouseEvent<HTMLButtonElement>, text: string, type: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-        navigator.clipboard.writeText(text).then(() => {
-          toast({ title: `${type} Copiada!`, description: `A ${type.toLowerCase()} foi copiada para a área de transferência.` });
-        }).catch(err => {
-          toast({ title: `Erro ao Copiar ${type}`, description: `Não foi possível copiar a ${type.toLowerCase()}.`, variant: "destructive" });
-          console.error(`Erro ao copiar ${type}: `, err);
-        });
-    } else {
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        try {
-            document.execCommand('copy');
-            toast({ title: `${type} Copiada!`, description: `A ${type.toLowerCase()} foi copiada para a área de transferência.` });
-        } catch (err) {
-            toast({ title: `Erro ao Copiar ${type}`, description: 'Não foi possível copiar. Tente manualmente.', variant: "destructive" });
-            console.error('Fallback: Oops, unable to copy', err);
-        }
-        document.body.removeChild(textArea);
-    }
-  };
-
   return (
     <>
       <header className="flex items-center justify-between h-16 px-4 md:px-6 border-b bg-card text-card-foreground shadow-sm shrink-0">
@@ -320,10 +304,6 @@ const TopBar: React.FC<TopBarProps> = ({
             <DropdownMenuContent align="end" className="w-60">
               <DropdownMenuLabel>Console e Diagnósticos</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setIsWebhookLogsDialogOpen(true)}>
-                <WebhookIcon className="mr-2 h-4 w-4" />
-                <span>Logs de Eventos da API Evolution</span>
-              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setIsSessionsDialogOpen(true)}>
                 <Users className="mr-2 h-4 w-4" />
                 <span>Sessões Ativas</span>
@@ -398,6 +378,10 @@ const TopBar: React.FC<TopBarProps> = ({
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Configurações do Fluxo</span>
               </DropdownMenuItem>
+               <DropdownMenuItem onSelect={() => setIsGlobalSettingsOpen(true)}>
+                <PlugZap className="mr-2 h-4 w-4" />
+                <span>Configurações Globais</span>
+              </DropdownMenuItem>
               {user?.role === 'desenvolvedor' && (
                 <Link href="/admin" passHref>
                     <DropdownMenuItem>
@@ -422,107 +406,52 @@ const TopBar: React.FC<TopBarProps> = ({
 
       {/* Workspace Settings Dialog */}
       <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Configurações do Fluxo: {workspaceName}</DialogTitle>
             <DialogDescription>
-              Ajustes específicos e integrações para este fluxo de trabalho.
+              Ajustes de integração para este fluxo de trabalho específico.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-             <Tabs defaultValue="integrations" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="general">Geral</TabsTrigger>
-                    <TabsTrigger value="integrations">Integrações</TabsTrigger>
-                </TabsList>
-                 <TabsContent value="general" className="pt-4">
-                     <p className="text-sm text-muted-foreground">Configurações gerais do fluxo (a serem implementadas).</p>
-                 </TabsContent>
-                <TabsContent value="integrations" className="pt-2">
-                    <Accordion type="single" collapsible className="w-full">
-                    <AccordionItem value="evolution-api">
-                        <AccordionTrigger className="font-semibold text-base py-3">
-                        <div className="flex items-center gap-3">
-                            <BotMessageSquare className="w-6 h-6 text-teal-500" />
-                            API Evolution (WhatsApp)
-                        </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-4 space-y-4">
-                        <div className="flex items-center space-x-3 rounded-md border p-4">
-                            <Switch
-                            id="enable-evolution-api"
-                            checked={activeWorkspace?.evolution_api_enabled || false}
-                            onCheckedChange={(checked) => onUpdateWorkspace({ evolution_api_enabled: checked })}
-                            aria-labelledby="enable-evolution-api-label"
-                            />
-                            <Label htmlFor="enable-evolution-api" id="enable-evolution-api-label" className="flex-1 text-sm font-medium cursor-pointer">
-                                Habilitar integração com a API Evolution para este fluxo
-                            </Label>
-                        </div>
-                        {activeWorkspace?.evolution_api_enabled && (
-                            <div className="space-y-4 pl-2 border-l-2 ml-4 pt-2 pb-2">
-                            <div>
-                                <Label htmlFor="evolution_api_url">URL Base</Label>
-                                <Input
-                                id="evolution_api_url"
-                                name="evolution_api_url"
-                                placeholder="http://localhost:8080"
-                                value={activeWorkspace?.evolution_api_url || ''}
-                                onChange={(e) => onUpdateWorkspace({ evolution_api_url: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <Label htmlFor="evolution_instance_name">Nome da Instância</Label>
-                                <Input
-                                id="evolution_instance_name"
-                                name="evolution_instance_name"
-                                placeholder="evolution_instance"
-                                value={activeWorkspace?.evolution_instance_name || ''}
-                                onChange={(e) => onUpdateWorkspace({ evolution_instance_name: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <Label htmlFor="evolution_api_key">Chave da API (Opcional)</Label>
-                                <Input
-                                id="evolution_api_key"
-                                name="evolution_api_key"
-                                type="password"
-                                placeholder="Sua chave de API secreta"
-                                value={activeWorkspace?.evolution_api_key || ''}
-                                onChange={(e) => onUpdateWorkspace({ evolution_api_key: e.target.value })}
-                                />
-                            </div>
-                            <div className="pt-2">
-                                <Label className="text-card-foreground/90 text-sm font-medium" htmlFor="flow-webhook-url-for-evolution">URL de Webhook para este Fluxo</Label>
-                                <div className="flex items-center space-x-2 mt-1">
-                                    <Input 
-                                    id="flow-webhook-url-for-evolution" 
-                                    name="flow-webhook-url-for-evolution"
-                                    type="text" 
-                                    value={evolutionWebhookUrlForCurrentFlow} 
-                                    readOnly 
-                                    className="bg-input text-foreground flex-1 cursor-default break-all h-9"
-                                    />
-                                    <Button 
-                                    variant="outline" 
-                                    size="icon" 
-                                    onClick={(e) => handleCopyToClipboard(e, evolutionWebhookUrlForCurrentFlow, "URL de Webhook")} 
-                                    title="Copiar URL de Webhook" 
-                                    className="h-9 w-9"
-                                    >
-                                    <Copy className="w-4 w-4" />
-                                    </Button>
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1.5">Use esta URL para que a API Evolution envie eventos para este fluxo específico.</p>
-                            </div>
-                            </div>
-                        )}
-                        </AccordionContent>
-                    </AccordionItem>
-                    {/* Futuras integrações podem ser adicionadas aqui como novos AccordionItem */}
-                    </Accordion>
-                </TabsContent>
-            </Tabs>
+             <Accordion type="single" collapsible className="w-full" defaultValue="evolution-api">
+              <AccordionItem value="evolution-api">
+                  <AccordionTrigger className="font-semibold text-base py-3">
+                  <div className="flex items-center gap-3">
+                      <BotMessageSquare className="w-6 h-6 text-teal-500" />
+                      API Evolution (WhatsApp)
+                  </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-4 space-y-4">
+                  <div className="space-y-3">
+                    <div>
+                        <Label htmlFor="evolution_instance_id">Instância da API Evolution</Label>
+                        <Select
+                          value={activeWorkspace?.evolution_instance_id || ''}
+                          onValueChange={(value) => onUpdateWorkspace({ evolution_instance_id: value })}
+                        >
+                          <SelectTrigger id="evolution_instance_id">
+                            <SelectValue placeholder="Nenhuma instância selecionada" />
+                          </SelectTrigger>
+                          <SelectContent>
+                             <DropdownMenuItem onSelect={() => onUpdateWorkspace({ evolution_instance_id: undefined })}>
+                                <em>Nenhuma</em>
+                              </DropdownMenuItem>
+                            {evolutionInstances.map(instance => (
+                              <SelectItem key={instance.id} value={instance.id}>
+                                {instance.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                         <p className="text-xs text-muted-foreground mt-1.5">
+                          Selecione uma instância configurada nas <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => { setIsSettingsDialogOpen(false); setIsGlobalSettingsOpen(true);}}>Configurações Globais</Button>.
+                        </p>
+                      </div>
+                  </div>
+                  </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </div>
           <DialogFooter>
             <DialogClose asChild>
@@ -533,59 +462,99 @@ const TopBar: React.FC<TopBarProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-
-       {/* Webhook Logs Dialog */}
-      <Dialog open={isWebhookLogsDialogOpen} onOpenChange={setIsWebhookLogsDialogOpen}>
-        <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Logs de Eventos da API Evolution</DialogTitle>
-            <DialogDescription>
-              Webhooks HTTP recebidos no endpoint <code className="mx-1 p-0.5 text-xs bg-muted rounded-sm break-all">{`${nexusFlowAppBaseUrl}/api/evolution/trigger/[ID_DO_FLUXO]`}</code>.
-              Os logs são armazenados em memória no servidor (máx. 50) e zerados ao reiniciar.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
-            <Button onClick={fetchEvolutionWebhookLogs} variant="outline" size="sm" className="self-start mb-2 h-9" disabled={isLoadingEvolutionLogs}>
-              <RefreshCw className={cn("mr-2 h-4 w-4", isLoadingEvolutionLogs && "animate-spin")} />
-              {isLoadingEvolutionLogs ? "Atualizando..." : "Atualizar Logs"}
-            </Button>
-            {isLoadingEvolutionLogs && <p className="text-sm text-muted-foreground text-center py-4">Carregando logs...</p>}
-            {evolutionLogsError && (<div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm"><div className="flex items-center gap-2 font-medium"><AlertCircle className="h-5 w-5" /> Erro ao carregar logs:</div><p className="mt-1 text-xs">{evolutionLogsError}</p></div>)}
-            {!isLoadingEvolutionLogs && !evolutionLogsError && evolutionWebhookLogEntries.length === 0 && (
-              <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4"><FileText className="w-12 h-12 mb-3" /><p className="text-sm">Nenhum log de webhook da API Evolution encontrado.</p><p className="text-xs mt-1">Verifique sua API Evolution e o endpoint de webhook.</p></div>
-            )}
-            {!isLoadingEvolutionLogs && evolutionWebhookLogEntries.length > 0 && (
-              <ScrollArea className="flex-1 border rounded-md bg-muted/30">
-                <div className="p-3 space-y-3">
-                  {evolutionWebhookLogEntries.map((log, index) => (
-                    <details key={index} className="bg-background p-2.5 rounded shadow-sm text-xs">
-                      <summary className="cursor-pointer font-medium text-foreground/80 hover:text-foreground select-none">
-                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm text-primary/80 mr-2">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                        <span className="font-semibold mr-1">{log.method || (log.payload?.event ? '' : 'Evento Desconhecido')}</span>
-                        {(log.payload?.event || log.workspaceNameParam) && (<span className="text-accent font-semibold">{log.payload?.event || `GET para ${log.workspaceNameParam}`}</span>)}
-                        {log.extractedMessage && (<span className="ml-2 text-slate-500 italic">Msg: "{log.extractedMessage.substring(0, 30)}{log.extractedMessage.length > 30 ? '...' : ''}"</span>)}
-                        {log.webhook_remoteJid && (<span className="ml-2 text-blue-500 text-xs">De: {log.webhook_remoteJid}</span>)}
-                      </summary>
-                      <div className="mt-2 p-2 bg-muted/20 rounded-sm overflow-auto text-xs text-foreground/70 space-y-1.5">
-                        {log.method && log.url && (<div><strong>Endpoint:</strong> <span className="break-all">{log.method} {log.url}</span></div>)}
-                        {log.ip && (<div><strong>IP Origem:</strong> {log.ip} {log.geo?.city && `(${log.geo.city}, ${log.geo.country})`}</div>)}
-                        {log.headers && (<div><strong>Headers:</strong><pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-24 overflow-y-auto">{JSON.stringify(log.headers, null, 2)}</pre></div>)}
-                        <div><strong>Payload Completo:</strong>
-                          <pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-60 overflow-y-auto">
-                            {typeof log.payload === 'string' ? log.payload : (log.payload ? JSON.stringify(log.payload, null, 2) : 'N/A')}
-                          </pre>
+      
+      {/* Global Settings Dialog */}
+      <Dialog open={isGlobalSettingsOpen} onOpenChange={setIsGlobalSettingsOpen}>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Configurações Globais</DialogTitle>
+              <DialogDescription>
+                Gerencie integrações e outras configurações para toda a sua conta.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 overflow-hidden">
+                <Tabs defaultValue="evolution-api" className="w-full h-full flex flex-col">
+                    <TabsList className="grid w-full grid-cols-1">
+                        <TabsTrigger value="evolution-api">Instâncias da API Evolution</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="evolution-api" className="flex-1 overflow-hidden mt-4">
+                      {editingInstance ? (
+                        <form onSubmit={handleSaveInstance} className="space-y-4 p-1">
+                          <h4 className="font-semibold">{editingInstance.id ? "Editar Instância" : "Nova Instância"}</h4>
+                           <input type="hidden" name="id" value={editingInstance.id || ''} />
+                          <div>
+                            <Label htmlFor="instanceName">Nome</Label>
+                            <Input id="instanceName" name="name" defaultValue={editingInstance.name} required />
+                          </div>
+                           <div>
+                            <Label htmlFor="baseUrl">URL Base</Label>
+                            <Input id="baseUrl" name="baseUrl" type="url" defaultValue={editingInstance.baseUrl} placeholder="http://localhost:8080" required />
+                          </div>
+                           <div>
+                            <Label htmlFor="apiKey">Chave da API (Opcional)</Label>
+                            <Input id="apiKey" name="apiKey" type="password" defaultValue={editingInstance.apiKey} />
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button type="button" variant="ghost" onClick={handleCancelEdit}>Cancelar</Button>
+                            <Button type="submit">Salvar Instância</Button>
+                          </div>
+                        </form>
+                      ) : (
+                        <div className="h-full flex flex-col">
+                          <div className="flex justify-between items-center mb-2">
+                             <p className="text-sm text-muted-foreground">Instâncias de API salvas.</p>
+                            <Button size="sm" onClick={handleAddNewInstance}><PlusCircle className="mr-2 h-4 w-4"/>Adicionar Nova</Button>
+                          </div>
+                          <ScrollArea className="flex-1 border rounded-lg">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Nome</TableHead>
+                                    <TableHead>URL</TableHead>
+                                    <TableHead className="text-right">Ações</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {isLoadingInstances ? (
+                                    <TableRow><TableCell colSpan={4} className="text-center"><Loader2 className="inline-block mr-2 h-4 w-4 animate-spin"/>Carregando...</TableCell></TableRow>
+                                  ) : evolutionInstances.length === 0 ? (
+                                    <TableRow><TableCell colSpan={4} className="text-center h-24">Nenhuma instância configurada.</TableCell></TableRow>
+                                  ) : (
+                                    evolutionInstances.map(instance => (
+                                      <TableRow key={instance.id}>
+                                        <TableCell>
+                                          <div className={cn("w-3 h-3 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')} title={instance.status}/>
+                                        </TableCell>
+                                        <TableCell className="font-medium">{instance.name}</TableCell>
+                                        <TableCell>{instance.baseUrl}</TableCell>
+                                        <TableCell className="text-right space-x-1">
+                                          <Button variant="outline" size="sm" className="h-7" onClick={() => handleCheckInstanceStatus(instance)} disabled={instance.status === 'connecting'}>Testar</Button>
+                                          <Button variant="outline" size="sm" className="h-7" onClick={() => handleEditInstance(instance)}>Editar</Button>
+                                          <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                              <Button variant="destructive" size="sm" className="h-7">Excluir</Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                              <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Deseja realmente excluir a instância "{instance.name}"? Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
+                                              <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteInstance(instance.id)}>Confirmar</AlertDialogAction></AlertDialogFooter>
+                                            </AlertDialogContent>
+                                          </AlertDialog>
+                                        </TableCell>
+                                      </TableRow>
+                                    ))
+                                  )}
+                                </TableBody>
+                              </Table>
+                          </ScrollArea>
                         </div>
-                      </div>
-                    </details>
-                  ))}
-                </div>
-              </ScrollArea>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsWebhookLogsDialogOpen(false)}>Fechar</Button>
-          </DialogFooter>
+                      )}
+                    </TabsContent>
+                </Tabs>
+            </div>
+            <DialogFooter>
+                <DialogClose asChild><Button type="button" variant="secondary">Fechar</Button></DialogClose>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
       

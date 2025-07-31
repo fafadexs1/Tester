@@ -230,15 +230,10 @@ export interface WorkspaceData {
   name: string;
   nodes: NodeData[];
   connections: Connection[];
-  owner: string; // This will now be the User's UUID
+  owner_id: string; 
   created_at?: string | Date;
   updated_at?: string | Date;
-  
-  // Evolution API Settings per Workspace
-  evolution_api_enabled?: boolean;
-  evolution_api_url?: string;
-  evolution_api_key?: string;
-  evolution_instance_name?: string;
+  evolution_instance_id?: string | null;
 }
 
 export interface FlowSession {
