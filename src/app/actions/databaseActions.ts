@@ -44,6 +44,7 @@ async function initializeDatabaseSchema(): Promise<void> {
     console.log('[DB Actions] Initializing database schema if needed...');
     await client.query('BEGIN');
 
+    // Create tables if they don't exist
     await client.query(`
       CREATE TABLE IF NOT EXISTS workspaces (
         id TEXT PRIMARY KEY,
@@ -52,12 +53,10 @@ async function initializeDatabaseSchema(): Promise<void> {
         connections JSONB,
         owner TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(owner, name)
+        updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
 
-    // Adicionado para suportar o tempo de expiração da sessão
     await client.query(`
       CREATE TABLE IF NOT EXISTS flow_sessions (
         session_id TEXT PRIMARY KEY,
@@ -71,32 +70,45 @@ async function initializeDatabaseSchema(): Promise<void> {
         last_interaction_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+
+    // --- Migration Logic for UNIQUE constraint on workspaces ---
+    const constraintCheckQuery = `
+      SELECT conname
+      FROM pg_constraint
+      WHERE conrelid = 'workspaces'::regclass AND contype = 'u';
+    `;
+    const { rows: constraints } = await client.query(constraintCheckQuery);
     
-    // Verificação de migração: Adiciona a coluna se não existir.
+    const oldUniqueNameConstraint = constraints.find(c => c.conname === 'workspaces_name_key');
+    const correctOwnerNameConstraint = constraints.find(c => c.conname === 'workspaces_owner_name_key');
+
+    if (oldUniqueNameConstraint && !correctOwnerNameConstraint) {
+      console.warn("[DB Migration] Found old 'workspaces_name_key' constraint. Dropping it and creating the correct 'workspaces_owner_name_key' constraint.");
+      await client.query(`ALTER TABLE workspaces DROP CONSTRAINT workspaces_name_key;`);
+      await client.query(`ALTER TABLE workspaces ADD CONSTRAINT workspaces_owner_name_key UNIQUE (owner, name);`);
+      console.log("[DB Migration] Successfully migrated unique constraint for workspaces.");
+    } else if (!correctOwnerNameConstraint) {
+      console.log("[DB Migration] No unique constraint on (owner, name) found. Creating it now.");
+      await client.query(`ALTER TABLE workspaces ADD CONSTRAINT workspaces_owner_name_key UNIQUE (owner, name);`);
+    }
+
+    // --- Migration Logic for flow_sessions timeout column ---
     const checkColumnQuery = `
       SELECT column_name
       FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = 'flow_sessions'
-        AND column_name = 'session_timeout_seconds';
+      WHERE table_schema = 'public' AND table_name = 'flow_sessions' AND column_name = 'session_timeout_seconds';
     `;
     const { rows } = await client.query(checkColumnQuery);
     if (rows.length === 0) {
-      console.log("[DB Actions] Migration needed: Adding 'session_timeout_seconds' column to 'flow_sessions' table.");
-      await client.query(`
-        ALTER TABLE flow_sessions
-        ADD COLUMN session_timeout_seconds INTEGER NOT NULL DEFAULT 0;
-      `);
-      console.log("[DB Actions] Migration completed successfully.");
-    } else {
-        // console.log("[DB Actions] Migration check: 'session_timeout_seconds' column already exists. No action needed.");
+      console.log("[DB Migration] Adding 'session_timeout_seconds' column to 'flow_sessions' table.");
+      await client.query(`ALTER TABLE flow_sessions ADD COLUMN session_timeout_seconds INTEGER NOT NULL DEFAULT 0;`);
     }
     
     await client.query('COMMIT');
-    console.log('[DB Actions] Schema initialization check complete.');
+    console.log('[DB Actions] Schema initialization and migration check complete.');
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('[DB Actions] Error initializing database schema, transaction rolled back.', error);
+    console.error('[DB Actions] Error initializing/migrating database schema, transaction rolled back.', error);
     throw error;
   } finally {
     client.release();
@@ -190,13 +202,6 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
     if (!workspaceData.owner || !workspaceData.name || !workspaceData.id) {
         return { success: false, error: "Dados do workspace incompletos (requer id, nome e proprietário)." };
     }
-
-    // Primeiro, verifica se o nome já está em uso por este proprietário em um ID DIFERENTE
-    const checkExistingQuery = `SELECT id FROM workspaces WHERE owner = $1 AND name = $2 AND id != $3`;
-    const existingResult = await runQuery(checkExistingQuery, [workspaceData.owner, workspaceData.name, workspaceData.id]);
-    if (existingResult.rows.length > 0) {
-        return { success: false, error: `Erro: O nome do fluxo '${workspaceData.name}' já existe. Por favor, escolha um nome único.` };
-    }
     
     // Agora, usa ON CONFLICT no ID, que é a chave primária, para decidir entre INSERT e UPDATE.
     const query = `
@@ -221,7 +226,6 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
   } catch (error: any) {
     console.error(`[DB Actions] saveWorkspaceToDB Error:`, error);
     let errorMessage = `Erro de banco de dados: ${error.message || 'Erro desconhecido'}. (Código: ${error.code || 'N/A'})`;
-     // O erro de unique constraint agora é tratado pela verificação manual acima, mas deixamos como fallback.
     if (error.constraint === 'workspaces_owner_name_key') {
         errorMessage = `Erro: O nome do fluxo '${workspaceData.name}' já existe. Por favor, escolha um nome único.`;
     }
@@ -410,3 +414,5 @@ export async function loadAllActiveSessionsFromDB(): Promise<FlowSession[]> {
         });
     }
 })();
+
+    
