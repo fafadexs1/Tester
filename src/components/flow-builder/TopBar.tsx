@@ -105,8 +105,7 @@ const TopBar: React.FC<TopBarProps> = ({
   const { toast } = useToast();
   const { user, logout } = useAuth();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-  const [activeSettingsCategory, setActiveSettingsCategory] = useState<SettingsCategory>('integrations');
-
+  
   const [isWebhookLogsDialogOpen, setIsWebhookLogsDialogOpen] = useState(false);
   const [evolutionWebhookLogEntries, setEvolutionWebhookLogEntries] = useState<WebhookLogEntry[]>([]);
   const [isLoadingEvolutionLogs, setIsLoadingEvolutionLogs] = useState(false);
@@ -118,15 +117,6 @@ const TopBar: React.FC<TopBarProps> = ({
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [selectedSessionVariables, setSelectedSessionVariables] = useState<Record<string, any> | null>(null);
   const [isSessionVariablesModalOpen, setIsSessionVariablesModalOpen] = useState(false);
-
-  // States are kept for potential future use but UI is removed
-  const [supabaseUrl, setSupabaseUrl] = useState('');
-  const [supabaseServiceKey, setSupabaseServiceKey] = useState('');
-  const [isSupabaseEnabled, setIsSupabaseEnabled] = useState(false);
-
-  // Evolution API States
-  const [evolutionInstances, setEvolutionInstances] = useState<EvolutionInstance[]>([]);
-  const [isEvolutionApiEnabled, setIsEvolutionApiEnabled] = useState(false);
   
   const [nexusFlowAppBaseUrl, setNexusFlowAppBaseUrl] = useState('');
   
@@ -145,109 +135,6 @@ const TopBar: React.FC<TopBarProps> = ({
       setNexusFlowAppBaseUrl(window.location.origin);
     }
   }, []);
-
-  const loadSettingsFromLocalStorage = useCallback(() => {
-    // Supabase
-    setSupabaseUrl(localStorage.getItem('supabaseUrl') || '');
-    setSupabaseServiceKey(localStorage.getItem('supabaseServiceKey') || '');
-    setIsSupabaseEnabled(localStorage.getItem('isSupabaseEnabled') === 'true');
-    
-    // Evolution API
-    setIsEvolutionApiEnabled(localStorage.getItem('isEvolutionApiEnabled') === 'true');
-    const savedInstances = localStorage.getItem('evolutionInstances');
-    if (savedInstances) {
-      try {
-        setEvolutionInstances(JSON.parse(savedInstances));
-      } catch (e) {
-        console.error("Failed to parse Evolution instances from localStorage", e);
-        setEvolutionInstances([]);
-      }
-    } else {
-      setEvolutionInstances([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isSettingsDialogOpen) {
-      loadSettingsFromLocalStorage();
-    }
-  }, [isSettingsDialogOpen, loadSettingsFromLocalStorage]);
-
-  const handleSaveSettings = () => {
-    // Save Supabase settings
-    localStorage.setItem('supabaseUrl', supabaseUrl);
-    localStorage.setItem('supabaseServiceKey', supabaseServiceKey);
-    localStorage.setItem('isSupabaseEnabled', String(isSupabaseEnabled));
-
-    // Save Evolution settings
-    localStorage.setItem('isEvolutionApiEnabled', String(isEvolutionApiEnabled));
-    localStorage.setItem('evolutionInstances', JSON.stringify(evolutionInstances));
-
-    toast({
-      title: "Configurações Salvas!",
-      description: "Suas configurações foram salvas no localStorage.",
-    });
-    setIsSettingsDialogOpen(false);
-  };
-
-  const handleAddNewEvolutionInstance = () => {
-    setEvolutionInstances(prev => [...prev, {
-      id: uuidv4(),
-      name: `Instância ${prev.length + 1}`,
-      baseUrl: '',
-      apiKey: '',
-      status: 'unconfigured'
-    }]);
-  };
-
-  const handleUpdateEvolutionInstance = (id: string, field: keyof Omit<EvolutionInstance, 'id' | 'status'>, value: string) => {
-    setEvolutionInstances(prev => prev.map(inst => 
-      inst.id === id ? { ...inst, [field]: value } : inst
-    ));
-  };
-  
-  const handleRemoveEvolutionInstance = (id: string) => {
-    setEvolutionInstances(prev => prev.filter(inst => inst.id !== id));
-  };
-
-  const handleCheckInstanceStatus = useCallback(async (instanceId: string) => {
-    setEvolutionInstances(prev => prev.map(inst => inst.id === instanceId ? { ...inst, status: 'connecting' } : inst));
-
-    const instanceToCheck = evolutionInstances.find(inst => inst.id === instanceId);
-    if (!instanceToCheck) return;
-
-    const result = await checkEvolutionInstanceStatus(instanceToCheck.baseUrl, instanceToCheck.name, instanceToCheck.apiKey);
-    
-    setEvolutionInstances(prev => prev.map(inst => {
-      if (inst.id === instanceId) {
-        return { ...inst, status: result.status };
-      }
-      return inst;
-    }));
-
-    toast({
-      title: `Status da Instância "${instanceToCheck.name}"`,
-      description: result.status === 'online' ? 'Conectada com sucesso!' : `Offline: ${result.error}`,
-      variant: result.status === 'online' ? 'default' : 'destructive',
-    });
-  }, [evolutionInstances, toast]);
-
-  const handlePublishFlow = () => {
-    if (!activeWorkspace) {
-      toast({
-        title: "Nenhum fluxo ativo",
-        description: "Por favor, selecione um fluxo para publicar.",
-        variant: "destructive",
-      });
-      return;
-    }
-    onSaveWorkspaces();
-    toast({
-      title: "Fluxo Publicado!",
-      description: `O fluxo ativo foi salvo e publicado (simulado).`,
-      variant: "default",
-    });
-  };
 
   const fetchEvolutionWebhookLogs = useCallback(async () => {
     setIsLoadingEvolutionLogs(true);
@@ -308,7 +195,7 @@ const TopBar: React.FC<TopBarProps> = ({
         title: "Sessão Encerrada",
         description: `A sessão ${sessionId} foi encerrada com sucesso.`,
       });
-      fetchActiveSessions(); // Refresh the list
+      fetchActiveSessions(); 
     } catch (error: any) {
       toast({
         title: "Erro ao Encerrar Sessão",
@@ -351,11 +238,6 @@ const TopBar: React.FC<TopBarProps> = ({
     }
   };
 
-
-  const settingsCategories: { id: SettingsCategory; label: string; icon: React.ReactNode }[] = [
-    { id: 'integrations', label: 'Integrações', icon: <PlugZap className="w-5 h-5 mr-2" /> },
-  ];
-
   const handleCopyToClipboard = (e: React.MouseEvent<HTMLButtonElement>, text: string, type: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -383,20 +265,6 @@ const TopBar: React.FC<TopBarProps> = ({
     }
   };
 
-  const renderStatusIcon = (status: EvolutionInstance['status']) => {
-    switch (status) {
-      case 'online':
-        return <CircleDot className="h-4 w-4 text-green-500" title="Online" />;
-      case 'offline':
-        return <CloudOff className="h-4 w-4 text-red-500" title="Offline" />;
-      case 'connecting':
-        return <Loader2 className="h-4 w-4 animate-spin text-yellow-500" title="Conectando..." />;
-      case 'unconfigured':
-      default:
-        return <Circle className="h-4 w-4 text-gray-400" title="Não configurado" />;
-    }
-  }
-
   return (
     <>
       <header className="flex items-center justify-between h-16 px-4 md:px-6 border-b bg-card text-card-foreground shadow-sm shrink-0">
@@ -412,6 +280,16 @@ const TopBar: React.FC<TopBarProps> = ({
             onChange={(e) => onUpdateWorkspaceName(e.target.value)}
             disabled={!activeWorkspace}
           />
+           <Button
+            onClick={() => setIsSettingsDialogOpen(true)}
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground"
+            disabled={!activeWorkspace}
+            title="Configurações do Fluxo"
+          >
+            <Settings className="h-5 w-5" />
+          </Button>
         </div>
 
         <div className="flex items-center gap-1 md:gap-2">
@@ -434,7 +312,6 @@ const TopBar: React.FC<TopBarProps> = ({
               <span className="sr-only">Aumentar Zoom</span>
             </Button>
           </div>
-
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -466,7 +343,7 @@ const TopBar: React.FC<TopBarProps> = ({
           </DropdownMenu>
           
           <Button
-            onClick={handlePublishFlow}
+            onClick={onSaveWorkspaces}
             variant="default"
             size="sm"
             className="bg-accent hover:bg-accent/90 text-accent-foreground hidden md:inline-flex h-9"
@@ -532,13 +409,9 @@ const TopBar: React.FC<TopBarProps> = ({
                     </DropdownMenuItem>
                 </Link>
               )}
-              <DropdownMenuItem>
+              <DropdownMenuItem disabled>
                 <CreditCard className="mr-2 h-4 w-4" />
                 <span>Assinatura</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setActiveSettingsCategory('integrations'); setIsSettingsDialogOpen(true); }}>
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Configurações Globais</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={logout}>
@@ -550,139 +423,102 @@ const TopBar: React.FC<TopBarProps> = ({
         </div>
       </header>
 
-      {/* Settings Dialog */}
+      {/* Workspace Settings Dialog */}
       <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
-        <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl bg-card max-h-[85vh] flex flex-col p-0">
-          <DialogHeader className="px-6 py-4 border-b">
-            <DialogTitle className="text-xl">Configurações Globais</DialogTitle>
-             <DialogDescription>
-              A configuração do banco de dados agora é gerenciada pelo arquivo <code className="bg-muted px-1 rounded-sm text-xs">.env</code>.
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Configurações do Fluxo: {workspaceName}</DialogTitle>
+            <DialogDescription>
+              Ajustes específicos para este fluxo de trabalho.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-1 overflow-hidden">
-            <aside className="w-1/4 min-w-[200px] border-r bg-muted/40 p-4 space-y-2 overflow-y-auto">
-              {settingsCategories.map(category => (
-                <Button
-                  key={category.id}
-                  variant={activeSettingsCategory === category.id ? "secondary" : "ghost"}
-                  className={cn(
-                    "w-full justify-start text-sm",
-                    activeSettingsCategory === category.id ? "font-semibold" : "font-normal"
+          <div className="py-4 space-y-6">
+            <Accordion type="single" collapsible className="w-full" defaultValue="evolution-api">
+              <AccordionItem value="evolution-api">
+                <AccordionTrigger className="font-semibold">
+                  <div className="flex items-center gap-2">
+                    <BotMessageSquare className="w-5 h-5 text-teal-500" />
+                    API Evolution (WhatsApp)
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pt-4 space-y-4">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="enable-evolution-api"
+                      checked={activeWorkspace?.evolution_api_enabled}
+                      onCheckedChange={(checked) => onUpdateWorkspaceName(activeWorkspace?.name || '', { evolution_api_enabled: checked })}
+                      aria-label="Habilitar Integração API Evolution"
+                    />
+                    <Label htmlFor="enable-evolution-api">Habilitar para este fluxo</Label>
+                  </div>
+                  {activeWorkspace?.evolution_api_enabled && (
+                    <div className="space-y-3 pl-2 border-l-2 ml-2">
+                      <div>
+                        <Label htmlFor="evolution_api_url">URL Base</Label>
+                        <Input
+                          id="evolution_api_url"
+                          placeholder="http://localhost:8080"
+                          value={activeWorkspace?.evolution_api_url || ''}
+                          onChange={(e) => onUpdateWorkspaceName(activeWorkspace?.name || '', { evolution_api_url: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="evolution_instance_name">Nome da Instância</Label>
+                        <Input
+                          id="evolution_instance_name"
+                          placeholder="evolution_instance"
+                          value={activeWorkspace?.evolution_instance_name || ''}
+                          onChange={(e) => onUpdateWorkspaceName(activeWorkspace?.name || '', { evolution_instance_name: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="evolution_api_key">Chave da API (Opcional)</Label>
+                        <Input
+                          id="evolution_api_key"
+                          type="password"
+                          placeholder="Sua chave de API secreta"
+                          value={activeWorkspace?.evolution_api_key || ''}
+                          onChange={(e) => onUpdateWorkspaceName(activeWorkspace?.name || '', { evolution_api_key: e.target.value })}
+                        />
+                      </div>
+                       <div className="pt-2">
+                        <Label className="text-card-foreground/90 text-sm font-medium">URL de Webhook para este Fluxo</Label>
+                        <div className="flex items-center space-x-2 mt-1">
+                            <Input 
+                            id="flow-webhook-url-for-evolution" 
+                            type="text" 
+                            value={evolutionWebhookUrlForCurrentFlow} 
+                            readOnly 
+                            className="bg-input text-foreground flex-1 cursor-default break-all h-9"
+                            />
+                            <Button 
+                            variant="outline" 
+                            size="icon" 
+                            onClick={(e) => handleCopyToClipboard(e, evolutionWebhookUrlForCurrentFlow, "URL de Webhook")} 
+                            title="Copiar URL de Webhook" 
+                            className="h-9 w-9"
+                            >
+                            <Copy className="w-4 w-4" />
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1.5">Use esta URL para que a API Evolution envie eventos para este fluxo específico.</p>
+                       </div>
+                    </div>
                   )}
-                  onClick={() => setActiveSettingsCategory(category.id)}
-                >
-                  {category.icon}
-                  {category.label}
-                </Button>
-              ))}
-            </aside>
-            <main className="flex-1 p-6 overflow-y-auto space-y-6">
-              {activeSettingsCategory === 'integrations' && (
-                <section>
-                  <h3 className="text-lg font-semibold text-card-foreground mb-4">Integrações de Plataformas</h3>
-                  <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={isEvolutionApiEnabled ? 'evolution-api' : undefined}>
-                    <AccordionItem value="evolution-api" className="border rounded-lg shadow-sm">
-                      <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
-                        <div className="flex items-center space-x-3"><BotMessageSquare className="w-5 h-5 text-teal-500" /><span className="font-medium text-card-foreground">API Evolution (WhatsApp)</span></div>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-4 pt-3 pb-4 border-t">
-                        <div className="flex items-center space-x-2 mb-4">
-                          <Switch id="enable-evolution-api" checked={isEvolutionApiEnabled} onCheckedChange={setIsEvolutionApiEnabled} aria-label="Habilitar Integração API Evolution"/>
-                          <Label htmlFor="enable-evolution-api" className="text-sm font-medium">Habilitar Integração API Evolution</Label>
-                        </div>
-                         {isEvolutionApiEnabled && (
-                            <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
-                                <div className="space-y-3">
-                                    {evolutionInstances.map((instance, index) => (
-                                        <div key={instance.id} className="p-3 border rounded-md bg-muted/30 space-y-2">
-                                            <div className="flex justify-between items-center">
-                                                <div className="flex items-center gap-2">
-                                                    {renderStatusIcon(instance.status)}
-                                                    <Input
-                                                        placeholder={`Instância ${index + 1}`}
-                                                        value={instance.name}
-                                                        onChange={(e) => handleUpdateEvolutionInstance(instance.id, 'name', e.target.value)}
-                                                        className="font-semibold text-sm h-8 w-40 bg-background"
-                                                    />
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                   <Button size="sm" variant="outline" className="h-8" onClick={() => handleCheckInstanceStatus(instance.id)} disabled={instance.status === 'connecting'}>
-                                                        {instance.status === 'connecting' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4"/>}
-                                                        Verificar
-                                                    </Button>
-                                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => handleRemoveEvolutionInstance(instance.id)}><Trash2 className="h-4 w-4"/></Button>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-2 pt-2">
-                                                <div><Label htmlFor={`evo-url-${instance.id}`} className="text-xs">URL Base</Label><Input id={`evo-url-${instance.id}`} placeholder="http://localhost:8080" value={instance.baseUrl} onChange={(e) => handleUpdateEvolutionInstance(instance.id, 'baseUrl', e.target.value)} className="bg-background h-8 mt-1"/></div>
-                                                <div><Label htmlFor={`evo-key-${instance.id}`} className="text-xs">Chave API (Opcional)</Label><Input id={`evo-key-${instance.id}`} type="password" placeholder="Sua chave de API" value={instance.apiKey} onChange={(e) => handleUpdateEvolutionInstance(instance.id, 'apiKey', e.target.value)} className="bg-background h-8 mt-1"/></div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <Button variant="outline" size="sm" onClick={handleAddNewEvolutionInstance}><PlusCircle className="mr-2 h-4 w-4"/>Adicionar Nova Instância</Button>
-
-                                <div className="pt-4 border-t border-border space-y-2">
-                                <Label className="text-card-foreground/90 text-sm font-medium">Recepção de Webhooks da API Evolution</Label>
-                                <p className="text-xs text-muted-foreground mt-1 mb-2">
-                                    Configure a URL abaixo na sua API Evolution para o NexusFlow receber eventos.
-                                </p>
-                                <div className="flex items-center space-x-2">
-                                    <Input 
-                                    id="flowise-webhook-url-for-evolution" 
-                                    type="text" 
-                                    value={evolutionWebhookUrlForCurrentFlow} 
-                                    readOnly 
-                                    className="bg-input text-foreground flex-1 cursor-default break-all"
-                                    />
-                                    <Button 
-                                    variant="outline" 
-                                    size="icon" 
-                                    onClick={(e) => handleCopyToClipboard(e, evolutionWebhookUrlForCurrentFlow, "URL de Webhook")} 
-                                    title="Copiar URL de Webhook" 
-                                    className="h-9 w-9"
-                                    disabled={!workspaceName}
-                                    >
-                                    <Copy className="w-4 w-4" />
-                                    </Button>
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">Payloads recebidos são logados no console do servidor e visíveis no "Console" do app.</p>
-                                </div>
-                            </div>
-                         )}
-                      </AccordionContent>
-                    </AccordionItem>
-                    <AccordionItem value="supabase-integration" className="border rounded-lg shadow-sm">
-                      <AccordionTrigger className="px-4 py-3 hover:bg-muted/50 rounded-t-lg">
-                        <div className="flex items-center space-x-3">
-                          <SupabaseIcon />
-                          <span className="font-medium text-card-foreground">Supabase</span>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-4 pt-3 pb-4 border-t">
-                        <div className="flex items-center space-x-2 mb-4">
-                          <Switch id="enable-supabase" checked={isSupabaseEnabled} onCheckedChange={setIsSupabaseEnabled} aria-label="Habilitar Integração Supabase"/>
-                          <Label htmlFor="enable-supabase" className="text-sm font-medium">Habilitar Integração Supabase (para nós Supabase)</Label>
-                        </div>
-                        {isSupabaseEnabled && (
-                          <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2 duration-300">
-                            <div><Label htmlFor="supabase-url" className="text-card-foreground/90 text-sm">URL do Projeto Supabase</Label><Input id="supabase-url" placeholder="https://seunomeprojeto.supabase.co" value={supabaseUrl} onChange={(e) => setSupabaseUrl(e.target.value)} className="bg-input text-foreground mt-1"/></div>
-                            <div><Label htmlFor="supabase-service-key" className="text-card-foreground/90 text-sm">Chave de Serviço (Service Role Key)</Label><div className="flex items-center space-x-2 mt-1"><KeyRound className="w-4 h-4 text-muted-foreground" /><Input id="supabase-service-key" type="password" placeholder="eyJhbGciOi..." value={supabaseServiceKey} onChange={(e) => setSupabaseServiceKey(e.target.value)} className="bg-input text-foreground flex-1"/></div><p className="text-xs text-muted-foreground mt-1">Usada pelas Ações de Servidor para buscar schema e executar operações.</p></div>
-                          </div>
-                        )}
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                </section>
-              )}
-            </main>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </div>
-          <DialogFooter className="px-6 py-4 border-t mt-auto">
-            <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-            <Button onClick={handleSaveSettings}>Salvar Configurações</Button>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="secondary">
+                Fechar
+              </Button>
+            </DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
 
        {/* Webhook Logs Dialog */}
       <Dialog open={isWebhookLogsDialogOpen} onOpenChange={setIsWebhookLogsDialogOpen}>

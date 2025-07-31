@@ -129,7 +129,11 @@ async function initializeDatabaseSchema(): Promise<void> {
         connections JSONB,
         owner UUID, 
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW()
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        evolution_api_enabled BOOLEAN DEFAULT false,
+        evolution_api_url TEXT,
+        evolution_api_key TEXT,
+        evolution_instance_name TEXT
       );
     `);
 
@@ -264,6 +268,10 @@ export async function createWorkspaceAction(
             nodes: [defaultStartNode],
             connections: [],
             owner: ownerId,
+            evolution_api_enabled: false,
+            evolution_api_url: '',
+            evolution_api_key: '',
+            evolution_instance_name: '',
         };
 
         const saveResult = await saveWorkspaceToDB(newWorkspace);
@@ -286,15 +294,18 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
         return { success: false, error: "Dados do workspace incompletos (requer id, nome e proprietário)." };
     }
     
-    // Usa ON CONFLICT no ID (UUID), que é a chave primária, para decidir entre INSERT e UPDATE.
     const query = `
-      INSERT INTO workspaces (id, name, nodes, connections, owner, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      INSERT INTO workspaces (id, name, nodes, connections, owner, evolution_api_enabled, evolution_api_url, evolution_api_key, evolution_instance_name, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
       ON CONFLICT (id) DO UPDATE
       SET name = EXCLUDED.name,
           nodes = EXCLUDED.nodes,
           connections = EXCLUDED.connections,
-          updated_at = NOW();
+          updated_at = NOW(),
+          evolution_api_enabled = EXCLUDED.evolution_api_enabled,
+          evolution_api_url = EXCLUDED.evolution_api_url,
+          evolution_api_key = EXCLUDED.evolution_api_key,
+          evolution_instance_name = EXCLUDED.evolution_instance_name;
     `;
     
     await runQuery(query, [
@@ -303,6 +314,10 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
       JSON.stringify(workspaceData.nodes || []), 
       JSON.stringify(workspaceData.connections || []),
       workspaceData.owner,
+      workspaceData.evolution_api_enabled || false,
+      workspaceData.evolution_api_url || '',
+      workspaceData.evolution_api_key || '',
+      workspaceData.evolution_instance_name || '',
     ]);
     
     return { success: true };
@@ -319,7 +334,13 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
 
 export async function loadWorkspaceFromDB(workspaceId: string): Promise<WorkspaceData | null> {
   try {
-    const result = await runQuery<WorkspaceData>('SELECT id, name, nodes, connections, owner, created_at, updated_at FROM workspaces WHERE id = $1', [workspaceId]);
+    const result = await runQuery<WorkspaceData>(`
+        SELECT 
+            id, name, nodes, connections, owner, created_at, updated_at,
+            evolution_api_enabled, evolution_api_url, evolution_api_key, evolution_instance_name
+        FROM workspaces 
+        WHERE id = $1
+    `, [workspaceId]);
     if (result.rows.length > 0) {
       const row = result.rows[0];
       return { 
@@ -342,7 +363,12 @@ export async function loadWorkspacesForOwnerFromDB(ownerId: string): Promise<Wor
         return [];
     }
     const result = await runQuery<WorkspaceData>(
-      'SELECT id, name, nodes, connections, owner, created_at, updated_at FROM workspaces WHERE owner = $1 ORDER BY updated_at DESC',
+      `SELECT 
+        id, name, nodes, connections, owner, created_at, updated_at, 
+        evolution_api_enabled, evolution_api_url, evolution_api_key, evolution_instance_name
+       FROM workspaces 
+       WHERE owner = $1 
+       ORDER BY updated_at DESC`,
       [ownerId]
     );
      return result.rows.map(row => ({
@@ -507,5 +533,3 @@ export async function loadWorkspaceByNameFromDB(name: string, owner: string): Pr
     return null;
   }
 }
-
-    

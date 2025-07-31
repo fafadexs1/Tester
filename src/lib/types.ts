@@ -1,10 +1,4 @@
 
-
-
-
-
-
-
 export interface DraggableBlockItemData {
   type: string;
   label: string;
@@ -239,6 +233,12 @@ export interface WorkspaceData {
   owner: string; // This will now be the User's UUID
   created_at?: string | Date;
   updated_at?: string | Date;
+  
+  // Evolution API Settings per Workspace
+  evolution_api_enabled?: boolean;
+  evolution_api_url?: string;
+  evolution_api_key?: string;
+  evolution_instance_name?: string;
 }
 
 export interface FlowSession {
@@ -271,5 +271,3 @@ export interface EvolutionInstance {
   apiKey: string;
   status: 'online' | 'offline' | 'unconfigured' | 'connecting';
 }
-
-    
