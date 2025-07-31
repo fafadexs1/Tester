@@ -811,7 +811,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                         <Label htmlFor="webhook-url" className="text-xs font-medium">URL do Webhook (POST)</Label>
                         <div className="flex items-center space-x-1.5 mt-1">
                           <Input id="webhook-url" type="text" readOnly value={webhookUrl} className="bg-input/50 h-7 text-xs"/>
-                          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => { navigator.clipboard.writeText(webhookUrl).then(() => toast({ title: "URL Copiada!" })).catch(() => toast({ title: "Erro ao copiar", variant:"destructive"})); }} title="Copiar URL">
+                          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => { 
+                              if (navigator.clipboard && navigator.clipboard.writeText) {
+                                navigator.clipboard.writeText(webhookUrl).then(() => toast({ title: "URL Copiada!" })).catch(() => toast({ title: "Erro ao copiar", variant:"destructive"}));
+                              } else {
+                                toast({ title: "Não foi possível copiar", description: "Seu navegador não suporta esta ação ou a página não é segura (HTTPS).", variant: "destructive" });
+                              }
+                            }} title="Copiar URL">
                             <Copy className="w-3 h-3"/>
                           </Button>
                         </div>
@@ -1822,3 +1828,5 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
+    
