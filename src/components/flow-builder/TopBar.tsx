@@ -81,7 +81,7 @@ interface TopBarProps {
   workspaceName: string;
   onSaveWorkspaces: () => void;
   onDiscardChanges: () => void;
-  onUpdateWorkspaceName: (newName: string) => void;
+  onUpdateWorkspaceName: (newName: string, newSettings?: Partial<WorkspaceData>) => void;
   isChatPanelOpen: boolean;
   onToggleChatPanel: () => void;
   onZoom: (direction: 'in' | 'out' | 'reset') => void;
@@ -401,6 +401,10 @@ const TopBar: React.FC<TopBarProps> = ({
                     <span>Perfil</span>
                 </DropdownMenuItem>
               </Link>
+              <DropdownMenuItem onSelect={() => setIsSettingsDialogOpen(true)}>
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Configurações do Fluxo</span>
+              </DropdownMenuItem>
               {user?.role === 'desenvolvedor' && (
                 <Link href="/admin" passHref>
                     <DropdownMenuItem>
@@ -677,3 +681,5 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
+
+    
