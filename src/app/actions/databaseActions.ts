@@ -128,6 +128,42 @@ async function initializeDatabaseSchema(): Promise<void> {
         evolution_instance_id UUID
       );
     `);
+
+    // --- START WORKSPACE MIGRATION LOGIC ---
+    const ownerIdColumnExists = await client.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='workspaces' AND column_name='owner_id';
+    `);
+
+    if (ownerIdColumnExists.rowCount === 0) {
+        console.log("[DB Actions] 'owner_id' column not found in 'workspaces'. Migrating...");
+        const oldOwnerColumnExists = await client.query(`
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name='workspaces' AND column_name='owner';
+        `);
+
+        if (oldOwnerColumnExists.rowCount > 0) {
+            console.log("[DB Actions] Old 'owner' column found. Renaming to 'owner_id'.");
+            await client.query('ALTER TABLE workspaces RENAME COLUMN owner TO owner_id;');
+        } else {
+            console.log("[DB Actions] 'owner_id' not found. Creating it.");
+            await client.query('ALTER TABLE workspaces ADD COLUMN owner_id UUID;');
+        }
+        
+        // Add foreign key constraint if it doesn't exist
+        const fkConstraintExists = await client.query(`
+            SELECT 1 FROM pg_constraint 
+            WHERE conname = 'workspaces_owner_id_fkey' AND conrelid = 'workspaces'::regclass;
+        `);
+        if (fkConstraintExists.rowCount === 0) {
+            await client.query(`
+                ALTER TABLE workspaces ADD CONSTRAINT workspaces_owner_id_fkey 
+                FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE;
+            `);
+            console.log("[DB Actions] Foreign key constraint for 'owner_id' added.");
+        }
+    }
+    // --- END WORKSPACE MIGRATION LOGIC ---
     
     await client.query(`
       CREATE TABLE IF NOT EXISTS evolution_instances (
