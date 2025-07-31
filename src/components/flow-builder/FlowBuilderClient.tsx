@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { 
     saveWorkspaceToDB,
     loadWorkspaceFromDB,
+    loadWorkspacesForOwnerFromDB
 } from '@/app/actions/databaseActions';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
@@ -178,22 +179,32 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const createNewWorkspace = useCallback(async () => {
     if (!user) return;
     setIsLoading(true);
+    
+    const existingWorkspaces = await loadWorkspacesForOwnerFromDB(user.username);
+    const existingNames = existingWorkspaces.map(ws => ws.name);
+    
+    let newName = 'Meu Novo Fluxo';
+    let counter = 1;
+    while (existingNames.includes(newName)) {
+        newName = `Meu Novo Fluxo (${counter})`;
+        counter++;
+    }
+
     const newId = uuidv4();
     const newWorkspace: WorkspaceData = {
         id: newId,
-        name: 'Meu Novo Fluxo',
+        name: newName,
         nodes: [],
         connections: [],
         owner: user.username
     };
     const saveResult = await saveWorkspaceToDB(newWorkspace);
     if(saveResult.success) {
-        // Replace URL and set active workspace
         router.replace(`/flow/${newId}`, { scroll: false });
         setActiveWorkspace(newWorkspace);
     } else {
          toast({ title: "Erro", description: `Não foi possível criar o novo fluxo: ${saveResult.error}`, variant: "destructive" });
-         router.push('/'); // Volta para o dashboard em caso de erro
+         router.push('/');
     }
     setIsLoading(false);
   }, [user, toast, router]);
