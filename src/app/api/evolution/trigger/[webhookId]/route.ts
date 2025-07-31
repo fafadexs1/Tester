@@ -336,6 +336,8 @@ async function executeFlow(
     // After the loop finishes (either by pausing or reaching the end), save the final session state.
     if (shouldContinue && !currentNodeId) { // This means the loop finished because currentNodeId is null (a dead end)
         session.current_node_id = null; // Explicitly set to null to indicate a paused/dead-end state
+        session.awaiting_input_type = null; // Ensure it's not waiting for input
+        session.awaiting_input_details = null;
         console.log(`[Flow Engine - ${session.session_id}] Execution loop ended at a dead end. Pausing session.`);
         await saveSessionToDB(session); // Save the paused state
     } else if (!shouldContinue) { // Loop was broken by a node that pauses (e.g., input) or ends the flow
