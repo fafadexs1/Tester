@@ -1,27 +1,10 @@
 
 'use server';
 
-import { Pool, type QueryResult } from 'pg';
 import { z } from 'zod';
 import type { EvolutionInstance } from '@/lib/types';
 import { getCurrentUser } from '@/lib/auth';
-
-// This is a simplified version of the DB connection from databaseActions.ts
-// In a real app, you would centralize this logic.
-let pool: Pool | null = null;
-function getDbPool(): Pool {
-    if (pool) return pool;
-    const useSSL = process.env.POSTGRES_SSL === 'true';
-    pool = new Pool({
-        host: process.env.POSTGRES_HOST,
-        port: process.env.POSTGRES_PORT ? parseInt(process.env.POSTGRES_PORT, 10) : 5432,
-        user: process.env.POSTGRES_USER,
-        password: process.env.POSTGRES_PASSWORD,
-        database: process.env.POSTGRES_DATABASE,
-        ssl: useSSL ? { rejectUnauthorized: false } : false,
-    });
-    return pool;
-}
+import { runQuery } from './databaseActions'; // Import the robust runQuery
 
 const InstanceSchema = z.object({
     id: z.string().uuid().optional().or(z.literal('')),
@@ -38,8 +21,7 @@ export async function getEvolutionInstancesForUser(): Promise<{ data?: Evolution
     }
 
     try {
-        const poolInstance = getDbPool();
-        const result = await poolInstance.query<EvolutionInstance>(
+        const result = await runQuery<EvolutionInstance>(
             'SELECT id, name, base_url, api_key FROM evolution_instances WHERE user_id = $1 ORDER BY name',
             [user.id]
         );
@@ -80,12 +62,11 @@ export async function saveEvolutionInstanceAction(
     console.log('[InstanceActions] Dados validados:', { id, name, baseUrl, apiKey: apiKey ? 'presente' : 'ausente' });
 
     try {
-        const poolInstance = getDbPool();
-        let result: QueryResult<EvolutionInstance>;
+        let result;
 
         if (id) { // Update
             console.log(`[InstanceActions] Executando UPDATE para a instância ID: ${id}`);
-            result = await poolInstance.query<EvolutionInstance>(
+            result = await runQuery<EvolutionInstance>(
                 `UPDATE evolution_instances 
                  SET name = $1, base_url = $2, api_key = $3, updated_at = NOW() 
                  WHERE id = $4 AND user_id = $5 
@@ -94,7 +75,7 @@ export async function saveEvolutionInstanceAction(
             );
         } else { // Create
             console.log(`[InstanceActions] Executando INSERT para a nova instância com nome: ${name}`);
-            result = await poolInstance.query<EvolutionInstance>(
+            result = await runQuery<EvolutionInstance>(
                 `INSERT INTO evolution_instances (user_id, name, base_url, api_key) 
                  VALUES ($1, $2, $3, $4) 
                  RETURNING id, name, base_url, api_key`,
@@ -130,8 +111,7 @@ export async function deleteEvolutionInstanceAction(instanceId: string): Promise
     }
 
     try {
-        const poolInstance = getDbPool();
-        const result = await poolInstance.query(
+        const result = await runQuery(
             'DELETE FROM evolution_instances WHERE id = $1 AND user_id = $2',
             [instanceId, user.id]
         );

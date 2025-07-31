@@ -37,38 +37,41 @@ function getDbPool(): Pool {
     return pool;
 }
 
-async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResult<T>> {
+export async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResult<T>> {
     const poolInstance = getDbPool();
+    const client = await poolInstance.connect();
     try {
-        const client = await poolInstance.connect();
-        try {
-            return await client.query<T>(query, params);
-        } finally {
-            client.release();
-        }
+        await client.query('BEGIN');
+        const result = await client.query<T>(query, params);
+        await client.query('COMMIT');
+        return result;
     } catch (error: any) {
-        console.error(`[DB Actions] Query failed: ${query.substring(0, 100)}...`, { error: error.message, code: error.code });
+        await client.query('ROLLBACK');
+        console.error(`[DB Actions] Query failed and rolled back: ${query.substring(0, 100)}...`, { error: error.message, code: error.code });
+        
         if (['ECONNRESET', 'ECONNREFUSED'].includes(error.code) || error.message.includes('timeout')) {
             if (pool) await pool.end();
             pool = null;
         }
+        
         if (error.code === '42P01') { 
             console.warn('[DB Actions] Table not found. Attempting to initialize schema and retry...');
             try {
                 await initializeDatabaseSchema();
                 console.log('[DB Actions] Schema initialized. Retrying query...');
-                const client = await poolInstance.connect();
-                 try {
-                    return await client.query<T>(query, params);
-                } finally {
-                    client.release();
-                }
-            } catch (initError) {
-                 console.error('[DB Actions] Fatal: Failed to initialize schema after table not found.', initError);
+                await client.query('BEGIN');
+                const result = await client.query<T>(query, params);
+                await client.query('COMMIT');
+                return result;
+            } catch (initError: any) {
+                 await client.query('ROLLBACK');
+                 console.error('[DB Actions] Fatal: Failed to initialize schema after table not found. Rolled back.', initError);
                  throw initError;
             }
         }
         throw error;
+    } finally {
+        client.release();
     }
 }
 
