@@ -118,16 +118,10 @@ const TopBar: React.FC<TopBarProps> = ({
   }, [toast]);
 
   useEffect(() => {
-    if (isGlobalSettingsOpen) {
+    if (isGlobalSettingsOpen || isSettingsDialogOpen) {
       fetchEvolutionInstances();
     }
-  }, [isGlobalSettingsOpen, fetchEvolutionInstances]);
-  
-   useEffect(() => {
-    if (isSettingsDialogOpen) {
-      fetchEvolutionInstances();
-    }
-  }, [isSettingsDialogOpen, fetchEvolutionInstances]);
+  }, [isGlobalSettingsOpen, isSettingsDialogOpen, fetchEvolutionInstances]);
 
   const handleEditInstance = (instance: EvolutionInstance) => {
     setEditingInstance(instance);
@@ -385,10 +379,6 @@ const TopBar: React.FC<TopBarProps> = ({
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Configurações do Fluxo</span>
               </DropdownMenuItem>
-               <DropdownMenuItem onSelect={() => setIsGlobalSettingsOpen(true)}>
-                <PlugZap className="mr-2 h-4 w-4" />
-                <span>Configurações Globais</span>
-              </DropdownMenuItem>
               {user?.role === 'desenvolvedor' && (
                 <Link href="/admin" passHref>
                     <DropdownMenuItem>
@@ -452,7 +442,10 @@ const TopBar: React.FC<TopBarProps> = ({
                           </SelectContent>
                         </Select>
                          <p className="text-xs text-muted-foreground mt-1.5">
-                          Selecione uma instância configurada nas <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => { setIsSettingsDialogOpen(false); setIsGlobalSettingsOpen(true);}}>Configurações Globais</Button>.
+                          Precisa adicionar ou alterar uma instância?
+                          <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => setIsGlobalSettingsOpen(true)}>
+                            Gerenciar Instâncias
+                          </Button>
                         </p>
                       </div>
                   </div>
@@ -470,21 +463,18 @@ const TopBar: React.FC<TopBarProps> = ({
         </DialogContent>
       </Dialog>
       
-      {/* Global Settings Dialog */}
+      {/* Instance Management Dialog */}
       <Dialog open={isGlobalSettingsOpen} onOpenChange={setIsGlobalSettingsOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
             <DialogHeader>
-              <DialogTitle>Configurações Globais</DialogTitle>
+              <DialogTitle>Gerenciar Instâncias da API Evolution</DialogTitle>
               <DialogDescription>
-                Gerencie integrações e outras configurações para toda a sua conta.
+                Adicione, edite, teste e remova suas instâncias de API. Elas ficarão disponíveis para todos os seus fluxos.
               </DialogDescription>
             </DialogHeader>
             <div className="flex-1 overflow-hidden">
-                <Tabs defaultValue="evolution-api" className="w-full h-full flex flex-col">
-                    <TabsList className="grid w-full grid-cols-1">
-                        <TabsTrigger value="evolution-api">Instâncias da API Evolution</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="evolution-api" className="flex-1 overflow-hidden mt-4">
+                <div className="w-full h-full flex flex-col">
+                    <div className="flex-1 overflow-hidden mt-4">
                       {editingInstance ? (
                         <form onSubmit={handleSaveInstance} className="space-y-4 p-1">
                           <h4 className="font-semibold">{editingInstance.id ? "Editar Instância" : "Nova Instância"}</h4>
@@ -556,8 +546,8 @@ const TopBar: React.FC<TopBarProps> = ({
                           </ScrollArea>
                         </div>
                       )}
-                    </TabsContent>
-                </Tabs>
+                    </div>
+                </div>
             </div>
             <DialogFooter>
                 <DialogClose asChild><Button type="button" variant="secondary">Fechar</Button></DialogClose>
