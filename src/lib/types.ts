@@ -4,6 +4,7 @@
 
 
 
+
 export interface DraggableBlockItemData {
   type: string;
   label: string;
@@ -260,6 +261,7 @@ export interface User {
     id: string; // UUID
     username: string;
     role: 'user' | 'desenvolvedor';
+    password_hash?: string;
 }
 
 export interface EvolutionInstance {
@@ -269,3 +271,5 @@ export interface EvolutionInstance {
   apiKey: string;
   status: 'online' | 'offline' | 'unconfigured' | 'connecting';
 }
+
+    

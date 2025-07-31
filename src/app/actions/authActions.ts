@@ -31,11 +31,11 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
     }
     
     // A verificação de senha real deve ser feita com uma biblioteca como bcrypt no futuro.
-    // const passwordMatches = await verifyPassword(password, dbUser.password_hash);
-    // if (!passwordMatches) {
-    //     console.log(`[authActions.ts] loginAction: Senha inválida para o usuário '${username}'.`);
-    //     return { success: false, error: "Usuário ou senha inválidos." };
-    // }
+    const passwordMatches = verifyPassword(password, dbUser.password_hash || '');
+    if (!passwordMatches) {
+        console.log(`[authActions.ts] loginAction: Senha inválida para o usuário '${username}'.`);
+        return { success: false, error: "Usuário ou senha inválidos." };
+    }
 
     // Cria a sessão com os dados do usuário do banco, incluindo id e role.
     const user: User = { id: dbUser.id, username: dbUser.username, role: dbUser.role };
@@ -96,3 +96,5 @@ export async function logoutAction(): Promise<{ success: boolean }> {
   console.log('[authActions.ts] logoutAction: Sessão do usuário deletada.');
   return { success: true };
 }
+
+    

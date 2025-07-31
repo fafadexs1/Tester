@@ -72,22 +72,6 @@ async function initializeDatabaseSchema(): Promise<void> {
       );
     `);
     
-    // Altera a coluna 'id' de workspaces para UUID se ela for do tipo TEXT
-    const idTypeCheckQuery = `
-        SELECT data_type FROM information_schema.columns 
-        WHERE table_name = 'workspaces' AND column_name = 'id';
-    `;
-    const idTypeResult = await client.query(idTypeCheckQuery);
-    if (idTypeResult.rows.length > 0 && idTypeResult.rows[0].data_type === 'text') {
-        console.log("[DB Migration] Workspace 'id' column is TEXT. Altering to UUID.");
-        // Isso é complexo e potencialmente destrutivo. Por segurança, vamos apenas recriar se for um ambiente de dev.
-        // Em um cenário real, uma migração mais cuidadosa seria necessária.
-        // Esta abordagem assume que os dados podem ser recriados.
-        // Se houver dados, esta migração precisa ser mais inteligente.
-        // Aqui, vamos focar em garantir que o schema esteja correto para novas instalações.
-    }
-
-
     await client.query(`
       CREATE TABLE IF NOT EXISTS flow_sessions (
         session_id TEXT PRIMARY KEY,
@@ -152,7 +136,7 @@ async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResu
 // --- User Actions ---
 export async function findUserByUsername(username: string): Promise<User | null> {
     const result = await runQuery<User>(
-        'SELECT id, username, role FROM users WHERE username = $1',
+        'SELECT id, username, role, password_hash FROM users WHERE username = $1',
         [username]
     );
     if (result.rows.length > 0) {
@@ -176,6 +160,7 @@ export async function createUser(username: string, passwordHash: string, role: '
         if (error.code === '23505') { // Unique violation on username
             return { success: false, error: 'Este nome de usuário já está em uso.' };
         }
+        console.error("[DB Actions] Error creating user:", error);
         return { success: false, error: `Erro de banco de dados: ${error.message}` };
     }
 }
@@ -435,3 +420,22 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
         });
     }
 })();
+
+// Deprecated function, will be removed later.
+export async function loadWorkspaceByNameFromDB(name: string, owner: string): Promise<WorkspaceData | null> {
+  try {
+    const result = await runQuery<WorkspaceData>(
+      'SELECT id, name, nodes, connections, owner FROM workspaces WHERE name = $1 AND owner = $2',
+      [name, owner]
+    );
+    if (result.rows.length > 0) {
+      return result.rows[0];
+    }
+    return null;
+  } catch (error: any) {
+    console.error(`[DB Actions] loadWorkspaceByNameFromDB Error for name ${name}:`, error);
+    return null;
+  }
+}
+
+    

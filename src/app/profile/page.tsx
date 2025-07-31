@@ -99,7 +99,7 @@ export default function ProfilePage() {
                             <Input readOnly value={user.role} className="capitalize"/>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="apiToken">Seu Token de API</Label>
+                            <Label htmlFor="apiToken">Seu Token de API (exemplo)</Label>
                             <div className="flex items-center space-x-2">
                                 <Input id="apiToken" readOnly type="password" value={apiToken} />
                                 <Button variant="outline" size="icon" onClick={handleCopyToken}>
@@ -119,3 +119,5 @@ export default function ProfilePage() {
         </div>
     );
 }
+
+    
