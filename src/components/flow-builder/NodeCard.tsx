@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger, WebhookVariableMapping, WorkspaceData } from '@/lib/types';
+import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger, WebhookVariableMapping, WorkspaceData, EvolutionInstance } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, Trash, MousePointerClick
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, Trash, MousePointerClick, History, AlertCircle, FileText
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
@@ -33,6 +33,7 @@ import {
   NODE_HEADER_HEIGHT_APPROX, NODE_HEADER_CONNECTOR_Y_OFFSET
 } from '@/lib/constants';
 import { fetchSupabaseTablesAction, fetchSupabaseTableColumnsAction } from '@/lib/supabase/actions';
+import { checkEvolutionInstanceStatus } from '@/app/actions/evolutionApiActions';
 
 
 interface NodeCardProps {
@@ -43,6 +44,18 @@ interface NodeCardProps {
   definedVariablesInFlow: string[];
   isSessionHighlighted?: boolean;
   activeWorkspace: WorkspaceData | undefined | null;
+}
+
+interface WebhookLogEntry {
+  timestamp: string;
+  method?: string;
+  url?: string;
+  headers?: Record<string, string>;
+  payload?: any;
+  ip?: string;
+  extractedMessage?: string | null;
+  webhook_remoteJid?: string | null;
+  workspaceNameParam?: string;
 }
 
 const NodeCard: React.FC<NodeCardProps> = React.memo(({
@@ -57,16 +70,29 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const { toast } = useToast();
   const isDraggingNode = useRef(false);
 
+  // States for API Call testing modal
   const [isTestResponseModalOpen, setIsTestResponseModalOpen] = useState(false);
   const [testResponseData, setTestResponseData] = useState<{ status: number; headers: Record<string, string>; body: any } | null>(null);
   const [testResponseError, setTestResponseError] = useState<string | null>(null);
   const [isTestingApi, setIsTestingApi] = useState(false);
+  
+  // States for Webhook History modal
+  const [isWebhookHistoryDialogOpen, setIsWebhookHistoryDialogOpen] = useState(false);
+  const [webhookLogs, setWebhookLogs] = useState<WebhookLogEntry[]>([]);
+  const [isLoadingWebhookLogs, setIsLoadingWebhookLogs] = useState(false);
+  const [webhookLogsError, setWebhookLogsError] = useState<string | null>(null);
 
+  // States for Supabase schema fetching
   const [supabaseTables, setSupabaseTables] = useState<{name: string}[]>([]);
   const [supabaseColumns, setSupabaseColumns] = useState<{name: string}[]>([]);
   const [isLoadingSupabaseTables, setIsLoadingSupabaseTables] = useState(false);
   const [isLoadingSupabaseColumns, setIsLoadingSupabaseColumns] = useState(false);
   const [supabaseSchemaError, setSupabaseSchemaError] = useState<string | null>(null);
+
+  // States for Evolution API instance popover
+  const [isEvolutionPoperOpen, setIsEvolutionPoperOpen] = useState(false);
+  const [evolutionInstances, setEvolutionInstances] = useState<EvolutionInstance[]>([]);
+
 
   // Garantir que o nó de início tenha os gatilhos padrão se não os tiver
   useEffect(() => {
@@ -193,6 +219,21 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id, node.supabaseTableName]); // Removido onUpdate
 
+   const loadEvolutionInstances = () => {
+    const savedInstances = localStorage.getItem('evolutionInstances');
+    if (savedInstances) {
+      setEvolutionInstances(JSON.parse(savedInstances));
+    } else {
+      setEvolutionInstances([]);
+    }
+  };
+
+  const handleEvolutionPopoverOpen = (open: boolean) => {
+    if(open) {
+      loadEvolutionInstances();
+    }
+    setIsEvolutionPoperOpen(open);
+  }
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -411,6 +452,29 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     } finally {
       setIsTestingApi(false);
     }
+  };
+
+  const fetchWebhookLogs = useCallback(async () => {
+    setIsLoadingWebhookLogs(true);
+    setWebhookLogsError(null);
+    try {
+      const response = await fetch('/api/evolution/webhook-logs');
+      if (!response.ok) {
+        throw new Error('Falha ao buscar logs do webhook');
+      }
+      const data: WebhookLogEntry[] = await response.json();
+      setWebhookLogs(data);
+    } catch (error: any) {
+      setWebhookLogsError(error.message);
+      setWebhookLogs([]);
+    } finally {
+      setIsLoadingWebhookLogs(false);
+    }
+  }, []);
+
+  const handleOpenWebhookHistory = () => {
+    fetchWebhookLogs();
+    setIsWebhookHistoryDialogOpen(true);
   };
 
   const handleVariableInsert = (
@@ -757,6 +821,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                             <Copy className="w-3 h-3"/>
                           </Button>
                         </div>
+                         <Button
+                            variant="link"
+                            size="sm"
+                            className="text-xs h-auto p-0 mt-1.5 text-accent"
+                            onClick={handleOpenWebhookHistory}
+                          >
+                            <History className="w-3.5 h-3.5 mr-1" />
+                            Ver Histórico de Webhooks
+                          </Button>
                       </div>
 
                       <div className="pt-2">
@@ -863,11 +936,20 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-instance`}>Instância (Opcional - usa padrão global)</Label>
-              <div className="relative">
-                <Input id={`${node.id}-instance`} placeholder="ex: evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
-                {renderVariableInserter('instanceName')}
-              </div>
+              <Label htmlFor={`${node.id}-instance`}>Instância</Label>
+              <Select onValueChange={(value) => onUpdate(node.id, { instanceName: value })} value={node.instanceName || ''}>
+                <SelectTrigger id={`${node.id}-instance`}>
+                  <SelectValue placeholder="Selecione uma instância..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Usar Padrão Global</SelectItem>
+                  {evolutionInstances.map(instance => (
+                    <SelectItem key={instance.id} value={instance.name}>
+                      {instance.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
@@ -889,11 +971,20 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-instance`}>Instância (Opcional - usa padrão global)</Label>
-              <div className="relative">
-                <Input id={`${node.id}-instance`} placeholder="ex: evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
-                {renderVariableInserter('instanceName')}
-              </div>
+              <Label htmlFor={`${node.id}-instance`}>Instância</Label>
+              <Select onValueChange={(value) => onUpdate(node.id, { instanceName: value })} value={node.instanceName || ''}>
+                <SelectTrigger id={`${node.id}-instance`}>
+                  <SelectValue placeholder="Selecione uma instância..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Usar Padrão Global</SelectItem>
+                  {evolutionInstances.map(instance => (
+                    <SelectItem key={instance.id} value={instance.name}>
+                      {instance.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
              <div>
                 <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
@@ -931,11 +1022,20 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
          return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-instance`}>Instância (Opcional - usa padrão global)</Label>
-              <div className="relative">
-                <Input id={`${node.id}-instance`} placeholder="ex: evolution_instance" value={node.instanceName || ''} onChange={(e) => onUpdate(node.id, { instanceName: e.target.value })} className="pr-8"/>
-                {renderVariableInserter('instanceName')}
-              </div>
+              <Label htmlFor={`${node.id}-instance`}>Instância</Label>
+              <Select onValueChange={(value) => onUpdate(node.id, { instanceName: value })} value={node.instanceName || ''}>
+                <SelectTrigger id={`${node.id}-instance`}>
+                  <SelectValue placeholder="Selecione uma instância..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Usar Padrão Global</SelectItem>
+                  {evolutionInstances.map(instance => (
+                    <SelectItem key={instance.id} value={instance.name}>
+                      {instance.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-groupname`}>Nome do Grupo</Label>
@@ -1596,15 +1696,53 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               {node.title}
             </CardTitle>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleDeleteClick}
-            className="p-0.5 text-muted-foreground hover:text-destructive w-6 h-6"
-            aria-label="Excluir nó" data-action="delete-node"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
+          <div className="flex items-center gap-1">
+             {node.type === 'start' && (
+              <Popover open={isEvolutionPoperOpen} onOpenChange={handleEvolutionPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="p-0.5 text-muted-foreground hover:text-foreground w-6 h-6" aria-label="Instâncias da API Evolution">
+                    <BotMessageSquare className="w-4 h-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80" align="end" data-no-drag="true">
+                  <div className="grid gap-4">
+                    <div className="space-y-2">
+                      <h4 className="font-medium leading-none">Instâncias da API Evolution</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Status das suas instâncias configuradas.
+                      </p>
+                    </div>
+                     <ScrollArea className="h-auto max-h-[200px]">
+                      <div className="grid gap-2">
+                        {evolutionInstances.length > 0 ? evolutionInstances.map((instance) => (
+                           <div key={instance.id} className="grid grid-cols-[auto,1fr,auto] items-center gap-x-2 text-sm p-2 rounded-md border bg-muted/50">
+                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: instance.status === 'online' ? 'hsl(var(--primary))' : instance.status === 'offline' ? 'hsl(var(--destructive))' : 'hsl(var(--muted-foreground))' }} title={instance.status}></div>
+                              <div className="font-medium truncate" title={instance.name}>{instance.name}</div>
+                              <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
+                          </div>
+                        )) : (
+                          <p className="text-xs text-muted-foreground text-center py-2">Nenhuma instância configurada.</p>
+                        )}
+                      </div>
+                    </ScrollArea>
+                    <Button variant="outline" size="sm" onClick={() => { /* Lógica para abrir config global */ }}>
+                        <Settings2 className="w-4 h-4 mr-2" />
+                        Gerenciar Instâncias
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleDeleteClick}
+              className="p-0.5 text-muted-foreground hover:text-destructive w-6 h-6"
+              aria-label="Excluir nó" data-action="delete-node"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="p-3.5 text-sm">
           {renderNodeContent()}
@@ -1632,6 +1770,63 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       {renderOutputConnectors()}
     </motion.div>
 
+    {/* Webhook History Dialog */}
+    <Dialog open={isWebhookHistoryDialogOpen} onOpenChange={setIsWebhookHistoryDialogOpen}>
+        <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[85vh] flex flex-col" data-no-drag="true">
+            <DialogHeader>
+                <DialogTitle>Histórico de Webhooks Recebidos</DialogTitle>
+                <DialogDescription>
+                    Exibe os últimos 50 eventos de webhook recebidos pelo fluxo. Os logs são zerados quando o servidor reinicia.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
+                {isLoadingWebhookLogs && <div className="flex justify-center items-center h-full"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>}
+                {webhookLogsError && (
+                  <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm">
+                    <div className="flex items-center gap-2 font-medium"><AlertCircle className="h-5 w-5" /> Erro ao carregar logs:</div>
+                    <p className="mt-1 text-xs">{webhookLogsError}</p>
+                  </div>
+                )}
+                {!isLoadingWebhookLogs && !webhookLogsError && webhookLogs.length === 0 && (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4">
+                    <FileText className="w-12 h-12 mb-3" />
+                    <p className="text-sm">Nenhum log de webhook encontrado.</p>
+                  </div>
+                )}
+                {!isLoadingWebhookLogs && webhookLogs.length > 0 && (
+                    <ScrollArea className="flex-1 border rounded-md bg-muted/30">
+                        <div className="p-3 space-y-3">
+                            {webhookLogs.map((log, index) => (
+                                <details key={index} className="bg-background p-2.5 rounded shadow-sm text-xs">
+                                    <summary className="cursor-pointer font-medium text-foreground/80 hover:text-foreground select-none">
+                                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm text-primary/80 mr-2">{new Date(log.timestamp).toLocaleString()}</span>
+                                        <span className="font-semibold mr-1">{log.method}</span>
+                                        {log.payload?.event && <span className="text-accent font-semibold">{log.payload.event}</span>}
+                                        {log.extractedMessage && <span className="ml-2 text-slate-500 italic">Msg: "{log.extractedMessage.substring(0, 30)}{log.extractedMessage.length > 30 ? '...' : ''}"</span>}
+                                        {log.webhook_remoteJid && <span className="ml-2 text-blue-500 text-xs">De: {log.webhook_remoteJid}</span>}
+                                    </summary>
+                                    <div className="mt-2 p-2 bg-muted/20 rounded-sm overflow-auto text-xs text-foreground/70 space-y-1.5">
+                                        {log.method && log.url && <div><strong>Endpoint:</strong> <span className="break-all">{log.method} {log.url}</span></div>}
+                                        {log.ip && <div><strong>IP Origem:</strong> {log.ip}</div>}
+                                        {log.headers && <div><strong>Headers:</strong><pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-24 overflow-y-auto">{JSON.stringify(log.headers, null, 2)}</pre></div>}
+                                        <div><strong>Payload Completo:</strong>
+                                            <pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-60 overflow-y-auto">{JSON.stringify(log.payload, null, 2)}</pre>
+                                        </div>
+                                    </div>
+                                </details>
+                            ))}
+                        </div>
+                    </ScrollArea>
+                )}
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsWebhookHistoryDialogOpen(false)}>Fechar</Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+
+
+    {/* API Test Response Dialog */}
     {node.type === 'api-call' && (
         <Dialog open={isTestResponseModalOpen} onOpenChange={setIsTestResponseModalOpen}>
             <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col" data-no-drag="true">
