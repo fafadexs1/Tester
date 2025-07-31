@@ -334,7 +334,7 @@ async function executeFlow(
     }
     
     // After the loop finishes (either by pausing or reaching the end), save the final session state.
-    if (shouldContinue && !session.current_node_id) { // This means the loop finished because currentNodeId is null (a dead end)
+    if (shouldContinue && !currentNodeId) { // This means the loop finished because currentNodeId is null (a dead end)
         session.current_node_id = null; // Explicitly set to null to indicate a paused/dead-end state
         console.log(`[Flow Engine - ${session.session_id}] Execution loop ended at a dead end. Pausing session.`);
         await saveSessionToDB(session); // Save the paused state
@@ -451,7 +451,8 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
     if (session) {
         console.log(`[API Evolution Trigger - ${sessionId}] Existing session found. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
       if (session.current_node_id === null && session.awaiting_input_type === null) {
-          console.log(`[API Evolution Trigger - ${sessionId}] Session is in a paused (dead-end) state.`);
+          console.log(`[API Evolution Trigger - ${sessionId}] Session is in a paused (dead-end) state. No action will be taken unless a trigger keyword is matched.`);
+          // This allows the flow to be re-triggered by a keyword even if a session exists.
           session = null;
       } else {
         session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
