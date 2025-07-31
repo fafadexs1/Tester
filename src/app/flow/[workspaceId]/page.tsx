@@ -29,8 +29,8 @@ export default async function FlowEditorPage({ params }: { params: { workspaceId
   }
   
   // Verifica se o usuário logado é o dono do workspace
-  if (initialWorkspace.owner !== user.id) {
-      console.warn(`[FlowEditorPage] Usuário ${user.username} (ID: ${user.id}) tentou acessar o workspace ${workspaceId} que pertence ao owner ID ${initialWorkspace.owner}. Acesso negado.`);
+  if (initialWorkspace.owner_id !== user.id) {
+      console.warn(`[FlowEditorPage] Usuário ${user.username} (ID: ${user.id}) tentou acessar o workspace ${workspaceId} que pertence ao owner ID ${initialWorkspace.owner_id}. Acesso negado.`);
       redirect('/');
   }
 
