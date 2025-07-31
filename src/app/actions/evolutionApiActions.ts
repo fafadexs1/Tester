@@ -35,7 +35,7 @@ export async function sendWhatsAppMessageAction(
       return { success: false, error: 'Conteúdo do texto ausente para mensagem de texto.' };
     }
     endpoint = `${params.baseUrl.replace(/\/$/, '')}/message/sendText/${params.instanceName}`;
-    body.number = params.recipientPhoneNumber;
+    body.number = params.recipientPhoneNumber.split('@')[0];
     body.options = { presence: 'composing', delay: 1200 };
     // CORREÇÃO: O texto deve estar dentro de um objeto textMessage.
     body.textMessage = { text: params.textContent };
@@ -44,7 +44,7 @@ export async function sendWhatsAppMessageAction(
       return { success: false, error: 'URL da mídia ausente para mensagem de mídia.' };
     }
     endpoint = `${params.baseUrl.replace(/\/$/, '')}/message/sendMedia/${params.instanceName}`;
-    body.number = params.recipientPhoneNumber;
+    body.number = params.recipientPhoneNumber.split('@')[0];
     body.mediaMessage = {
       mediaType: params.messageType,
       url: params.mediaUrl,

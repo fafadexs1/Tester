@@ -251,7 +251,7 @@ async function executeFlow(
                 await sendWhatsAppMessageAction({
                     ...apiConfig,
                     instanceName,
-                    recipientPhoneNumber,
+                    recipientPhoneNumber: recipientPhoneNumber.split('@')[0], // Garante que apenas o número seja usado
                     messageType: currentNode.type === 'whatsapp-text' ? 'text' : currentNode.mediaType || 'image',
                     textContent: currentNode.type === 'whatsapp-text' ? substituteVariablesInText(currentNode.textMessage, session.flow_variables) : undefined,
                     mediaUrl: currentNode.type === 'whatsapp-media' ? substituteVariablesInText(currentNode.mediaUrl, session.flow_variables) : undefined,
