@@ -334,9 +334,17 @@ async function executeFlow(
     }
     
     // After the loop finishes (either by pausing or reaching the end), save the final session state.
-    console.log(`[Flow Engine - ${session.session_id}] Execution loop ended. Saving session state. Paused: ${!shouldContinue}.`);
-    session.current_node_id = currentNodeId; // Save the node we stopped at, or null if it's the end of a branch
-    await saveSessionToDB(session);
+    if (shouldContinue) { // This means the loop finished because currentNodeId is null (a dead end)
+        session.current_node_id = null; // Explicitly set to null to indicate a paused/dead-end state
+        console.log(`[Flow Engine - ${session.session_id}] Execution loop ended at a dead end. Pausing session.`);
+    } else { // Loop was broken by a node that pauses (e.g., input) or ends the flow
+        session.current_node_id = currentNodeId;
+        console.log(`[Flow Engine - ${session.session_id}] Execution loop paused or ended. Saving session state. Paused: ${!shouldContinue}.`);
+    }
+
+    if (session.current_node_id || shouldContinue) { // Only save if the session is not deleted
+      await saveSessionToDB(session);
+    }
 }
 
 
@@ -451,57 +459,59 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
     let startExecution = false;
     
     if (session) {
-      // Sessão existente, continuar o fluxo a partir da entrada do usuário
-      console.log(`[API Evolution WS Route - ${sessionId}] Existing session found.`);
-      session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
-
-      if (session.awaiting_input_type && session.awaiting_input_details) {
-          console.log(`[API Evolution WS Route - ${sessionId}] Session is awaiting input type: ${session.awaiting_input_type}`);
-          const originalNodeId = session.awaiting_input_details.originalNodeId;
-          const awaitingNode = findNodeById(originalNodeId!, workspace.nodes);
-          
-          if (awaitingNode) {
-              let nextNode: string | null = null;
-              if (session.awaiting_input_type === 'text' && session.awaiting_input_details.variableToSave) {
-                setProperty(session.flow_variables, session.awaiting_input_details.variableToSave, receivedMessageText || '');
-                nextNode = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
-              } else if (session.awaiting_input_type === 'option' && Array.isArray(session.awaiting_input_details.options)) {
-                const options = session.awaiting_input_details.options;
-                const trimmedReceivedMessage = (receivedMessageText || '').trim();
-                let chosenOptionText: string | undefined = undefined;
-
-                const numericChoice = parseInt(trimmedReceivedMessage, 10);
-                if (!isNaN(numericChoice) && numericChoice > 0 && numericChoice <= options.length) {
-                  chosenOptionText = options[numericChoice - 1];
-                } else {
-                  chosenOptionText = options.find(opt => opt.toLowerCase() === trimmedReceivedMessage.toLowerCase());
-                }
-
-                if (chosenOptionText) {
-                  if (session.awaiting_input_details.variableToSave) {
-                    setProperty(session.flow_variables, session.awaiting_input_details.variableToSave, chosenOptionText);
-                  }
-                  nextNode = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
-                } else {
-                  // Resposta inválida, informa o usuário e não avança o fluxo
-                  await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: "Opção inválida. Por favor, tente novamente."});
-                  nextNode = null; // Permanece no mesmo estado aguardando
-                  startExecution = false; // Não executa o fluxo, apenas salva a sessão
-                }
-              }
-              if (nextNode) {
-                session.awaiting_input_type = null;
-                session.awaiting_input_details = null;
-                session.current_node_id = nextNode;
-                startExecution = true;
-              }
-          } else {
-              console.warn(`[API Evolution WS Route - ${sessionId}] Awaiting node ${originalNodeId} not found, restarting flow.`);
-              session = null; 
-          }
+        console.log(`[API Evolution WS Route - ${sessionId}] Existing session found. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
+      // Se a sessão existe mas o fluxo está pausado (dead-end), não faz nada a menos que uma palavra-chave reinicie
+      if (session.current_node_id === null && session.awaiting_input_type === null) {
+          console.log(`[API Evolution WS Route - ${sessionId}] Session is in a paused (dead-end) state.`);
+          // Permite que o código abaixo verifique se a nova mensagem é um gatilho de palavra-chave
       } else {
-         console.log(`[API Evolution WS Route - ${sessionId}] Session exists but was not awaiting input. Checking for keyword triggers to restart.`);
-         session = null; // Força a verificação de um novo fluxo por palavra-chave.
+        session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
+        if (session.awaiting_input_type && session.awaiting_input_details) {
+            const originalNodeId = session.awaiting_input_details.originalNodeId;
+            const awaitingNode = findNodeById(originalNodeId!, workspace.nodes);
+            
+            if (awaitingNode) {
+                let nextNode: string | null = null;
+                if (session.awaiting_input_type === 'text' && session.awaiting_input_details.variableToSave) {
+                  setProperty(session.flow_variables, session.awaiting_input_details.variableToSave, receivedMessageText || '');
+                  nextNode = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
+                } else if (session.awaiting_input_type === 'option' && Array.isArray(session.awaiting_input_details.options)) {
+                  const options = session.awaiting_input_details.options;
+                  const trimmedReceivedMessage = (receivedMessageText || '').trim();
+                  let chosenOptionText: string | undefined = undefined;
+
+                  const numericChoice = parseInt(trimmedReceivedMessage, 10);
+                  if (!isNaN(numericChoice) && numericChoice > 0 && numericChoice <= options.length) {
+                    chosenOptionText = options[numericChoice - 1];
+                  } else {
+                    chosenOptionText = options.find(opt => opt.toLowerCase() === trimmedReceivedMessage.toLowerCase());
+                  }
+
+                  if (chosenOptionText) {
+                    if (session.awaiting_input_details.variableToSave) {
+                      setProperty(session.flow_variables, session.awaiting_input_details.variableToSave, chosenOptionText);
+                    }
+                    nextNode = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
+                  } else {
+                    await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: "Opção inválida. Por favor, tente novamente."});
+                    nextNode = null;
+                    startExecution = false;
+                  }
+                }
+                if (nextNode) {
+                  session.awaiting_input_type = null;
+                  session.awaiting_input_details = null;
+                  session.current_node_id = nextNode;
+                  startExecution = true;
+                }
+            } else {
+                console.warn(`[API Evolution WS Route - ${sessionId}] Awaiting node ${originalNodeId} not found, restarting flow.`);
+                session = null;
+            }
+        } else {
+           // Se a sessão existe mas não está aguardando input, força a verificação de keyword.
+           session = null;
+        }
       }
     }
     
@@ -512,20 +522,16 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
         return NextResponse.json({ error: "Flow has no start node." }, { status: 500 });
       }
       
-      // Lógica de roteamento por palavra-chave
       let triggerNameToUse: string | null = null;
       let webhookTrigger: StartNodeTrigger | undefined = undefined;
 
       if (startNode.triggers && startNode.triggers.length > 0) {
-        // Encontrar gatilho por palavra-chave
         for (const trigger of startNode.triggers) {
             if (trigger.enabled && trigger.keyword && receivedMessageText?.toLowerCase() === trigger.keyword.toLowerCase()) {
                 triggerNameToUse = trigger.name;
                 break;
             }
         }
-        
-        // Se nenhuma palavra-chave corresponder, usar o gatilho de webhook padrão
         if (!triggerNameToUse) {
             webhookTrigger = startNode.triggers.find(t => t.type === 'webhook' && t.enabled);
             if (webhookTrigger) {
@@ -533,11 +539,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
             }
         }
       }
-      
-      // Se ainda não encontrou um gatilho, usa 'default' como fallback
-      if (!triggerNameToUse) {
-        triggerNameToUse = 'default';
-      }
+      if (!triggerNameToUse) triggerNameToUse = 'default';
 
       const initialNodeId = findNextNodeId(startNode.id, triggerNameToUse, workspace.connections || []);
 
@@ -552,7 +554,6 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
         webhook_payload: parsedBody
       };
 
-      // Mapeamento de variáveis do gatilho de webhook, se aplicável
       if (webhookTrigger && webhookTrigger.variableMappings) {
         webhookTrigger.variableMappings.forEach(mapping => {
           if (mapping.jsonPath && mapping.flowVariable) {
@@ -578,7 +579,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
     
     if (startExecution && session.current_node_id) {
       await executeFlow(session, workspace.nodes, workspace.connections || [], apiConfig);
-    } else {
+    } else if (session && !startExecution) { // Se não iniciou execução (ex: opção inválida), apenas salva o estado atual
       await saveSessionToDB(session);
     }
 

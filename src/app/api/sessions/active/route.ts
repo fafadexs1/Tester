@@ -25,6 +25,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Session ID is required" }, { status: 400 });
   }
   
+  console.log(`[API /sessions/active] Attempting to delete session with ID: ${sessionId}`);
   try {
     const result = await deleteSessionFromDB(sessionId);
     if (result.success) {
