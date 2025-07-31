@@ -8,7 +8,7 @@ import FlowBuilderClient from "@/components/flow-builder/FlowBuilderClient";
 export default async function FlowEditorPage({ params }: { params: { workspaceId: string } }) {
   const user = await getCurrentUser();
 
-  if (!user) {
+  if (!user || !user.id) {
     redirect('/login');
   }
 
@@ -29,8 +29,8 @@ export default async function FlowEditorPage({ params }: { params: { workspaceId
   }
   
   // Verifica se o usuário logado é o dono do workspace
-  if (initialWorkspace.owner !== user.username) {
-      console.warn(`[FlowEditorPage] Usuário ${user.username} tentou acessar o workspace ${workspaceId} que pertence a ${initialWorkspace.owner}. Acesso negado.`);
+  if (initialWorkspace.owner !== user.id) {
+      console.warn(`[FlowEditorPage] Usuário ${user.username} (ID: ${user.id}) tentou acessar o workspace ${workspaceId} que pertence ao owner ID ${initialWorkspace.owner}. Acesso negado.`);
       redirect('/');
   }
 

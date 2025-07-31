@@ -14,9 +14,13 @@ export async function getCurrentUser(): Promise<User | null> {
 
   if (sessionCookie && sessionCookie.value) {
     try {
-      // O cookie armazena o objeto User como um JSON stringificado, incluindo a role.
+      // O cookie armazena o objeto User como um JSON stringificado, incluindo a role e o id.
       const user: User = JSON.parse(sessionCookie.value);
-      return user;
+      // Validação básica para garantir que o objeto de usuário tenha os campos esperados
+      if (user && user.id && user.username && user.role) {
+        return user;
+      }
+      return null;
     } catch (error) {
       console.error("[auth.ts] Erro ao analisar o cookie da sessão:", error);
       // Se o cookie estiver malformado, trata como se não houvesse sessão
@@ -36,7 +40,7 @@ export async function createSession(user: User) {
     maxAge: 60 * 60 * 24, // 24 horas
     path: '/',
   });
-   console.log(`[auth.ts] Cookie de sessão criado para o usuário: ${user.username} com role: ${user.role}`);
+   console.log(`[auth.ts] Cookie de sessão criado para o usuário: ${user.username}, ID: ${user.id}, role: ${user.role}`);
 }
 
 export async function deleteSession() {

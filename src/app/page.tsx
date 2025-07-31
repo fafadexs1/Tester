@@ -37,11 +37,11 @@ export default function DashboardPage() {
   const { toast } = useToast();
 
   const loadWorkspaces = useCallback(async () => {
-    if (user) {
-      console.log(`[DashboardPage Client] User "${user.username}" authenticated. Loading workspaces...`);
+    if (user && user.id) {
+      console.log(`[DashboardPage Client] User "${user.username}" (ID: ${user.id}) authenticated. Loading workspaces...`);
       setIsLoadingData(true);
       try {
-        const loadedWorkspaces = await loadWorkspacesForOwnerFromDB(user.username);
+        const loadedWorkspaces = await loadWorkspacesForOwnerFromDB(user.id);
         setWorkspaces(loadedWorkspaces);
         console.log(`[DashboardPage Client] ${loadedWorkspaces.length} workspaces loaded for ${user.username}.`);
       } catch (error) {
@@ -79,17 +79,17 @@ export default function DashboardPage() {
   }, [isCreateDialogOpen, getSuggestedWorkspaceName]);
 
   const handleCreateWorkspace = async () => {
-    if (!user || !newWorkspaceName.trim()) {
+    if (!user || !user.id || !newWorkspaceName.trim()) {
         toast({
             title: "Erro de Validação",
-            description: "O nome do fluxo não pode estar vazio.",
+            description: "O nome do fluxo não pode estar vazio e você deve estar logado.",
             variant: "destructive",
         });
         return;
     }
     setIsCreating(true);
     try {
-        const result = await createWorkspaceAction(newWorkspaceName.trim(), user.username);
+        const result = await createWorkspaceAction(newWorkspaceName.trim(), user.id);
         if (result.success && result.workspaceId) {
             toast({
                 title: "Fluxo Criado!",

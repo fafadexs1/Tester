@@ -9,11 +9,11 @@ export async function GET(request: NextRequest) {
   console.log('[API /sessions/active] GET request received');
   try {
     const user = await getCurrentUser();
-    if (!user) {
+    if (!user || !user.id) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const activeSessions: FlowSession[] = await loadAllActiveSessionsFromDB(user.username);
+    const activeSessions: FlowSession[] = await loadAllActiveSessionsFromDB(user.id);
     // console.log(`[API /sessions/active] Returning ${activeSessions.length} active sessions for user ${user.username}.`);
     return NextResponse.json(activeSessions, { status: 200 });
   } catch (error: any) {

@@ -3,6 +3,7 @@
 
 
 
+
 export interface DraggableBlockItemData {
   type: string;
   label: string;
@@ -234,7 +235,7 @@ export interface WorkspaceData {
   name: string;
   nodes: NodeData[];
   connections: Connection[];
-  owner: string;
+  owner: string; // This will now be the User's UUID
   created_at?: string | Date;
   updated_at?: string | Date;
 }
@@ -256,6 +257,7 @@ export interface FlowSession {
 }
 
 export interface User {
+    id: string; // UUID
     username: string;
     role: 'user' | 'desenvolvedor';
 }

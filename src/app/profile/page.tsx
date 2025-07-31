@@ -25,7 +25,7 @@ export default function ProfilePage() {
         }
     }, [user, loading, router]);
 
-    const apiToken = user ? `nexus_tk_${Buffer.from(user.username).toString('hex')}_${new Date().getFullYear()}` : '';
+    const apiToken = user ? `nexus_tk_${Buffer.from(user.id).toString('hex')}` : '';
 
     const handleCopyToken = () => {
         if (!apiToken) return;
@@ -34,6 +34,16 @@ export default function ProfilePage() {
         }).catch(err => {
             toast({ title: "Erro ao copiar", description: "Não foi possível copiar o token.", variant: "destructive" });
             console.error("Failed to copy token: ", err);
+        });
+    };
+    
+    const handleCopyUserId = () => {
+        if (!user || !user.id) return;
+         navigator.clipboard.writeText(user.id).then(() => {
+            toast({ title: "ID do Usuário Copiado!" });
+        }).catch(err => {
+            toast({ title: "Erro ao copiar", description: "Não foi possível copiar o ID.", variant: "destructive" });
+            console.error("Failed to copy user ID: ", err);
         });
     };
 
@@ -72,8 +82,17 @@ export default function ProfilePage() {
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <div className="space-y-2">
-                            <Label htmlFor="userId">Nome de Usuário</Label>
-                            <Input id="userId" readOnly value={user.username} />
+                            <Label htmlFor="userId">ID do Usuário</Label>
+                             <div className="flex items-center space-x-2">
+                                <Input id="userId" readOnly value={user.id} />
+                                <Button variant="outline" size="icon" onClick={handleCopyUserId}>
+                                    <Copy className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="username">Nome de Usuário</Label>
+                            <Input id="username" readOnly value={user.username} />
                         </div>
                         <div className="space-y-2">
                             <Label>Role</Label>

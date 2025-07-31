@@ -23,10 +23,8 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
   }
   
   try {
-    // Busca o usuário no novo banco de dados de usuários
     const dbUser = await findUserByUsername(username);
 
-    // Se o usuário não for encontrado no banco de dados, o login falha.
     if (!dbUser) {
         console.log(`[authActions.ts] loginAction: Usuário '${username}' não encontrado.`);
         return { success: false, error: "Usuário ou senha inválidos." };
@@ -39,8 +37,8 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
     //     return { success: false, error: "Usuário ou senha inválidos." };
     // }
 
-    // Cria a sessão com os dados do usuário do banco, incluindo a role.
-    const user: User = { username: dbUser.username, role: dbUser.role };
+    // Cria a sessão com os dados do usuário do banco, incluindo id e role.
+    const user: User = { id: dbUser.id, username: dbUser.username, role: dbUser.role };
     await createSession(user);
     console.log(`[authActions.ts] loginAction: Sessão criada com sucesso para o usuário: ${username}, role: ${user.role}`);
     return { success: true, user };
@@ -62,26 +60,26 @@ export async function registerAction(formData: FormData): Promise<{ success: boo
     }
 
     try {
-        // Verifica se o usuário já existe
         const existingUser = await findUserByUsername(username);
         if (existingUser) {
             return { success: false, error: "Este nome de usuário já está em uso." };
         }
         
-        // "Hashea" a senha (simulação)
         const passwordHash = simpleHash(password);
 
-        // Cria o usuário na nova tabela de usuários com a role padrão 'user'
+        // Cria o usuário com a role padrão 'user'
         const createResult = await createUser(username, passwordHash, 'user');
 
-        if (!createResult.success) {
-            return { success: false, error: createResult.error };
+        if (!createResult.success || !createResult.user) {
+            return { success: false, error: createResult.error || "Falha ao registrar usuário." };
         }
+        
+        // createResult.user contém o usuário recém-criado com id, username, e role
+        const newUser = createResult.user;
 
-        // Cria a sessão para o novo usuário com a role padrão 'user'
-        const newUser: User = { username, role: 'user' };
+        // Cria a sessão para o novo usuário
         await createSession(newUser);
-        console.log(`[authActions.ts] registerAction: Sessão criada com sucesso para o novo usuário: ${username}`);
+        console.log(`[authActions.ts] registerAction: Sessão criada com sucesso para o novo usuário: ${newUser.username}`);
         return { success: true, user: newUser };
 
     } catch (error: any) {
