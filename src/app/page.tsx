@@ -1,7 +1,7 @@
 
 'use client'; 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, Zap, Loader2 } from 'lucide-react';
 import { loadWorkspacesForOwnerFromDB, createWorkspaceAction } from '@/app/actions/databaseActions';
@@ -36,7 +36,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const loadWorkspaces = async () => {
+  const loadWorkspaces = useCallback(async () => {
     if (user) {
       console.log(`[DashboardPage Client] User "${user.username}" authenticated. Loading workspaces...`);
       setIsLoadingData(true);
@@ -46,31 +46,37 @@ export default function DashboardPage() {
         console.log(`[DashboardPage Client] ${loadedWorkspaces.length} workspaces loaded for ${user.username}.`);
       } catch (error) {
         console.error("[DashboardPage Client] Error loading workspaces:", error);
+        toast({ title: "Erro ao Carregar Fluxos", description: "Não foi possível buscar seus fluxos.", variant: "destructive" });
       } finally {
         setIsLoadingData(false);
       }
     }
-  };
+  }, [user, toast]);
   
   useEffect(() => {
     if (!loading && user) {
        loadWorkspaces();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, loading]);
+  }, [user, loading, loadWorkspaces]);
+
+  const getSuggestedWorkspaceName = useCallback(() => {
+    const existingNames = workspaces.map(ws => ws.name);
+    let defaultName = 'Meu Novo Fluxo';
+    if (!existingNames.includes(defaultName)) {
+      return defaultName;
+    }
+    let counter = 1;
+    while (existingNames.includes(`${defaultName} (${counter})`)) {
+        counter++;
+    }
+    return `${defaultName} (${counter})`;
+  }, [workspaces]);
 
   useEffect(() => {
-    if (isCreateDialogOpen && user) {
-        const existingNames = workspaces.map(ws => ws.name);
-        let defaultName = 'Meu Fluxo';
-        let counter = 1;
-        while (existingNames.includes(defaultName)) {
-            defaultName = `Meu Fluxo ${counter}`;
-            counter++;
-        }
-        setNewWorkspaceName(defaultName);
+    if (isCreateDialogOpen) {
+        setNewWorkspaceName(getSuggestedWorkspaceName());
     }
-  }, [isCreateDialogOpen, user, workspaces]);
+  }, [isCreateDialogOpen, getSuggestedWorkspaceName]);
 
   const handleCreateWorkspace = async () => {
     if (!user || !newWorkspaceName.trim()) {
@@ -156,7 +162,7 @@ export default function DashboardPage() {
                         value={newWorkspaceName}
                         onChange={(e) => setNewWorkspaceName(e.target.value)}
                         placeholder="Ex: Fluxo de Boas-vindas"
-                        onKeyPress={(e) => { if (e.key === 'Enter') handleCreateWorkspace()}}
+                        onKeyPress={(e) => { if (e.key === 'Enter' && !isCreating) handleCreateWorkspace()}}
                     />
                 </div>
                 <DialogFooter>
@@ -164,7 +170,7 @@ export default function DashboardPage() {
                         <Button variant="outline" disabled={isCreating}>Cancelar</Button>
                     </DialogClose>
                     <Button onClick={handleCreateWorkspace} disabled={isCreating}>
-                        {isCreating && <Loader2 className="animate-spin" />}
+                        {isCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         {isCreating ? 'Criando...' : 'Criar e Editar'}
                     </Button>
                 </DialogFooter>
@@ -175,7 +181,7 @@ export default function DashboardPage() {
         
         <div className="flex-1">
           {isLoadingData ? (
-             <p className="text-muted-foreground">Carregando seus fluxos...</p>
+             <p className="text-muted-foreground text-center py-10">Carregando seus fluxos...</p>
           ) : (
              <WorkspaceList initialWorkspaces={workspaces} onWorkspacesChange={loadWorkspaces} />
           )}

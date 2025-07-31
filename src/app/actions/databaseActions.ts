@@ -187,39 +187,42 @@ export async function createWorkspaceAction(
 
 export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{ success: boolean; error?: string }> {
   try {
-    if (!workspaceData.owner) {
-        return { success: false, error: "Workspace owner is required." };
+    if (!workspaceData.owner || !workspaceData.name || !workspaceData.id) {
+        return { success: false, error: "Dados do workspace incompletos (requer id, nome e proprietário)." };
     }
+
+    // Primeiro, verifica se o nome já está em uso por este proprietário em um ID DIFERENTE
+    const checkExistingQuery = `SELECT id FROM workspaces WHERE owner = $1 AND name = $2 AND id != $3`;
+    const existingResult = await runQuery(checkExistingQuery, [workspaceData.owner, workspaceData.name, workspaceData.id]);
+    if (existingResult.rows.length > 0) {
+        return { success: false, error: `Erro: O nome do fluxo '${workspaceData.name}' já existe. Por favor, escolha um nome único.` };
+    }
+    
+    // Agora, usa ON CONFLICT no ID, que é a chave primária, para decidir entre INSERT e UPDATE.
     const query = `
       INSERT INTO workspaces (id, name, nodes, connections, owner, updated_at)
       VALUES ($1, $2, $3, $4, $5, NOW())
-      ON CONFLICT (owner, name) DO UPDATE
-      SET nodes = EXCLUDED.nodes,
+      ON CONFLICT (id) DO UPDATE
+      SET name = EXCLUDED.name,
+          nodes = EXCLUDED.nodes,
           connections = EXCLUDED.connections,
-          updated_at = NOW()
-      WHERE workspaces.id = $1;
+          updated_at = NOW();
     `;
-    const result = await runQuery(query, [
+    
+    await runQuery(query, [
       workspaceData.id,
       workspaceData.name,
       JSON.stringify(workspaceData.nodes || []), 
       JSON.stringify(workspaceData.connections || []),
       workspaceData.owner,
     ]);
-     if (result.rowCount === 0) {
-        // This case can happen if the ON CONFLICT is on (owner, name) but the ID is different,
-        // which means the user is trying to rename a workspace to a name that already exists.
-        const checkExistingQuery = `SELECT id FROM workspaces WHERE owner = $1 AND name = $2`;
-        const existingResult = await runQuery(checkExistingQuery, [workspaceData.owner, workspaceData.name]);
-        if (existingResult.rows.length > 0 && existingResult.rows[0].id !== workspaceData.id) {
-            return { success: false, error: `Erro: O nome do fluxo '${workspaceData.name}' já existe. Por favor, escolha um nome único.` };
-        }
-    }
+    
     return { success: true };
   } catch (error: any) {
     console.error(`[DB Actions] saveWorkspaceToDB Error:`, error);
-     let errorMessage = `PG Error: ${error.message || 'Unknown DB error'} (Code: ${error.code || 'N/A'})`;
-     if (error.constraint === 'workspaces_owner_name_key') {
+    let errorMessage = `Erro de banco de dados: ${error.message || 'Erro desconhecido'}. (Código: ${error.code || 'N/A'})`;
+     // O erro de unique constraint agora é tratado pela verificação manual acima, mas deixamos como fallback.
+    if (error.constraint === 'workspaces_owner_name_key') {
         errorMessage = `Erro: O nome do fluxo '${workspaceData.name}' já existe. Por favor, escolha um nome único.`;
     }
     return { success: false, error: errorMessage };
