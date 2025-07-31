@@ -22,14 +22,14 @@ export async function getEvolutionInstancesForUser(): Promise<{ data?: Evolution
 
     try {
         const result = await runQuery<EvolutionInstance>(
-            'SELECT id, name, "baseUrl", api_key FROM evolution_instances WHERE user_id = $1 ORDER BY name',
+            'SELECT id, name, base_url, api_key FROM evolution_instances WHERE user_id = $1 ORDER BY name',
             [user.id]
         );
         // Correctly map database columns to object properties
         const instances = result.rows.map(row => ({
             id: row.id,
             name: row.name,
-            baseUrl: (row as any).baseUrl || (row as any).baseurl, // Handle potential case-insensitivity from DB driver
+            baseUrl: (row as any).base_url, // Use snake_case from DB
             apiKey: row.api_key,
             status: 'unconfigured' // Default status
         }));
@@ -76,17 +76,17 @@ export async function saveEvolutionInstanceAction(
             console.log(`[InstanceActions] Executando UPDATE para a instância ID: ${id}`);
             result = await runQuery<EvolutionInstance>(
                 `UPDATE evolution_instances 
-                 SET name = $1, "baseUrl" = $2, api_key = $3, updated_at = NOW() 
+                 SET name = $1, base_url = $2, api_key = $3, updated_at = NOW() 
                  WHERE id = $4 AND user_id = $5 
-                 RETURNING id, name, "baseUrl", api_key`,
+                 RETURNING id, name, base_url, api_key`,
                 [name, baseUrl, apiKey || '', id, user.id]
             );
         } else { // Create
             console.log(`[InstanceActions] Executando INSERT para a nova instância com nome: ${name}`);
             result = await runQuery<EvolutionInstance>(
-                `INSERT INTO evolution_instances (user_id, name, "baseUrl", api_key) 
+                `INSERT INTO evolution_instances (user_id, name, base_url, api_key) 
                  VALUES ($1, $2, $3, $4) 
-                 RETURNING id, name, "baseUrl", api_key`,
+                 RETURNING id, name, base_url, api_key`,
                 [user.id, name, baseUrl, apiKey || '']
             );
         }
@@ -99,7 +99,7 @@ export async function saveEvolutionInstanceAction(
             const instance: EvolutionInstance = {
                  id: dbRow.id,
                  name: dbRow.name,
-                 baseUrl: (dbRow as any).baseUrl, // Ensure correct property access
+                 baseUrl: (dbRow as any).base_url, // Ensure correct property access
                  apiKey: dbRow.api_key,
                  status: 'unconfigured'
             };
