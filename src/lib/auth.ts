@@ -9,12 +9,12 @@ const SESSION_COOKIE_NAME = 'nexusflow_session_cookie';
 // A função foi corrigida para ser totalmente assíncrona como o Next.js espera
 export async function getCurrentUser(): Promise<User | null> {
   // Acessar a cookie store de forma assíncrona
-  const cookieStore = await cookies();
+  const cookieStore = cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME);
 
   if (sessionCookie && sessionCookie.value) {
     try {
-      // O cookie armazena o objeto User como um JSON stringificado
+      // O cookie armazena o objeto User como um JSON stringificado, incluindo a role.
       const user: User = JSON.parse(sessionCookie.value);
       return user;
     } catch (error) {
@@ -36,7 +36,7 @@ export async function createSession(user: User) {
     maxAge: 60 * 60 * 24, // 24 horas
     path: '/',
   });
-   console.log(`[auth.ts] Cookie de sessão criado para o usuário: ${user.username}`);
+   console.log(`[auth.ts] Cookie de sessão criado para o usuário: ${user.username} com role: ${user.role}`);
 }
 
 export async function deleteSession() {

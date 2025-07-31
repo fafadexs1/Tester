@@ -2,6 +2,7 @@
 
 
 
+
 export interface DraggableBlockItemData {
   type: string;
   label: string;
@@ -256,6 +257,7 @@ export interface FlowSession {
 
 export interface User {
     username: string;
+    role: 'user' | 'desenvolvedor';
 }
 
 export interface EvolutionInstance {

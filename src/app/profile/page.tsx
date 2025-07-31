@@ -2,8 +2,8 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/auth/AuthProvider";
 import type { User } from '@/lib/types';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,24 +13,17 @@ import { Button } from "@/components/ui/button";
 import { Copy, Home, Workflow, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-
 export default function ProfilePage() {
-    const [user, setUser] = useState<User | null>(null);
-    const [loading, setLoading] = useState(true);
+    const { user, loading } = useAuth();
+    const router = useRouter();
     const { toast } = useToast();
 
+    // Redireciona se o usuário não estiver logado após o carregamento
     useEffect(() => {
-        const fetchUser = async () => {
-            const currentUser = await getCurrentUser();
-            if (!currentUser) {
-                redirect('/login');
-            } else {
-                setUser(currentUser);
-            }
-            setLoading(false);
-        };
-        fetchUser();
-    }, []);
+        if (!loading && !user) {
+            router.push('/login');
+        }
+    }, [user, loading, router]);
 
     const apiToken = user ? `nexus_tk_${Buffer.from(user.username).toString('hex')}_${new Date().getFullYear()}` : '';
 
@@ -44,17 +37,12 @@ export default function ProfilePage() {
         });
     };
 
-    if (loading) {
+    if (loading || !user) {
         return (
             <div className="flex h-screen w-full items-center justify-center bg-muted/40">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
             </div>
         );
-    }
-    
-    if (!user) {
-        // O redirect no useEffect já deve ter sido acionado, mas isso é uma garantia.
-        return null; 
     }
 
     return (
@@ -84,8 +72,12 @@ export default function ProfilePage() {
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <div className="space-y-2">
-                            <Label htmlFor="userId">ID do Usuário</Label>
+                            <Label htmlFor="userId">Nome de Usuário</Label>
                             <Input id="userId" readOnly value={user.username} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Role</Label>
+                            <Input readOnly value={user.role} className="capitalize"/>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="apiToken">Seu Token de API</Label>
@@ -101,7 +93,7 @@ export default function ProfilePage() {
                         </div>
                     </CardContent>
                      <CardFooter>
-                        <Button>Salvar Alterações</Button>
+                        <Button disabled>Salvar Alterações (desabilitado)</Button>
                     </CardFooter>
                 </Card>
             </main>

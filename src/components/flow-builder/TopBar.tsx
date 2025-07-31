@@ -524,12 +524,14 @@ const TopBar: React.FC<TopBarProps> = ({
                     <span>Perfil</span>
                 </DropdownMenuItem>
               </Link>
-              {/* <Link href="/admin" passHref>
-                <DropdownMenuItem>
-                    <Shield className="mr-2 h-4 w-4" />
-                    <span>Administração</span>
-                </DropdownMenuItem>
-              </Link> */}
+              {user?.role === 'desenvolvedor' && (
+                <Link href="/admin" passHref>
+                    <DropdownMenuItem>
+                        <Shield className="mr-2 h-4 w-4" />
+                        <span>Administração</span>
+                    </DropdownMenuItem>
+                </Link>
+              )}
               <DropdownMenuItem>
                 <CreditCard className="mr-2 h-4 w-4" />
                 <span>Assinatura</span>

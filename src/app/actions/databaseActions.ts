@@ -3,7 +3,7 @@
 
 import { Pool, type QueryResult } from 'pg';
 import dotenv from 'dotenv';
-import type { WorkspaceData, FlowSession, NodeData, Connection } from '@/lib/types';
+import type { WorkspaceData, FlowSession, NodeData, Connection, User } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { redirect } from 'next/navigation';
 
@@ -46,12 +46,21 @@ async function initializeDatabaseSchema(): Promise<void> {
 
     // Create tables if they don't exist
     await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS workspaces (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         nodes JSONB,
         connections JSONB,
-        owner TEXT NOT NULL,
+        owner TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
@@ -151,6 +160,29 @@ async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResu
     }
 }
 
+// --- User Actions ---
+export async function findUserByUsername(username: string): Promise<User | null> {
+    const result = await runQuery<{ username: string, role: 'user' | 'desenvolvedor' }>(
+        'SELECT username, role FROM users WHERE username = $1',
+        [username]
+    );
+    if (result.rows.length > 0) {
+        return result.rows[0];
+    }
+    return null;
+}
+
+export async function createUser(username: string, passwordHash: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        await runQuery('INSERT INTO users (username, password_hash) VALUES ($1, $2)', [username, passwordHash]);
+        return { success: true };
+    } catch (error: any) {
+        if (error.code === '23505') { // Unique violation
+            return { success: false, error: 'Este nome de usuário já está em uso.' };
+        }
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    }
+}
 
 // --- Workspace Actions ---
 export async function createWorkspaceAction(

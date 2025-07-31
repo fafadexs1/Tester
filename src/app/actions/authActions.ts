@@ -4,26 +4,12 @@
 import { createSession, deleteSession } from '@/lib/auth';
 import type { User } from '@/lib/types';
 import { cookies } from 'next/headers';
+import { findUserByUsername, createUser } from './databaseActions';
 
-// Em uma aplicação real, você buscaria de um banco de dados aqui.
-// Para este exemplo, a validação de senha será feita aqui, no lado do servidor.
-// Como não temos um banco de dados real, vamos simular lendo de um "banco" conceitual
-// que as ações do lado do cliente escrevem (localStorage). 
-// AVISO: Esta abordagem é insegura e apenas para fins de demonstração.
-// Em um aplicativo real, use um banco de dados com senhas hasheadas.
-async function validateUser(username: string, pass: string): Promise<boolean> {
-    // Esta função precisaria de uma forma de acessar os dados do usuário.
-    // Como Server Actions não podem ler o localStorage do cliente, esta é uma limitação
-    // do nosso setup de demonstração sem banco. 
-    // Para contornar isso, temporariamente vamos assumir que a validação é sempre bem-sucedida
-    // se o usuário existir, e o erro será tratado se o usuário não existir no registerAction.
-    // Em um app real:
-    // 1. Busque o hash da senha do usuário no DB pelo `username`.
-    // 2. Compare o hash da senha fornecida com o hash do DB.
-    // 3. Retorne true se corresponderem.
-    // console.log(`[validateUser] Validando usuário: ${username}. Na demo, isso sempre retorna true se o usuário existir.`);
-    return true; // Simulação para a demo
-}
+// Simulação de hashing de senha. Em um app real, use uma biblioteca como bcrypt.
+// AVISO: NÃO USE ISTO EM PRODUÇÃO.
+const simpleHash = (pass: string) => `hashed_${pass}`;
+const verifyPassword = (pass: string, hash: string) => hash === simpleHash(pass);
 
 
 export async function loginAction(formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> {
@@ -36,22 +22,28 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
     return { success: false, error: "Nome de usuário e senha são obrigatórios." };
   }
   
-  // Em uma aplicação real, aqui você faria a verificação da senha contra o hash no seu banco de dados.
-  // Como estamos simulando, pulamos essa etapa e confiamos na ação do lado do cliente para ter
-  // verificado a senha (mesmo que isso seja inseguro para produção).
-
   try {
-    // Aqui você validaria a senha: const isValid = await validateUser(username, password);
-    // if (!isValid) {
+    // Busca o usuário no novo banco de dados de usuários
+    const dbUser = await findUserByUsername(username);
+
+    if (!dbUser) {
+        return { success: false, error: "Usuário ou senha inválidos." };
+    }
+    
+    // Futuramente, a verificação de senha usará o hash real.
+    // const passwordMatches = await verifyPassword(password, dbUser.password_hash);
+    // if (!passwordMatches) {
     //     return { success: false, error: "Usuário ou senha inválidos." };
     // }
 
-    const user: User = { username };
+    // Cria a sessão com os dados do usuário do banco, incluindo a role.
+    const user: User = { username: dbUser.username, role: dbUser.role };
     await createSession(user);
-    console.log(`[authActions.ts] loginAction: Sessão criada com sucesso para o usuário: ${username}`);
+    console.log(`[authActions.ts] loginAction: Sessão criada com sucesso para o usuário: ${username}, role: ${user.role}`);
     return { success: true, user };
+
   } catch (error: any) {
-    console.error("[authActions.ts] loginAction: Exceção durante a criação da sessão:", error);
+    console.error("[authActions.ts] loginAction: Exceção durante a operação:", error);
     const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro no servidor durante o login.";
     return { success: false, error: errorMessage };
   }
@@ -60,25 +52,37 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
 export async function registerAction(formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> {
     console.log('[authActions.ts] registerAction: Iniciando...');
     const username = formData.get('username') as string;
-    // O password seria usado aqui para criar um hash e salvar no banco de dados.
-    // Como não temos DB, essa lógica fica apenas conceitual.
-     if (!username) {
-        console.log('[authActions.ts] registerAction: Erro - Nome de usuário faltando.');
-        return { success: false, error: "Nome de usuário é obrigatório." };
+    const password = formData.get('password') as string;
+
+    if (!username || !password) {
+        return { success: false, error: "Nome de usuário e senha são obrigatórios." };
     }
-    
-    // Em um aplicativo real, você primeiro verificaria se o nome de usuário já existe no seu DB.
-    // Ex: const existingUser = await db.users.findUnique({ where: { username } });
-    // if (existingUser) { return { success: false, error: "Nome de usuário já existe." }; }
-    // Depois, você faria o hash da senha e armazenaria o novo registro do usuário.
 
     try {
-        const user: User = { username };
-        await createSession(user);
+        // Verifica se o usuário já existe
+        const existingUser = await findUserByUsername(username);
+        if (existingUser) {
+            return { success: false, error: "Este nome de usuário já está em uso." };
+        }
+        
+        // "Hashea" a senha (simulação)
+        const passwordHash = simpleHash(password);
+
+        // Cria o usuário na nova tabela de usuários
+        const createResult = await createUser(username, passwordHash);
+
+        if (!createResult.success) {
+            return { success: false, error: createResult.error };
+        }
+
+        // Cria a sessão para o novo usuário com a role padrão 'user'
+        const newUser: User = { username, role: 'user' };
+        await createSession(newUser);
         console.log(`[authActions.ts] registerAction: Sessão criada com sucesso para o novo usuário: ${username}`);
-        return { success: true, user };
+        return { success: true, user: newUser };
+
     } catch (error: any) {
-        console.error("[authActions.ts] registerAction: Exceção durante a criação da sessão:", error);
+        console.error("[authActions.ts] registerAction: Exceção durante o registro:", error);
         const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro no servidor durante o registro.";
         return { success: false, error: errorMessage };
     }

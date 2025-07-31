@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
-import { Users, Workflow, BarChart2, Home } from 'lucide-react';
+import { Users, Workflow, BarChart2, Home, AlertTriangle } from 'lucide-react';
 
 
 export default async function AdminPage() {
@@ -14,8 +14,12 @@ export default async function AdminPage() {
         redirect('/login');
     }
     
-    // Futuramente, você pode adicionar uma verificação de permissão aqui.
-    // Ex: if (user.role !== 'admin') redirect('/');
+    // Verifica se o usuário tem a permissão de 'desenvolvedor'
+    if (user.role !== 'desenvolvedor') {
+        // Se não for desenvolvedor, pode mostrar uma mensagem de acesso negado ou redirecionar.
+        // Redirecionar é mais seguro.
+        redirect('/');
+    }
 
     return (
         <div className="flex min-h-screen w-full flex-col bg-muted/40">
