@@ -92,6 +92,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   // States for Evolution API instance popover
   const [isEvolutionPoperOpen, setIsEvolutionPoperOpen] = useState(false);
   const [evolutionInstances, setEvolutionInstances] = useState<EvolutionInstance[]>([]);
+  const [isLoadingEvolutionInstances, setIsLoadingEvolutionInstances] = useState(false);
 
 
   // Garantir que o nó de início tenha os gatilhos padrão se não os tiver
@@ -220,14 +221,23 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id, node.supabaseTableName]); // Removido onUpdate
 
-   const loadEvolutionInstances = () => {
-    const savedInstances = localStorage.getItem('evolutionInstances');
-    if (savedInstances) {
-      setEvolutionInstances(JSON.parse(savedInstances));
-    } else {
+  const loadEvolutionInstances = useCallback(async () => {
+    setIsLoadingEvolutionInstances(true);
+    try {
+      const response = await fetch('/api/instances/evolution');
+      if (!response.ok) {
+        throw new Error('Falha ao buscar instâncias do servidor.');
+      }
+      const data: EvolutionInstance[] = await response.json();
+      setEvolutionInstances(data.map(d => ({ ...d, status: 'unconfigured' })));
+    } catch (error: any) {
+      console.error("[NodeCard] Error fetching evolution instances:", error);
+      toast({ title: "Erro ao Carregar Instâncias", description: error.message, variant: "destructive" });
       setEvolutionInstances([]);
+    } finally {
+      setIsLoadingEvolutionInstances(false);
     }
-  };
+  }, [toast]);
 
   const handleEvolutionPopoverOpen = (open: boolean) => {
     if(open) {
@@ -880,124 +890,93 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </div>
         );
       case 'whatsapp-text':
-        return (
-          <div className="space-y-3" data-no-drag="true">
-            <div>
-              <Label htmlFor={`${node.id}-instance`}>Instância</Label>
-              <Select onValueChange={(value) => onUpdate(node.id, { instanceName: value })} value={node.instanceName || ''}>
-                <SelectTrigger id={`${node.id}-instance`}>
-                  <SelectValue placeholder="Selecione uma instância..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Usar Padrão Global</SelectItem>
-                  {evolutionInstances.map(instance => (
-                    <SelectItem key={instance.id} value={instance.name}>
-                      {instance.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-                <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-phone`} placeholder="55119... ou {{whatsapp_sender_jid}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8"/>
-                     {renderVariableInserter('phoneNumber')}
-                </div>
-            </div>
-            <div>
-                <Label htmlFor={`${node.id}-watext`}>Mensagem</Label>
-                <div className="relative">
-                    <Textarea id={`${node.id}-watext`} value={node.textMessage || ''} onChange={(e) => onUpdate(node.id, { textMessage: e.target.value })} rows={2} className="pr-8"/>
-                    {renderVariableInserter('textMessage', true)}
-                </div>
-            </div>
-          </div>
-        );
       case 'whatsapp-media':
+      case 'whatsapp-group':
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
               <Label htmlFor={`${node.id}-instance`}>Instância</Label>
-              <Select onValueChange={(value) => onUpdate(node.id, { instanceName: value })} value={node.instanceName || ''}>
-                <SelectTrigger id={`${node.id}-instance`}>
-                  <SelectValue placeholder="Selecione uma instância..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Usar Padrão Global</SelectItem>
-                  {evolutionInstances.map(instance => (
-                    <SelectItem key={instance.id} value={instance.name}>
-                      {instance.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isLoadingEvolutionInstances ? (
+                <div className="flex items-center text-sm text-muted-foreground h-10"><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Carregando...</div>
+              ) : (
+                <Select onValueChange={(value) => onUpdate(node.id, { instanceName: value })} value={node.instanceName || ''}>
+                  <SelectTrigger id={`${node.id}-instance`}>
+                    <SelectValue placeholder="Selecione uma instância..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Usar Padrão do Fluxo</SelectItem>
+                    {evolutionInstances.map(instance => (
+                      <SelectItem key={instance.id} value={instance.name}>
+                        {instance.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
-             <div>
-                <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-phone`} placeholder="55119... ou {{whatsapp_sender_jid}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8"/>
-                     {renderVariableInserter('phoneNumber')}
+            {node.type !== 'whatsapp-group' && (
+              <div>
+                  <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
+                  <div className="relative">
+                      <Input id={`${node.id}-phone`} placeholder="55119... ou {{whatsapp_sender_jid}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8"/>
+                       {renderVariableInserter('phoneNumber')}
+                  </div>
+              </div>
+            )}
+            {node.type === 'whatsapp-text' && (
+              <div>
+                  <Label htmlFor={`${node.id}-watext`}>Mensagem</Label>
+                  <div className="relative">
+                      <Textarea id={`${node.id}-watext`} value={node.textMessage || ''} onChange={(e) => onUpdate(node.id, { textMessage: e.target.value })} rows={2} className="pr-8"/>
+                      {renderVariableInserter('textMessage', true)}
+                  </div>
+              </div>
+            )}
+            {node.type === 'whatsapp-media' && (
+              <>
+                <div>
+                    <Label htmlFor={`${node.id}-mediaurl`}>URL da Mídia (Ex: https://... ou {"{{url_midia}}"})</Label>
+                    <div className="relative">
+                        <Input id={`${node.id}-mediaurl`} placeholder="https://... ou {{url_midia}}" value={node.mediaUrl || ''} onChange={(e) => onUpdate(node.id, { mediaUrl: e.target.value })} className="pr-8"/>
+                        {renderVariableInserter('mediaUrl')}
+                    </div>
                 </div>
-            </div>
-            <div>
-                <Label htmlFor={`${node.id}-mediaurl`}>URL da Mídia (Ex: https://... ou {"{{url_midia}}"})</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-mediaurl`} placeholder="https://... ou {{url_midia}}" value={node.mediaUrl || ''} onChange={(e) => onUpdate(node.id, { mediaUrl: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('mediaUrl')}
+                <div><Label htmlFor={`${node.id}-mediatype`}>Tipo</Label>
+                  <Select value={node.mediaType || 'image'} onValueChange={(value) => onUpdate(node.id, { mediaType: value as NodeData['mediaType'] })}>
+                    <SelectTrigger id={`${node.id}-mediatype`}><SelectValue placeholder="Selecione o tipo de mídia" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="image">Imagem</SelectItem><SelectItem value="video">Vídeo</SelectItem>
+                      <SelectItem value="document">Documento</SelectItem><SelectItem value="audio">Áudio</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-            </div>
-            <div><Label htmlFor={`${node.id}-mediatype`}>Tipo</Label>
-              <Select value={node.mediaType || 'image'} onValueChange={(value) => onUpdate(node.id, { mediaType: value as NodeData['mediaType'] })}>
-                <SelectTrigger id={`${node.id}-mediatype`}><SelectValue placeholder="Selecione o tipo de mídia" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="image">Imagem</SelectItem><SelectItem value="video">Vídeo</SelectItem>
-                  <SelectItem value="document">Documento</SelectItem><SelectItem value="audio">Áudio</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-                <Label htmlFor={`${node.id}-caption`}>Legenda/Nome do Arquivo (Opcional)</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-caption`} value={node.caption || ''} onChange={(e) => onUpdate(node.id, { caption: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('caption')}
+                <div>
+                    <Label htmlFor={`${node.id}-caption`}>Legenda/Nome do Arquivo (Opcional)</Label>
+                    <div className="relative">
+                        <Input id={`${node.id}-caption`} value={node.caption || ''} onChange={(e) => onUpdate(node.id, { caption: e.target.value })} className="pr-8"/>
+                        {renderVariableInserter('caption')}
+                    </div>
                 </div>
-            </div>
-          </div>
-        );
-      case 'whatsapp-group':
-         return (
-          <div className="space-y-3" data-no-drag="true">
-            <div>
-              <Label htmlFor={`${node.id}-instance`}>Instância</Label>
-              <Select onValueChange={(value) => onUpdate(node.id, { instanceName: value })} value={node.instanceName || ''}>
-                <SelectTrigger id={`${node.id}-instance`}>
-                  <SelectValue placeholder="Selecione uma instância..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Usar Padrão Global</SelectItem>
-                  {evolutionInstances.map(instance => (
-                    <SelectItem key={instance.id} value={instance.name}>
-                      {instance.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-                <Label htmlFor={`${node.id}-groupname`}>Nome do Grupo</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-groupname`} value={node.groupName || ''} onChange={(e) => onUpdate(node.id, { groupName: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('groupName')}
+              </>
+            )}
+            {node.type === 'whatsapp-group' && (
+              <>
+                <div>
+                    <Label htmlFor={`${node.id}-groupname`}>Nome do Grupo</Label>
+                    <div className="relative">
+                        <Input id={`${node.id}-groupname`} value={node.groupName || ''} onChange={(e) => onUpdate(node.id, { groupName: e.target.value })} className="pr-8"/>
+                        {renderVariableInserter('groupName')}
+                    </div>
                 </div>
-            </div>
-            <div>
-                <Label htmlFor={`${node.id}-participants`}>Participantes (IDs separados por vírgula, ex: 5511...,5521...)</Label>
-                <div className="relative">
-                    <Textarea id={`${node.id}-participants`} value={node.participants || ''} onChange={(e) => onUpdate(node.id, { participants: e.target.value })} rows={2} className="pr-8"/>
-                    {renderVariableInserter('participants', true)}
+                <div>
+                    <Label htmlFor={`${node.id}-participants`}>Participantes (IDs separados por vírgula, ex: 5511...,5521...)</Label>
+                    <div className="relative">
+                        <Textarea id={`${node.id}-participants`} value={node.participants || ''} onChange={(e) => onUpdate(node.id, { participants: e.target.value })} rows={2} className="pr-8"/>
+                        {renderVariableInserter('participants', true)}
+                    </div>
                 </div>
-            </div>
+              </>
+            )}
           </div>
         );
       case 'condition':
@@ -1825,3 +1804,5 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
+    

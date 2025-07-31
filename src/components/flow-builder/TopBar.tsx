@@ -98,7 +98,7 @@ const TopBar: React.FC<TopBarProps> = ({
   
   const [nexusFlowAppBaseUrl, setNexusFlowAppBaseUrl] = useState('');
   
-  const [isGlobalSettingsOpen, setIsGlobalSettingsOpen] = useState(false);
+  const [isInstanceManagerOpen, setIsInstanceManagerOpen] = useState(false);
   const [evolutionInstances, setEvolutionInstances] = useState<EvolutionInstance[]>([]);
   const [isLoadingInstances, setIsLoadingInstances] = useState(false);
   const [editingInstance, setEditingInstance] = useState<EvolutionInstance | null>(null);
@@ -118,10 +118,10 @@ const TopBar: React.FC<TopBarProps> = ({
   }, [toast]);
 
   useEffect(() => {
-    if (isGlobalSettingsOpen) {
+    if (isInstanceManagerOpen || isSettingsDialogOpen) {
       fetchEvolutionInstances();
     }
-  }, [isGlobalSettingsOpen, fetchEvolutionInstances]);
+  }, [isInstanceManagerOpen, isSettingsDialogOpen, fetchEvolutionInstances]);
 
   const handleEditInstance = (instance: EvolutionInstance) => {
     setEditingInstance(instance);
@@ -143,7 +143,7 @@ const TopBar: React.FC<TopBarProps> = ({
     if (result.success && result.instance) {
       toast({ title: "Sucesso", description: "Instância salva com sucesso." });
       setEditingInstance(null);
-      fetchEvolutionInstances();
+      await fetchEvolutionInstances();
     } else {
       toast({ title: "Erro ao Salvar", description: result.error || "Ocorreu um erro desconhecido.", variant: "destructive" });
     }
@@ -443,7 +443,7 @@ const TopBar: React.FC<TopBarProps> = ({
                         </Select>
                          <p className="text-xs text-muted-foreground mt-1.5">
                           Precisa adicionar ou alterar uma instância?
-                          <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => { setIsSettingsDialogOpen(false); setIsGlobalSettingsOpen(true); }}>
+                          <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => { setIsSettingsDialogOpen(false); setIsInstanceManagerOpen(true); }}>
                             Gerenciar Instâncias
                           </Button>
                         </p>
@@ -464,7 +464,7 @@ const TopBar: React.FC<TopBarProps> = ({
       </Dialog>
       
       {/* Instance Management Dialog */}
-      <Dialog open={isGlobalSettingsOpen} onOpenChange={setIsGlobalSettingsOpen}>
+      <Dialog open={isInstanceManagerOpen} onOpenChange={setIsInstanceManagerOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>Gerenciar Instâncias da API Evolution</DialogTitle>
@@ -550,7 +550,7 @@ const TopBar: React.FC<TopBarProps> = ({
                 </div>
             </div>
             <DialogFooter>
-                <DialogClose asChild><Button type="button" variant="secondary" onClick={() => { if (!editingInstance) { setIsGlobalSettingsOpen(false); setIsSettingsDialogOpen(true); } }}>Fechar</Button></DialogClose>
+                <DialogClose asChild><Button type="button" variant="secondary" onClick={() => { setIsInstanceManagerOpen(false); setIsSettingsDialogOpen(true); }}>Fechar</Button></DialogClose>
             </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -659,3 +659,4 @@ const TopBar: React.FC<TopBarProps> = ({
 
 export default TopBar;
 
+    
