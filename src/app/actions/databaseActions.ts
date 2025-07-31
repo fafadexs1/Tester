@@ -168,16 +168,18 @@ export async function loadWorkspaceFromDB(workspaceId: string): Promise<Workspac
   }
 }
 
-export async function loadWorkspaceByNameFromDB(name: string, owner?: string): Promise<WorkspaceData | null> {
+export async function loadWorkspaceByNameFromDB(name: string, owner: string): Promise<WorkspaceData | null> {
     try {
-        let query = 'SELECT id, name, nodes, connections, owner, created_at, updated_at FROM workspaces WHERE name = $1';
-        const params: any[] = [name];
-        if(owner) {
-            query += ' AND owner = $2';
-            params.push(owner);
+        if (!owner) {
+            console.error('[DB Actions] loadWorkspaceByNameFromDB requires an owner.');
+            return null;
         }
         
-        const result = await runQuery<WorkspaceData>(query, params);
+        const result = await runQuery<WorkspaceData>(
+            'SELECT id, name, nodes, connections, owner, created_at, updated_at FROM workspaces WHERE name = $1 AND owner = $2', 
+            [name, owner]
+        );
+
         if (result.rows.length > 0) {
             const row = result.rows[0];
             return {
