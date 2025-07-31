@@ -549,11 +549,11 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   }, []);
 
   const handleUpdateWorkspace = useCallback((newSettings: Partial<WorkspaceData>) => {
-    updateActiveWorkspace(ws => ({
-      ...ws,
-      ...newSettings,
-    }));
-  }, [updateActiveWorkspace]);
+      setActiveWorkspace(prev => {
+        if (!prev) return null;
+        return { ...prev, ...newSettings };
+      });
+  }, []);
 
 
   if (isLoading) {

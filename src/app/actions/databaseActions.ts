@@ -546,5 +546,3 @@ export async function loadWorkspaceByNameFromDB(name: string, owner: string): Pr
     return null;
   }
 }
-
-    

@@ -50,6 +50,8 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import Link from 'next/link';
 import { v4 as uuidv4 } from 'uuid';
 import { checkEvolutionInstanceStatus } from '@/app/actions/evolutionApiActions';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 
 const SupabaseIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
@@ -281,16 +283,6 @@ const TopBar: React.FC<TopBarProps> = ({
             disabled={!activeWorkspace}
             name="workspaceName"
           />
-           <Button
-            onClick={() => setIsSettingsDialogOpen(true)}
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground"
-            disabled={!activeWorkspace}
-            title="Configurações do Fluxo"
-          >
-            <Settings className="h-5 w-5" />
-          </Button>
         </div>
 
         <div className="flex items-center gap-1 md:gap-2">
@@ -430,93 +422,107 @@ const TopBar: React.FC<TopBarProps> = ({
 
       {/* Workspace Settings Dialog */}
       <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Configurações do Fluxo: {workspaceName}</DialogTitle>
             <DialogDescription>
-              Ajustes específicos para este fluxo de trabalho.
+              Ajustes específicos e integrações para este fluxo de trabalho.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-6">
-            <Accordion type="single" collapsible className="w-full" defaultValue="evolution-api">
-              <AccordionItem value="evolution-api">
-                <AccordionTrigger className="font-semibold">
-                  <div className="flex items-center gap-2">
-                    <BotMessageSquare className="w-5 h-5 text-teal-500" />
-                    API Evolution (WhatsApp)
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="pt-4 space-y-4">
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="enable-evolution-api"
-                      checked={activeWorkspace?.evolution_api_enabled}
-                      onCheckedChange={(checked) => onUpdateWorkspace({ evolution_api_enabled: checked })}
-                      aria-label="Habilitar Integração API Evolution"
-                    />
-                    <Label htmlFor="enable-evolution-api">Habilitar para este fluxo</Label>
-                  </div>
-                  {activeWorkspace?.evolution_api_enabled && (
-                    <div className="space-y-3 pl-2 border-l-2 ml-2">
-                      <div>
-                        <Label htmlFor="evolution_api_url">URL Base</Label>
-                        <Input
-                          id="evolution_api_url"
-                          name="evolution_api_url"
-                          placeholder="http://localhost:8080"
-                          value={activeWorkspace?.evolution_api_url || ''}
-                          onChange={(e) => onUpdateWorkspace({ evolution_api_url: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="evolution_instance_name">Nome da Instância</Label>
-                        <Input
-                          id="evolution_instance_name"
-                          name="evolution_instance_name"
-                          placeholder="evolution_instance"
-                          value={activeWorkspace?.evolution_instance_name || ''}
-                          onChange={(e) => onUpdateWorkspace({ evolution_instance_name: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="evolution_api_key">Chave da API (Opcional)</Label>
-                        <Input
-                          id="evolution_api_key"
-                          name="evolution_api_key"
-                          type="password"
-                          placeholder="Sua chave de API secreta"
-                          value={activeWorkspace?.evolution_api_key || ''}
-                          onChange={(e) => onUpdateWorkspace({ evolution_api_key: e.target.value })}
-                        />
-                      </div>
-                       <div className="pt-2">
-                        <Label className="text-card-foreground/90 text-sm font-medium" htmlFor="flow-webhook-url-for-evolution">URL de Webhook para este Fluxo</Label>
-                        <div className="flex items-center space-x-2 mt-1">
-                            <Input 
-                            id="flow-webhook-url-for-evolution" 
-                            name="flow-webhook-url-for-evolution"
-                            type="text" 
-                            value={evolutionWebhookUrlForCurrentFlow} 
-                            readOnly 
-                            className="bg-input text-foreground flex-1 cursor-default break-all h-9"
-                            />
-                            <Button 
-                            variant="outline" 
-                            size="icon" 
-                            onClick={(e) => handleCopyToClipboard(e, evolutionWebhookUrlForCurrentFlow, "URL de Webhook")} 
-                            title="Copiar URL de Webhook" 
-                            className="h-9 w-9"
-                            >
-                            <Copy className="w-4 w-4" />
-                            </Button>
+          <div className="py-4">
+             <Tabs defaultValue="integrations" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="general">Geral</TabsTrigger>
+                    <TabsTrigger value="integrations">Integrações</TabsTrigger>
+                </TabsList>
+                 <TabsContent value="general" className="pt-4">
+                     <p className="text-sm text-muted-foreground">Configurações gerais do fluxo (a serem implementadas).</p>
+                 </TabsContent>
+                <TabsContent value="integrations" className="pt-2">
+                    <Accordion type="single" collapsible className="w-full">
+                    <AccordionItem value="evolution-api">
+                        <AccordionTrigger className="font-semibold text-base py-3">
+                        <div className="flex items-center gap-3">
+                            <BotMessageSquare className="w-6 h-6 text-teal-500" />
+                            API Evolution (WhatsApp)
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1.5">Use esta URL para que a API Evolution envie eventos para este fluxo específico.</p>
-                       </div>
-                    </div>
-                  )}
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
+                        </AccordionTrigger>
+                        <AccordionContent className="pt-4 space-y-4">
+                        <div className="flex items-center space-x-3 rounded-md border p-4">
+                            <Switch
+                            id="enable-evolution-api"
+                            checked={activeWorkspace?.evolution_api_enabled || false}
+                            onCheckedChange={(checked) => onUpdateWorkspace({ evolution_api_enabled: checked })}
+                            aria-labelledby="enable-evolution-api-label"
+                            />
+                            <Label htmlFor="enable-evolution-api" id="enable-evolution-api-label" className="flex-1 text-sm font-medium cursor-pointer">
+                                Habilitar integração com a API Evolution para este fluxo
+                            </Label>
+                        </div>
+                        {activeWorkspace?.evolution_api_enabled && (
+                            <div className="space-y-4 pl-2 border-l-2 ml-4 pt-2 pb-2">
+                            <div>
+                                <Label htmlFor="evolution_api_url">URL Base</Label>
+                                <Input
+                                id="evolution_api_url"
+                                name="evolution_api_url"
+                                placeholder="http://localhost:8080"
+                                value={activeWorkspace?.evolution_api_url || ''}
+                                onChange={(e) => onUpdateWorkspace({ evolution_api_url: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <Label htmlFor="evolution_instance_name">Nome da Instância</Label>
+                                <Input
+                                id="evolution_instance_name"
+                                name="evolution_instance_name"
+                                placeholder="evolution_instance"
+                                value={activeWorkspace?.evolution_instance_name || ''}
+                                onChange={(e) => onUpdateWorkspace({ evolution_instance_name: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <Label htmlFor="evolution_api_key">Chave da API (Opcional)</Label>
+                                <Input
+                                id="evolution_api_key"
+                                name="evolution_api_key"
+                                type="password"
+                                placeholder="Sua chave de API secreta"
+                                value={activeWorkspace?.evolution_api_key || ''}
+                                onChange={(e) => onUpdateWorkspace({ evolution_api_key: e.target.value })}
+                                />
+                            </div>
+                            <div className="pt-2">
+                                <Label className="text-card-foreground/90 text-sm font-medium" htmlFor="flow-webhook-url-for-evolution">URL de Webhook para este Fluxo</Label>
+                                <div className="flex items-center space-x-2 mt-1">
+                                    <Input 
+                                    id="flow-webhook-url-for-evolution" 
+                                    name="flow-webhook-url-for-evolution"
+                                    type="text" 
+                                    value={evolutionWebhookUrlForCurrentFlow} 
+                                    readOnly 
+                                    className="bg-input text-foreground flex-1 cursor-default break-all h-9"
+                                    />
+                                    <Button 
+                                    variant="outline" 
+                                    size="icon" 
+                                    onClick={(e) => handleCopyToClipboard(e, evolutionWebhookUrlForCurrentFlow, "URL de Webhook")} 
+                                    title="Copiar URL de Webhook" 
+                                    className="h-9 w-9"
+                                    >
+                                    <Copy className="w-4 w-4" />
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1.5">Use esta URL para que a API Evolution envie eventos para este fluxo específico.</p>
+                            </div>
+                            </div>
+                        )}
+                        </AccordionContent>
+                    </AccordionItem>
+                    {/* Futuras integrações podem ser adicionadas aqui como novos AccordionItem */}
+                    </Accordion>
+                </TabsContent>
+            </Tabs>
           </div>
           <DialogFooter>
             <DialogClose asChild>
