@@ -334,16 +334,16 @@ async function executeFlow(
     }
     
     // After the loop finishes (either by pausing or reaching the end), save the final session state.
-    if (shouldContinue) { // This means the loop finished because currentNodeId is null (a dead end)
+    if (shouldContinue && !session.current_node_id) { // This means the loop finished because currentNodeId is null (a dead end)
         session.current_node_id = null; // Explicitly set to null to indicate a paused/dead-end state
         console.log(`[Flow Engine - ${session.session_id}] Execution loop ended at a dead end. Pausing session.`);
-    } else { // Loop was broken by a node that pauses (e.g., input) or ends the flow
+        await saveSessionToDB(session); // Save the paused state
+    } else if (!shouldContinue) { // Loop was broken by a node that pauses (e.g., input) or ends the flow
         session.current_node_id = currentNodeId;
-        console.log(`[Flow Engine - ${session.session_id}] Execution loop paused or ended. Saving session state. Paused: ${!shouldContinue}.`);
-    }
-
-    if (session.current_node_id || shouldContinue) { // Only save if the session is not deleted
-      await saveSessionToDB(session);
+        console.log(`[Flow Engine - ${session.session_id}] Execution loop paused or ended. Saving session state. Paused: ${!!session.current_node_id}.`);
+        if (session.current_node_id) { // Only save if the session is not deleted
+          await saveSessionToDB(session);
+        }
     }
 }
 
@@ -406,8 +406,9 @@ async function storeRequestDetails(
 }
 
 
-export async function POST(request: NextRequest, { params }: { params: { workspaceName: string } }) {
-  const decodedWorkspaceName = decodeURIComponent(params.workspaceName.replace(/_/g, ' '));
+export async function POST(request: NextRequest, context: { params: { workspaceName: string } }) {
+  const { workspaceName } = context.params;
+  const decodedWorkspaceName = decodeURIComponent(workspaceName.replace(/_/g, ' '));
   console.log(`[API Evolution WS Route] POST request received for workspace: "${decodedWorkspaceName}"`);
 
   let rawBody: string | null = null;
@@ -464,6 +465,7 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
       if (session.current_node_id === null && session.awaiting_input_type === null) {
           console.log(`[API Evolution WS Route - ${sessionId}] Session is in a paused (dead-end) state.`);
           // Permite que o código abaixo verifique se a nova mensagem é um gatilho de palavra-chave
+          session = null; // Trata como se não houvesse sessão para forçar verificação de keyword
       } else {
         session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
         if (session.awaiting_input_type && session.awaiting_input_details) {
@@ -591,8 +593,9 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: { workspaceName: string } }) {
-  const decodedWorkspaceName = decodeURIComponent(params.workspaceName.replace(/_/g, ' '));
+export async function GET(request: NextRequest, context: { params: { workspaceName: string } }) {
+  const { workspaceName } = context.params;
+  const decodedWorkspaceName = decodeURIComponent(workspaceName.replace(/_/g, ' '));
   try {
     const workspace = await loadWorkspaceByNameFromDB(decodedWorkspaceName);
     if (workspace) {
@@ -608,12 +611,12 @@ export async function GET(request: NextRequest, { params }: { params: { workspac
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { workspaceName: string } }) {
-  return POST(request, { params });
+export async function PUT(request: NextRequest, context: { params: { workspaceName: string } }) {
+  return POST(request, context);
 }
-export async function PATCH(request: NextRequest, { params }: { params: { workspaceName: string } }) {
-  return POST(request, { params });
+export async function PATCH(request: NextRequest, context: { params: { workspaceName: string } }) {
+  return POST(request, context);
 }
-export async function DELETE(request: NextRequest, { params }: { params: { workspaceName: string } }) {
-  return POST(request, { params });
+export async function DELETE(request: NextRequest, context: { params: { workspaceName: string } }) {
+  return POST(request, context);
 }
