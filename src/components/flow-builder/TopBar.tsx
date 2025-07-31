@@ -137,13 +137,21 @@ const TopBar: React.FC<TopBarProps> = ({
 
   const handleSaveInstance = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    console.log('[TopBar] handleSaveInstance: Formulário submetido.');
     const formData = new FormData(event.currentTarget);
+    
+    // Log para depuração
+    console.log('[TopBar] handleSaveInstance: FormData entries:');
+    for (let [key, value] of formData.entries()) {
+      console.log(`- ${key}: ${value}`);
+    }
+
     const result = await saveEvolutionInstanceAction(formData);
 
     if (result.success && result.instance) {
       toast({ title: "Sucesso", description: "Instância salva com sucesso." });
       setEditingInstance(null);
-      await fetchEvolutionInstances();
+      await fetchEvolutionInstances(); // This should refresh the list
     } else {
       toast({ title: "Erro ao Salvar", description: result.error || "Ocorreu um erro desconhecido.", variant: "destructive" });
     }
@@ -550,7 +558,7 @@ const TopBar: React.FC<TopBarProps> = ({
                 </div>
             </div>
             <DialogFooter>
-                <DialogClose asChild><Button type="button" variant="secondary" onClick={() => { setIsInstanceManagerOpen(false); setIsSettingsDialogOpen(true); }}>Fechar</Button></DialogClose>
+                <DialogClose asChild><Button type="button" variant="secondary" onClick={() => { setIsInstanceManagerOpen(false); if (!editingInstance) setIsSettingsDialogOpen(true); }}>Fechar</Button></DialogClose>
             </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -658,5 +666,3 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
-
-    
