@@ -22,10 +22,18 @@ export async function getEvolutionInstancesForUser(): Promise<{ data?: Evolution
 
     try {
         const result = await runQuery<EvolutionInstance>(
-            'SELECT id, name, base_url, api_key FROM evolution_instances WHERE user_id = $1 ORDER BY name',
+            'SELECT id, name, "baseUrl", api_key FROM evolution_instances WHERE user_id = $1 ORDER BY name',
             [user.id]
         );
-        return { data: result.rows };
+        // Correctly map database columns to object properties
+        const instances = result.rows.map(row => ({
+            id: row.id,
+            name: row.name,
+            baseUrl: (row as any).baseurl || (row as any).baseUrl, // Handle potential case-insensitivity from DB driver
+            apiKey: row.api_key,
+            status: 'unconfigured' // Default status
+        }));
+        return { data: instances };
     } catch (error: any) {
         console.error('[InstanceActions] Error fetching instances:', error);
         return { error: `Erro de banco de dados: ${error.message}` };
@@ -68,17 +76,17 @@ export async function saveEvolutionInstanceAction(
             console.log(`[InstanceActions] Executando UPDATE para a instância ID: ${id}`);
             result = await runQuery<EvolutionInstance>(
                 `UPDATE evolution_instances 
-                 SET name = $1, base_url = $2, api_key = $3, updated_at = NOW() 
+                 SET name = $1, "baseUrl" = $2, api_key = $3, updated_at = NOW() 
                  WHERE id = $4 AND user_id = $5 
-                 RETURNING id, name, base_url, api_key`,
+                 RETURNING id, name, "baseUrl", api_key`,
                 [name, baseUrl, apiKey || '', id, user.id]
             );
         } else { // Create
             console.log(`[InstanceActions] Executando INSERT para a nova instância com nome: ${name}`);
             result = await runQuery<EvolutionInstance>(
-                `INSERT INTO evolution_instances (user_id, name, base_url, api_key) 
+                `INSERT INTO evolution_instances (user_id, name, "baseUrl", api_key) 
                  VALUES ($1, $2, $3, $4) 
-                 RETURNING id, name, base_url, api_key`,
+                 RETURNING id, name, "baseUrl", api_key`,
                 [user.id, name, baseUrl, apiKey || '']
             );
         }
@@ -87,7 +95,15 @@ export async function saveEvolutionInstanceAction(
 
         if (result.rows.length > 0) {
             console.log('[InstanceActions] Operação bem-sucedida.');
-            return { success: true, instance: result.rows[0] };
+            const dbRow = result.rows[0];
+            const instance: EvolutionInstance = {
+                 id: dbRow.id,
+                 name: dbRow.name,
+                 baseUrl: (dbRow as any).baseUrl, // Ensure correct property access
+                 apiKey: dbRow.api_key,
+                 status: 'unconfigured'
+            };
+            return { success: true, instance: instance };
         } else {
             console.error('[InstanceActions] Erro: Nenhuma linha retornada do banco de dados após a operação.');
             return { success: false, error: 'Falha ao salvar a instância. Verifique se você tem permissão.' };
