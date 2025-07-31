@@ -90,7 +90,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const [supabaseSchemaError, setSupabaseSchemaError] = useState<string | null>(null);
 
   // States for Evolution API instance popover
-  const [isEvolutionPoperOpen, setIsEvolutionPoperOpen] = useState(false);
+  const [isEvolutionPopoverOpen, setIsEvolutionPopoverOpen] = useState(false);
   const [evolutionInstances, setEvolutionInstances] = useState<EvolutionInstance[]>([]);
   const [isLoadingEvolutionInstances, setIsLoadingEvolutionInstances] = useState(false);
 
@@ -221,7 +221,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id, node.supabaseTableName]); // Removido onUpdate
 
-  const loadEvolutionInstances = useCallback(async () => {
+  const handleCheckInstanceStatus = useCallback(async (instance: EvolutionInstance) => {
+    setEvolutionInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: 'connecting' } : i));
+    const result = await checkEvolutionInstanceStatus(instance.baseUrl, instance.name, instance.apiKey);
+    setEvolutionInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: result.status } : i));
+  }, []);
+
+  const loadEvolutionInstancesAndCheckStatus = useCallback(async () => {
     setIsLoadingEvolutionInstances(true);
     try {
       const response = await fetch('/api/instances/evolution');
@@ -229,7 +235,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         throw new Error('Falha ao buscar instâncias do servidor.');
       }
       const data: EvolutionInstance[] = await response.json();
-      setEvolutionInstances(data.map(d => ({ ...d, status: 'unconfigured' })));
+      const instancesWithStatus = data.map(d => ({ ...d, status: 'unconfigured' as const }));
+      setEvolutionInstances(instancesWithStatus);
+      // Após carregar, dispara a verificação de status para todas
+      instancesWithStatus.forEach(instance => {
+          handleCheckInstanceStatus(instance);
+      });
     } catch (error: any) {
       console.error("[NodeCard] Error fetching evolution instances:", error);
       toast({ title: "Erro ao Carregar Instâncias", description: error.message, variant: "destructive" });
@@ -237,13 +248,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     } finally {
       setIsLoadingEvolutionInstances(false);
     }
-  }, [toast]);
+  }, [toast, handleCheckInstanceStatus]);
 
   const handleEvolutionPopoverOpen = (open: boolean) => {
     if(open) {
-      loadEvolutionInstances();
+      loadEvolutionInstancesAndCheckStatus();
     }
-    setIsEvolutionPoperOpen(open);
+    setIsEvolutionPopoverOpen(open);
   }
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent) => {
@@ -1624,7 +1635,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </div>
           <div className="flex items-center gap-1">
              {node.type === 'start' && (
-              <Popover open={isEvolutionPoperOpen} onOpenChange={handleEvolutionPopoverOpen}>
+              <Popover open={isEvolutionPopoverOpen} onOpenChange={handleEvolutionPopoverOpen}>
                 <PopoverTrigger asChild>
                   <Button variant="ghost" size="icon" className="p-0.5 text-muted-foreground hover:text-foreground w-6 h-6" aria-label="Instâncias da API Evolution">
                     <BotMessageSquare className="w-4 h-4" />
@@ -1640,9 +1651,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     </div>
                      <ScrollArea className="h-auto max-h-[200px]">
                       <div className="grid gap-2">
-                        {evolutionInstances.length > 0 ? evolutionInstances.map((instance) => (
+                         {isLoadingEvolutionInstances ? (
+                            <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin"/> Carregando...
+                            </div>
+                         ) : evolutionInstances.length > 0 ? evolutionInstances.map((instance) => (
                            <div key={instance.id} className="grid grid-cols-[auto,1fr,auto] items-center gap-x-2 text-sm p-2 rounded-md border bg-muted/50">
-                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: instance.status === 'online' ? 'hsl(var(--primary))' : instance.status === 'offline' ? 'hsl(var(--destructive))' : 'hsl(var(--muted-foreground))' }} title={instance.status}></div>
+                              <div
+                                  className={cn("w-2.5 h-2.5 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
+                                  title={instance.status}
+                              />
                               <div className="font-medium truncate" title={instance.name}>{instance.name}</div>
                               <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
                           </div>
@@ -1804,5 +1822,3 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
-    
