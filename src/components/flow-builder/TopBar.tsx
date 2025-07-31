@@ -39,6 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from '@/hooks/use-toast';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -121,6 +122,12 @@ const TopBar: React.FC<TopBarProps> = ({
       fetchEvolutionInstances();
     }
   }, [isGlobalSettingsOpen, fetchEvolutionInstances]);
+  
+   useEffect(() => {
+    if (isSettingsDialogOpen) {
+      fetchEvolutionInstances();
+    }
+  }, [isSettingsDialogOpen, fetchEvolutionInstances]);
 
   const handleEditInstance = (instance: EvolutionInstance) => {
     setEditingInstance(instance);
@@ -428,15 +435,15 @@ const TopBar: React.FC<TopBarProps> = ({
                         <Label htmlFor="evolution_instance_id">Instância da API Evolution</Label>
                         <Select
                           value={activeWorkspace?.evolution_instance_id || ''}
-                          onValueChange={(value) => onUpdateWorkspace({ evolution_instance_id: value })}
+                          onValueChange={(value) => onUpdateWorkspace({ evolution_instance_id: value === 'none' ? undefined : value })}
                         >
                           <SelectTrigger id="evolution_instance_id">
                             <SelectValue placeholder="Nenhuma instância selecionada" />
                           </SelectTrigger>
                           <SelectContent>
-                             <DropdownMenuItem onSelect={() => onUpdateWorkspace({ evolution_instance_id: undefined })}>
+                             <SelectItem value="none">
                                 <em>Nenhuma</em>
-                              </DropdownMenuItem>
+                              </SelectItem>
                             {evolutionInstances.map(instance => (
                               <SelectItem key={instance.id} value={instance.id}>
                                 {instance.name}
