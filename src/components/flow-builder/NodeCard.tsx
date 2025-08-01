@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
@@ -10,7 +9,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target, Hourglass
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -652,6 +651,40 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     );
   };
 
+  const renderApiResponseSettings = () => (
+      <div className="space-y-3 pt-3 border-t">
+        <div className="flex items-center space-x-2">
+          <Switch
+            id={`${node.id}-apiResponseAsInput`}
+            checked={node.apiResponseAsInput || false}
+            onCheckedChange={(checked) => onUpdate(node.id, { apiResponseAsInput: checked })}
+          />
+          <Label htmlFor={`${node.id}-apiResponseAsInput`}>Aceitar Resposta via API</Label>
+        </div>
+        {node.apiResponseAsInput && (
+          <div>
+            <Label htmlFor={`${node.id}-apiResponsePathForValue`}>Caminho do Valor no JSON da API</Label>
+              <div className="relative">
+                <Input
+                  id={`${node.id}-apiResponsePathForValue`}
+                  placeholder="Ex: data.choice"
+                  value={node.apiResponsePathForValue || ''}
+                  onChange={(e) => onUpdate(node.id, { apiResponsePathForValue: e.target.value })}
+                  className="pr-8"
+                />
+                  <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground"/></Button>
+                  </PopoverTrigger>
+                  <WebhookPathPicker onPathSelect={(path) => onUpdate(node.id, { apiResponsePathForValue: path })} />
+                </Popover>
+            </div>
+              <p className="text-xs text-muted-foreground mt-1">O fluxo usará o valor deste caminho como se fosse a resposta do usuário.</p>
+          </div>
+        )}
+      </div>
+  );
+
 
   const renderNodeIcon = (): React.ReactNode => {
     const iconProps = { className: "w-5 h-5" };
@@ -685,6 +718,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       'supabase-update-row': <Edit3 {...iconProps} className="text-yellow-500" />,
       'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />,
       'end-flow': <StopCircle {...iconProps} className="text-destructive" />,
+      'external-response': <Hourglass {...iconProps} className="text-indigo-400" />,
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
     return icons[node.type] || icons.default;
@@ -915,7 +949,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </div>
         );
       case 'input':
-      case 'option':
+      case 'option': {
         const isOptionNode = node.type === 'option';
         return (
           <div className="space-y-3" data-no-drag="true">
@@ -952,40 +986,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <Input id={`${node.id}-varsave`} placeholder="nome_da_variavel" value={node.variableToSaveResponse || node.variableToSaveChoice || ''} onChange={(e) => onUpdate(node.id, isOptionNode ? { variableToSaveChoice: e.target.value } : { variableToSaveResponse: e.target.value })} />
             </div>
 
-            <div className="space-y-3 pt-3 border-t">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id={`${node.id}-apiResponseAsInput`}
-                  checked={node.apiResponseAsInput || false}
-                  onCheckedChange={(checked) => onUpdate(node.id, { apiResponseAsInput: checked })}
-                />
-                <Label htmlFor={`${node.id}-apiResponseAsInput`}>Aceitar Resposta via API</Label>
-              </div>
-              {node.apiResponseAsInput && (
-                <div>
-                  <Label htmlFor={`${node.id}-apiResponsePathForValue`}>Caminho do Valor no JSON da API</Label>
-                   <div className="relative">
-                      <Input
-                        id={`${node.id}-apiResponsePathForValue`}
-                        placeholder="Ex: data.choice"
-                        value={node.apiResponsePathForValue || ''}
-                        onChange={(e) => onUpdate(node.id, { apiResponsePathForValue: e.target.value })}
-                        className="pr-8"
-                      />
-                       <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground"/></Button>
-                        </PopoverTrigger>
-                        <WebhookPathPicker onPathSelect={(path) => onUpdate(node.id, { apiResponsePathForValue: path })} />
-                      </Popover>
-                  </div>
-                   <p className="text-xs text-muted-foreground mt-1">O fluxo usará o valor deste caminho como se fosse a resposta do usuário.</p>
-                </div>
-              )}
-            </div>
-             {isOptionNode && <p className="text-xs text-muted-foreground italic pt-1">Cada opção na lista acima terá um conector de saída dedicado.</p>}
+            {renderApiResponseSettings()}
+
+            {isOptionNode && <p className="text-xs text-muted-foreground italic pt-1">Cada opção na lista acima terá um conector de saída dedicado.</p>}
           </div>
         );
+      }
       case 'whatsapp-text':
       case 'whatsapp-media':
       case 'whatsapp-group':
@@ -1279,6 +1285,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <Label htmlFor={`${node.id}-varsavedate`}>Salvar Data na Variável</Label>
                 <Input id={`${node.id}-varsavedate`} placeholder="data_nascimento" value={node.variableToSaveDate || ''} onChange={(e) => onUpdate(node.id, { variableToSaveDate: e.target.value })} />
             </div>
+            {renderApiResponseSettings()}
           </div>
         );
       case 'redirect':
@@ -1400,6 +1407,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <Label htmlFor={`${node.id}-fileurlvar`}>Salvar URL do Arquivo na Variável</Label>
                 <Input id={`${node.id}-fileurlvar`} placeholder="url_do_arquivo" value={node.fileUrlVariable || ''} onChange={(e) => onUpdate(node.id, { fileUrlVariable: e.target.value })} />
             </div>
+            {renderApiResponseSettings()}
           </div>
         );
       case 'rating-input':
@@ -1428,6 +1436,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <Label htmlFor={`${node.id}-ratingoutputvar`}>Salvar Avaliação na Variável</Label>
                 <Input id={`${node.id}-ratingoutputvar`} placeholder="avaliacao_usuario" value={node.ratingOutputVariable || ''} onChange={(e) => onUpdate(node.id, { ratingOutputVariable: e.target.value })} />
             </div>
+            {renderApiResponseSettings()}
           </div>
         );
       case 'ai-text-generation':

@@ -114,7 +114,16 @@ async function executeFlow(
             }
 
             case 'input':
-                const promptText = substituteVariablesInText(currentNode.promptText, session.flow_variables);
+            case 'date-input':
+            case 'file-upload':
+            case 'rating-input':
+                const promptFieldName = 
+                    currentNode.type === 'input' ? 'promptText' : 
+                    currentNode.type === 'date-input' ? 'dateInputLabel' :
+                    currentNode.type === 'file-upload' ? 'uploadPromptText' :
+                    'ratingQuestionText';
+
+                const promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
                 if (promptText) {
                     await sendWhatsAppMessageAction({
                         ...apiConfig,
@@ -123,8 +132,16 @@ async function executeFlow(
                         textContent: promptText,
                     });
                 }
-                session.awaiting_input_type = 'text';
-                session.awaiting_input_details = { variableToSave: currentNode.variableToSaveResponse || 'last_user_input', originalNodeId: currentNode.id };
+                session.awaiting_input_type = currentNode.type;
+                session.awaiting_input_details = { 
+                    variableToSave: 
+                        currentNode.variableToSaveResponse || 
+                        currentNode.variableToSaveDate ||
+                        currentNode.fileUrlVariable ||
+                        currentNode.ratingOutputVariable ||
+                        'last_user_input', 
+                    originalNodeId: currentNode.id 
+                };
                 shouldContinue = false; // Pause execution
                 break;
 
@@ -512,7 +529,7 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
                    return NextResponse.json({ message: "Awaiting API response, user message ignored." }, { status: 200 });
                 }
 
-                if (session.awaiting_input_type === 'text' && session.awaiting_input_details.variableToSave) {
+                if (['input', 'date-input', 'file-upload', 'rating-input'].includes(session.awaiting_input_type) && session.awaiting_input_details.variableToSave) {
                   let textToSave = String(responseValue);
                   if (isApiCallResponse && awaitingNode.apiResponsePathForValue) {
                       const extracted = getProperty(responseValue, awaitingNode.apiResponsePathForValue);

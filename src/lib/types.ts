@@ -35,7 +35,8 @@ export type NodeType =
   | 'supabase-read-row'
   | 'supabase-update-row'
   | 'supabase-delete-row'
-  | 'end-flow';
+  | 'end-flow'
+  | 'external-response';
 
 export interface ApiHeader {
   id: string;
@@ -206,6 +207,11 @@ export interface NodeData {
   
   // Start Node
   triggers?: StartNodeTrigger[];
+
+  // External Response Node
+  responseMode?: 'immediate' | 'webhook';
+  responseValue?: string; // For immediate mode
+  responseVariable?: string; // To save webhook body
 }
 
 export interface Connection {
@@ -240,12 +246,15 @@ export interface WorkspaceData {
   evolution_instance_id?: string | null;
 }
 
+export type AwaitingInputNode = 'input' | 'option' | 'date-input' | 'file-upload' | 'rating-input';
+export type FlowSessionAwaitingInputType = AwaitingInputNode | null;
+
 export interface FlowSession {
   session_id: string; 
   workspace_id: string;
   current_node_id: string | null;
   flow_variables: Record<string, any>;
-  awaiting_input_type: 'text' | 'option' | null;
+  awaiting_input_type: FlowSessionAwaitingInputType;
   awaiting_input_details: {
     variableToSave?: string; 
     options?: string[];       
