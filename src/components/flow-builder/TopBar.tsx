@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -52,6 +53,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { checkEvolutionInstanceStatus } from '@/app/actions/evolutionApiActions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { saveEvolutionInstanceAction, deleteEvolutionInstanceAction } from '@/app/actions/instanceActions';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 
 
 interface TopBarProps {
@@ -599,7 +601,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <DialogHeader>
             <DialogTitle>Sessões Ativas</DialogTitle>
             <DialogDescription>
-              Lista de conversas/sessões de fluxo atualmente ativas no banco de dados.
+              Lista de conversas e fluxos atualmente ativos no banco de dados.
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
@@ -607,50 +609,58 @@ const TopBar: React.FC<TopBarProps> = ({
               <RefreshCw className={cn("mr-2 h-4 w-4", isLoadingSessions && "animate-spin")} />
               {isLoadingSessions ? "Atualizando..." : "Atualizar Sessões"}
             </Button>
-            {isLoadingSessions && <p className="text-sm text-muted-foreground text-center py-4">Carregando sessões...</p>}
+            {isLoadingSessions && <div className="flex justify-center items-center h-full"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>}
             {sessionsError && (<div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm"><div className="flex items-center gap-2 font-medium"><AlertCircle className="h-5 w-5" /> Erro ao carregar sessões:</div><p className="mt-1 text-xs">{sessionsError}</p></div>)}
             {!isLoadingSessions && !sessionsError && activeSessions.length === 0 && (
               <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4"><Users className="w-12 h-12 mb-3" /><p className="text-sm">Nenhuma sessão ativa encontrada.</p><p className="text-xs mt-1">Interaja com um fluxo para criar uma sessão.</p></div>
             )}
             {!isLoadingSessions && activeSessions.length > 0 && (
-              <ScrollArea className="flex-1 border rounded-md">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[200px]">ID da Sessão (Usuário)</TableHead>
-                      <TableHead className="w-[150px]">ID do Fluxo</TableHead>
-                      <TableHead>ID do Nó Atual</TableHead>
-                      <TableHead className="w-[120px]">Aguardando</TableHead>
-                      <TableHead className="w-[180px]">Última Interação</TableHead>
-                      <TableHead className="w-[180px] text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+              <ScrollArea className="flex-1 -m-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-3">
                     {activeSessions.map((session) => (
-                      <TableRow key={session.session_id}>
-                        <TableCell className="font-medium truncate" title={session.session_id}>{session.session_id}</TableCell>
-                        <TableCell className="truncate" title={session.workspace_id}>{session.workspace_id}</TableCell>
-                        <TableCell className="truncate" title={session.current_node_id || undefined}>{session.current_node_id || 'N/A'}</TableCell>
-                        <TableCell>{session.awaiting_input_type || 'N/A'}</TableCell>
-                        <TableCell>{session.last_interaction_at ? new Date(session.last_interaction_at).toLocaleString() : 'N/A'}</TableCell>
-                        <TableCell className="text-right space-x-1">
-                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => handleViewSessionVariables(session.flow_variables)}>
-                            <FileJson2 className="mr-1 h-3.5 w-3.5" /> Ver
-                          </Button>
-                           <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => handleGoToNodeInFlow(session)}>
-                            <Target className="mr-1 h-3.5 w-3.5" /> Ir Nó
-                          </Button>
+                      <Card key={session.session_id} className="flex flex-col">
+                        <CardHeader>
+                            <CardTitle className="flex items-center justify-between">
+                                <span className="truncate font-mono text-base" title={session.session_id}>
+                                    {session.session_id.split('@@')[0]}
+                                </span>
+                                <span className={cn("flex items-center gap-1.5 text-xs font-normal", session.awaiting_input_type ? "text-yellow-500" : "text-green-500")}>
+                                  <span className={cn("w-2 h-2 rounded-full", session.awaiting_input_type ? "bg-yellow-500" : "bg-green-500")} />
+                                  {session.awaiting_input_type ? `Aguardando ${session.awaiting_input_type}` : "Ativo"}
+                                </span>
+                            </CardTitle>
+                            <CardDescription className="text-xs truncate" title={session.workspace_id}>
+                                Fluxo: {session.workspace_id}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-2 text-sm flex-grow">
+                           <div>
+                                <p className="font-medium text-muted-foreground text-xs">Nó Atual</p>
+                                <p className="font-mono text-xs truncate" title={session.current_node_id || 'N/A'}>{session.current_node_id || 'Nenhum (Pausado)'}</p>
+                           </div>
+                           <div>
+                                <p className="font-medium text-muted-foreground text-xs">Última Interação</p>
+                                <p className="text-xs">{session.last_interaction_at ? new Date(session.last_interaction_at).toLocaleString() : 'N/A'}</p>
+                           </div>
+                        </CardContent>
+                        <CardFooter className="flex justify-end space-x-2 border-t pt-4">
+                           <Button variant="outline" size="sm" onClick={() => handleViewSessionVariables(session.flow_variables)}>
+                                <FileJson2 className="mr-1.5 h-4 w-4" /> Variáveis
+                           </Button>
+                           <Button variant="outline" size="sm" onClick={() => handleGoToNodeInFlow(session)}>
+                                <Target className="mr-1.5 h-4 w-4" /> Ir para Nó
+                           </Button>
                            <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="destructive" size="icon" className="h-7 w-7">
-                                <Trash2 className="h-3.5 w-3.5" />
+                              <Button variant="destructive" size="icon">
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Encerrar Sessão?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Tem certeza que deseja encerrar a sessão para <strong className='break-all'>{session.session_id}</strong>? Esta ação não pode ser desfeita e o fluxo será interrompido para este usuário.
+                                  Tem certeza que deseja encerrar a sessão para <strong className='break-all font-mono'>{session.session_id.split('@@')[0]}</strong>? Esta ação não pode ser desfeita e o fluxo será interrompido para este usuário.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
@@ -659,11 +669,10 @@ const TopBar: React.FC<TopBarProps> = ({
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
-                        </TableCell>
-                      </TableRow>
+                        </CardFooter>
+                      </Card>
                     ))}
-                  </TableBody>
-                </Table>
+                </div>
               </ScrollArea>
             )}
           </div>
