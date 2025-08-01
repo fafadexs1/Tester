@@ -458,7 +458,23 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
     let startExecution = false;
     
     if (session) {
-        console.log(`[API Evolution Trigger - ${sessionId}] Existing session found. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
+      console.log(`[API Evolution Trigger - ${sessionId}] Existing session found. Last interaction: ${session.last_interaction_at}, Timeout: ${session.session_timeout_seconds}s`);
+      // Lógica de timeout
+      if (session.session_timeout_seconds && session.session_timeout_seconds > 0 && session.last_interaction_at) {
+          const lastInteractionDate = new Date(session.last_interaction_at);
+          const timeoutMilliseconds = session.session_timeout_seconds * 1000;
+          const expirationTime = lastInteractionDate.getTime() + timeoutMilliseconds;
+
+          if (Date.now() > expirationTime) {
+              console.log(`[API Evolution Trigger - ${sessionId}] Session timed out. Deleting session and starting a new one.`);
+              await deleteSessionFromDB(sessionId);
+              session = null; // Tratar como uma nova sessão
+          }
+      }
+    }
+
+    if (session) {
+        console.log(`[API Evolution Trigger - ${sessionId}] Existing session is active. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
       
       // SE A SESSÃO ESTIVER PAUSADA (BECo SEM SAÍDA)
       if (session.current_node_id === null && session.awaiting_input_type === null) {
@@ -559,11 +575,12 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
         for (const trigger of startNode.triggers) {
             if (trigger.enabled && trigger.keyword && receivedMessageText?.toLowerCase() === trigger.keyword.toLowerCase()) {
                 triggerNameToUse = trigger.name;
+                webhookTrigger = trigger;
                 break;
             }
         }
         if (!triggerNameToUse) {
-            webhookTrigger = startNode.triggers.find(t => t.type === 'webhook' && t.enabled);
+            webhookTrigger = startNode.triggers.find(t => t.type === 'webhook' && t.enabled && !t.keyword);
             if (webhookTrigger) {
                 triggerNameToUse = webhookTrigger.name;
             }
