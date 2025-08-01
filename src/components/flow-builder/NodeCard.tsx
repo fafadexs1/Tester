@@ -76,7 +76,11 @@ const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onS
                 Object.entries(data).map(([key, value]) => (
                     <div key={key}>
                         <button
-                            onClick={() => onSelectPath([...currentPath, key].join('.'))}
+                            onClick={(e) => {
+                                e.preventDefault(); // Impede o comportamento padrão do botão se houver
+                                e.stopPropagation(); // Impede que o evento se propague para outros elementos
+                                onSelectPath([...currentPath, key].join('.'));
+                            }}
                             className="text-red-500 hover:underline cursor-pointer focus:outline-none text-left"
                             title={`Clique para selecionar o caminho: ${[...currentPath, key].join('.')}`}
                         >
@@ -487,6 +491,19 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const handleOpenWebhookHistory = () => {
     fetchWebhookLogs();
     setIsWebhookHistoryDialogOpen(true);
+  };
+
+  const handleCopyPathToClipboard = (path: string) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(path).then(() => {
+        toast({ title: "Caminho copiado!", description: `O caminho "${path}" foi copiado para a área de transferência.` });
+      }).catch(err => {
+        toast({ title: "Erro ao copiar", description: "Não foi possível copiar o caminho.", variant: "destructive" });
+        console.error("Failed to copy path: ", err);
+      });
+    } else {
+      toast({ title: "Ação não suportada", description: "Seu navegador não suporta a cópia para a área de transferência ou a página não é segura.", variant: "destructive" });
+    }
   };
 
   const handleVariableInsert = (
@@ -1724,7 +1741,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <DialogHeader>
                 <DialogTitle>Histórico de Webhooks Recebidos</DialogTitle>
                 <DialogDescription>
-                    Exibe os últimos 50 eventos de webhook recebidos pelo fluxo. Os logs são zerados quando o servidor reinicia.
+                    Exibe os últimos 50 eventos de webhook recebidos. Clique em uma chave do JSON para copiar seu caminho para a área de transferência.
                 </DialogDescription>
             </DialogHeader>
             <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
@@ -1757,8 +1774,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                         {log.method && log.url && <div><strong>Endpoint:</strong> <span className="break-all">{log.method} {log.url}</span></div>}
                                         {log.ip && <div><strong>IP Origem:</strong> {log.ip}</div>}
                                         {log.headers && <div><strong>Headers:</strong><pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-24 overflow-y-auto">{JSON.stringify(log.headers, null, 2)}</pre></div>}
-                                        <div><strong>Payload Completo:</strong>
-                                            <pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-60 overflow-y-auto">{JSON.stringify(log.payload, null, 2)}</pre>
+                                        <div><strong>Payload Completo (clique para copiar caminho):</strong>
+                                          <div className="mt-1 p-2 bg-background/30 rounded text-xs max-h-60 overflow-y-auto">
+                                            <JsonTreeView data={log.payload} onSelectPath={handleCopyPathToClipboard} />
+                                          </div>
                                         </div>
                                     </div>
                                 </details>
@@ -1780,7 +1799,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col" data-no-drag="true">
           <DialogHeader>
               <DialogTitle>Resposta do Teste da API</DialogTitle>
-              <DialogDescription>Clique em uma chave do JSON para selecionar o caminho do dado.</DialogDescription>
+              <DialogDescription>Clique em uma chave do JSON para preencher o campo "Caminho do Dado".</DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto space-y-4 py-4">
               {testResponseError && (
@@ -1794,7 +1813,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                       <Label className="font-semibold">Corpo da Resposta:</Label>
                       <ScrollArea className="h-64 mt-1 border rounded-md p-2 bg-muted/30">
                           <pre className="text-xs whitespace-pre-wrap break-all">
-                              <JsonTreeView data={testResponseData} onSelectPath={(path) => onUpdate(node.id, { apiResponsePath: path })} />
+                              <JsonTreeView data={testResponseData} onSelectPath={(path) => {
+                                onUpdate(node.id, { apiResponsePath: path });
+                                toast({ title: "Caminho Preenchido!", description: `O caminho "${path}" foi inserido no campo.`});
+                              }} />
                           </pre>
                       </ScrollArea>
                   </div>
