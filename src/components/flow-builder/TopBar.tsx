@@ -254,6 +254,17 @@ const TopBar: React.FC<TopBarProps> = ({
   };
 
 
+  const getSessionStatus = (session: FlowSession): { text: string; color: string } => {
+    if (session.awaiting_input_type) {
+      return { text: `Aguardando ${session.awaiting_input_type}`, color: 'bg-yellow-500' };
+    }
+    if (session.current_node_id === null) {
+      return { text: 'Pausado', color: 'bg-gray-400' };
+    }
+    return { text: 'Ativo', color: 'bg-green-500' };
+  };
+
+
   useEffect(() => {
     if (isSessionsDialogOpen) {
       fetchActiveSessions();
@@ -624,9 +635,9 @@ const TopBar: React.FC<TopBarProps> = ({
                                 <span className="truncate font-mono text-base" title={session.session_id}>
                                     {session.session_id.split('@@')[0]}
                                 </span>
-                                <span className={cn("flex items-center gap-1.5 text-xs font-normal", session.awaiting_input_type ? "text-yellow-500" : "text-green-500")}>
-                                  <span className={cn("w-2 h-2 rounded-full", session.awaiting_input_type ? "bg-yellow-500" : "bg-green-500")} />
-                                  {session.awaiting_input_type ? `Aguardando ${session.awaiting_input_type}` : "Ativo"}
+                                <span className={cn("flex items-center gap-1.5 text-xs font-normal", getSessionStatus(session).color.replace('bg-', 'text-'))}>
+                                  <span className={cn("w-2 h-2 rounded-full", getSessionStatus(session).color)} />
+                                  {getSessionStatus(session).text}
                                 </span>
                             </CardTitle>
                             <CardDescription className="text-xs truncate" title={session.workspace_id}>

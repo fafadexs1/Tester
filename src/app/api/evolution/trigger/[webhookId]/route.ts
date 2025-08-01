@@ -452,11 +452,29 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
     
     if (session) {
         console.log(`[API Evolution Trigger - ${sessionId}] Existing session found. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
+      
+      // SE A SESSÃO ESTIVER PAUSADA (BECo SEM SAÍDA)
       if (session.current_node_id === null && session.awaiting_input_type === null) {
-          console.log(`[API Evolution Trigger - ${sessionId}] Session is in a paused (dead-end) state. No action will be taken unless a trigger keyword is matched.`);
-          // This allows the flow to be re-triggered by a keyword even if a session exists.
-          session = null;
-      } else {
+          console.log(`[API Evolution Trigger - ${sessionId}] Session is in a paused (dead-end) state. Checking for keyword triggers to restart...`);
+          
+          const startNode = workspace.nodes.find(n => n.type === 'start');
+          let triggerMatched = false;
+          if (startNode?.triggers) {
+              for (const trigger of startNode.triggers) {
+                  if (trigger.enabled && trigger.keyword && receivedMessageText?.toLowerCase() === trigger.keyword.toLowerCase()) {
+                      console.log(`[API Evolution Trigger - ${sessionId}] Paused session re-triggered by keyword: '${trigger.keyword}'. Restarting flow.`);
+                      triggerMatched = true;
+                      break;
+                  }
+              }
+          }
+          
+          if (!triggerMatched) {
+              console.log(`[API Evolution Trigger - ${sessionId}] No keyword matched. Ignoring message and keeping session paused.`);
+              return NextResponse.json({ message: "Session is paused and no trigger keyword was matched." }, { status: 200 });
+          }
+          session = null; // Força a recriação da sessão se um gatilho foi encontrado
+      } else { // SE A SESSÃO ESTIVER ATIVA E ESPERANDO INPUT
         session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
         if (session.awaiting_input_type && session.awaiting_input_details) {
             const originalNodeId = session.awaiting_input_details.originalNodeId;
