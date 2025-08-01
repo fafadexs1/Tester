@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target, Hourglass
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -34,6 +34,7 @@ import {
 } from '@/lib/constants';
 import { fetchSupabaseTablesAction, fetchSupabaseTableColumnsAction } from '@/lib/supabase/actions';
 import { checkEvolutionInstanceStatus } from '@/app/actions/evolutionApiActions';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 
 interface NodeCardProps {
@@ -682,6 +683,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       'supabase-read-row': <Search {...iconProps} className="text-blue-500" />,
       'supabase-update-row': <Edit3 {...iconProps} className="text-yellow-500" />,
       'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />,
+      'external-response': <Hourglass {...iconProps} className="text-indigo-400" />,
       'end-flow': <StopCircle {...iconProps} className="text-destructive" />,
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
@@ -1651,6 +1653,64 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </div>
         );
       }
+      case 'external-response': {
+          const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/trigger/${activeWorkspace?.id || '[ID_DO_FLUXO]'}`;
+          return (
+            <div className="space-y-4" data-no-drag="true">
+              <div>
+                <Label>Modo de Operação</Label>
+                <RadioGroup 
+                  defaultValue={node.responseMode || 'webhook'}
+                  onValueChange={(value) => onUpdate(node.id, { responseMode: value as 'immediate' | 'webhook' })}
+                  className="mt-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="webhook" id={`${node.id}-mode-webhook`} />
+                    <Label htmlFor={`${node.id}-mode-webhook`}>Aguardar Webhook</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="immediate" id={`${node.id}-mode-immediate`} />
+                    <Label htmlFor={`${node.id}-mode-immediate`}>Imediato (Injetar Resposta)</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              {(node.responseMode === 'immediate') && (
+                <div className="space-y-2">
+                  <Label htmlFor={`${node.id}-injected-response`}>Resposta a ser Injetada</Label>
+                  <div className="relative">
+                    <Textarea
+                      id={`${node.id}-injected-response`}
+                      placeholder='Pode ser um texto, número ou JSON. Ex: { "status": "aprovado" }'
+                      value={node.injectedResponse || ''}
+                      onChange={(e) => onUpdate(node.id, { injectedResponse: e.target.value })}
+                      className="pr-8"
+                      rows={3}
+                    />
+                    {renderVariableInserter('injectedResponse', true)}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor={`${node.id}-webhookResponseVariable`}>Salvar Resposta na Variável</Label>
+                <Input
+                  id={`${node.id}-webhookResponseVariable`}
+                  placeholder="resposta_externa"
+                  value={node.webhookResponseVariable || ''}
+                  onChange={(e) => onUpdate(node.id, { webhookResponseVariable: e.target.value })}
+                />
+              </div>
+              
+              {(node.responseMode === 'webhook') && (
+                <div className="text-xs text-muted-foreground border-t pt-3 space-y-1">
+                  <p>O fluxo pausará aqui até que uma chamada POST seja feita para a URL de webhook do fluxo com um novo payload.</p>
+                  <p><strong>URL:</strong> <span className="font-mono bg-muted p-1 rounded break-all text-xs">{webhookUrl}</span></p>
+                </div>
+              )}
+            </div>
+          )
+        }
       case 'end-flow':
         return <p className="text-sm text-muted-foreground italic">Este nó encerra o fluxo.</p>;
       default:
@@ -1884,5 +1944,3 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
-    
