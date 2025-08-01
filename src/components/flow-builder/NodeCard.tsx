@@ -1,7 +1,8 @@
+
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger, WebhookVariableMapping, WorkspaceData, EvolutionInstance } from '@/lib/types';
+import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger, WebhookVariableMapping, WorkspaceData, EvolutionInstance, SwitchCase } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -9,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target, Hourglass
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target, Hourglass, GitCommitHorizontal
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -538,6 +539,25 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     fetchWebhookLogs();
     setIsWebhookHistoryDialogOpen(true);
   };
+  
+  const handleAddSwitchCase = () => {
+      const newCase: SwitchCase = { id: uuidv4(), value: '' };
+      const updatedCases = [...(node.switchCases || []), newCase];
+      onUpdate(node.id, { switchCases: updatedCases });
+  };
+
+  const handleRemoveSwitchCase = (caseId: string) => {
+      const updatedCases = (node.switchCases || []).filter(c => c.id !== caseId);
+      onUpdate(node.id, { switchCases: updatedCases });
+  };
+
+  const handleSwitchCaseChange = (caseId: string, value: string) => {
+      const updatedCases = (node.switchCases || []).map(c =>
+          c.id === caseId ? { ...c, value } : c
+      );
+      onUpdate(node.id, { switchCases: updatedCases });
+  };
+
 
   const handleVariableInsert = (
     fieldName: keyof NodeData,
@@ -697,6 +717,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       'whatsapp-media': <ImageUp {...iconProps} className="text-indigo-500" />,
       'whatsapp-group': <UserPlus2 {...iconProps} className="text-pink-500" />,
       'condition': <GitFork {...iconProps} className="text-orange-500" />,
+      'switch': <GitCommitHorizontal {...iconProps} className="text-indigo-500" />,
       'set-variable': <Variable {...iconProps} className="text-cyan-500" />,
       'api-call': <Webhook {...iconProps} className="text-red-500" />,
       'delay': <Timer {...iconProps} className="text-yellow-500" />,
@@ -808,8 +829,52 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         </>
       );
     }
+     if (node.type === 'switch') {
+        const switchCases = node.switchCases || [];
+        const initialY = 65;
+        const spacingY = 30;
 
-    if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow') {
+        return (
+            <>
+                {switchCases.map((caseItem, index) => (
+                    <div
+                        key={caseItem.id}
+                        className="absolute -right-2.5 z-10 flex items-center"
+                        style={{ top: `${initialY + index * spacingY - 10}px` }}
+                        title={`Caso: ${caseItem.value}`}
+                    >
+                        <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">
+                            {caseItem.value || 'vazio'}
+                        </span>
+                        <div
+                            className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+                            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, caseItem.id); }}
+                            data-connector="true" data-handle-type="source" data-handle-id={caseItem.id}
+                        >
+                            <Hash className="w-3 h-3 text-accent-foreground" />
+                        </div>
+                    </div>
+                ))}
+                <div
+                    className="absolute -right-2.5 z-10 flex items-center"
+                    style={{ top: `${initialY + switchCases.length * spacingY - 10}px` }}
+                    title="Caso Contrário"
+                >
+                    <span className="text-xs text-muted-foreground mr-2">Caso Contrário</span>
+                    <div
+                        className="w-5 h-5 bg-gray-500 hover:bg-gray-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+                        onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'otherwise'); }}
+                        data-connector="true" data-handle-type="source" data-handle-id="otherwise"
+                    >
+                        <Hash className="w-3 h-3 text-white" />
+                    </div>
+                </div>
+            </>
+        );
+    }
+
+
+    if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow' && node.type !== 'switch') {
         return (
           <div
             className="absolute -right-2.5 z-10 flex items-center justify-center"
@@ -1113,6 +1178,51 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 </div>
             </div>
           </div>
+        );
+    case 'switch':
+        return (
+            <div className="space-y-3" data-no-drag="true">
+                <div>
+                    <Label htmlFor={`${node.id}-switchvar`}>Variável de Entrada (ex: {"{{status}}"})</Label>
+                    <div className="relative">
+                        <Input
+                            id={`${node.id}-switchvar`}
+                            placeholder="{{status_pagamento}}"
+                            value={node.switchVariable || ''}
+                            onChange={(e) => onUpdate(node.id, { switchVariable: e.target.value })}
+                            className="pr-8"
+                        />
+                        {renderVariableInserter('switchVariable')}
+                    </div>
+                </div>
+                <div>
+                    <Label>Casos de Saída</Label>
+                    <div className="space-y-2">
+                        {(node.switchCases || []).map((caseItem, index) => (
+                            <div key={caseItem.id} className="flex items-center space-x-2">
+                                <Input
+                                    placeholder={`Valor do Caso ${index + 1}`}
+                                    value={caseItem.value}
+                                    onChange={(e) => handleSwitchCaseChange(caseItem.id, e.target.value)}
+                                />
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleRemoveSwitchCase(caseItem.id)}
+                                    className="text-destructive hover:text-destructive/80 w-8 h-8"
+                                    aria-label="Remover caso"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                    <Button onClick={handleAddSwitchCase} variant="outline" size="sm" className="mt-2 text-xs h-8">
+                        <PlusCircle className="w-3.5 h-3.5 mr-1" /> Adicionar Caso
+                    </Button>
+                </div>
+                <p className="text-xs text-muted-foreground italic pt-1">Cada caso terá um conector de saída. O fluxo seguirá para "Caso Contrário" se nenhum valor corresponder.</p>
+            </div>
         );
       case 'set-variable':
         return (

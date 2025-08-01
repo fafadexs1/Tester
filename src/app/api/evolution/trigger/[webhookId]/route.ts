@@ -201,6 +201,30 @@ async function executeFlow(
                 nextNodeId = findNextNodeId(currentNode.id, conditionMet ? 'true' : 'false', connections);
                 break;
             }
+            
+            case 'switch': {
+                const switchVarName = currentNode.switchVariable?.replace(/\{\{|\}\}/g, '').trim();
+                const switchActualValue = switchVarName ? getProperty(session.flow_variables, switchVarName) : undefined;
+                let matchedCase = false;
+
+                if (Array.isArray(currentNode.switchCases)) {
+                    for (const caseItem of currentNode.switchCases) {
+                        const caseValue = substituteVariablesInText(caseItem.value, session.flow_variables);
+                        if (String(switchActualValue) === String(caseValue)) {
+                            console.log(`[Flow Engine - ${session.session_id}] Switch: Matched case '${caseValue}'`);
+                            nextNodeId = findNextNodeId(currentNode.id, caseItem.id, connections);
+                            matchedCase = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!matchedCase) {
+                    console.log(`[Flow Engine - ${session.session_id}] Switch: No case matched. Using default 'otherwise' path.`);
+                    nextNodeId = findNextNodeId(currentNode.id, 'otherwise', connections);
+                }
+                break;
+            }
 
             case 'set-variable': {
                 if (currentNode.variableName) {

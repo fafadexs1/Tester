@@ -15,6 +15,7 @@ export type NodeType =
   | 'whatsapp-media' 
   | 'whatsapp-group'
   | 'condition' 
+  | 'switch'
   | 'set-variable' 
   | 'api-call' 
   | 'delay'
@@ -72,6 +73,10 @@ export interface StartNodeTrigger {
   sessionTimeoutSeconds?: number;
 }
 
+export interface SwitchCase {
+  id: string;
+  value: string;
+}
 
 export interface NodeData {
   id: string;
@@ -111,6 +116,10 @@ export interface NodeData {
   conditionOperator?: '==' | '!=' | '>' | '<' | 'contains' | 'startsWith' | 'endsWith' | 'isEmpty' | 'isNotEmpty'; 
   conditionValue?: string; 
   
+  // Switch Node
+  switchVariable?: string;
+  switchCases?: SwitchCase[];
+
   // Set Variable Node
   variableName?: string; 
   variableValue?: string; 

@@ -8,7 +8,7 @@ import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, 
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle, MousePointerClick
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle, MousePointerClick, Hourglass, GitCommitHorizontal
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -53,6 +53,7 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
       title: "Lógica e Controle",
       blocks: [
         { type: "condition", label: "Condição (Se/Então)", icon: <GitFork {...iconProps} className="text-orange-500" />, description: "Desvia o fluxo baseado em regras.", defaultData: { conditionVariable: '{{input.variavel}}', conditionOperator: '==', conditionValue: 'valor_esperado' }},
+        { type: "switch", label: "Escolha de Caminho", icon: <GitCommitHorizontal {...iconProps} className="text-indigo-500" />, description: "Desvia o fluxo para múltiplos caminhos.", defaultData: { switchVariable: '{{status}}', switchCases: [{id: uuidv4(), value: 'aprovado'}, {id: uuidv4(), value: 'recusado'}] }},
         { type: "set-variable", label: "Definir Variável", icon: <Variable {...iconProps} className="text-cyan-500" />, description: "Cria ou atualiza uma variável.", defaultData: { variableName: 'nova_variavel', variableValue: '123' }},
         { type: "delay", label: "Atraso", icon: <Timer {...iconProps} className="text-yellow-500" />, description: "Pausa o fluxo por um tempo.", defaultData: { delayDuration: 1000 }},
         { type: "typing-emulation", label: "Simular Digitação", icon: <MoreHorizontal {...iconProps} className="text-gray-500" />, description: "Exibe o indicador 'digitando'.", defaultData: { typingDuration: 1500 } },
@@ -87,7 +88,7 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
         { type: "supabase-create-row", label: "Criar Linha", icon: <PlusCircle {...iconProps} className="text-green-500" />, description: "Adiciona um novo registro.", defaultData: { supabaseTableName: '', supabaseDataJson: '{ "coluna": "valor" }', supabaseResultVariable: 'id_linha_criada_supabase' } },
         { type: "supabase-read-row", label: "Ler Linha(s)", icon: <Search {...iconProps} className="text-blue-500" />, description: "Busca registros em uma tabela.", defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase'} },
         { type: "supabase-update-row", label: "Atualizar Linha", icon: <Edit3 {...iconProps} className="text-yellow-500" />, description: "Modifica um registro existente.", defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseDataJson: '{ "coluna": "novo_valor" }' } },
-        { type: "supabase-delete-row", label: "Deletar Linha", icon: <PlusCircle {...iconProps} className="text-red-500" />, description: "Remove um registro da tabela.", defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '' } },
+        { type: "supabase-delete-row", label: "Deletar Linha", icon: <Trash2 {...iconProps} className="text-red-500" />, description: "Remove um registro da tabela.", defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '' } },
       ]
     },
     {
