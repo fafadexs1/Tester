@@ -37,8 +37,7 @@ export type NodeType =
   | 'supabase-update-row'
   | 'supabase-delete-row'
   | 'end-flow'
-  | 'external-response'
-  | 'chatwoot-send-message';
+  | 'external-response';
 
 export interface ApiHeader {
   id: string;
@@ -222,11 +221,6 @@ export interface NodeData {
   responseMode?: 'immediate' | 'webhook';
   responseValue?: string; // For immediate mode
   responseVariable?: string; // To save webhook body
-
-  // Chatwoot
-  chatwootAccountId?: string;
-  chatwootConversationId?: string;
-  chatwootMessage?: string;
 }
 
 export interface Connection {

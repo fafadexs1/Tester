@@ -7,7 +7,7 @@ import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, 
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle, MousePointerClick, Hourglass, GitCommitHorizontal, MessageCircle
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle, MousePointerClick, Hourglass, GitCommitHorizontal, Trash2
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -59,7 +59,7 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
         { type: "log-console", label: "Registrar no Console", icon: <TerminalSquare {...iconProps} className="text-slate-500" />, description: "Imprime dados no log do servidor.", defaultData: { logMessage: 'Log: {{input.status}}' } },
         { type: "code-execution", label: "Executar Código (JS)", icon: <Code2 {...iconProps} className="text-amber-500" />, description: "Roda um script JavaScript no servidor.", defaultData: { codeSnippet: "return { resultado: 'sucesso' };", codeOutputVariable: 'resultado_codigo' } },
         { type: "json-transform", label: "Transformar JSON", icon: <Shuffle {...iconProps} className="text-violet-500" />, description: "Manipula dados JSON com JSONata.", defaultData: { inputJson: '{ "nome": "Exemplo" }', jsonataExpression: '$.nome', jsonOutputVariable: 'nome_transformado' } },
-        { type: "external-response", label: "Resposta Externa", icon: <Hourglass {...iconProps} className="text-indigo-400" />, description: "Pausa e aguarda uma resposta via API.", defaultData: { responseMode: 'immediate', responseValue: '{ "status": "ok" }', responseVariable: 'dados_externos' } },
+        { type: "external-response", label: "Resposta Externa", icon: <Hourglass {...iconProps} className="text-indigo-400" />, description: "Pausa e aguarda uma resposta via API.", defaultData: { responseMode: 'webhook', responseVariable: 'dados_externos' } },
       ]
     },
     {
@@ -98,13 +98,6 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
         { type: "whatsapp-text", label: "Enviar Texto (WA)", icon: <BotMessageSquare {...iconProps} className="text-teal-600" />, description: "Envia uma mensagem de texto.", defaultData: { textMessage: 'Olá!', instanceName: 'evolution_instance' } },
         { type: "whatsapp-media", label: "Enviar Mídia (WA)", icon: <ImageUp {...iconProps} className="text-indigo-600" />, description: "Envia imagem, vídeo, áudio, etc.", defaultData: { mediaType: 'image', instanceName: 'evolution_instance', mediaUrl: 'https://placehold.co/300x200.png', dataAiHint: 'placeholder abstract' } },
         { type: "whatsapp-group", label: "Criar Grupo (WA)", icon: <UserPlus2 {...iconProps} className="text-pink-600" />, description: "Cria um grupo com participantes.", defaultData: { groupName: 'Novo Grupo', instanceName: 'evolution_instance' } },
-      ]
-    },
-    {
-      value: "chatwoot",
-      title: "Chatwoot",
-      blocks: [
-        { type: "chatwoot-send-message", label: "Enviar Mensagem (Chatwoot)", icon: <MessageCircle {...iconProps} className="text-sky-600" />, description: "Envia uma mensagem para uma conversa.", defaultData: { chatwootMessage: 'Olá de NexusFlow!', chatwootAccountId: '{{chatwoot_account_id}}', chatwootConversationId: '{{chatwoot_conversation_id}}' } },
       ]
     }
   ];
