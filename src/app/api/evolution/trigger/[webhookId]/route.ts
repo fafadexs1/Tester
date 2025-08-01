@@ -231,7 +231,14 @@ async function executeFlow(
                     const responseData = await response.json().catch(() => response.text());
                     
                     if (varName) {
-                        setProperty(session.flow_variables, varName, { status: response.status, headers: Object.fromEntries(response.headers.entries()), body: responseData });
+                        let valueToSave = responseData;
+                        if (currentNode.apiResponsePath) {
+                            const extractedValue = getProperty(responseData, currentNode.apiResponsePath);
+                            if (extractedValue !== undefined) {
+                                valueToSave = extractedValue;
+                            }
+                        }
+                        setProperty(session.flow_variables, varName, valueToSave);
                     }
                 } catch (error: any) {
                     console.error(`[Flow Engine - ${session.session_id}] API Call Error:`, error);

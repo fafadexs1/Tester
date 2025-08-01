@@ -58,6 +58,41 @@ interface WebhookLogEntry {
   workspaceNameParam?: string;
 }
 
+const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onSelectPath: (path: string) => void, currentPath?: string[] }) => {
+    if (typeof data !== 'object' || data === null) {
+        return <span className="text-blue-500">{JSON.stringify(data)}</span>;
+    }
+
+    return (
+        <div className="pl-4">
+            {Array.isArray(data) ? (
+                data.map((item, index) => (
+                    <div key={index}>
+                        <span className="text-gray-500">{index}: </span>
+                        <JsonTreeView data={item} onSelectPath={onSelectPath} currentPath={[...currentPath, String(index)]} />
+                    </div>
+                ))
+            ) : (
+                Object.entries(data).map(([key, value]) => (
+                    <div key={key}>
+                        <button
+                            onClick={() => onSelectPath([...currentPath, key].join('.'))}
+                            className="text-red-500 hover:underline cursor-pointer focus:outline-none text-left"
+                            title={`Clique para selecionar o caminho: ${[...currentPath, key].join('.')}`}
+                        >
+                          "{key}":
+                        </button>
+                        <span className="ml-1">
+                            {typeof value === 'object' && value !== null ? <JsonTreeView data={value} onSelectPath={onSelectPath} currentPath={[...currentPath, key]} /> : <span className="text-green-600">{JSON.stringify(value)}</span>}
+                        </span>
+                    </div>
+                ))
+            )}
+        </div>
+    );
+};
+
+
 const NodeCard: React.FC<NodeCardProps> = React.memo(({
   node,
   onUpdate,
@@ -72,7 +107,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
   // States for API Call testing modal
   const [isTestResponseModalOpen, setIsTestResponseModalOpen] = useState(false);
-  const [testResponseData, setTestResponseData] = useState<{ status: number; headers: Record<string, string>; body: any } | null>(null);
+  const [testResponseData, setTestResponseData] = useState<any | null>(null);
   const [testResponseError, setTestResponseError] = useState<string | null>(null);
   const [isTestingApi, setIsTestingApi] = useState(false);
   
@@ -376,99 +411,54 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       });
       return;
     }
-    console.log('[NodeCard] handleTestApiCall triggered for node:', node.id, 'with URL:', node.apiUrl);
     setIsTestingApi(true);
     setTestResponseData(null);
     setTestResponseError(null);
 
-    let constructedUrl = node.apiUrl;
-    const queryParams = new URLSearchParams();
-    (node.apiQueryParamsList || []).forEach(param => {
-      if (param.key) queryParams.append(param.key, param.value);
-    });
-    const queryString = queryParams.toString();
-    if (queryString) {
-      constructedUrl += (constructedUrl.includes('?') ? '&' : '?') + queryString;
-    }
-
-    const requestHeaders = new Headers();
-    (node.apiHeadersList || []).forEach(header => {
-      if (header.key) requestHeaders.append(header.key, header.value);
-    });
-
-    if (node.apiAuthType === 'bearer' && node.apiAuthBearerToken) {
-      requestHeaders.append('Authorization', `Bearer ${node.apiAuthBearerToken}`);
-    } else if (node.apiAuthType === 'basic' && node.apiAuthBasicUser && node.apiAuthBasicPassword) {
-      requestHeaders.append('Authorization', `Basic ${btoa(`${node.apiAuthBasicUser}:${node.apiAuthBasicPassword}`)}`);
-    }
-
-    let requestBody: BodyInit | null = null;
-    if (node.apiMethod !== 'GET' && node.apiMethod !== 'HEAD' && node.apiMethod !== 'DELETE') {
-        if (node.apiBodyType === 'json' && node.apiBodyJson) {
-          requestBody = node.apiBodyJson;
-          if (!requestHeaders.has('Content-Type')) {
-            requestHeaders.append('Content-Type', 'application/json');
-          }
-        } else if (node.apiBodyType === 'form-data' && node.apiBodyFormDataList && node.apiBodyFormDataList.length > 0) {
-          const formData = new FormData();
-          node.apiBodyFormDataList.forEach(entry => {
-            if (entry.key) formData.append(entry.key, entry.value);
-          });
-          requestBody = formData;
-        } else if (node.apiBodyType === 'raw' && node.apiBodyRaw) {
-          requestBody = node.apiBodyRaw;
-          if (!requestHeaders.has('Content-Type')) {
-            requestHeaders.append('Content-Type', 'text/plain');
-          }
-        }
-    }
+    const apiDetails = {
+      url: node.apiUrl,
+      method: node.apiMethod,
+      headers: node.apiHeadersList,
+      queryParams: node.apiQueryParamsList,
+      auth: {
+        type: node.apiAuthType,
+        bearerToken: node.apiAuthBearerToken,
+        basicUser: node.apiAuthBasicUser,
+        basicPassword: node.apiAuthBasicPassword,
+      },
+      body: {
+        type: node.apiBodyType,
+        json: node.apiBodyJson,
+        formData: node.apiBodyFormDataList,
+        raw: node.apiBodyRaw,
+      },
+    };
 
     try {
-      const response = await fetch(constructedUrl, {
-        method: node.apiMethod || 'GET',
-        headers: requestHeaders,
-        body: requestBody,
+      const response = await fetch('/api/test-api-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(apiDetails),
       });
 
-      const responseHeadersObj: Record<string, string> = {};
-      response.headers.forEach((value, key) => {
-        responseHeadersObj[key] = value;
-      });
-
-      let responseBodyContent: any;
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        try {
-            responseBodyContent = await response.json();
-        } catch (jsonError) {
-            console.warn('[NodeCard TestAPI] Failed to parse JSON, reading as text. Error:', jsonError);
-            responseBodyContent = await response.text(); // Fallback to text if JSON parse fails
-        }
-      } else {
-        responseBodyContent = await response.text();
-      }
-
-      setTestResponseData({ status: response.status, headers: responseHeadersObj, body: responseBodyContent });
-      setIsTestResponseModalOpen(true);
+      const result = await response.json();
 
       if (!response.ok) {
-        toast({
-          title: `Erro na API: ${response.status}`,
-          description: typeof responseBodyContent === 'string' ? responseBodyContent.substring(0, 100) + '...' : JSON.stringify(responseBodyContent, null, 2).substring(0,100)+'...',
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "API Testada com Sucesso!",
-          description: `Status: ${response.status}`,
-        });
+        throw new Error(result.error || `Erro da API: ${response.status}`);
       }
-    } catch (error: any) {
-      setTestResponseError(`Erro ao conectar à API: ${error.message}`);
+
+      setTestResponseData(result.data);
       setIsTestResponseModalOpen(true);
       toast({
-        title: "Erro de Conexão",
-        description: `Não foi possível conectar à API: ${error.message}`,
+        title: "API Testada com Sucesso!",
+        description: `Status: ${result.status}`,
+      });
+    } catch (error: any) {
+      setTestResponseError(error.message);
+      setIsTestResponseModalOpen(true);
+      toast({
+        title: "Erro no Teste",
+        description: error.message,
         variant: "destructive",
       });
     } finally {
@@ -1160,11 +1150,19 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 )}
               </TabsContent>
             </Tabs>
-
-            <div className="mt-4">
-              <Label htmlFor={`${node.id}-apioutputvar`}>Salvar Resposta da API na Variável</Label>
-              <Input id={`${node.id}-apioutputvar`} placeholder="resposta_api" value={node.apiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { apiOutputVariable: e.target.value })} />
+            
+            <div className="space-y-3 pt-4 border-t">
+              <div>
+                <Label htmlFor={`${node.id}-apiResponsePath`}>Caminho do Dado de Resposta (opcional)</Label>
+                <Input id={`${node.id}-apiResponsePath`} placeholder="Ex: data.user.name" value={node.apiResponsePath || ''} onChange={(e) => onUpdate(node.id, { apiResponsePath: e.target.value })} />
+                <p className="text-xs text-muted-foreground mt-1">Se preenchido, extrai apenas este dado. Se vazio, salva a resposta inteira.</p>
+              </div>
+              <div>
+                <Label htmlFor={`${node.id}-apioutputvar`}>Salvar Resultado na Variável</Label>
+                <Input id={`${node.id}-apioutputvar`} placeholder="resposta_api" value={node.apiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { apiOutputVariable: e.target.value })} />
+              </div>
             </div>
+
             <Button variant="outline" className="w-full mt-3" onClick={handleTestApiCall} disabled={isTestingApi}>
                 <TestTube2 className="mr-2 h-4 w-4" /> {isTestingApi ? "Testando..." : "Testar Requisição"}
             </Button>
@@ -1778,55 +1776,40 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
     {/* API Test Response Dialog */}
     {node.type === 'api-call' && (
-        <Dialog open={isTestResponseModalOpen} onOpenChange={setIsTestResponseModalOpen}>
-            <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col" data-no-drag="true">
-                <DialogHeader>
-                    <DialogTitle>Resposta do Teste da API</DialogTitle>
-                </DialogHeader>
-                <div className="flex-1 overflow-y-auto space-y-4 py-4">
-                    {testResponseError && (
-                        <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md">
-                            <h4 className="font-semibold mb-1">Erro:</h4>
-                            <pre className="text-xs whitespace-pre-wrap break-all">{testResponseError}</pre>
-                        </div>
-                    )}
-                    {testResponseData && (
-                        <>
-                            <div>
-                                <Label className="font-semibold">Status Code:</Label>
-                                <p className={`text-sm ${testResponseData.status >= 400 ? 'text-destructive' : 'text-green-600'}`}>{testResponseData.status}</p>
-                            </div>
-                            <div>
-                                <Label className="font-semibold">Headers da Resposta:</Label>
-                                <ScrollArea className="h-32 mt-1 border rounded-md p-2 bg-muted/30">
-                                    <pre className="text-xs whitespace-pre-wrap break-all">
-                                        {Object.entries(testResponseData.headers).map(([key, value]) => `${key}: ${value}`).join('\n')}
-                                    </pre>
-                                </ScrollArea>
-                            </div>
-                            <div>
-                                <Label className="font-semibold">Corpo da Resposta:</Label>
-                                <ScrollArea className="h-48 mt-1 border rounded-md p-2 bg-muted/30">
-                                    <pre className="text-xs whitespace-pre-wrap break-all">
-                                        {typeof testResponseData.body === 'string' ? testResponseData.body : JSON.stringify(testResponseData.body, null, 2)}
-                                    </pre>
-                                </ScrollArea>
-                            </div>
-                        </>
-                    )}
-                </div>
-                <DialogFooter>
-                  <DialogClose asChild>
-                    <Button variant="outline">Fechar</Button>
-                  </DialogClose>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+      <Dialog open={isTestResponseModalOpen} onOpenChange={setIsTestResponseModalOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col" data-no-drag="true">
+          <DialogHeader>
+              <DialogTitle>Resposta do Teste da API</DialogTitle>
+              <DialogDescription>Clique em uma chave do JSON para selecionar o caminho do dado.</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-4 py-4">
+              {testResponseError && (
+                  <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md">
+                      <h4 className="font-semibold mb-1">Erro:</h4>
+                      <pre className="text-xs whitespace-pre-wrap break-all">{testResponseError}</pre>
+                  </div>
+              )}
+              {testResponseData && (
+                  <div>
+                      <Label className="font-semibold">Corpo da Resposta:</Label>
+                      <ScrollArea className="h-64 mt-1 border rounded-md p-2 bg-muted/30">
+                          <pre className="text-xs whitespace-pre-wrap break-all">
+                              <JsonTreeView data={testResponseData} onSelectPath={(path) => onUpdate(node.id, { apiResponsePath: path })} />
+                          </pre>
+                      </ScrollArea>
+                  </div>
+              )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Fechar</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     )}
     </>
   );
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
-    

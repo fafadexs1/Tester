@@ -125,6 +125,7 @@ export interface NodeData {
   apiBodyFormDataList?: ApiFormDataEntry[]; 
   apiBodyRaw?: string; 
   apiOutputVariable?: string;
+  apiResponsePath?: string;
   
   // Delay Node
   delayDuration?: number; 
