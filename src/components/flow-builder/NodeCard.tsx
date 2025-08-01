@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -77,8 +77,8 @@ const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onS
                     <div key={key}>
                         <button
                             onClick={(e) => {
-                                e.preventDefault(); // Impede o comportamento padrão do botão se houver
-                                e.stopPropagation(); // Impede que o evento se propague para outros elementos
+                                e.preventDefault(); 
+                                e.stopPropagation();
                                 onSelectPath([...currentPath, key].join('.'));
                             }}
                             className="text-red-500 hover:underline cursor-pointer focus:outline-none text-left"
@@ -97,6 +97,68 @@ const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onS
 };
 
 
+const WebhookPathPicker = ({ onPathSelect }: { onPathSelect: (path: string) => void }) => {
+  const [logs, setLogs] = useState<WebhookLogEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedLog, setSelectedLog] = useState<WebhookLogEntry | null>(null);
+
+  const fetchLogs = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/evolution/webhook-logs');
+      if (!response.ok) throw new Error('Falha ao buscar logs');
+      const data = await response.json();
+      setLogs(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  return (
+    <PopoverContent className="w-80" align="end" onOpenAutoFocus={fetchLogs} data-no-drag="true">
+      <div className="space-y-2">
+        <h4 className="font-medium leading-none text-sm">Seletor de Caminho do Webhook</h4>
+        <p className="text-xs text-muted-foreground">
+          {selectedLog ? "Clique em uma chave para selecionar o caminho." : "Selecione um webhook recebido para inspecionar."}
+        </p>
+        <div className="border rounded-md max-h-60 overflow-y-auto">
+          {isLoading && <div className="p-2 text-xs text-muted-foreground">Carregando...</div>}
+          {error && <div className="p-2 text-xs text-destructive">{error}</div>}
+          {!isLoading && !error && logs.length === 0 && <div className="p-2 text-xs text-muted-foreground">Nenhum log encontrado.</div>}
+          {!isLoading && !error && logs.length > 0 && (
+            <div className="p-1">
+              {!selectedLog ? (
+                // Log List View
+                logs.map((log, index) => (
+                  <button key={index} onClick={() => setSelectedLog(log)} className="w-full text-left p-1.5 text-xs rounded hover:bg-muted">
+                    <div className="font-mono text-primary/80">{new Date(log.timestamp).toLocaleString()}</div>
+                    <div className="text-muted-foreground truncate">{log.extractedMessage || 'Sem mensagem extraída'}</div>
+                  </button>
+                ))
+              ) : (
+                // JSON Tree View
+                <div>
+                   <Button variant="ghost" size="sm" className="h-auto p-1 mb-1 text-xs" onClick={() => setSelectedLog(null)}>
+                      &larr; Voltar para a lista
+                   </Button>
+                   <div className="p-1 bg-background/50 rounded">
+                      <JsonTreeView data={selectedLog.payload} onSelectPath={onPathSelect} />
+                   </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </PopoverContent>
+  );
+};
+
+
 const NodeCard: React.FC<NodeCardProps> = React.memo(({
   node,
   onUpdate,
@@ -109,32 +171,26 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const { toast } = useToast();
   const isDraggingNode = useRef(false);
 
-  // States for API Call testing modal
   const [isTestResponseModalOpen, setIsTestResponseModalOpen] = useState(false);
   const [testResponseData, setTestResponseData] = useState<any | null>(null);
   const [testResponseError, setTestResponseError] = useState<string | null>(null);
   const [isTestingApi, setIsTestingApi] = useState(false);
   
-  // States for Webhook History modal
   const [isWebhookHistoryDialogOpen, setIsWebhookHistoryDialogOpen] = useState(false);
   const [webhookLogs, setWebhookLogs] = useState<WebhookLogEntry[]>([]);
   const [isLoadingWebhookLogs, setIsLoadingWebhookLogs] = useState(false);
   const [webhookLogsError, setWebhookLogsError] = useState<string | null>(null);
 
-  // States for Supabase schema fetching
   const [supabaseTables, setSupabaseTables] = useState<{name: string}[]>([]);
   const [supabaseColumns, setSupabaseColumns] = useState<{name: string}[]>([]);
   const [isLoadingSupabaseTables, setIsLoadingSupabaseTables] = useState(false);
   const [isLoadingSupabaseColumns, setIsLoadingSupabaseColumns] = useState(false);
   const [supabaseSchemaError, setSupabaseSchemaError] = useState<string | null>(null);
 
-  // States for Evolution API instance popover
   const [isEvolutionPopoverOpen, setIsEvolutionPopoverOpen] = useState(false);
   const [evolutionInstances, setEvolutionInstances] = useState<EvolutionInstance[]>([]);
   const [isLoadingEvolutionInstances, setIsLoadingEvolutionInstances] = useState(false);
 
-
-  // Garantir que o nó de início tenha os gatilhos padrão se não os tiver
   useEffect(() => {
     if (node.type === 'start') {
         const hasManual = (node.triggers || []).some(t => t.type === 'manual');
@@ -148,7 +204,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     name: 'Webhook', 
                     type: 'webhook', 
                     enabled: false,
-                    keyword: '', // Webhook padrão não tem palavra-chave
+                    keyword: '', 
                     variableMappings: [], 
                     sessionTimeoutSeconds: 0 
                 },
@@ -184,10 +240,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           .then(result => {
             if (result.error) {
               setSupabaseSchemaError(result.error);
-              console.error(`[NodeCard - ${node.id}] Supabase error fetching tables:`, result.error);
               setSupabaseTables([]);
             } else if (result.data) {
-              console.log(`[NodeCard - ${node.id}] Supabase tables fetched:`, result.data);
               setSupabaseTables(result.data);
               if (node.supabaseTableName && !result.data.some(t => t.name === node.supabaseTableName)) {
                 onUpdate(node.id, { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseColumnsToSelect: '*' });
@@ -198,7 +252,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           })
            .catch(err => {
             setSupabaseSchemaError('Falha ao comunicar com o servidor para buscar tabelas.');
-            console.error(`[NodeCard - ${node.id}] Supabase exception fetching tables:`, err);
             setSupabaseTables([]);
           })
           .finally(() => {
@@ -211,8 +264,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.type, node.id]); // Removido onUpdate da lista de dependências para evitar loops se a tabela não existir
-
+  }, [node.type, node.id]); 
 
   useEffect(() => {
     if (node.type.startsWith('supabase-') && node.supabaseTableName) {
@@ -229,10 +281,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           .then(result => {
             if (result.error) {
               setSupabaseSchemaError(result.error);
-              console.error(`[NodeCard - ${node.id}] Supabase error fetching columns for ${node.supabaseTableName}:`, result.error);
               setSupabaseColumns([]);
             } else if (result.data) {
-              console.log(`[NodeCard - ${node.id}] Columns for ${node.supabaseTableName} fetched:`, result.data);
               setSupabaseColumns(result.data);
               if (node.supabaseIdentifierColumn && !result.data.some(c => c.name === node.supabaseIdentifierColumn)) {
                 onUpdate(node.id, { supabaseIdentifierColumn: '' });
@@ -243,7 +293,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           })
            .catch(err => {
             setSupabaseSchemaError(`Falha ao comunicar com o servidor para buscar colunas da tabela ${node.supabaseTableName}.`);
-            console.error(`[NodeCard - ${node.id}] Supabase exception fetching columns for ${node.supabaseTableName}:`, err);
             setSupabaseColumns([]);
           })
           .finally(() => {
@@ -258,7 +307,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       setSupabaseColumns([]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.id, node.supabaseTableName]); // Removido onUpdate
+  }, [node.id, node.supabaseTableName]);
 
   const handleCheckInstanceStatus = useCallback(async (instance: EvolutionInstance) => {
     setEvolutionInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: 'connecting' } : i));
@@ -276,12 +325,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       const data: EvolutionInstance[] = await response.json();
       const instancesWithStatus = data.map(d => ({ ...d, status: 'unconfigured' as const }));
       setEvolutionInstances(instancesWithStatus);
-      // Após carregar, dispara a verificação de status para todas
       instancesWithStatus.forEach(instance => {
           handleCheckInstanceStatus(instance);
       });
     } catch (error: any) {
-      console.error("[NodeCard] Error fetching evolution instances:", error);
       toast({ title: "Erro ao Carregar Instâncias", description: error.message, variant: "destructive" });
       setEvolutionInstances([]);
     } finally {
@@ -380,7 +427,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     });
     onUpdate(node.id, { triggers: updatedTriggers });
   };
-
 
   const handleAddListItem = (listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList') => {
     const currentList = (node[listName] as any[] || []);
@@ -491,19 +537,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const handleOpenWebhookHistory = () => {
     fetchWebhookLogs();
     setIsWebhookHistoryDialogOpen(true);
-  };
-
-  const handleCopyPathToClipboard = (path: string) => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(path).then(() => {
-        toast({ title: "Caminho copiado!", description: `O caminho "${path}" foi copiado para a área de transferência.` });
-      }).catch(err => {
-        toast({ title: "Erro ao copiar", description: "Não foi possível copiar o caminho.", variant: "destructive" });
-        console.error("Failed to copy path: ", err);
-      });
-    } else {
-      toast({ title: "Ação não suportada", description: "Seu navegador não suporta a cópia para a área de transferência ou a página não é segura.", variant: "destructive" });
-    }
   };
 
   const handleVariableInsert = (
@@ -663,7 +696,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         const allTriggers = node.triggers || [];
         return allTriggers.filter(t => t.enabled).map(trigger => {
         const originalIndex = allTriggers.findIndex(t => t.id === trigger.id);
-        if (originalIndex === -1) return null; // Should not happen
+        if (originalIndex === -1) return null;
 
         return (
           <div
@@ -837,15 +870,27 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                         <Label className="text-xs font-medium">Mapeamento de Variáveis do Webhook</Label>
                         <div className="space-y-2 mt-1">
                           {(trigger.variableMappings || []).map(mapping => (
-                            <div key={mapping.id} className="flex items-center space-x-2">
-                              <Input placeholder="Caminho (ex: data.message.conversation)" value={mapping.jsonPath} onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', e.target.value)} className="h-7 text-xs"/>
-                              <Input placeholder="Variável (ex: mensagem_usuario)" value={mapping.flowVariable} onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs"/>
+                            <div key={mapping.id} className="flex items-center space-x-1.5">
+                               <div className="relative flex-1">
+                                  <Input 
+                                      placeholder="Caminho (ex: data.message.text)" 
+                                      value={mapping.jsonPath} 
+                                      onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', e.target.value)} 
+                                      className="h-7 text-xs pl-2 pr-7"/>
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground"/></Button>
+                                    </PopoverTrigger>
+                                    <WebhookPathPicker onPathSelect={(path) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', path)} />
+                                  </Popover>
+                              </div>
+                              <Input placeholder="Variável (ex: mensagem_usuario)" value={mapping.flowVariable} onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs flex-1"/>
                               <Button variant="ghost" size="icon" onClick={() => handleRemoveVariableMapping(trigger.id, mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6"><Trash2 className="w-3.5 h-3.5" /></Button>
                             </div>
                           ))}
                         </div>
                         <Button onClick={() => handleAddVariableMapping(trigger.id)} variant="outline" size="sm" className="mt-2 text-xs h-7">
-                           <PlusCircle className="w-3 h-3 mr-1" /> Adicionar
+                           <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Mapeamento
                         </Button>
                       </div>
 
@@ -1525,8 +1570,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     onValueChange={(value) => {
                       onUpdate(node.id, {
                         supabaseTableName: value,
-                        supabaseIdentifierColumn: '', // Resetar coluna ao mudar tabela
-                        supabaseColumnsToSelect: '*'  // Resetar colunas a selecionar
+                        supabaseIdentifierColumn: '', 
+                        supabaseColumnsToSelect: '*'  
                       });
                     }}
                 >
@@ -1776,7 +1821,11 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                         {log.headers && <div><strong>Headers:</strong><pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-24 overflow-y-auto">{JSON.stringify(log.headers, null, 2)}</pre></div>}
                                         <div><strong>Payload Completo (clique para copiar caminho):</strong>
                                           <div className="mt-1 p-2 bg-background/30 rounded text-xs max-h-60 overflow-y-auto">
-                                            <JsonTreeView data={log.payload} onSelectPath={handleCopyPathToClipboard} />
+                                            <JsonTreeView data={log.payload} onSelectPath={(path) => {
+                                                navigator.clipboard.writeText(path).then(() => {
+                                                    toast({ title: "Caminho copiado!", description: `O caminho "${path}" foi copiado.` });
+                                                });
+                                            }} />
                                           </div>
                                         </div>
                                     </div>
@@ -1835,3 +1884,5 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
+    
