@@ -360,16 +360,6 @@ const TopBar: React.FC<TopBarProps> = ({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          
-          <Button
-            onClick={onSaveWorkspaces}
-            variant="default"
-            size="sm"
-            className="bg-accent hover:bg-accent/90 text-accent-foreground hidden md:inline-flex h-9"
-            disabled={!activeWorkspace}
-          >
-            <Rocket className="mr-2 h-4 w-4" /> Publicar
-          </Button>
 
           <Button
             onClick={onSaveWorkspaces}
