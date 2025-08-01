@@ -147,7 +147,7 @@ async function executeFlow(
 
             case 'option':
                 const questionText = substituteVariablesInText(currentNode.questionText, session.flow_variables);
-                const optionsList = (currentNode.optionsList || '').split('\n').map(opt => substituteVariablesInText(opt.trim(), session.flow_variables)).filter(Boolean);
+                const optionsList = (currentNode.optionsList || '').split('\n').map(opt => substituteVariables(opt.trim(), session.flow_variables)).filter(Boolean);
 
                 if (questionText && optionsList.length > 0) {
                     let messageWithOptions = questionText + '\n\n';
@@ -412,25 +412,40 @@ async function storeRequestDetails(
   const ip = request.ip || headers['x-forwarded-for'] || 'unknown IP';
 
   let actualPayloadToExtractFrom = parsedPayload;
+  
+  // Handle Chatwoot payload which can be an array
   if (Array.isArray(parsedPayload) && parsedPayload.length === 1 && typeof parsedPayload[0] === 'object') {
     actualPayloadToExtractFrom = parsedPayload[0];
   }
   
   if (actualPayloadToExtractFrom && typeof actualPayloadToExtractFrom === 'object') {
-    const commonMessagePaths = [
-      'data.message.conversation', 'message.conversation', 
-      'message.body', 'message.textMessage.text', 'text',
-      'data.message.extendedTextMessage.text',
-    ];
-    for (const path of commonMessagePaths) {
-      const msg = getProperty(actualPayloadToExtractFrom, path);
-      if (typeof msg === 'string' && msg.trim() !== '') {
-        extractedMessage = msg.trim();
-        break;
+      // Prioritize Chatwoot structure
+      const chatwootEvent = getProperty(actualPayloadToExtractFrom, 'event');
+      const chatwootContent = getProperty(actualPayloadToExtractFrom, 'content');
+      const chatwootSenderId = getProperty(actualPayloadToExtractFrom, 'sender.identifier');
+      const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id');
+
+      if (chatwootEvent === 'message_created' && chatwootContent !== undefined) {
+          extractedMessage = String(chatwootContent).trim();
+          webhookRemoteJid = chatwootSenderId || `chatwoot_conv_${chatwootConversationId}`;
+          console.log(`[storeRequestDetails] Detected Chatwoot payload. Message: "${extractedMessage}", JID: "${webhookRemoteJid}"`);
+      } else {
+          // Fallback to Evolution API structure
+          const commonMessagePaths = [
+              'data.message.conversation', 'message.conversation', 
+              'message.body', 'message.textMessage.text', 'text',
+              'data.message.extendedTextMessage.text',
+          ];
+          for (const path of commonMessagePaths) {
+              const msg = getProperty(actualPayloadToExtractFrom, path);
+              if (typeof msg === 'string' && msg.trim() !== '') {
+                  extractedMessage = msg.trim();
+                  break;
+              }
+          }
+          webhookRemoteJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid');
+          if (webhookRemoteJid) console.log(`[storeRequestDetails] Detected Evolution API payload. Message: "${extractedMessage}", JID: "${webhookRemoteJid}"`);
       }
-    }
-    
-    webhookRemoteJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid');
   }
 
   const logEntry: Record<string, any> = {
@@ -470,18 +485,53 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
     parsedBody = rawBody ? JSON.parse(rawBody) : { message: "Request body was empty." };
     loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
     
+    // Unified variables from different possible sources (Evolution API, Chatwoot, etc.)
     const eventType = getProperty(parsedBody, 'event') as string;
     const instanceName = getProperty(parsedBody, 'instance') as string;
     const senderJid = loggedEntry.webhook_remote_jid; 
     const receivedMessageText = loggedEntry.extractedMessage;
     const evolutionApiBaseUrl = getProperty(parsedBody, 'server_url') as string;
     const evolutionApiKey = getProperty(parsedBody, 'apikey') as string;
+    
+    // Check for API call response flag
     const isApiCallResponse = getProperty(parsedBody, 'isApiCallResponse') === true;
 
-    if (!isApiCallResponse && (eventType !== 'messages.upsert' || !senderJid || !instanceName || !evolutionApiBaseUrl)) {
-      let reason = "Not a 'messages.upsert' event or missing critical data.";
+    // Check if this is a call to resume a flow
+    const resumeSessionId = getProperty(parsedBody, 'resume_session_id');
+
+    if (resumeSessionId) {
+       console.log(`[API Evolution Trigger] Resume call detected for session ID: ${resumeSessionId}`);
+        const sessionToResume = await loadSessionFromDB(resumeSessionId);
+        if (sessionToResume) {
+             const workspaceForResume = await loadWorkspaceFromDB(sessionToResume.workspace_id);
+             if (workspaceForResume && workspaceForResume.nodes) {
+                 // The payload of the resume call becomes the response
+                 sessionToResume.flow_variables[sessionToResume.awaiting_input_details?.variableToSave || 'external_response_data'] = parsedBody;
+                 sessionToResume.awaiting_input_type = null; 
+                 
+                 const apiConfigForResume = {
+                    baseUrl: workspaceForResume.evolution_instance_id ? (await loadWorkspaceFromDB(workspaceForResume.id))?.evolution_instance_id || '' : evolutionApiBaseUrl || '',
+                    apiKey: evolutionApiKey || undefined,
+                    instanceName: instanceName || ''
+                 };
+
+                 await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], apiConfigForResume);
+                 return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
+             }
+        } else {
+            console.error(`[API Evolution Trigger] Could not find session ${resumeSessionId} to resume.`);
+            return NextResponse.json({ error: `Session to resume not found: ${resumeSessionId}` }, { status: 404 });
+        }
+    }
+
+
+    if (!isApiCallResponse && (eventType !== 'messages.upsert' && eventType !== 'message_created') || !senderJid) {
+      let reason = "Event is not a message or sender ID is missing.";
       if (getProperty(parsedBody, 'data.key.fromMe') === true) {
         reason = "Ignoring message because it is fromMe (sent by the bot itself).";
+      }
+       if (getProperty(parsedBody, 'message_type') === 'outgoing') {
+        reason = "Ignoring outgoing Chatwoot message.";
       }
       console.log(`[API Evolution Trigger] Logged, but no flow execution triggered for webhook ID "${webhookId}". Reason: ${reason}.`);
       return NextResponse.json({ message: `Webhook logged, but no flow execution: ${reason}.` }, { status: 200 });
@@ -491,7 +541,7 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
 
     if (!workspace || !workspace.nodes || workspace.nodes.length === 0) {
       console.error(`[API Evolution Trigger] Workspace with ID "${webhookId}" not found or empty.`);
-      if (senderJid) await sendWhatsAppMessageAction({baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey || undefined, instanceName, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: `Desculpe, o fluxo de trabalho solicitado não foi encontrado ou está vazio.`});
+      if (senderJid && evolutionApiBaseUrl && instanceName) await sendWhatsAppMessageAction({baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey || undefined, instanceName, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: `Desculpe, o fluxo de trabalho solicitado não foi encontrado ou está vazio.`});
       return NextResponse.json({ error: `Workspace with ID "${webhookId}" not found or empty.` }, { status: 404 });
     }
     
@@ -598,7 +648,7 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
                         return NextResponse.json({ message: "Flow paused at dead end." }, { status: 200 });
                     }
                   } else {
-                    if (!isApiCallResponse) await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: "Opção inválida. Por favor, tente novamente."});
+                    if (!isApiCallResponse && evolutionApiBaseUrl && instanceName) await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: "Opção inválida. Por favor, tente novamente."});
                     nextNode = null;
                     startExecution = false;
                   }
