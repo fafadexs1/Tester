@@ -8,7 +8,7 @@ import {
   loadSessionFromDB,
   saveSessionToDB,
   deleteSessionFromDB,
-  loadWorkspaceFromDB, // Changed from loadWorkspaceByNameFromDB to loadWorkspaceFromDB
+  loadWorkspaceFromDB,
 } from '@/app/actions/databaseActions';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
@@ -177,7 +177,7 @@ async function executeFlow(
                     case 'startsWith': conditionMet = valStr.startsWith(compareValStr); break;
                     case 'endsWith': conditionMet = valStr.endsWith(compareValStr); break;
                     case 'isEmpty': conditionMet = actualValueCond === undefined || actualValueCond === null || String(actualValueCond).trim() === ''; break;
-                    case 'isNotEmpty': conditionMet = actualValueCond !== undefined && actualValueCond !== null && String(actualValueCond).trim() !== ''; break;
+                    case 'isNotEmpty': conditionMet = actualValueCond !== undefined && actualValue !== null && String(actualValueCond).trim() !== ''; break;
                     default: conditionMet = false;
                 }
                 console.log(`[Flow Engine - ${session.session_id}] Condition: Var ('${varNameCond}')='${actualValueCond}' ${currentNode.conditionOperator} '${compareValueCond}' -> ${conditionMet}`);
@@ -321,6 +321,30 @@ async function executeFlow(
                  break;
             }
 
+            case 'external-response': {
+                if (currentNode.responseMode === 'immediate') {
+                    const injectedResponse = substituteVariablesInText(currentNode.injectedResponse, session.flow_variables);
+                    const varName = currentNode.webhookResponseVariable;
+                    if (varName) {
+                        try {
+                           const jsonData = JSON.parse(injectedResponse);
+                           setProperty(session.flow_variables, varName, jsonData);
+                        } catch (e) {
+                           setProperty(session.flow_variables, varName, injectedResponse);
+                        }
+                    }
+                    nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+                } else { // 'webhook' mode
+                    session.awaiting_input_type = 'external_response';
+                    session.awaiting_input_details = {
+                        variableToSave: currentNode.webhookResponseVariable,
+                        originalNodeId: currentNode.id,
+                    };
+                    shouldContinue = false; // Pause execution
+                }
+                break;
+            }
+
             case 'end-flow':
                 console.log(`[Flow Engine - ${session.session_id}] Reached End Flow node. Deleting session.`);
                 await deleteSessionFromDB(session.session_id);
@@ -422,11 +446,39 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
   let rawBody: string | null = null;
   let parsedBody: any = null;
   let loggedEntry: any = null;
+  let startExecution = false;
 
   try {
     rawBody = await request.text();
     parsedBody = rawBody ? JSON.parse(rawBody) : { message: "Request body was empty." };
     loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
+    
+    // --- Lógica de Retomada de Sessão ---
+    const resumeSessionId = getProperty(parsedBody, 'resume_session_id') as string;
+    if (resumeSessionId) {
+        console.log(`[API Evolution Trigger] Resume session call detected for session ID: ${resumeSessionId}`);
+        const sessionToResume = await loadSessionFromDB(resumeSessionId);
+        if (sessionToResume && sessionToResume.awaiting_input_type === 'external_response' && sessionToResume.awaiting_input_details?.originalNodeId) {
+            const workspace = await loadWorkspaceFromDB(sessionToResume.workspace_id);
+            if (!workspace) { return NextResponse.json({ error: "Workspace for session not found." }, { status: 404 }); }
+
+            const variableToSave = sessionToResume.awaiting_input_details.variableToSave;
+            if (variableToSave) {
+                setProperty(sessionToResume.flow_variables, variableToSave, parsedBody);
+            }
+            sessionToResume.current_node_id = findNextNodeId(sessionToResume.awaiting_input_details.originalNodeId, 'default', workspace.connections || []);
+            sessionToResume.awaiting_input_type = null;
+            sessionToResume.awaiting_input_details = null;
+            
+            const apiConfig: ApiConfig = { baseUrl: '', apiKey: undefined, instanceName: '' }; // API config pode precisar ser carregada do workspace se for usada adiante
+            await executeFlow(sessionToResume, workspace.nodes, workspace.connections || [], apiConfig);
+            return NextResponse.json({ message: "Session resumed." }, { status: 200 });
+        } else {
+            console.warn(`[API Evolution Trigger] Could not find a session to resume with ID ${resumeSessionId} or it was not awaiting external response.`);
+            return NextResponse.json({ error: "Session to resume not found or not in correct state." }, { status: 404 });
+        }
+    }
+    // --- Fim da Lógica de Retomada ---
     
     const eventType = getProperty(parsedBody, 'event') as string;
     const instanceName = getProperty(parsedBody, 'instance') as string;
@@ -455,11 +507,9 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
     const apiConfig: ApiConfig = { baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey || undefined, instanceName };
     const sessionId = `${senderJid.split('@')[0]}@@${workspace.id}`;
     let session = await loadSessionFromDB(sessionId);
-    let startExecution = false;
     
     if (session) {
       console.log(`[API Evolution Trigger - ${sessionId}] Existing session found. Last interaction: ${session.last_interaction_at}, Timeout: ${session.session_timeout_seconds}s`);
-      // Lógica de timeout
       if (session.session_timeout_seconds && session.session_timeout_seconds > 0 && session.last_interaction_at) {
           const lastInteractionDate = new Date(session.last_interaction_at);
           const timeoutMilliseconds = session.session_timeout_seconds * 1000;
@@ -468,7 +518,7 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
           if (Date.now() > expirationTime) {
               console.log(`[API Evolution Trigger - ${sessionId}] Session timed out. Deleting session and starting a new one.`);
               await deleteSessionFromDB(sessionId);
-              session = null; // Tratar como uma nova sessão
+              session = null;
           }
       }
     }
@@ -476,7 +526,6 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
     if (session) {
         console.log(`[API Evolution Trigger - ${sessionId}] Existing session is active. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
       
-      // SE A SESSÃO ESTIVER PAUSADA (BECo SEM SAÍDA)
       if (session.current_node_id === null && session.awaiting_input_type === null) {
           console.log(`[API Evolution Trigger - ${sessionId}] Session is in a paused (dead-end) state. Checking for keyword triggers to restart...`);
           
@@ -496,8 +545,8 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
               console.log(`[API Evolution Trigger - ${sessionId}] No keyword matched. Ignoring message and keeping session paused.`);
               return NextResponse.json({ message: "Session is paused and no trigger keyword was matched." }, { status: 200 });
           }
-          session = null; // Força a recriação da sessão se um gatilho foi encontrado
-      } else { // SE A SESSÃO ESTIVER ATIVA E ESPERANDO INPUT
+          session = null;
+      } else {
         session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
         if (session.awaiting_input_type && session.awaiting_input_details) {
             const originalNodeId = session.awaiting_input_details.originalNodeId;
@@ -531,12 +580,11 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
                         session.current_node_id = nextNode;
                         startExecution = true;
                     } else {
-                        // The chosen option leads to a dead end. Pause the flow.
                         session.awaiting_input_type = null;
                         session.awaiting_input_details = null;
-                        session.current_node_id = null; // Explicitly pause
+                        session.current_node_id = null;
                         startExecution = false;
-                        await saveSessionToDB(session); // Save the paused state
+                        await saveSessionToDB(session);
                         return NextResponse.json({ message: "Flow paused at dead end." }, { status: 200 });
                     }
                   } else {
@@ -602,7 +650,8 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
       const initialVars: Record<string, any> = {
         whatsapp_sender_jid: senderJid.split('@')[0],
         mensagem_whatsapp: receivedMessageText || '',
-        webhook_payload: parsedBody
+        webhook_payload: parsedBody,
+        session_id: sessionId,
       };
 
       if (webhookTrigger && webhookTrigger.variableMappings) {

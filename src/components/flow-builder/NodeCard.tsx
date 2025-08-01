@@ -571,7 +571,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     itemId?: string,
     itemKeyOrValue?: 'key' | 'value'
   ) => {
-    if (!definedVariablesInFlow || definedVariablesInFlow.length === 0) return null;
+    const allVars = ['session_id', ...definedVariablesInFlow].filter((v, i, a) => a.indexOf(v) === i).sort();
+    if (allVars.length === 0) return null;
 
     return (
       <Popover>
@@ -588,7 +589,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         </PopoverTrigger>
         <PopoverContent className="w-auto p-1" data-no-drag="true" align="end">
           <ScrollArea className="h-auto max-h-[150px] text-xs">
-            {definedVariablesInFlow.map((varName) => (
+            {allVars.map((varName) => (
               <Button
                 key={varName}
                 variant="ghost"
@@ -682,7 +683,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       'supabase-create-row': <Rows {...iconProps} className="text-green-500" />,
       'supabase-read-row': <Search {...iconProps} className="text-blue-500" />,
       'supabase-update-row': <Edit3 {...iconProps} className="text-yellow-500" />,
-      'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />,
+      'supabase-delete-row': <Trash2 className="text-red-500" />,
       'external-response': <Hourglass {...iconProps} className="text-indigo-400" />,
       'end-flow': <StopCircle {...iconProps} className="text-destructive" />,
       default: <Settings2 {...iconProps} className="text-gray-500" />,
@@ -1280,8 +1281,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <Select value={node.mediaDisplayType || 'image'} onValueChange={(value) => onUpdate(node.id, { mediaDisplayType: value as NodeData['mediaDisplayType'] })}>
                   <SelectTrigger id={`${node.id}-mediadisplaytype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="image">Imagem</SelectItem>
-                    <SelectItem value="video">Vídeo</SelectItem>
+                    <SelectItem value="image">Imagem</SelectItem><SelectItem value="video">Vídeo</SelectItem>
                     <SelectItem value="audio">Áudio</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1704,7 +1704,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               
               {(node.responseMode === 'webhook') && (
                 <div className="text-xs text-muted-foreground border-t pt-3 space-y-1">
-                  <p>O fluxo pausará aqui até que uma chamada POST seja feita para a URL de webhook do fluxo com um novo payload.</p>
+                  <p>O fluxo pausará aqui até que uma chamada POST seja feita para a URL de webhook do fluxo com um novo payload contendo um campo `resume_session_id`.</p>
                   <p><strong>URL:</strong> <span className="font-mono bg-muted p-1 rounded break-all text-xs">{webhookUrl}</span></p>
                 </div>
               )}
