@@ -177,7 +177,7 @@ async function executeFlow(
                     case 'startsWith': conditionMet = valStr.startsWith(compareValStr); break;
                     case 'endsWith': conditionMet = valStr.endsWith(compareValStr); break;
                     case 'isEmpty': conditionMet = actualValueCond === undefined || actualValueCond === null || String(actualValueCond).trim() === ''; break;
-                    case 'isNotEmpty': conditionMet = actualValueCond !== undefined && actualValue !== null && String(actualValueCond).trim() !== ''; break;
+                    case 'isNotEmpty': conditionMet = actualValueCond !== undefined && actualValueCond !== null && String(actualValueCond).trim() !== ''; break;
                     default: conditionMet = false;
                 }
                 console.log(`[Flow Engine - ${session.session_id}] Condition: Var ('${varNameCond}')='${actualValueCond}' ${currentNode.conditionOperator} '${compareValueCond}' -> ${conditionMet}`);
@@ -321,30 +321,6 @@ async function executeFlow(
                  break;
             }
 
-            case 'external-response': {
-                if (currentNode.responseMode === 'immediate') {
-                    const injectedResponse = substituteVariablesInText(currentNode.injectedResponse, session.flow_variables);
-                    const varName = currentNode.webhookResponseVariable;
-                    if (varName) {
-                        try {
-                           const jsonData = JSON.parse(injectedResponse);
-                           setProperty(session.flow_variables, varName, jsonData);
-                        } catch (e) {
-                           setProperty(session.flow_variables, varName, injectedResponse);
-                        }
-                    }
-                    nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
-                } else { // 'webhook' mode
-                    session.awaiting_input_type = 'external_response';
-                    session.awaiting_input_details = {
-                        variableToSave: currentNode.webhookResponseVariable,
-                        originalNodeId: currentNode.id,
-                    };
-                    shouldContinue = false; // Pause execution
-                }
-                break;
-            }
-
             case 'end-flow':
                 console.log(`[Flow Engine - ${session.session_id}] Reached End Flow node. Deleting session.`);
                 await deleteSessionFromDB(session.session_id);
@@ -453,41 +429,15 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
     parsedBody = rawBody ? JSON.parse(rawBody) : { message: "Request body was empty." };
     loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
     
-    // --- Lógica de Retomada de Sessão ---
-    const resumeSessionId = getProperty(parsedBody, 'resume_session_id') as string;
-    if (resumeSessionId) {
-        console.log(`[API Evolution Trigger] Resume session call detected for session ID: ${resumeSessionId}`);
-        const sessionToResume = await loadSessionFromDB(resumeSessionId);
-        if (sessionToResume && sessionToResume.awaiting_input_type === 'external_response' && sessionToResume.awaiting_input_details?.originalNodeId) {
-            const workspace = await loadWorkspaceFromDB(sessionToResume.workspace_id);
-            if (!workspace) { return NextResponse.json({ error: "Workspace for session not found." }, { status: 404 }); }
-
-            const variableToSave = sessionToResume.awaiting_input_details.variableToSave;
-            if (variableToSave) {
-                setProperty(sessionToResume.flow_variables, variableToSave, parsedBody);
-            }
-            sessionToResume.current_node_id = findNextNodeId(sessionToResume.awaiting_input_details.originalNodeId, 'default', workspace.connections || []);
-            sessionToResume.awaiting_input_type = null;
-            sessionToResume.awaiting_input_details = null;
-            
-            const apiConfig: ApiConfig = { baseUrl: '', apiKey: undefined, instanceName: '' }; // API config pode precisar ser carregada do workspace se for usada adiante
-            await executeFlow(sessionToResume, workspace.nodes, workspace.connections || [], apiConfig);
-            return NextResponse.json({ message: "Session resumed." }, { status: 200 });
-        } else {
-            console.warn(`[API Evolution Trigger] Could not find a session to resume with ID ${resumeSessionId} or it was not awaiting external response.`);
-            return NextResponse.json({ error: "Session to resume not found or not in correct state." }, { status: 404 });
-        }
-    }
-    // --- Fim da Lógica de Retomada ---
-    
     const eventType = getProperty(parsedBody, 'event') as string;
     const instanceName = getProperty(parsedBody, 'instance') as string;
     const senderJid = loggedEntry.webhook_remote_jid; 
     const receivedMessageText = loggedEntry.extractedMessage;
     const evolutionApiBaseUrl = getProperty(parsedBody, 'server_url') as string;
     const evolutionApiKey = getProperty(parsedBody, 'apikey') as string;
+    const isApiCallResponse = getProperty(parsedBody, 'isApiCallResponse') === true;
 
-    if (eventType !== 'messages.upsert' || !senderJid || !receivedMessageText || !instanceName || !evolutionApiBaseUrl) {
+    if (!isApiCallResponse && (eventType !== 'messages.upsert' || !senderJid || !instanceName || !evolutionApiBaseUrl)) {
       let reason = "Not a 'messages.upsert' event or missing critical data.";
       if (getProperty(parsedBody, 'data.key.fromMe') === true) {
         reason = "Ignoring message because it is fromMe (sent by the bot itself).";
@@ -500,7 +450,7 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
 
     if (!workspace || !workspace.nodes || workspace.nodes.length === 0) {
       console.error(`[API Evolution Trigger] Workspace with ID "${webhookId}" not found or empty.`);
-      await sendWhatsAppMessageAction({baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey || undefined, instanceName, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: `Desculpe, o fluxo de trabalho solicitado não foi encontrado ou está vazio.`});
+      if (senderJid) await sendWhatsAppMessageAction({baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey || undefined, instanceName, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: `Desculpe, o fluxo de trabalho solicitado não foi encontrado ou está vazio.`});
       return NextResponse.json({ error: `Workspace with ID "${webhookId}" not found or empty.` }, { status: 404 });
     }
     
@@ -547,21 +497,40 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
           }
           session = null;
       } else {
-        session.flow_variables.mensagem_whatsapp = receivedMessageText || '';
+        const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
+        session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
+        
         if (session.awaiting_input_type && session.awaiting_input_details) {
             const originalNodeId = session.awaiting_input_details.originalNodeId;
             const awaitingNode = findNodeById(originalNodeId!, workspace.nodes);
             
             if (awaitingNode) {
                 let nextNode: string | null = null;
+                
+                if (awaitingNode.apiResponseAsInput && !isApiCallResponse) {
+                   console.log(`[API Evolution Trigger] Node ${awaitingNode.id} expects API response, but received user message. Ignoring.`);
+                   return NextResponse.json({ message: "Awaiting API response, user message ignored." }, { status: 200 });
+                }
+
                 if (session.awaiting_input_type === 'text' && session.awaiting_input_details.variableToSave) {
-                  setProperty(session.flow_variables, session.awaiting_input_details.variableToSave, receivedMessageText || '');
+                  let textToSave = String(responseValue);
+                  if (isApiCallResponse && awaitingNode.apiResponsePathForValue) {
+                      const extracted = getProperty(responseValue, awaitingNode.apiResponsePathForValue);
+                      if (extracted !== undefined) textToSave = String(extracted);
+                  }
+                  setProperty(session.flow_variables, session.awaiting_input_details.variableToSave, textToSave);
                   nextNode = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
                 } else if (session.awaiting_input_type === 'option' && Array.isArray(session.awaiting_input_details.options)) {
                   const options = session.awaiting_input_details.options;
-                  const trimmedReceivedMessage = (receivedMessageText || '').trim();
                   let chosenOptionText: string | undefined = undefined;
-
+                  
+                  let valueForOptionMatching = String(responseValue);
+                   if (isApiCallResponse && awaitingNode.apiResponsePathForValue) {
+                      const extracted = getProperty(responseValue, awaitingNode.apiResponsePathForValue);
+                      if (extracted !== undefined) valueForOptionMatching = String(extracted);
+                  }
+                  
+                  const trimmedReceivedMessage = valueForOptionMatching.trim();
                   const numericChoice = parseInt(trimmedReceivedMessage, 10);
                   if (!isNaN(numericChoice) && numericChoice > 0 && numericChoice <= options.length) {
                     chosenOptionText = options[numericChoice - 1];
@@ -588,7 +557,7 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
                         return NextResponse.json({ message: "Flow paused at dead end." }, { status: 200 });
                     }
                   } else {
-                    await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: "Opção inválida. Por favor, tente novamente."});
+                    if (!isApiCallResponse) await sendWhatsAppMessageAction({...apiConfig, recipientPhoneNumber: senderJid.split('@')[0], messageType:'text', textContent: "Opção inválida. Por favor, tente novamente."});
                     nextNode = null;
                     startExecution = false;
                   }
@@ -610,6 +579,10 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
     }
     
     if (!session) {
+      if (isApiCallResponse) {
+         console.log(`[API Evolution Trigger] API response received but no active session found for ${senderJid}. Ignoring.`);
+         return NextResponse.json({ message: "API response ignored, no active session." }, { status: 200 });
+      }
       console.log(`[API Evolution Trigger - ${sessionId}] No active session or session was reset. Looking for a trigger to start a new one.`);
       const startNode = workspace.nodes.find(n => n.type === 'start');
       if (!startNode) {

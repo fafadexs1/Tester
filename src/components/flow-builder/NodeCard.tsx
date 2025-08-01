@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target, Hourglass
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -683,8 +683,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       'supabase-create-row': <Rows {...iconProps} className="text-green-500" />,
       'supabase-read-row': <Search {...iconProps} className="text-blue-500" />,
       'supabase-update-row': <Edit3 {...iconProps} className="text-yellow-500" />,
-      'supabase-delete-row': <Trash2 className="text-red-500" />,
-      'external-response': <Hourglass {...iconProps} className="text-indigo-400" />,
+      'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />,
       'end-flow': <StopCircle {...iconProps} className="text-destructive" />,
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
@@ -916,49 +915,75 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </div>
         );
       case 'input':
-        return (
-          <div className="space-y-3" data-no-drag="true">
-            <div>
-              <Label htmlFor={`${node.id}-prompttext`}>Texto da Pergunta</Label>
-              <div className="relative">
-                <Textarea id={`${node.id}-prompttext`} placeholder="Digite sua pergunta aqui..." value={node.promptText || ''} onChange={(e) => onUpdate(node.id, { promptText: e.target.value })} rows={2} className="pr-8"/>
-                {renderVariableInserter('promptText', true)}
-              </div>
-            </div>
-            <div><Label htmlFor={`${node.id}-inputtype`}>Tipo de Entrada</Label>
-              <Select value={node.inputType || 'text'} onValueChange={(value) => onUpdate(node.id, { inputType: value as NodeData['inputType'] })}>
-                <SelectTrigger id={`${node.id}-inputtype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="text">Texto</SelectItem><SelectItem value="email">E-mail</SelectItem>
-                  <SelectItem value="phone">Telefone</SelectItem><SelectItem value="number">Número</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-                <Label htmlFor={`${node.id}-varsave`}>Salvar Resposta na Variável</Label>
-                <Input id={`${node.id}-varsave`} placeholder="nome_da_variavel" value={node.variableToSaveResponse || ''} onChange={(e) => onUpdate(node.id, { variableToSaveResponse: e.target.value })} />
-            </div>
-          </div>
-        );
       case 'option':
+        const isOptionNode = node.type === 'option';
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-optionqtext`}>Texto da Pergunta</Label>
+              <Label htmlFor={`${node.id}-prompttext`}>{isOptionNode ? 'Texto da Pergunta' : 'Texto da Pergunta'}</Label>
               <div className="relative">
-                <Textarea id={`${node.id}-optionqtext`} placeholder="Qual sua escolha?" value={node.questionText || ''} onChange={(e) => onUpdate(node.id, { questionText: e.target.value })} rows={2} className="pr-8"/>
-                {renderVariableInserter('questionText', true)}
+                <Textarea id={`${node.id}-prompttext`} placeholder="Digite sua pergunta aqui..." value={node.promptText || node.questionText || ''} onChange={(e) => onUpdate(node.id, isOptionNode ? { questionText: e.target.value } : { promptText: e.target.value })} rows={2} className="pr-8"/>
+                {renderVariableInserter(isOptionNode ? 'questionText' : 'promptText', true)}
               </div>
             </div>
-            <div>
+            
+            {!isOptionNode && (
+              <div>
+                <Label htmlFor={`${node.id}-inputtype`}>Tipo de Entrada</Label>
+                <Select value={node.inputType || 'text'} onValueChange={(value) => onUpdate(node.id, { inputType: value as NodeData['inputType'] })}>
+                  <SelectTrigger id={`${node.id}-inputtype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="text">Texto</SelectItem><SelectItem value="email">E-mail</SelectItem>
+                    <SelectItem value="phone">Telefone</SelectItem><SelectItem value="number">Número</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            {isOptionNode && (
+               <div>
                 <Label htmlFor={`${node.id}-optionslist`}>Opções (uma por linha)</Label>
                 <Textarea id={`${node.id}-optionslist`} placeholder="Opção 1\nOpção 2" value={node.optionsList || ''} onChange={(e) => onUpdate(node.id, { optionsList: e.target.value })} rows={3}/>
-            </div>
+               </div>
+            )}
+            
             <div>
-                <Label htmlFor={`${node.id}-varsavechoice`}>Salvar Escolha na Variável (opcional)</Label>
-                <Input id={`${node.id}-varsavechoice`} placeholder="variavel_escolha" value={node.variableToSaveChoice || ''} onChange={(e) => onUpdate(node.id, { variableToSaveChoice: e.target.value })} />
+                <Label htmlFor={`${node.id}-varsave`}>Salvar Resposta na Variável</Label>
+                <Input id={`${node.id}-varsave`} placeholder="nome_da_variavel" value={node.variableToSaveResponse || node.variableToSaveChoice || ''} onChange={(e) => onUpdate(node.id, isOptionNode ? { variableToSaveChoice: e.target.value } : { variableToSaveResponse: e.target.value })} />
             </div>
-            <p className="text-xs text-muted-foreground italic pt-1">Cada opção na lista acima terá um conector de saída dedicado.</p>
+
+            <div className="space-y-3 pt-3 border-t">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id={`${node.id}-apiResponseAsInput`}
+                  checked={node.apiResponseAsInput || false}
+                  onCheckedChange={(checked) => onUpdate(node.id, { apiResponseAsInput: checked })}
+                />
+                <Label htmlFor={`${node.id}-apiResponseAsInput`}>Aceitar Resposta via API</Label>
+              </div>
+              {node.apiResponseAsInput && (
+                <div>
+                  <Label htmlFor={`${node.id}-apiResponsePathForValue`}>Caminho do Valor no JSON da API</Label>
+                   <div className="relative">
+                      <Input
+                        id={`${node.id}-apiResponsePathForValue`}
+                        placeholder="Ex: data.choice"
+                        value={node.apiResponsePathForValue || ''}
+                        onChange={(e) => onUpdate(node.id, { apiResponsePathForValue: e.target.value })}
+                        className="pr-8"
+                      />
+                       <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground"/></Button>
+                        </PopoverTrigger>
+                        <WebhookPathPicker onPathSelect={(path) => onUpdate(node.id, { apiResponsePathForValue: path })} />
+                      </Popover>
+                  </div>
+                   <p className="text-xs text-muted-foreground mt-1">O fluxo usará o valor deste caminho como se fosse a resposta do usuário.</p>
+                </div>
+              )}
+            </div>
+             {isOptionNode && <p className="text-xs text-muted-foreground italic pt-1">Cada opção na lista acima terá um conector de saída dedicado.</p>}
           </div>
         );
       case 'whatsapp-text':
@@ -1653,64 +1678,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </div>
         );
       }
-      case 'external-response': {
-          const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/trigger/${activeWorkspace?.id || '[ID_DO_FLUXO]'}`;
-          return (
-            <div className="space-y-4" data-no-drag="true">
-              <div>
-                <Label>Modo de Operação</Label>
-                <RadioGroup 
-                  defaultValue={node.responseMode || 'webhook'}
-                  onValueChange={(value) => onUpdate(node.id, { responseMode: value as 'immediate' | 'webhook' })}
-                  className="mt-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="webhook" id={`${node.id}-mode-webhook`} />
-                    <Label htmlFor={`${node.id}-mode-webhook`}>Aguardar Webhook</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="immediate" id={`${node.id}-mode-immediate`} />
-                    <Label htmlFor={`${node.id}-mode-immediate`}>Imediato (Injetar Resposta)</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              {(node.responseMode === 'immediate') && (
-                <div className="space-y-2">
-                  <Label htmlFor={`${node.id}-injected-response`}>Resposta a ser Injetada</Label>
-                  <div className="relative">
-                    <Textarea
-                      id={`${node.id}-injected-response`}
-                      placeholder='Pode ser um texto, número ou JSON. Ex: { "status": "aprovado" }'
-                      value={node.injectedResponse || ''}
-                      onChange={(e) => onUpdate(node.id, { injectedResponse: e.target.value })}
-                      className="pr-8"
-                      rows={3}
-                    />
-                    {renderVariableInserter('injectedResponse', true)}
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor={`${node.id}-webhookResponseVariable`}>Salvar Resposta na Variável</Label>
-                <Input
-                  id={`${node.id}-webhookResponseVariable`}
-                  placeholder="resposta_externa"
-                  value={node.webhookResponseVariable || ''}
-                  onChange={(e) => onUpdate(node.id, { webhookResponseVariable: e.target.value })}
-                />
-              </div>
-              
-              {(node.responseMode === 'webhook') && (
-                <div className="text-xs text-muted-foreground border-t pt-3 space-y-1">
-                  <p>O fluxo pausará aqui até que uma chamada POST seja feita para a URL de webhook do fluxo com um novo payload contendo um campo `resume_session_id`.</p>
-                  <p><strong>URL:</strong> <span className="font-mono bg-muted p-1 rounded break-all text-xs">{webhookUrl}</span></p>
-                </div>
-              )}
-            </div>
-          )
-        }
       case 'end-flow':
         return <p className="text-sm text-muted-foreground italic">Este nó encerra o fluxo.</p>;
       default:

@@ -8,7 +8,7 @@ import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, 
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle, Trash2, MousePointerClick, Hourglass
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle, MousePointerClick
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -40,8 +40,8 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
       blocks: [
         { type: "start", label: "Início do Fluxo", icon: <PlayCircle {...iconProps} color="hsl(var(--primary))" />, description: "Começa a execução do fluxo.", defaultData: { triggers: defaultTriggers } },
         { type: "message", label: "Exibir Texto", icon: <MessageSquareText {...iconProps} color="hsl(var(--accent))" />, description: "Mostra uma mensagem de texto.", defaultData: { text: 'Olá!'} },
-        { type: "input", label: "Entrada do Usuário", icon: <Type {...iconProps} className="text-green-500" />, description: "Solicita e salva uma resposta.", defaultData: { inputType: 'text', promptText: 'Qual é o seu nome?', variableToSaveResponse: 'nome_usuario' } },
-        { type: "option", label: "Múltiplas Escolhas", icon: <ListChecks {...iconProps} className="text-purple-500" />, description: "Apresenta opções para o usuário.", defaultData: { questionText: 'Escolha uma opção:', optionsList: 'Opção A\nOpção B', variableToSaveChoice: 'escolha_usuario' }},
+        { type: "input", label: "Entrada do Usuário", icon: <Type {...iconProps} className="text-green-500" />, description: "Solicita e salva uma resposta.", defaultData: { inputType: 'text', promptText: 'Qual é o seu nome?', variableToSaveResponse: 'nome_usuario', apiResponseAsInput: false, apiResponsePathForValue: 'responseText' } },
+        { type: "option", label: "Múltiplas Escolhas", icon: <ListChecks {...iconProps} className="text-purple-500" />, description: "Apresenta opções para o usuário.", defaultData: { questionText: 'Escolha uma opção:', optionsList: 'Opção A\nOpção B', variableToSaveChoice: 'escolha_usuario', apiResponseAsInput: false, apiResponsePathForValue: 'optionChoice' }},
         { type: "media-display", label: "Exibir Mídia", icon: <FileImage {...iconProps} className="text-blue-500" />, description: "Mostra uma imagem, vídeo ou áudio.", defaultData: { mediaDisplayType: 'image', mediaDisplayUrl: 'https://placehold.co/300x200.png', dataAiHint: 'placeholder abstract', mediaDisplayText: 'Imagem de exemplo' } },
         { type: "rating-input", label: "Entrada de Avaliação", icon: <Star {...iconProps} className="text-yellow-400" />, description: "Coleta uma avaliação em escala.", defaultData: { ratingQuestionText: 'Como você avalia nosso serviço?', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: 'avaliacao_servico' } },
         { type: "file-upload", label: "Upload de Arquivo", icon: <UploadCloud {...iconProps} className="text-fuchsia-500" />, description: "Permite que o usuário envie um arquivo.", defaultData: { uploadPromptText: 'Por favor, envie seu arquivo.', maxFileSizeMB: 5, fileUrlVariable: 'url_arquivo_enviado' } },
@@ -55,7 +55,6 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
         { type: "condition", label: "Condição (Se/Então)", icon: <GitFork {...iconProps} className="text-orange-500" />, description: "Desvia o fluxo baseado em regras.", defaultData: { conditionVariable: '{{input.variavel}}', conditionOperator: '==', conditionValue: 'valor_esperado' }},
         { type: "set-variable", label: "Definir Variável", icon: <Variable {...iconProps} className="text-cyan-500" />, description: "Cria ou atualiza uma variável.", defaultData: { variableName: 'nova_variavel', variableValue: '123' }},
         { type: "delay", label: "Atraso", icon: <Timer {...iconProps} className="text-yellow-500" />, description: "Pausa o fluxo por um tempo.", defaultData: { delayDuration: 1000 }},
-        { type: "external-response", label: "Resposta Externa", icon: <Hourglass {...iconProps} className="text-indigo-400"/>, description: "Pausa e aguarda resposta externa.", defaultData: { responseMode: 'webhook', webhookResponseVariable: 'resposta_externa' } },
         { type: "typing-emulation", label: "Simular Digitação", icon: <MoreHorizontal {...iconProps} className="text-gray-500" />, description: "Exibe o indicador 'digitando'.", defaultData: { typingDuration: 1500 } },
         { type: "log-console", label: "Registrar no Console", icon: <TerminalSquare {...iconProps} className="text-slate-500" />, description: "Imprime dados no log do servidor.", defaultData: { logMessage: 'Log: {{input.status}}' } },
         { type: "code-execution", label: "Executar Código (JS)", icon: <Code2 {...iconProps} className="text-amber-500" />, description: "Roda um script JavaScript no servidor.", defaultData: { codeSnippet: "return { resultado: 'sucesso' };", codeOutputVariable: 'resultado_codigo' } },
@@ -88,7 +87,7 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
         { type: "supabase-create-row", label: "Criar Linha", icon: <PlusCircle {...iconProps} className="text-green-500" />, description: "Adiciona um novo registro.", defaultData: { supabaseTableName: '', supabaseDataJson: '{ "coluna": "valor" }', supabaseResultVariable: 'id_linha_criada_supabase' } },
         { type: "supabase-read-row", label: "Ler Linha(s)", icon: <Search {...iconProps} className="text-blue-500" />, description: "Busca registros em uma tabela.", defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase'} },
         { type: "supabase-update-row", label: "Atualizar Linha", icon: <Edit3 {...iconProps} className="text-yellow-500" />, description: "Modifica um registro existente.", defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseDataJson: '{ "coluna": "novo_valor" }' } },
-        { type: "supabase-delete-row", label: "Deletar Linha", icon: <Trash2 {...iconProps} className="text-red-500" />, description: "Remove um registro da tabela.", defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '' } },
+        { type: "supabase-delete-row", label: "Deletar Linha", icon: <PlusCircle {...iconProps} className="text-red-500" />, description: "Remove um registro da tabela.", defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '' } },
       ]
     },
     {
