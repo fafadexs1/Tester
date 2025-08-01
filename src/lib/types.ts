@@ -1,4 +1,5 @@
 
+
 export interface DraggableBlockItemData {
   type: string;
   label: string;
@@ -34,6 +35,7 @@ export type NodeType =
   | 'supabase-read-row'
   | 'supabase-update-row'
   | 'supabase-delete-row'
+  | 'external-response'
   | 'end-flow';
 
 export interface ApiHeader {
@@ -200,6 +202,11 @@ export interface NodeData {
   supabaseDataJson?: string; 
   supabaseColumnsToSelect?: string; 
   supabaseResultVariable?: string; 
+
+  // External Response Node
+  responseMode?: 'immediate' | 'webhook';
+  injectedResponse?: string;
+  webhookResponseVariable?: string;
   
   // Start Node
   triggers?: StartNodeTrigger[];
@@ -242,7 +249,7 @@ export interface FlowSession {
   workspace_id: string;
   current_node_id: string | null;
   flow_variables: Record<string, any>;
-  awaiting_input_type: 'text' | 'option' | null;
+  awaiting_input_type: 'text' | 'option' | 'external_response' | null;
   awaiting_input_details: {
     variableToSave?: string; 
     options?: string[];       
