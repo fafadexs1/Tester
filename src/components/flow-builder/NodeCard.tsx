@@ -1801,7 +1801,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <RadioGroup
-              value={node.responseMode || 'immediate'}
+              value={node.responseMode || 'webhook'}
               onValueChange={(value) => onUpdate(node.id, { responseMode: value as 'immediate' | 'webhook' })}
               className="flex space-x-4"
             >
@@ -2083,3 +2083,4 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
 
+    
