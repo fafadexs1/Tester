@@ -413,8 +413,8 @@ async function storeRequestDetails(
 
   let actualPayloadToExtractFrom = parsedPayload;
   
-  // Handle Chatwoot payload which can be an array
-  if (Array.isArray(parsedPayload) && parsedPayload.length === 1 && typeof parsedPayload[0] === 'object') {
+  // Handle Chatwoot payload which can be an array of a single object
+  if (Array.isArray(parsedPayload) && parsedPayload.length > 0 && typeof parsedPayload[0] === 'object') {
     actualPayloadToExtractFrom = parsedPayload[0];
   }
   
@@ -422,12 +422,12 @@ async function storeRequestDetails(
       // Prioritize Chatwoot structure
       const chatwootEvent = getProperty(actualPayloadToExtractFrom, 'event');
       const chatwootContent = getProperty(actualPayloadToExtractFrom, 'content');
-      const chatwootSenderId = getProperty(actualPayloadToExtractFrom, 'sender.identifier');
-      const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id');
+      const chatwootSenderIdentifier = getProperty(actualPayloadToExtractFrom, 'sender.identifier') || getProperty(actualPayloadToExtractFrom, 'body.sender.identifier');
+      const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id') || getProperty(actualPayloadToExtractFrom, 'body.conversation.id');
 
       if (chatwootEvent === 'message_created' && chatwootContent !== undefined) {
           extractedMessage = String(chatwootContent).trim();
-          webhookRemoteJid = chatwootSenderId || `chatwoot_conv_${chatwootConversationId}`;
+          webhookRemoteJid = chatwootSenderIdentifier || `chatwoot_conv_${chatwootConversationId}`;
           console.log(`[storeRequestDetails] Detected Chatwoot payload. Message: "${extractedMessage}", JID: "${webhookRemoteJid}"`);
       } else {
           // Fallback to Evolution API structure
@@ -486,18 +486,18 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
     loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
     
     // Unified variables from different possible sources (Evolution API, Chatwoot, etc.)
-    const eventType = getProperty(parsedBody, 'event') as string;
-    const instanceName = getProperty(parsedBody, 'instance') as string;
+    const eventType = getProperty(loggedEntry.payload, 'event') as string;
+    const instanceName = getProperty(loggedEntry.payload, 'instance') as string;
     const senderJid = loggedEntry.webhook_remote_jid; 
     const receivedMessageText = loggedEntry.extractedMessage;
-    const evolutionApiBaseUrl = getProperty(parsedBody, 'server_url') as string;
-    const evolutionApiKey = getProperty(parsedBody, 'apikey') as string;
+    const evolutionApiBaseUrl = getProperty(loggedEntry.payload, 'server_url') as string;
+    const evolutionApiKey = getProperty(loggedEntry.payload, 'apikey') as string;
     
     // Check for API call response flag
-    const isApiCallResponse = getProperty(parsedBody, 'isApiCallResponse') === true;
+    const isApiCallResponse = getProperty(loggedEntry.payload, 'isApiCallResponse') === true;
 
     // Check if this is a call to resume a flow
-    const resumeSessionId = getProperty(parsedBody, 'resume_session_id');
+    const resumeSessionId = getProperty(loggedEntry.payload, 'resume_session_id');
 
     if (resumeSessionId) {
        console.log(`[API Evolution Trigger] Resume call detected for session ID: ${resumeSessionId}`);
@@ -527,10 +527,10 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
 
     if (!isApiCallResponse && (eventType !== 'messages.upsert' && eventType !== 'message_created') || !senderJid) {
       let reason = "Event is not a message or sender ID is missing.";
-      if (getProperty(parsedBody, 'data.key.fromMe') === true) {
+      if (getProperty(loggedEntry.payload, 'data.key.fromMe') === true) {
         reason = "Ignoring message because it is fromMe (sent by the bot itself).";
       }
-       if (getProperty(parsedBody, 'message_type') === 'outgoing') {
+       if (getProperty(loggedEntry.payload, 'message_type') === 'outgoing') {
         reason = "Ignoring outgoing Chatwoot message.";
       }
       console.log(`[API Evolution Trigger] Logged, but no flow execution triggered for webhook ID "${webhookId}". Reason: ${reason}.`);
@@ -711,17 +711,42 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
           return NextResponse.json({ error: `Start node trigger '${triggerNameToUse}' is not connected.` }, { status: 500 });
       }
       
+      let payloadToUse = parsedBody;
+      if (Array.isArray(payloadToUse) && payloadToUse.length > 0) {
+          payloadToUse = payloadToUse[0];
+      }
+
       const initialVars: Record<string, any> = {
         whatsapp_sender_jid: senderJid.split('@')[0],
         mensagem_whatsapp: receivedMessageText || '',
-        webhook_payload: parsedBody,
+        webhook_payload: payloadToUse,
         session_id: sessionId,
       };
 
+      // Auto-inject Chatwoot variables if it's a Chatwoot payload
+      if (getProperty(payloadToUse, 'event') === 'message_created') {
+        const chatwootMappings = {
+            chatwoot_conversation_id: 'body.conversation.id',
+            chatwoot_contact_id: 'body.sender.id',
+            chatwoot_account_id: 'body.account.id',
+            chatwoot_inbox_id: 'body.inbox.id',
+            contact_name: 'body.sender.name',
+            contact_phone: 'body.sender.phone_number',
+        };
+
+        for (const [varName, path] of Object.entries(chatwootMappings)) {
+            const value = getProperty(payloadToUse, path);
+            if (value !== undefined) {
+                initialVars[varName] = value;
+            }
+        }
+         console.log(`[API Evolution Trigger] Auto-injected Chatwoot variables:`, initialVars);
+      }
+      
       if (webhookTrigger && webhookTrigger.variableMappings) {
         webhookTrigger.variableMappings.forEach(mapping => {
           if (mapping.jsonPath && mapping.flowVariable) {
-            const value = getProperty(parsedBody, mapping.jsonPath);
+            const value = getProperty(payloadToUse, mapping.jsonPath);
             if (value !== undefined) {
               setProperty(initialVars, mapping.flowVariable, value);
             }
