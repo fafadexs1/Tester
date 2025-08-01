@@ -1179,7 +1179,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             </div>
           </div>
         );
-    case 'switch':
+      case 'switch':
         return (
             <div className="space-y-3" data-no-drag="true">
                 <div>
@@ -1423,8 +1423,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <Select value={node.mediaDisplayType || 'image'} onValueChange={(value) => onUpdate(node.id, { mediaDisplayType: value as NodeData['mediaDisplayType'] })}>
                   <SelectTrigger id={`${node.id}-mediadisplaytype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="image">Imagem</SelectItem><SelectItem value="video">Vídeo</SelectItem>
-                    <SelectItem value="audio">Áudio</SelectItem>
+                    <SelectItem value="image">Imagem</SelectItem><SelectItem value="video">Vídeo</SelectItem><SelectItem value="audio">Áudio</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
