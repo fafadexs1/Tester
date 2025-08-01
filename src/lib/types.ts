@@ -37,7 +37,8 @@ export type NodeType =
   | 'supabase-update-row'
   | 'supabase-delete-row'
   | 'end-flow'
-  | 'external-response';
+  | 'external-response'
+  | 'chatwoot-send-message';
 
 export interface ApiHeader {
   id: string;
@@ -221,6 +222,11 @@ export interface NodeData {
   responseMode?: 'immediate' | 'webhook';
   responseValue?: string; // For immediate mode
   responseVariable?: string; // To save webhook body
+
+  // Chatwoot
+  chatwootAccountId?: string;
+  chatwootConversationId?: string;
+  chatwootMessage?: string;
 }
 
 export interface Connection {
@@ -256,7 +262,7 @@ export interface WorkspaceData {
 }
 
 export type AwaitingInputNode = 'input' | 'option' | 'date-input' | 'file-upload' | 'rating-input';
-export type FlowSessionAwaitingInputType = AwaitingInputNode | null;
+export type FlowSessionAwaitingInputType = AwaitingInputNode | 'external_response' | null;
 
 export interface FlowSession {
   session_id: string; 

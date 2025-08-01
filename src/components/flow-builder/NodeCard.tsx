@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target, Hourglass, GitCommitHorizontal
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target, Hourglass, GitCommitHorizontal, MessageCircle
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -740,6 +740,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />,
       'end-flow': <StopCircle {...iconProps} className="text-destructive" />,
       'external-response': <Hourglass {...iconProps} className="text-indigo-400" />,
+      'chatwoot-send-message': <MessageCircle {...iconProps} className="text-sky-600" />,
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
     return icons[node.type] || icons.default;
@@ -1797,6 +1798,104 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </div>
         );
       }
+      case 'external-response':
+        return (
+          <div className="space-y-3" data-no-drag="true">
+            <RadioGroup
+              value={node.responseMode || 'immediate'}
+              onValueChange={(value) => onUpdate(node.id, { responseMode: value as 'immediate' | 'webhook' })}
+              className="flex space-x-4"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="immediate" id={`${node.id}-mode-immediate`} />
+                <Label htmlFor={`${node.id}-mode-immediate`}>Imediato</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="webhook" id={`${node.id}-mode-webhook`} />
+                <Label htmlFor={`${node.id}-mode-webhook`}>Aguardar Webhook</Label>
+              </div>
+            </RadioGroup>
+
+            {node.responseMode === 'immediate' && (
+              <div>
+                <Label htmlFor={`${node.id}-responsevalue`}>Resposta a ser Injetada</Label>
+                <div className="relative">
+                  <Textarea
+                    id={`${node.id}-responsevalue`}
+                    placeholder='{"status": "aprovado", "valor": "{{some_var}}"}'
+                    value={node.responseValue || ''}
+                    onChange={(e) => onUpdate(node.id, { responseValue: e.target.value })}
+                    rows={3}
+                    className="pr-8"
+                  />
+                  {renderVariableInserter('responseValue', true)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Este valor será tratado como a resposta e o fluxo continuará imediatamente.</p>
+              </div>
+            )}
+
+            {node.responseMode === 'webhook' && (
+              <div className="space-y-3 pt-2">
+                <p className="text-xs text-muted-foreground">O fluxo irá pausar aqui e aguardar uma chamada `POST` para o webhook do fluxo com o corpo (body) contendo `{"resume_session_id": "{{session_id}}", ...}`.</p>
+                <div>
+                  <Label htmlFor={`${node.id}-responsevariable`}>Salvar Corpo (Body) do Webhook na Variável</Label>
+                  <Input
+                    id={`${node.id}-responsevariable`}
+                    placeholder="dados_webhook_retorno"
+                    value={node.responseVariable || ''}
+                    onChange={(e) => onUpdate(node.id, { responseVariable: e.target.value })}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      case 'chatwoot-send-message':
+        return (
+          <div className="space-y-3" data-no-drag="true">
+            <div>
+              <Label htmlFor={`${node.id}-chatwootAccountId`}>ID da Conta Chatwoot</Label>
+              <div className="relative">
+                <Input
+                  id={`${node.id}-chatwootAccountId`}
+                  placeholder="1 ou {{chatwoot_account_id}}"
+                  value={node.chatwootAccountId || ''}
+                  onChange={(e) => onUpdate(node.id, { chatwootAccountId: e.target.value })}
+                  className="pr-8"
+                />
+                {renderVariableInserter('chatwootAccountId')}
+              </div>
+            </div>
+            <div>
+              <Label htmlFor={`${node.id}-chatwootConversationId`}>ID da Conversa</Label>
+              <div className="relative">
+                <Input
+                  id={`${node.id}-chatwootConversationId`}
+                  placeholder="123 ou {{chatwoot_conversation_id}}"
+                  value={node.chatwootConversationId || ''}
+                  onChange={(e) => onUpdate(node.id, { chatwootConversationId: e.target.value })}
+                  className="pr-8"
+                />
+                {renderVariableInserter('chatwootConversationId')}
+              </div>
+            </div>
+            <div>
+              <Label htmlFor={`${node.id}-chatwootMessage`}>Mensagem</Label>
+              <div className="relative">
+                <Textarea
+                  id={`${node.id}-chatwootMessage`}
+                  placeholder="Sua mensagem para o Chatwoot..."
+                  value={node.chatwootMessage || ''}
+                  onChange={(e) => onUpdate(node.id, { chatwootMessage: e.target.value })}
+                  rows={3}
+                  className="pr-8"
+                />
+                {renderVariableInserter('chatwootMessage', true)}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">Requer que as credenciais da API do Chatwoot (URL e Token) estejam configuradas nas Configurações Globais.</p>
+          </div>
+        );
       case 'end-flow':
         return <p className="text-sm text-muted-foreground italic">Este nó encerra o fluxo.</p>;
       default:

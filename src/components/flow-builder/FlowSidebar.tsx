@@ -7,7 +7,7 @@ import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset, 
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle, MousePointerClick, Hourglass, GitCommitHorizontal, Trash2
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle, MousePointerClick, Hourglass, GitCommitHorizontal, MessageCircle
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -42,8 +42,8 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
         { type: "input", label: "Entrada do Usuário", icon: <Type {...iconProps} className="text-green-500" />, description: "Solicita e salva uma resposta.", defaultData: { inputType: 'text', promptText: 'Qual é o seu nome?', variableToSaveResponse: 'nome_usuario', apiResponseAsInput: false, apiResponsePathForValue: 'responseText' } },
         { type: "option", label: "Múltiplas Escolhas", icon: <ListChecks {...iconProps} className="text-purple-500" />, description: "Apresenta opções para o usuário.", defaultData: { questionText: 'Escolha uma opção:', optionsList: 'Opção A\nOpção B', variableToSaveChoice: 'escolha_usuario', apiResponseAsInput: false, apiResponsePathForValue: 'optionChoice' }},
         { type: "media-display", label: "Exibir Mídia", icon: <FileImage {...iconProps} className="text-blue-500" />, description: "Mostra uma imagem, vídeo ou áudio.", defaultData: { mediaDisplayType: 'image', mediaDisplayUrl: 'https://placehold.co/300x200.png', dataAiHint: 'placeholder abstract', mediaDisplayText: 'Imagem de exemplo' } },
-        { type: "rating-input", label: "Entrada de Avaliação", icon: <Star {...iconProps} className="text-yellow-400" />, description: "Coleta uma avaliação em escala.", defaultData: { ratingQuestionText: 'Como você avalia nosso serviço?', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: 'avaliacao_servico' } },
-        { type: "file-upload", label: "Upload de Arquivo", icon: <UploadCloud {...iconProps} className="text-fuchsia-500" />, description: "Permite que o usuário envie um arquivo.", defaultData: { uploadPromptText: 'Por favor, envie seu arquivo.', maxFileSizeMB: 5, fileUrlVariable: 'url_arquivo_enviado' } },
+        { type: "rating-input", label: "Entrada de Avaliação", icon: <Star {...iconProps} className="text-yellow-400" />, description: "Coleta uma avaliação em escala.", defaultData: { ratingQuestionText: 'Como você avalia nosso serviço?', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: 'avaliacao_servico', apiResponseAsInput: false, apiResponsePathForValue: '' } },
+        { type: "file-upload", label: "Upload de Arquivo", icon: <UploadCloud {...iconProps} className="text-fuchsia-500" />, description: "Permite que o usuário envie um arquivo.", defaultData: { uploadPromptText: 'Por favor, envie seu arquivo.', maxFileSizeMB: 5, fileUrlVariable: 'url_arquivo_enviado', apiResponseAsInput: false, apiResponsePathForValue: '' } },
         { type: "end-flow", label: "Fim do Fluxo", icon: <StopCircle {...iconProps} className="text-destructive" />, description: "Encerra a execução do fluxo.", defaultData: {} },
       ]
     },
@@ -59,6 +59,7 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
         { type: "log-console", label: "Registrar no Console", icon: <TerminalSquare {...iconProps} className="text-slate-500" />, description: "Imprime dados no log do servidor.", defaultData: { logMessage: 'Log: {{input.status}}' } },
         { type: "code-execution", label: "Executar Código (JS)", icon: <Code2 {...iconProps} className="text-amber-500" />, description: "Roda um script JavaScript no servidor.", defaultData: { codeSnippet: "return { resultado: 'sucesso' };", codeOutputVariable: 'resultado_codigo' } },
         { type: "json-transform", label: "Transformar JSON", icon: <Shuffle {...iconProps} className="text-violet-500" />, description: "Manipula dados JSON com JSONata.", defaultData: { inputJson: '{ "nome": "Exemplo" }', jsonataExpression: '$.nome', jsonOutputVariable: 'nome_transformado' } },
+        { type: "external-response", label: "Resposta Externa", icon: <Hourglass {...iconProps} className="text-indigo-400" />, description: "Pausa e aguarda uma resposta via API.", defaultData: { responseMode: 'immediate', responseValue: '{ "status": "ok" }', responseVariable: 'dados_externos' } },
       ]
     },
     {
@@ -75,7 +76,7 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
       blocks: [
         { type: "api-call", label: "Chamada API", icon: <Webhook {...iconProps} className="text-red-500" />, description: "Conecta-se a serviços externos.", defaultData: { apiUrl: 'https://', apiMethod: 'GET', apiOutputVariable: 'resposta_api' }},
         { type: "redirect", label: "Redirecionar URL", icon: <ExternalLink {...iconProps} className="text-lime-500" />, description: "Envia o usuário para uma URL.", defaultData: { redirectUrl: 'https://google.com' } },
-        { type: "date-input", label: "Entrada de Data", icon: <CalendarDays {...iconProps} className="text-teal-500" />, description: "Coleta uma data do usuário.", defaultData: { dateInputLabel: 'Qual sua data de nascimento?', variableToSaveDate: 'data_nascimento' } },
+        { type: "date-input", label: "Entrada de Data", icon: <CalendarDays {...iconProps} className="text-teal-500" />, description: "Coleta uma data do usuário.", defaultData: { dateInputLabel: 'Qual sua data de nascimento?', variableToSaveDate: 'data_nascimento', apiResponseAsInput: false, apiResponsePathForValue: '' } },
         { type: "send-email", label: "Enviar E-mail", icon: <Mail {...iconProps} className="text-blue-500" />, description: "Dispara um e-mail (requer config).", defaultData: { emailTo: 'destinatario@exemplo.com', emailSubject: 'Assunto do E-mail', emailBody: 'Olá, {{input.nome}}!' } },
         { type: "google-sheets-append", label: "Adicionar Linha Planilha Google", icon: <Sheet {...iconProps} className="text-emerald-500" />, description: "Escreve dados em uma planilha.", defaultData: { googleSheetId: 'SEU_SPREADSHEET_ID', googleSheetName: 'Página1', googleSheetRowData: '["{{input.campo1}}", "{{input.campo2}}"]' } },
       ]
@@ -97,6 +98,13 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
         { type: "whatsapp-text", label: "Enviar Texto (WA)", icon: <BotMessageSquare {...iconProps} className="text-teal-600" />, description: "Envia uma mensagem de texto.", defaultData: { textMessage: 'Olá!', instanceName: 'evolution_instance' } },
         { type: "whatsapp-media", label: "Enviar Mídia (WA)", icon: <ImageUp {...iconProps} className="text-indigo-600" />, description: "Envia imagem, vídeo, áudio, etc.", defaultData: { mediaType: 'image', instanceName: 'evolution_instance', mediaUrl: 'https://placehold.co/300x200.png', dataAiHint: 'placeholder abstract' } },
         { type: "whatsapp-group", label: "Criar Grupo (WA)", icon: <UserPlus2 {...iconProps} className="text-pink-600" />, description: "Cria um grupo com participantes.", defaultData: { groupName: 'Novo Grupo', instanceName: 'evolution_instance' } },
+      ]
+    },
+    {
+      value: "chatwoot",
+      title: "Chatwoot",
+      blocks: [
+        { type: "chatwoot-send-message", label: "Enviar Mensagem (Chatwoot)", icon: <MessageCircle {...iconProps} className="text-sky-600" />, description: "Envia uma mensagem para uma conversa.", defaultData: { chatwootMessage: 'Olá de NexusFlow!', chatwootAccountId: '{{chatwoot_account_id}}', chatwootConversationId: '{{chatwoot_conversation_id}}' } },
       ]
     }
   ];
