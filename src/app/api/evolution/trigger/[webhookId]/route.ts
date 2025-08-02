@@ -531,16 +531,18 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
     // Handle Chatwoot specific events before session logic
     if (flowContext === 'chatwoot') {
         let payloadToCheck = parsedBody;
+        // The webhook payload can be an array of events
         if (Array.isArray(payloadToCheck) && payloadToCheck.length > 0) {
             payloadToCheck = payloadToCheck[0];
         }
         
         const eventType = getProperty(payloadToCheck, 'event');
+        const messageType = getProperty(payloadToCheck, 'message_type');
         const conversationStatus = getProperty(payloadToCheck, 'status') || getProperty(payloadToCheck, 'conversation.status');
         const senderType = getProperty(payloadToCheck, 'sender_type');
 
-        // Rule 1: Human agent intervention pauses automation
-        if (senderType === 'User') {
+        // Rule 1: Human agent intervention pauses automation by ignoring event.
+        if (eventType === 'message_created' && senderType === 'User') {
             console.log(`[API Evolution Trigger] Human agent message detected in conversation ${sessionKeyIdentifier}. Pausing automation by ignoring event.`);
             return NextResponse.json({ message: "Automation paused due to human intervention." }, { status: 200 });
         }
@@ -552,6 +554,12 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
                 await deleteSessionFromDB(sessionKeyIdentifier);
              }
              return NextResponse.json({ message: "Conversation resolved, session terminated." }, { status: 200 });
+        }
+        
+        // Rule 3: Do not process outgoing messages from the bot itself to prevent loops
+        if (eventType === 'message_created' && messageType === 'outgoing') {
+            console.log(`[API Evolution Trigger] Outgoing message event detected for conversation ${sessionKeyIdentifier}. Ignoring to prevent loop.`);
+            return NextResponse.json({ message: "Outgoing message event ignored." }, { status: 200 });
         }
     }
     
@@ -750,32 +758,31 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
       let matchingTrigger: StartNodeTrigger | null = null;
       let startNodeForFlow: NodeData | null = null;
       
-      const mainWorkspace = await loadWorkspaceFromDB(webhookId);
-      if (!mainWorkspace || !mainWorkspace.owner_id) {
-          console.error(`[API Evolution Trigger] Main workspace with ID "${webhookId}" not found or has no owner. Cannot determine context.`);
-          return NextResponse.json({ error: `Main workspace with ID "${webhookId}" not found or misconfigured.` }, { status: 404 });
-      }
-      
-      const allWorkspaces = await loadWorkspacesForOwnerFromDB(mainWorkspace.owner_id);
+      const defaultWorkspace = await loadWorkspaceFromDB(webhookId);
 
-      for (const ws of allWorkspaces) {
-          const startNode = ws.nodes.find(n => n.type === 'start');
-          if (startNode?.triggers) {
-              for (const trigger of startNode.triggers) {
-                  if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword && receivedMessageText && trigger.keyword.toLowerCase() === receivedMessageText.toLowerCase()) {
-                      workspaceToStart = ws;
-                      matchingTrigger = trigger;
-                      startNodeForFlow = startNode;
-                      break;
+      if (defaultWorkspace?.owner_id) {
+          const ownerId = defaultWorkspace.owner_id;
+          const allWorkspaces = await loadWorkspacesForOwnerFromDB(ownerId);
+
+          for (const ws of allWorkspaces) {
+              const startNode = ws.nodes.find(n => n.type === 'start');
+              if (startNode?.triggers) {
+                  for (const trigger of startNode.triggers) {
+                      if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword && receivedMessageText && trigger.keyword.toLowerCase() === receivedMessageText.toLowerCase()) {
+                          workspaceToStart = ws;
+                          matchingTrigger = trigger;
+                          startNodeForFlow = startNode;
+                          break;
+                      }
                   }
               }
+              if (workspaceToStart) break;
           }
-          if (workspaceToStart) break;
       }
-      
-      if (!workspaceToStart) {
+
+      if (!workspaceToStart && defaultWorkspace) {
           console.log(`[API Evolution Trigger] No keyword match found. Falling back to default flow from URL: ${webhookId}`);
-          workspaceToStart = mainWorkspace;
+          workspaceToStart = defaultWorkspace;
           startNodeForFlow = workspaceToStart.nodes.find(n => n.type === 'start');
           matchingTrigger = startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled && !t.keyword) || startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled) || null;
       }
@@ -865,7 +872,7 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
 }
 
 export async function GET(request: NextRequest, { params }: { params: { webhookId: string } }) {
-  const { webhookId } = params;
+  const { webhookId } = await params;
   try {
     const workspace = await loadWorkspaceFromDB(webhookId);
     if (workspace) {
@@ -881,12 +888,14 @@ export async function GET(request: NextRequest, { params }: { params: { webhookI
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { webhookId: string } }) {
-  return POST(request, { params });
+export async function PUT(request: NextRequest, context: { params: { webhookId: string } }) {
+  return POST(request, context);
 }
-export async function PATCH(request: NextRequest, { params }: { params: { webhookId: string } }) {
-  return POST(request, { params });
+export async function PATCH(request: NextRequest, context: { params: { webhookId: string } }) {
+  return POST(request, context);
 }
-export async function DELETE(request: NextRequest, { params }: { params: { webhookId: string } }) {
-  return POST(request, { params });
+export async function DELETE(request: NextRequest, context: { params: { webhookId: string } }) {
+  return POST(request, context);
 }
+
+    
