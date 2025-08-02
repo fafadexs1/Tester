@@ -181,7 +181,7 @@ async function executeFlow(
                         currentNode.type === 'input' ? 'promptText' : 
                         currentNode.type === 'date-input' ? 'dateInputLabel' :
                         currentNode.type === 'file-upload' ? 'uploadPromptText' :
-                        'ratingQuestionText';
+                        'rating-input' ? 'ratingQuestionText' : '';
 
                     promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
                     if (promptText) {
@@ -452,7 +452,6 @@ async function storeRequestDetails(
       const chatwootContent = getProperty(actualPayloadToExtractFrom, 'content');
       const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id');
       const chatwootMessageType = getProperty(actualPayloadToExtractFrom, 'message_type');
-      const chatwootSenderType = getProperty(actualPayloadToExtractFrom, 'sender_type');
       
       const evolutionSenderJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid');
       
@@ -504,8 +503,8 @@ async function storeRequestDetails(
   return logEntry;
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
-  const { webhookId } = await params;
+export async function POST(request: NextRequest, { params }: { params: { webhookId: string } }) {
+  const { webhookId } = params;
 
   console.log(`[API Evolution Trigger] POST received for webhook ID: "${webhookId}"`);
 
@@ -594,9 +593,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         console.log(`[API Evolution Trigger - ${session.session_id}] Existing session is active. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
       
         if (session.current_node_id === null && session.awaiting_input_type === null) {
-          console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Restarting flow due to new message.`);
-          await deleteSessionFromDB(session.session_id); // Delete old paused session
-          session = null; // Force creation of a new session
+          console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Ignoring new message.`);
+          return NextResponse.json({ message: "Session is paused at a dead-end. Message ignored." }, { status: 200 });
         } else {
             const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
             session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
@@ -720,18 +718,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       let startNodeForFlow: NodeData | null = null;
       
       const defaultWorkspace = await loadWorkspaceFromDB(webhookId);
-      let ownerId: string | null = defaultWorkspace?.owner_id || null;
 
-      if (!ownerId && flowContext === 'chatwoot') {
-          // Special case: if it's chatwoot, we can't rely on URL. We need another way to find owner.
-          // This part is complex. For now, we assume a default mapping or that a flow will be found by keyword.
-          // A more robust solution might involve a setting for a "default Chatwoot owner"
-          console.warn("[API Evolution Trigger] Chatwoot request received without a valid workspace ID in URL to determine owner. Keyword matching will be attempted across all workspaces.");
-          // To allow keyword search, we might need a different strategy, e.g. load all workspaces (less scalable)
-      }
-
-
-      if (ownerId) {
+      if (defaultWorkspace?.owner_id) {
+          const ownerId = defaultWorkspace.owner_id;
           const allWorkspaces = await loadWorkspacesForOwnerFromDB(ownerId);
 
           for (const ws of allWorkspaces) {
@@ -841,8 +830,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
-  const { webhookId } = await params;
+export async function GET(request: NextRequest, { params }: { params: { webhookId: string } }) {
+  const { webhookId } = params;
   try {
     const workspace = await loadWorkspaceFromDB(webhookId);
     if (workspace) {
@@ -858,12 +847,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+export async function PUT(request: NextRequest, { params }: { params: { webhookId: string } }) {
   return POST(request, { params });
 }
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+export async function PATCH(request: NextRequest, { params }: { params: { webhookId: string } }) {
   return POST(request, { params });
 }
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: { webhookId: string } }) {
   return POST(request, { params });
 }
+
+    
