@@ -538,7 +538,6 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
         
         const eventType = getProperty(payloadToCheck, 'event');
         const messageType = getProperty(payloadToCheck, 'message_type');
-        const conversationStatus = getProperty(payloadToCheck, 'status') || getProperty(payloadToCheck, 'conversation.status');
         const senderType = getProperty(payloadToCheck, 'sender_type');
 
         // Rule 1: Human agent intervention pauses automation by ignoring event.
@@ -547,16 +546,7 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
             return NextResponse.json({ message: "Automation paused due to human intervention." }, { status: 200 });
         }
         
-        // Rule 2: Conversation resolved event ends the flow session
-        if ((eventType === 'conversation_status_changed' || eventType === 'conversation_updated' || eventType === 'message_updated') && conversationStatus === 'resolved') {
-             if (sessionKeyIdentifier) {
-                console.log(`[API Evolution Trigger] Chatwoot conversation ${sessionKeyIdentifier} was resolved. Deleting corresponding flow session.`);
-                await deleteSessionFromDB(sessionKeyIdentifier);
-             }
-             return NextResponse.json({ message: "Conversation resolved, session terminated." }, { status: 200 });
-        }
-        
-        // Rule 3: Do not process outgoing messages from the bot itself to prevent loops
+        // Rule 2: Do not process outgoing messages from the bot itself to prevent loops
         if (eventType === 'message_created' && messageType === 'outgoing') {
             console.log(`[API Evolution Trigger] Outgoing message event detected for conversation ${sessionKeyIdentifier}. Ignoring to prevent loop.`);
             return NextResponse.json({ message: "Outgoing message event ignored." }, { status: 200 });
@@ -872,7 +862,7 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
 }
 
 export async function GET(request: NextRequest, { params }: { params: { webhookId: string } }) {
-  const { webhookId } = await params;
+  const { webhookId } = params;
   try {
     const workspace = await loadWorkspaceFromDB(webhookId);
     if (workspace) {
@@ -897,5 +887,3 @@ export async function PATCH(request: NextRequest, context: { params: { webhookId
 export async function DELETE(request: NextRequest, context: { params: { webhookId: string } }) {
   return POST(request, context);
 }
-
-    
