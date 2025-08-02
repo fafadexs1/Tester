@@ -148,6 +148,25 @@ function generateUniqueVariableName(baseName: string, existingNames: string[]): 
   return newName;
 }
 
+// **NOVA FUNÇÃO** para limpar dados de nós de fluxos antigos
+function cleanLoadedWorkspace(workspace: WorkspaceData): WorkspaceData {
+  const cleanedNodes = workspace.nodes.map(node => {
+    const newNode = { ...node };
+    for (const field of VARIABLE_DEFINING_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(newNode, field)) {
+        const value = newNode[field];
+        if (value === '' || value === null || value === undefined) {
+          delete newNode[field];
+        }
+      }
+    }
+    return newNode;
+  });
+
+  return { ...workspace, nodes: cleanedNodes };
+}
+
+
 interface FlowBuilderClientProps {
   workspaceId: string;
   user: User;
@@ -158,7 +177,10 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const { toast } = useToast();
   const router = useRouter();
   
-  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceData | null>(initialWorkspace);
+  // Limpa o workspace inicial antes de colocá-lo no estado
+  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceData | null>(
+    initialWorkspace ? cleanLoadedWorkspace(initialWorkspace) : null
+  );
   const [isLoading, setIsLoading] = useState(!initialWorkspace); 
   
   const [drawingLine, setDrawingLine] = useState<DrawingLineData | null>(null);
@@ -251,7 +273,8 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     try {
         const dbWorkspace = await loadWorkspaceFromDB(workspaceId);
         if (dbWorkspace) {
-            setActiveWorkspace(dbWorkspace);
+            // Limpa os dados do workspace carregado antes de setar no estado
+            setActiveWorkspace(cleanLoadedWorkspace(dbWorkspace));
         } else {
             toast({ title: "Erro de Carregamento", description: "O fluxo solicitado não foi encontrado.", variant: "destructive" });
             router.push('/');
@@ -267,9 +290,13 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
 
   useEffect(() => {
     if (workspaceId && hasMounted) {
-      loadWorkspace();
+      // O workspace inicial já foi limpo ao setar o estado inicial.
+      // Apenas carregamos se o estado inicial for nulo.
+      if (!activeWorkspace) {
+        loadWorkspace();
+      }
     }
-  }, [workspaceId, hasMounted, loadWorkspace]);
+  }, [workspaceId, hasMounted, loadWorkspace, activeWorkspace]);
 
   const handleSaveWorkspace = useCallback(async () => {
     if (!activeWorkspace) {
