@@ -4,7 +4,7 @@
 
 import { Pool, type QueryResult } from 'pg';
 import dotenv from 'dotenv';
-import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance } from '@/lib/types';
+import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { redirect } from 'next/navigation';
 
@@ -130,7 +130,8 @@ async function initializeDatabaseSchema(): Promise<void> {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         evolution_instance_id UUID,
-        chatwoot_enabled BOOLEAN DEFAULT false
+        chatwoot_enabled BOOLEAN DEFAULT false,
+        chatwoot_instance_id UUID
       );
     `);
     
@@ -141,6 +142,19 @@ async function initializeDatabaseSchema(): Promise<void> {
         name TEXT NOT NULL,
         base_url TEXT,
         api_key TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, name)
+      );
+    `);
+    
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS chatwoot_instances (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        base_url TEXT NOT NULL,
+        api_access_token TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(user_id, name)
@@ -179,12 +193,18 @@ async function initializeDatabaseSchema(): Promise<void> {
       await client.query('ALTER TABLE workspaces ADD COLUMN chatwoot_enabled BOOLEAN DEFAULT false;');
     }
     
-    const fkConstraintExists = await client.query(`
+    const chatwootInstanceIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='chatwoot_instance_id'`);
+    if (chatwootInstanceIdColInfo.rowCount === 0) {
+      console.log("[DB Actions] 'chatwoot_instance_id' column not found in 'workspaces'. Adding column...");
+      await client.query('ALTER TABLE workspaces ADD COLUMN chatwoot_instance_id UUID;');
+    }
+    
+    const fkConstraintExistsEvo = await client.query(`
         SELECT 1 FROM pg_constraint 
         WHERE conname = 'workspaces_evolution_instance_id_fkey' AND conrelid = 'workspaces'::regclass;
     `);
 
-    if (fkConstraintExists.rowCount === 0) {
+    if (fkConstraintExistsEvo.rowCount === 0) {
       console.log("[DB Actions] Foreign key for 'evolution_instance_id' not found. Adding constraint...");
       await client.query(`
         ALTER TABLE workspaces 
@@ -193,6 +213,22 @@ async function initializeDatabaseSchema(): Promise<void> {
       `);
       console.log("[DB Actions] Foreign key 'workspaces_evolution_instance_id_fkey' added.");
     }
+    
+    const fkConstraintExistsChatwoot = await client.query(`
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'workspaces_chatwoot_instance_id_fkey' AND conrelid = 'workspaces'::regclass;
+    `);
+
+    if (fkConstraintExistsChatwoot.rowCount === 0) {
+      console.log("[DB Actions] Foreign key for 'chatwoot_instance_id' not found. Adding constraint...");
+      await client.query(`
+        ALTER TABLE workspaces 
+        ADD CONSTRAINT workspaces_chatwoot_instance_id_fkey 
+        FOREIGN KEY (chatwoot_instance_id) REFERENCES chatwoot_instances(id) ON DELETE SET NULL;
+      `);
+      console.log("[DB Actions] Foreign key 'workspaces_chatwoot_instance_id_fkey' added.");
+    }
+
 
     const correctUniqueConstraintExists = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_owner_id_name_key'`);
     if(correctUniqueConstraintExists.rowCount === 0) {
@@ -214,9 +250,16 @@ async function initializeDatabaseSchema(): Promise<void> {
         awaiting_input_details JSONB,
         session_timeout_seconds INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        last_interaction_at TIMESTAMPTZ DEFAULT NOW()
+        last_interaction_at TIMESTAMPTZ DEFAULT NOW(),
+        flow_context TEXT
       );
     `);
+     const flowContextColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='flow_sessions' AND column_name='flow_context'`);
+    if (flowContextColInfo.rowCount === 0) {
+        console.log("[DB Actions] 'flow_context' column not found in 'flow_sessions'. Adding column...");
+        await client.query(`ALTER TABLE flow_sessions ADD COLUMN flow_context TEXT;`);
+    }
+
     
     await client.query('COMMIT');
     console.log('[DB Actions] Schema initialization and migration check complete.');
@@ -314,15 +357,16 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
     }
     
     const query = `
-      INSERT INTO workspaces (id, name, nodes, connections, owner_id, evolution_instance_id, chatwoot_enabled, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      INSERT INTO workspaces (id, name, nodes, connections, owner_id, evolution_instance_id, chatwoot_enabled, chatwoot_instance_id, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
       ON CONFLICT (id) DO UPDATE
       SET name = EXCLUDED.name,
           nodes = EXCLUDED.nodes,
           connections = EXCLUDED.connections,
           updated_at = NOW(),
           evolution_instance_id = EXCLUDED.evolution_instance_id,
-          chatwoot_enabled = EXCLUDED.chatwoot_enabled;
+          chatwoot_enabled = EXCLUDED.chatwoot_enabled,
+          chatwoot_instance_id = EXCLUDED.chatwoot_instance_id;
     `;
     
     await runQuery(query, [
@@ -333,6 +377,7 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
       workspaceData.owner_id,
       workspaceData.evolution_instance_id || null,
       workspaceData.chatwoot_enabled || false,
+      workspaceData.chatwoot_instance_id || null,
     ]);
     
     return { success: true };
@@ -351,7 +396,7 @@ export async function loadWorkspaceFromDB(workspaceId: string): Promise<Workspac
   try {
     const result = await runQuery<WorkspaceData>(`
         SELECT 
-            id, name, nodes, connections, owner_id, created_at, updated_at, evolution_instance_id, chatwoot_enabled
+            id, name, nodes, connections, owner_id, created_at, updated_at, evolution_instance_id, chatwoot_enabled, chatwoot_instance_id
         FROM workspaces 
         WHERE id = $1
     `, [workspaceId]);
@@ -378,7 +423,7 @@ export async function loadWorkspacesForOwnerFromDB(ownerId: string): Promise<Wor
     }
     const result = await runQuery<WorkspaceData>(
       `SELECT 
-        id, name, nodes, connections, owner_id, created_at, updated_at, evolution_instance_id, chatwoot_enabled
+        id, name, nodes, connections, owner_id, created_at, updated_at, evolution_instance_id, chatwoot_enabled, chatwoot_instance_id
        FROM workspaces 
        WHERE owner_id = $1 
        ORDER BY updated_at DESC`,
@@ -415,8 +460,8 @@ export async function deleteWorkspaceAction(workspaceId: string): Promise<{ succ
 export async function saveSessionToDB(sessionData: FlowSession): Promise<{ success: boolean; error?: string }> {
   try {
     const query = `
-      INSERT INTO flow_sessions (session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, session_timeout_seconds, last_interaction_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+      INSERT INTO flow_sessions (session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, session_timeout_seconds, flow_context, last_interaction_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
       ON CONFLICT (session_id) DO UPDATE
       SET workspace_id = EXCLUDED.workspace_id,
           current_node_id = EXCLUDED.current_node_id,
@@ -424,6 +469,7 @@ export async function saveSessionToDB(sessionData: FlowSession): Promise<{ succe
           awaiting_input_type = EXCLUDED.awaiting_input_type,
           awaiting_input_details = EXCLUDED.awaiting_input_details,
           session_timeout_seconds = EXCLUDED.session_timeout_seconds,
+          flow_context = EXCLUDED.flow_context,
           last_interaction_at = NOW();
     `;
     await runQuery(query, [
@@ -434,6 +480,7 @@ export async function saveSessionToDB(sessionData: FlowSession): Promise<{ succe
       sessionData.awaiting_input_type,
       sessionData.awaiting_input_details ? JSON.stringify(sessionData.awaiting_input_details) : null,
       sessionData.session_timeout_seconds || 0,
+      sessionData.flow_context || null,
     ]);
     return { success: true };
   } catch (error: any) {
@@ -445,7 +492,7 @@ export async function saveSessionToDB(sessionData: FlowSession): Promise<{ succe
 export async function loadSessionFromDB(sessionId: string): Promise<FlowSession | null> {
   try {
     const result = await runQuery<FlowSession>(
-      'SELECT session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, session_timeout_seconds, created_at, last_interaction_at FROM flow_sessions WHERE session_id = $1',
+      'SELECT session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, session_timeout_seconds, flow_context, created_at, last_interaction_at FROM flow_sessions WHERE session_id = $1',
       [sessionId]
     );
     if (result.rows.length > 0) {
@@ -495,6 +542,7 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
         fs.awaiting_input_type, 
         fs.awaiting_input_details, 
         fs.session_timeout_seconds, 
+        fs.flow_context,
         fs.created_at, 
         fs.last_interaction_at
       FROM flow_sessions fs
@@ -514,6 +562,47 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
     return [];
   }
 }
+
+// --- Chatwoot Instance Actions ---
+export async function getChatwootInstancesForUser(userId: string): Promise<{ data?: ChatwootInstance[]; error?: string }> {
+    try {
+        const result = await runQuery<ChatwootInstance>(
+            'SELECT id, name, base_url, api_access_token FROM chatwoot_instances WHERE user_id = $1 ORDER BY name',
+            [userId]
+        );
+        return {
+            data: result.rows.map(row => ({
+                id: row.id,
+                name: row.name,
+                baseUrl: (row as any).base_url,
+                apiAccessToken: (row as any).api_access_token,
+                status: 'unconfigured'
+            }))
+        };
+    } catch (error: any) {
+        console.error('[DB Actions] Error fetching Chatwoot instances:', error);
+        return { error: `Erro de banco de dados: ${error.message}` };
+    }
+}
+
+export async function loadChatwootInstanceFromDB(instanceId: string): Promise<ChatwootInstance | null> {
+    const result = await runQuery<ChatwootInstance>(
+        'SELECT id, name, base_url, api_access_token FROM chatwoot_instances WHERE id = $1',
+        [instanceId]
+    );
+    if (result.rows.length > 0) {
+        const row = result.rows[0];
+        return {
+            id: row.id,
+            name: row.name,
+            baseUrl: (row as any).base_url,
+            apiAccessToken: (row as any).api_access_token,
+            status: 'unconfigured'
+        };
+    }
+    return null;
+}
+
 
 (async () => {
     try {

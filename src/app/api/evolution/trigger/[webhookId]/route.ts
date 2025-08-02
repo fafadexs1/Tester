@@ -5,13 +5,15 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getProperty, setProperty } from 'dot-prop';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
+import { sendChatwootMessageAction } from '@/app/actions/chatwootApiActions';
 import {
   loadSessionFromDB,
   saveSessionToDB,
   deleteSessionFromDB,
   loadWorkspaceFromDB,
+  loadChatwootInstanceFromDB,
 } from '@/app/actions/databaseActions';
-import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData } from '@/lib/types';
+import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData, FlowContextType } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 
@@ -74,7 +76,8 @@ async function executeFlow(
   session: FlowSession,
   nodes: NodeData[],
   connections: Connection[],
-  apiConfig: ApiConfig
+  apiConfig: ApiConfig,
+  workspace: WorkspaceData
 ): Promise<void> {
     let currentNodeId = session.current_node_id;
     let shouldContinue = true;
@@ -102,13 +105,30 @@ async function executeFlow(
 
             case 'message': {
                 const messageText = substituteVariablesInText(currentNode.text, session.flow_variables);
-                if (messageText) {
-                    await sendWhatsAppMessageAction({
-                        ...apiConfig,
-                        recipientPhoneNumber: session.session_id.split("@@")[0],
-                        messageType: 'text',
-                        textContent: messageText,
-                    });
+                if (!messageText) {
+                    console.warn(`[Flow Engine - ${session.session_id}] Message node ${currentNode.id} has empty content after variable substitution.`);
+                } else {
+                    if (session.flow_context === 'chatwoot' && workspace.chatwoot_enabled && workspace.chatwoot_instance_id) {
+                        const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
+                        if (chatwootInstance) {
+                            await sendChatwootMessageAction({
+                                baseUrl: chatwootInstance.baseUrl,
+                                apiAccessToken: chatwootInstance.apiAccessToken,
+                                accountId: session.flow_variables.chatwoot_account_id,
+                                conversationId: session.flow_variables.chatwoot_conversation_id,
+                                content: messageText
+                            });
+                        } else {
+                             console.error(`[Flow Engine - ${session.session_id}] Chatwoot instance with ID ${workspace.chatwoot_instance_id} not found.`);
+                        }
+                    } else {
+                         await sendWhatsAppMessageAction({
+                            ...apiConfig,
+                            recipientPhoneNumber: session.session_id.split("@@")[0],
+                            messageType: 'text',
+                            textContent: messageText,
+                        });
+                    }
                 }
                 nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
                 break;
@@ -126,12 +146,25 @@ async function executeFlow(
 
                 const promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
                 if (promptText) {
-                    await sendWhatsAppMessageAction({
-                        ...apiConfig,
-                        recipientPhoneNumber: session.session_id.split("@@")[0],
-                        messageType: 'text',
-                        textContent: promptText,
-                    });
+                    if (session.flow_context === 'chatwoot' && workspace.chatwoot_enabled && workspace.chatwoot_instance_id) {
+                         const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
+                         if (chatwootInstance) {
+                             await sendChatwootMessageAction({
+                                baseUrl: chatwootInstance.baseUrl,
+                                apiAccessToken: chatwootInstance.apiAccessToken,
+                                accountId: session.flow_variables.chatwoot_account_id,
+                                conversationId: session.flow_variables.chatwoot_conversation_id,
+                                content: promptText
+                             });
+                         }
+                    } else {
+                         await sendWhatsAppMessageAction({
+                            ...apiConfig,
+                            recipientPhoneNumber: session.session_id.split("@@")[0],
+                            messageType: 'text',
+                            textContent: promptText,
+                        });
+                    }
                 }
                 session.awaiting_input_type = currentNode.type;
                 session.awaiting_input_details = { 
@@ -155,14 +188,31 @@ async function executeFlow(
                     optionsList.forEach((opt, index) => {
                         messageWithOptions += `${index + 1}. ${opt}\n`;
                     });
-                    messageWithOptions += "\nResponda com o número da opção desejada ou o texto exato da opção.";
-
-                    await sendWhatsAppMessageAction({
-                        ...apiConfig,
-                        recipientPhoneNumber: session.session_id.split("@@")[0],
-                        messageType: 'text',
-                        textContent: messageWithOptions.trim(),
-                    });
+                    
+                    let finalMessage = messageWithOptions.trim();
+                     if (session.flow_context !== 'chatwoot') {
+                        finalMessage += "\nResponda com o número da opção desejada ou o texto exato da opção.";
+                     }
+                    
+                    if (session.flow_context === 'chatwoot' && workspace.chatwoot_enabled && workspace.chatwoot_instance_id) {
+                         const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
+                         if (chatwootInstance) {
+                            await sendChatwootMessageAction({
+                                baseUrl: chatwootInstance.baseUrl,
+                                apiAccessToken: chatwootInstance.apiAccessToken,
+                                accountId: session.flow_variables.chatwoot_account_id,
+                                conversationId: session.flow_variables.chatwoot_conversation_id,
+                                content: finalMessage
+                            });
+                         }
+                    } else {
+                         await sendWhatsAppMessageAction({
+                            ...apiConfig,
+                            recipientPhoneNumber: session.session_id.split("@@")[0],
+                            messageType: 'text',
+                            textContent: finalMessage,
+                        });
+                    }
 
                     session.awaiting_input_type = 'option';
                     session.awaiting_input_details = {
@@ -411,16 +461,15 @@ async function storeRequestDetails(
   let webhookRemoteJid: string | null = null;
   const headers = Object.fromEntries(request.headers.entries());
   const ip = request.ip || headers['x-forwarded-for'] || 'unknown IP';
+  let flowContext: FlowContextType = 'evolution';
 
   let actualPayloadToExtractFrom = parsedPayload;
   
-  // Handle Chatwoot payload which can be an array of a single object
   if (Array.isArray(parsedPayload) && parsedPayload.length > 0 && typeof parsedPayload[0] === 'object') {
     actualPayloadToExtractFrom = parsedPayload[0];
   }
   
   if (actualPayloadToExtractFrom && typeof actualPayloadToExtractFrom === 'object') {
-      // Prioritize Chatwoot structure
       const chatwootEvent = getProperty(actualPayloadToExtractFrom, 'event') || getProperty(actualPayloadToExtractFrom, 'body.event');
       const chatwootContent = getProperty(actualPayloadToExtractFrom, 'content') || getProperty(actualPayloadToExtractFrom, 'body.content');
       const chatwootSenderIdentifier = getProperty(actualPayloadToExtractFrom, 'sender.identifier') || getProperty(actualPayloadToExtractFrom, 'body.sender.identifier');
@@ -429,9 +478,9 @@ async function storeRequestDetails(
       if (chatwootEvent === 'message_created' && chatwootContent !== undefined) {
           extractedMessage = String(chatwootContent).trim();
           webhookRemoteJid = chatwootSenderIdentifier || `chatwoot_conv_${chatwootConversationId}`;
+          flowContext = 'chatwoot';
           console.log(`[storeRequestDetails] Detected Chatwoot payload. Message: "${extractedMessage}", JID: "${webhookRemoteJid}"`);
       } else {
-          // Fallback to Evolution API structure
           const commonMessagePaths = [
               'data.message.conversation', 'message.conversation', 
               'message.body', 'message.textMessage.text', 'text',
@@ -445,7 +494,10 @@ async function storeRequestDetails(
               }
           }
           webhookRemoteJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid');
-          if (webhookRemoteJid) console.log(`[storeRequestDetails] Detected Evolution API payload. Message: "${extractedMessage}", JID: "${webhookRemoteJid}"`);
+          if (webhookRemoteJid) {
+            console.log(`[storeRequestDetails] Detected Evolution API payload. Message: "${extractedMessage}", JID: "${webhookRemoteJid}"`);
+            flowContext = 'evolution';
+          }
       }
   }
 
@@ -458,6 +510,7 @@ async function storeRequestDetails(
     ip: ip,
     extractedMessage: extractedMessage,
     webhook_remote_jid: webhookRemoteJid,
+    flow_context: flowContext,
     payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
   };
 
@@ -486,18 +539,15 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
     parsedBody = rawBody ? JSON.parse(rawBody) : { message: "Request body was empty." };
     loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
     
-    // Unified variables from different possible sources (Evolution API, Chatwoot, etc.)
     const eventType = getProperty(loggedEntry.payload, 'event') || getProperty(loggedEntry.payload, 'body.event') as string;
     const instanceName = getProperty(loggedEntry.payload, 'instance') as string;
     const senderJid = loggedEntry.webhook_remote_jid; 
     const receivedMessageText = loggedEntry.extractedMessage;
     const evolutionApiBaseUrl = getProperty(loggedEntry.payload, 'server_url') as string;
     const evolutionApiKey = getProperty(loggedEntry.payload, 'apikey') as string;
+    const flowContext = loggedEntry.flow_context;
     
-    // Check for API call response flag
     const isApiCallResponse = getProperty(loggedEntry.payload, 'isApiCallResponse') === true;
-
-    // Check if this is a call to resume a flow
     const resumeSessionId = getProperty(loggedEntry.payload, 'resume_session_id');
 
     if (resumeSessionId) {
@@ -506,7 +556,6 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
         if (sessionToResume) {
              const workspaceForResume = await loadWorkspaceFromDB(sessionToResume.workspace_id);
              if (workspaceForResume && workspaceForResume.nodes) {
-                 // The payload of the resume call becomes the response
                  sessionToResume.flow_variables[sessionToResume.awaiting_input_details?.variableToSave || 'external_response_data'] = parsedBody;
                  sessionToResume.awaiting_input_type = null; 
                  
@@ -516,7 +565,7 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
                     instanceName: instanceName || ''
                  };
 
-                 await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], apiConfigForResume);
+                 await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], apiConfigForResume, workspaceForResume);
                  return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
              }
         } else {
@@ -724,15 +773,14 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
         session_id: sessionId,
       };
 
-      // Auto-inject Chatwoot variables if it's a Chatwoot payload and the integration is enabled
-      if (workspace.chatwoot_enabled && (getProperty(payloadToUse, 'event') === 'message_created' || getProperty(payloadToUse, 'body.event') === 'message_created')) {
+      if (workspace.chatwoot_enabled && flowContext === 'chatwoot') {
         const chatwootMappings = {
-            chatwoot_conversation_id: 'body.conversation.id',
-            chatwoot_contact_id: 'body.sender.id',
-            chatwoot_account_id: 'body.account.id',
-            chatwoot_inbox_id: 'body.inbox.id',
-            contact_name: 'body.sender.name',
-            contact_phone: 'body.sender.phone_number',
+            chatwoot_conversation_id: 'conversation.id',
+            chatwoot_contact_id: 'sender.id',
+            chatwoot_account_id: 'account.id',
+            chatwoot_inbox_id: 'inbox.id',
+            contact_name: 'sender.name',
+            contact_phone: 'sender.phone_number',
         };
 
         for (const [varName, path] of Object.entries(chatwootMappings)) {
@@ -763,12 +811,13 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
         awaiting_input_type: null,
         awaiting_input_details: null,
         session_timeout_seconds: webhookTrigger?.sessionTimeoutSeconds || 0,
+        flow_context: flowContext,
       };
       startExecution = true;
     }
     
     if (startExecution && session.current_node_id) {
-      await executeFlow(session, workspace.nodes, workspace.connections || [], apiConfig);
+      await executeFlow(session, workspace.nodes, workspace.connections || [], apiConfig, workspace);
     } else if (session && !startExecution) {
       await saveSessionToDB(session);
     }
