@@ -147,7 +147,7 @@ async function executeFlow(
 
             case 'option':
                 const questionText = substituteVariablesInText(currentNode.questionText, session.flow_variables);
-                const optionsList = (currentNode.optionsList || '').split('\n').map(opt => substituteVariables(opt.trim(), session.flow_variables)).filter(Boolean);
+                const optionsList = (currentNode.optionsList || '').split('\n').map(opt => substituteVariablesInText(opt.trim(), session.flow_variables)).filter(Boolean);
 
                 if (questionText && optionsList.length > 0) {
                     let messageWithOptions = questionText + '\n\n';
@@ -420,8 +420,8 @@ async function storeRequestDetails(
   
   if (actualPayloadToExtractFrom && typeof actualPayloadToExtractFrom === 'object') {
       // Prioritize Chatwoot structure
-      const chatwootEvent = getProperty(actualPayloadToExtractFrom, 'event');
-      const chatwootContent = getProperty(actualPayloadToExtractFrom, 'content');
+      const chatwootEvent = getProperty(actualPayloadToExtractFrom, 'event') || getProperty(actualPayloadToExtractFrom, 'body.event');
+      const chatwootContent = getProperty(actualPayloadToExtractFrom, 'content') || getProperty(actualPayloadToExtractFrom, 'body.content');
       const chatwootSenderIdentifier = getProperty(actualPayloadToExtractFrom, 'sender.identifier') || getProperty(actualPayloadToExtractFrom, 'body.sender.identifier');
       const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id') || getProperty(actualPayloadToExtractFrom, 'body.conversation.id');
 
@@ -486,7 +486,7 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
     loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
     
     // Unified variables from different possible sources (Evolution API, Chatwoot, etc.)
-    const eventType = getProperty(loggedEntry.payload, 'event') as string;
+    const eventType = getProperty(loggedEntry.payload, 'event') || getProperty(loggedEntry.payload, 'body.event') as string;
     const instanceName = getProperty(loggedEntry.payload, 'instance') as string;
     const senderJid = loggedEntry.webhook_remote_jid; 
     const receivedMessageText = loggedEntry.extractedMessage;
@@ -724,7 +724,7 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
       };
 
       // Auto-inject Chatwoot variables if it's a Chatwoot payload
-      if (getProperty(payloadToUse, 'event') === 'message_created') {
+      if (getProperty(payloadToUse, 'event') === 'message_created' || getProperty(payloadToUse, 'body.event') === 'message_created') {
         const chatwootMappings = {
             chatwoot_conversation_id: 'body.conversation.id',
             chatwoot_contact_id: 'body.sender.id',
@@ -737,7 +737,7 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
         for (const [varName, path] of Object.entries(chatwootMappings)) {
             const value = getProperty(payloadToUse, path);
             if (value !== undefined) {
-                initialVars[varName] = value;
+                setProperty(initialVars, varName, value);
             }
         }
          console.log(`[API Evolution Trigger] Auto-injected Chatwoot variables:`, initialVars);
