@@ -205,32 +205,40 @@ async function executeFlow(
                 const varNameCond = currentNode.conditionVariable?.replace(/\{\{|\}\}/g, '').trim();
                 const actualValueRaw = varNameCond ? getProperty(session.flow_variables, varNameCond) : undefined;
                 const compareValueRaw = substituteVariablesInText(currentNode.conditionValue, session.flow_variables);
+                const dataType = currentNode.conditionDataType || 'string';
                 let conditionMet = false;
 
-                const tryParse = (value: any) => {
-                    if (value === null || value === undefined || value === '') return value;
-                    const strValue = String(value).toLowerCase();
-                    if (strValue === 'true') return true;
-                    if (strValue === 'false') return false;
-                    if (!isNaN(Number(strValue)) && strValue.trim() !== '') return Number(strValue);
-                    const date = new Date(value);
-                    if (!isNaN(date.getTime())) return date;
-                    return value;
+                const parseValue = (value: any, type: typeof dataType) => {
+                    if (value === undefined || value === null || String(value).trim() === '') return value;
+                    switch (type) {
+                        case 'number': return parseFloat(String(value));
+                        case 'boolean': return String(value).toLowerCase() === 'true';
+                        case 'date': {
+                            const date = new Date(value);
+                             // Check for invalid date and ensure we don't count year 1970 from a bad numeric parse
+                            if (isNaN(date.getTime()) || (typeof value === 'number' && value < 100000)) return value;
+                            return date;
+                        }
+                        default: return String(value);
+                    }
                 };
 
-                const valA = tryParse(actualValueRaw);
-                const valB = tryParse(compareValueRaw);
+                const valA = parseValue(actualValueRaw, dataType);
+                const valB = parseValue(compareValueRaw, dataType);
+
+                const isValidA = valA !== undefined && valA !== null && !Number.isNaN(valA);
+                const isValidB = valB !== undefined && valB !== null && !Number.isNaN(valB);
 
                 switch (currentNode.conditionOperator) {
                     case '==': conditionMet = valA == valB; break;
                     case '!=': conditionMet = valA != valB; break;
-                    case '>': conditionMet = valA > valB; break;
-                    case '<': conditionMet = valA < valB; break;
-                    case '>=': conditionMet = valA >= valB; break;
-                    case '<=': conditionMet = valA <= valB; break;
-                    case 'contains': conditionMet = String(valA).toLowerCase().includes(String(valB).toLowerCase()); break;
-                    case 'startsWith': conditionMet = String(valA).toLowerCase().startsWith(String(valB).toLowerCase()); break;
-                    case 'endsWith': conditionMet = String(valA).toLowerCase().endsWith(String(valB).toLowerCase()); break;
+                    case '>': conditionMet = isValidA && isValidB && valA > valB; break;
+                    case '<': conditionMet = isValidA && isValidB && valA < valB; break;
+                    case '>=': conditionMet = isValidA && isValidB && valA >= valB; break;
+                    case '<=': conditionMet = isValidA && isValidB && valA <= valB; break;
+                    case 'contains': conditionMet = isValidA && isValidB && String(valA).toLowerCase().includes(String(valB).toLowerCase()); break;
+                    case 'startsWith': conditionMet = isValidA && isValidB && String(valA).toLowerCase().startsWith(String(valB).toLowerCase()); break;
+                    case 'endsWith': conditionMet = isValidA && isValidB && String(valA).toLowerCase().endsWith(String(valB).toLowerCase()); break;
                     case 'isEmpty': conditionMet = valA === undefined || valA === null || String(valA).trim() === ''; break;
                     case 'isNotEmpty': conditionMet = valA !== undefined && valA !== null && String(valA).trim() !== ''; break;
                     case 'isTrue': conditionMet = valA === true; break;

@@ -113,8 +113,9 @@ export interface NodeData {
   
   // Condition Node
   conditionVariable?: string; 
-  conditionOperator?: '==' | '!=' | '>' | '<' | 'contains' | 'startsWith' | 'endsWith' | 'isEmpty' | 'isNotEmpty'; 
-  conditionValue?: string; 
+  conditionOperator?: '==' | '!=' | '>' | '<' | '>=' | '<=' | 'contains' | 'startsWith' | 'endsWith' | 'isEmpty' | 'isNotEmpty' | 'isTrue' | 'isFalse' | 'isDateAfter' | 'isDateBefore'; 
+  conditionValue?: string;
+  conditionDataType?: 'string' | 'number' | 'boolean' | 'date';
   
   // Switch Node
   switchVariable?: string;
