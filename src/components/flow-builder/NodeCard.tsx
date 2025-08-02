@@ -599,14 +599,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           <Button
             variant="ghost"
             size="icon"
-            className={cn("absolute h-7 w-7 z-10", isTextarea ? 'top-1 right-1' : 'top-1/2 right-1 -translate-y-1/2')}
+            className={cn("absolute h-7 w-7 z-10", isTextarea ? 'top-1.5 right-1.5' : 'top-1/2 right-1 -translate-y-1/2')}
             data-no-drag="true"
             aria-label="Inserir Variável"
           >
             <Braces className="h-4 w-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-1" data-no-drag="true" align="end">
+        <PopoverContent className="w-[200px] p-1" data-no-drag="true" align="end">
           <ScrollArea className="h-auto max-h-[150px] text-xs">
             {allVars.map((varName) => (
               <Button
@@ -708,7 +708,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
   const renderNodeIcon = (): React.ReactNode => {
     const iconProps = { className: "w-5 h-5" };
-    const icons: Record<NodeData['type'] | 'default', React.ReactNode> = {
+    const icons: Record<NodeType | 'default', React.ReactNode> = {
       'start': <PlayCircle {...iconProps} color="hsl(var(--primary))" />,
       'message': <MessageSquareText {...iconProps} color="hsl(var(--accent))" />,
       'input': <InputIcon {...iconProps} className="text-green-500" />,
