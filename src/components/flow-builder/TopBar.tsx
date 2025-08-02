@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { WorkspaceData, FlowSession, EvolutionInstance } from '@/lib/types';
+import type { WorkspaceData, FlowSession, EvolutionInstance, ChatwootInstance } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import {
   Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard,
@@ -52,8 +52,9 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import Link from 'next/link';
 import { v4 as uuidv4 } from 'uuid';
 import { checkEvolutionInstanceStatus } from '@/app/actions/evolutionApiActions';
+import { checkChatwootInstanceStatus } from '@/app/actions/chatwootApiActions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { saveEvolutionInstanceAction, deleteEvolutionInstanceAction } from '@/app/actions/instanceActions';
+import { saveEvolutionInstanceAction, deleteEvolutionInstanceAction, getChatwootInstancesForUserAction, saveChatwootInstanceAction, deleteChatwootInstanceAction } from '@/app/actions/instanceActions';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 
 
@@ -101,12 +102,18 @@ const TopBar: React.FC<TopBarProps> = ({
   const [nexusFlowAppBaseUrl, setNexusFlowAppBaseUrl] = useState('');
   
   const [isInstanceManagerOpen, setIsInstanceManagerOpen] = useState(false);
+  const [instanceManagerTab, setInstanceManagerTab] = useState('evolution');
+
   const [evolutionInstances, setEvolutionInstances] = useState<EvolutionInstance[]>([]);
-  const [isLoadingInstances, setIsLoadingInstances] = useState(false);
-  const [editingInstance, setEditingInstance] = useState<EvolutionInstance | null>(null);
+  const [isLoadingEvolutionInstances, setIsLoadingEvolutionInstances] = useState(false);
+  const [editingEvolutionInstance, setEditingEvolutionInstance] = useState<EvolutionInstance | null>(null);
+  
+  const [chatwootInstances, setChatwootInstances] = useState<ChatwootInstance[]>([]);
+  const [isLoadingChatwootInstances, setIsLoadingChatwootInstances] = useState(false);
+  const [editingChatwootInstance, setEditingChatwootInstance] = useState<ChatwootInstance | null>(null);
 
   const fetchEvolutionInstances = useCallback(async () => {
-    setIsLoadingInstances(true);
+    setIsLoadingEvolutionInstances(true);
     try {
       const response = await fetch('/api/instances/evolution');
       if (!response.ok) throw new Error('Falha ao buscar instâncias.');
@@ -114,96 +121,30 @@ const TopBar: React.FC<TopBarProps> = ({
       setEvolutionInstances(data);
       return data;
     } catch (error: any) {
-      toast({ title: "Erro ao Carregar Instâncias", description: error.message, variant: "destructive" });
+      toast({ title: "Erro ao Carregar Instâncias Evolution", description: error.message, variant: "destructive" });
       setEvolutionInstances([]);
       return [];
     } finally {
-      setIsLoadingInstances(false);
+      setIsLoadingEvolutionInstances(false);
     }
   }, [toast]);
 
-  const handleCheckInstanceStatus = useCallback(async (instance: EvolutionInstance) => {
-    setEvolutionInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: 'connecting' } : i));
-    const result = await checkEvolutionInstanceStatus(instance.baseUrl, instance.name, instance.apiKey);
-    setEvolutionInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: result.status } : i));
-    return result.status;
-  }, []);
-
-  const checkAllInstances = useCallback(async (instancesToCheck: EvolutionInstance[]) => {
-    for (const instance of instancesToCheck) {
-        handleCheckInstanceStatus(instance);
+  const fetchChatwootInstances = useCallback(async () => {
+    setIsLoadingChatwootInstances(true);
+    try {
+      const result = await getChatwootInstancesForUserAction();
+      if (result.error) throw new Error(result.error);
+      setChatwootInstances(result.data || []);
+      return result.data || [];
+    } catch (error: any) {
+      toast({ title: "Erro ao Carregar Instâncias Chatwoot", description: error.message, variant: "destructive" });
+      setChatwootInstances([]);
+      return [];
+    } finally {
+      setIsLoadingChatwootInstances(false);
     }
-  }, [handleCheckInstanceStatus]);
-  
-  useEffect(() => {
-    let statusInterval: NodeJS.Timeout | null = null;
-    if (isInstanceManagerOpen && !editingInstance) {
-      fetchEvolutionInstances().then(initialInstances => {
-        if(initialInstances.length > 0) {
-            checkAllInstances(initialInstances);
-            statusInterval = setInterval(() => {
-                 // Use a function with the state setter to get the latest state
-                 setEvolutionInstances(currentInstances => {
-                    if (currentInstances.length > 0) {
-                        console.log('[TopBar] Periodic status check triggered.');
-                        checkAllInstances(currentInstances);
-                    }
-                    return currentInstances;
-                 });
-            }, 15000); // Check every 15 seconds
-        }
-      });
-    }
-    
-    return () => {
-        if (statusInterval) {
-            clearInterval(statusInterval);
-            console.log('[TopBar] Periodic status check interval cleared.');
-        }
-    };
-  }, [isInstanceManagerOpen, editingInstance, fetchEvolutionInstances, checkAllInstances]);
+  }, [toast]);
 
-  useEffect(() => {
-    if (isSettingsDialogOpen) {
-      fetchEvolutionInstances();
-    }
-  }, [isSettingsDialogOpen, fetchEvolutionInstances]);
-
-  const handleEditInstance = (instance: EvolutionInstance) => {
-    setEditingInstance(instance);
-  };
-
-  const handleAddNewInstance = () => {
-    setEditingInstance({ id: '', name: '', baseUrl: '', apiKey: '', status: 'unconfigured' });
-  };
-  
-  const handleCancelEdit = () => {
-    setEditingInstance(null);
-  };
-
-  const handleSaveInstance = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const result = await saveEvolutionInstanceAction(formData);
-
-    if (result.success && result.instance) {
-      toast({ title: "Sucesso", description: "Instância salva com sucesso." });
-      setEditingInstance(null);
-      await fetchEvolutionInstances().then(instances => checkAllInstances(instances));
-    } else {
-      toast({ title: "Erro ao Salvar", description: result.error || "Ocorreu um erro desconhecido.", variant: "destructive" });
-    }
-  };
-
-  const handleDeleteInstance = async (instanceId: string) => {
-    const result = await deleteEvolutionInstanceAction(instanceId);
-    if (result.success) {
-      toast({ title: "Sucesso", description: "Instância excluída com sucesso." });
-      fetchEvolutionInstances();
-    } else {
-      toast({ title: "Erro ao Excluir", description: result.error, variant: "destructive" });
-    }
-  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -524,96 +465,16 @@ const TopBar: React.FC<TopBarProps> = ({
       <Dialog open={isInstanceManagerOpen} onOpenChange={setIsInstanceManagerOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
             <DialogHeader>
-              <DialogTitle>Gerenciar Instâncias da API Evolution</DialogTitle>
+              <DialogTitle>Gerenciar Instâncias</DialogTitle>
               <DialogDescription>
-                Adicione, edite, teste e remova suas instâncias de API. Elas ficarão disponíveis para todos os seus fluxos.
+                Adicione e configure suas instâncias da API Evolution e Chatwoot.
               </DialogDescription>
             </DialogHeader>
-            <div className="flex-1 overflow-hidden">
-                <div className="w-full h-full flex flex-col">
-                    <div className="flex-1 overflow-hidden mt-4">
-                      {editingInstance ? (
-                        <form onSubmit={handleSaveInstance} className="space-y-4 p-1">
-                          <h4 className="font-semibold">{editingInstance.id ? "Editar Instância" : "Nova Instância"}</h4>
-                           <input type="hidden" name="id" value={editingInstance.id || ''} />
-                          <div>
-                            <Label htmlFor="instanceName">Nome</Label>
-                            <Input id="instanceName" name="name" defaultValue={editingInstance.name} required />
-                          </div>
-                           <div>
-                            <Label htmlFor="baseUrl">URL Base</Label>
-                            <Input id="baseUrl" name="baseUrl" type="url" defaultValue={editingInstance.baseUrl} placeholder="http://localhost:8080" required />
-                          </div>
-                           <div>
-                            <Label htmlFor="apiKey">Chave da API (Opcional)</Label>
-                            <Input id="apiKey" name="apiKey" type="password" defaultValue={editingInstance.apiKey} />
-                          </div>
-                          <div className="flex justify-end gap-2">
-                            <Button type="button" variant="ghost" onClick={handleCancelEdit}>Cancelar</Button>
-                            <Button type="submit">Salvar Instância</Button>
-                          </div>
-                        </form>
-                      ) : (
-                        <div className="h-full flex flex-col">
-                          <div className="flex justify-between items-center mb-2">
-                             <p className="text-sm text-muted-foreground">Instâncias de API salvas.</p>
-                            <Button size="sm" onClick={handleAddNewInstance}><PlusCircle className="mr-2 h-4 w-4"/>Adicionar Nova</Button>
-                          </div>
-                          <ScrollArea className="flex-1 border rounded-lg">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Nome</TableHead>
-                                    <TableHead>URL</TableHead>
-                                    <TableHead className="text-right">Ações</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {isLoadingInstances ? (
-                                    <TableRow><TableCell colSpan={4} className="text-center"><Loader2 className="inline-block mr-2 h-4 w-4 animate-spin"/>Carregando...</TableCell></TableRow>
-                                  ) : evolutionInstances.length === 0 ? (
-                                    <TableRow><TableCell colSpan={4} className="text-center h-24">Nenhuma instância configurada.</TableCell></TableRow>
-                                  ) : (
-                                    evolutionInstances.map(instance => (
-                                      <TableRow key={instance.id}>
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <span
-                                                    className={cn("w-3 h-3 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
-                                                    title={instance.status}
-                                                />
-                                                <span className="text-xs capitalize text-muted-foreground">{instance.status}</span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="font-medium">{instance.name}</TableCell>
-                                        <TableCell>{instance.baseUrl}</TableCell>
-                                        <TableCell className="text-right space-x-1">
-                                          <Button variant="outline" size="sm" className="h-7" onClick={() => handleCheckInstanceStatus(instance)} disabled={instance.status === 'connecting'}>Testar</Button>
-                                          <Button variant="outline" size="sm" className="h-7" onClick={() => handleEditInstance(instance)}>Editar</Button>
-                                          <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                              <Button variant="destructive" size="sm" className="h-7">Excluir</Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                              <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Deseja realmente excluir a instância "{instance.name}"? Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
-                                              <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteInstance(instance.id)}>Confirmar</AlertDialogAction></AlertDialogFooter>
-                                            </AlertDialogContent>
-                                          </AlertDialog>
-                                        </TableCell>
-                                      </TableRow>
-                                    ))
-                                  )}
-                                </TableBody>
-                              </Table>
-                          </ScrollArea>
-                        </div>
-                      )}
-                    </div>
-                </div>
+            <div className="flex-1 overflow-hidden mt-4">
+              <p>Gerenciador de instâncias aqui.</p>
             </div>
             <DialogFooter>
-                <DialogClose asChild><Button type="button" variant="secondary" onClick={() => { setIsInstanceManagerOpen(false); setEditingInstance(null); }}>Fechar</Button></DialogClose>
+                <DialogClose asChild><Button type="button" variant="secondary" onClick={() => { setIsInstanceManagerOpen(false); }}>Fechar</Button></DialogClose>
             </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -683,7 +544,7 @@ const TopBar: React.FC<TopBarProps> = ({
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Encerrar Sessão?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Tem certeza que deseja encerrar a sessão para <strong className='break-all font-mono'>{session.session_id.split('@@')[0]}</strong>? Esta ação não pode ser desfeita e o fluxo será interrompido para este usuário.
+                                  Tem certeza que deseja encerrar a sessão para <strong className='break-all font-mono'>{session.session_id.split('@@')[0]}</strong>? Esta ação não pode ser interrompido para este usuário.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>

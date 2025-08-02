@@ -249,8 +249,8 @@ export interface WorkspaceData {
   created_at?: string | Date;
   updated_at?: string | Date;
   evolution_instance_id?: string | null;
-  chatwoot_instance_id?: string | null;
   chatwoot_enabled?: boolean;
+  chatwoot_instance_id?: string | null;
 }
 
 export type AwaitingInputNode = 'input' | 'option' | 'date-input' | 'file-upload' | 'rating-input';
