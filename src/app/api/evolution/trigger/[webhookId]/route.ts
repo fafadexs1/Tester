@@ -1,5 +1,4 @@
 
-
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -12,7 +11,7 @@ import {
   deleteSessionFromDB,
   loadWorkspaceFromDB,
   loadChatwootInstanceFromDB,
-  loadWorkspacesForOwnerFromDB, 
+  loadWorkspacesForOwnerFromDB,
 } from '@/app/actions/databaseActions';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData, FlowContextType, User } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
@@ -153,7 +152,7 @@ async function executeFlow(
                 let promptText: string | undefined = '';
                 if (currentNode.type === 'option') {
                     promptText = substituteVariablesInText(currentNode.questionText, session.flow_variables);
-                    const optionsList = (currentNode.optionsList || '').split('\n').map(opt => substituteVariables(opt.trim(), session.flow_variables)).filter(Boolean);
+                    const optionsList = (currentNode.optionsList || '').split('\n').map(opt => substituteVariablesInText(opt.trim(), session.flow_variables)).filter(Boolean);
                     if (promptText && optionsList.length > 0) {
                         let messageWithOptions = promptText + '\n\n';
                         optionsList.forEach((opt, index) => {
@@ -162,7 +161,7 @@ async function executeFlow(
                         
                         let finalMessage = messageWithOptions.trim();
                          if (session.flow_context !== 'chatwoot') {
-                            finalMessage += "\nResponda com o número da opção desejada ou o texto exato da opção.";
+                             finalMessage += "\nResponda com o número da opção desejada ou o texto exato da opção.";
                          }
                         
                         await sendOmniChannelMessage(finalMessage);
@@ -505,8 +504,8 @@ async function storeRequestDetails(
   return logEntry;
 }
 
-export async function POST(request: NextRequest, context: { params: { webhookId: string } }) {
-  const { webhookId } = context.params;
+export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+  const { webhookId } = await params;
 
   console.log(`[API Evolution Trigger] POST received for webhook ID: "${webhookId}"`);
 
@@ -532,7 +531,7 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
     const resumeSessionId = getProperty(loggedEntry.payload, 'resume_session_id');
 
     if (resumeSessionId) {
-       console.log(`[API Evolution Trigger] Resume call detected for session ID: ${resumeSessionId}`);
+        console.log(`[API Evolution Trigger] Resume call detected for session ID: ${resumeSessionId}`);
         const sessionToResume = await loadSessionFromDB(resumeSessionId);
         if (sessionToResume) {
              const workspaceForResume = await loadWorkspaceFromDB(sessionToResume.workspace_id);
@@ -541,17 +540,17 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
                  sessionToResume.awaiting_input_type = null; 
                  
                  const apiConfigForResume = {
-                    baseUrl: evolutionApiBaseUrl || '',
-                    apiKey: evolutionApiKey || undefined,
-                    instanceName: instanceName || ''
+                     baseUrl: evolutionApiBaseUrl || '',
+                     apiKey: evolutionApiKey || undefined,
+                     instanceName: instanceName || ''
                  };
 
                  await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], apiConfigForResume, workspaceForResume);
                  return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
              }
         } else {
-            console.error(`[API Evolution Trigger] Could not find session ${resumeSessionId} to resume.`);
-            return NextResponse.json({ error: `Session to resume not found: ${resumeSessionId}` }, { status: 404 });
+             console.error(`[API Evolution Trigger] Could not find session ${resumeSessionId} to resume.`);
+             return NextResponse.json({ error: `Session to resume not found: ${resumeSessionId}` }, { status: 404 });
         }
     }
 
@@ -610,8 +609,8 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
                     let nextNode: string | null = null;
                     
                     if (awaitingNode.apiResponseAsInput && !isApiCallResponse) {
-                       console.log(`[API Evolution Trigger] Node ${awaitingNode.id} expects API response, but received user message. Ignoring.`);
-                       return NextResponse.json({ message: "Awaiting API response, user message ignored." }, { status: 200 });
+                        console.log(`[API Evolution Trigger] Node ${awaitingNode.id} expects API response, but received user message. Ignoring.`);
+                        return NextResponse.json({ message: "Awaiting API response, user message ignored." }, { status: 200 });
                     }
 
                     if (['input', 'date-input', 'file-upload', 'rating-input'].includes(session.awaiting_input_type) && session.awaiting_input_details.variableToSave) {
@@ -646,21 +645,44 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
                         }
                         nextNode = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
                          if (nextNode) {
-                            session.awaiting_input_type = null;
-                            session.awaiting_input_details = null;
-                            session.current_node_id = nextNode;
-                            startExecution = true;
-                        } else {
-                            session.awaiting_input_type = null;
-                            session.awaiting_input_details = null;
-                            session.current_node_id = null;
-                            startExecution = false;
-                            await saveSessionToDB(session);
-                            return NextResponse.json({ message: "Flow paused at dead end." }, { status: 200 });
-                        }
+                             session.awaiting_input_type = null;
+                             session.awaiting_input_details = null;
+                             session.current_node_id = nextNode;
+                             startExecution = true;
+                         } else {
+                             session.awaiting_input_type = null;
+                             session.awaiting_input_details = null;
+                             session.current_node_id = null;
+                             startExecution = false;
+                             await saveSessionToDB(session);
+                             return NextResponse.json({ message: "Flow paused at dead end." }, { status: 200 });
+                         }
                       } else {
                          if (!isApiCallResponse) {
-                            await sendOmniChannelMessage("Opção inválida. Por favor, tente novamente.",);
+                             // Função auxiliar para envio de mensagem omnichannel
+                             const sendOmniChannelMessage = async (content: string) => {
+                                 if (session!.flow_context === 'chatwoot' && workspace!.chatwoot_instance_id) {
+                                     const chatwootInstance = await loadChatwootInstanceFromDB(workspace!.chatwoot_instance_id);
+                                     if (chatwootInstance && session!.flow_variables.chatwoot_account_id && session!.flow_variables.chatwoot_conversation_id) {
+                                         await sendChatwootMessageAction({
+                                             baseUrl: chatwootInstance.baseUrl,
+                                             apiAccessToken: chatwootInstance.apiAccessToken,
+                                             accountId: session!.flow_variables.chatwoot_account_id,
+                                             conversationId: session!.flow_variables.chatwoot_conversation_id,
+                                             content: content
+                                         });
+                                     }
+                                 } else {
+                                     const recipientPhoneNumber = session!.flow_variables.whatsapp_sender_jid || session!.session_id.split('@@')[0].replace('evolution_jid_','');
+                                     await sendWhatsAppMessageAction({
+                                         ...apiConfig,
+                                         recipientPhoneNumber: recipientPhoneNumber,
+                                         messageType: 'text',
+                                         textContent: content,
+                                     });
+                                 }
+                             };
+                             await sendOmniChannelMessage("Opção inválida. Por favor, tente novamente.");
                          }
                          nextNode = null;
                          startExecution = false;
@@ -754,12 +776,12 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
 
       if (flowContext === 'chatwoot') {
         const chatwootMappings = {
-            chatwoot_conversation_id: 'conversation.id',
-            chatwoot_contact_id: 'sender.id',
-            chatwoot_account_id: 'account.id',
-            chatwoot_inbox_id: 'inbox.id',
-            contact_name: 'sender.name',
-            contact_phone: 'sender.phone_number',
+             chatwoot_conversation_id: 'conversation.id',
+             chatwoot_contact_id: 'sender.id',
+             chatwoot_account_id: 'account.id',
+             chatwoot_inbox_id: 'inbox.id',
+             contact_name: 'sender.name',
+             contact_phone: 'sender.phone_number',
         };
 
         for (const [varName, path] of Object.entries(chatwootMappings)) {
@@ -810,8 +832,8 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
   }
 }
 
-export async function GET(request: NextRequest, context: { params: { webhookId: string } }) {
-  const { webhookId } = context.params;
+export async function GET(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+  const { webhookId } = await params;
   try {
     const workspace = await loadWorkspaceFromDB(webhookId);
     if (workspace) {
@@ -827,12 +849,12 @@ export async function GET(request: NextRequest, context: { params: { webhookId: 
   }
 }
 
-export async function PUT(request: NextRequest, context: { params: { webhookId: string } }) {
-  return POST(request, context);
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+  return POST(request, { params });
 }
-export async function PATCH(request: NextRequest, context: { params: { webhookId: string } }) {
-  return POST(request, context);
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+  return POST(request, { params });
 }
-export async function DELETE(request: NextRequest, context: { params: { webhookId: string } }) {
-  return POST(request, context);
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+  return POST(request, { params });
 }
