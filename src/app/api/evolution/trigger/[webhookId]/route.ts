@@ -83,6 +83,39 @@ async function executeFlow(
     let shouldContinue = true;
 
     console.log(`[Flow Engine] Starting execution loop. Start Node: ${currentNodeId}`);
+    
+    // --- OMNICHANNEL MESSAGE SENDER ---
+    const sendOmniChannelMessage = async (content: string) => {
+        if (!content) {
+            console.warn(`[Flow Engine - ${session.session_id}] sendOmniChannelMessage called with empty content.`);
+            return;
+        }
+
+        if (session.flow_context === 'chatwoot' && workspace.chatwoot_enabled && workspace.chatwoot_instance_id) {
+            const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
+            if (chatwootInstance && session.flow_variables.chatwoot_account_id && session.flow_variables.chatwoot_conversation_id) {
+                console.log(`[Flow Engine - ${session.session_id}] Sending message via Chatwoot...`);
+                await sendChatwootMessageAction({
+                    baseUrl: chatwootInstance.baseUrl,
+                    apiAccessToken: chatwootInstance.apiAccessToken,
+                    accountId: session.flow_variables.chatwoot_account_id,
+                    conversationId: session.flow_variables.chatwoot_conversation_id,
+                    content: content
+                });
+            } else {
+                console.error(`[Flow Engine - ${session.session_id}] Chatwoot instance or session variables missing. Cannot send message via Chatwoot.`);
+            }
+        } else {
+            console.log(`[Flow Engine - ${session.session_id}] Sending message via default channel (Evolution API)...`);
+            await sendWhatsAppMessageAction({
+                ...apiConfig,
+                recipientPhoneNumber: session.session_id.split("@@")[0],
+                messageType: 'text',
+                textContent: content,
+            });
+        }
+    };
+
 
     while(currentNodeId && shouldContinue) {
         const currentNode = findNodeById(currentNodeId, nodes);
@@ -105,31 +138,7 @@ async function executeFlow(
 
             case 'message': {
                 const messageText = substituteVariablesInText(currentNode.text, session.flow_variables);
-                if (!messageText) {
-                    console.warn(`[Flow Engine - ${session.session_id}] Message node ${currentNode.id} has empty content after variable substitution.`);
-                } else {
-                    if (session.flow_context === 'chatwoot' && workspace.chatwoot_enabled && workspace.chatwoot_instance_id) {
-                        const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
-                        if (chatwootInstance) {
-                            await sendChatwootMessageAction({
-                                baseUrl: chatwootInstance.baseUrl,
-                                apiAccessToken: chatwootInstance.apiAccessToken,
-                                accountId: session.flow_variables.chatwoot_account_id,
-                                conversationId: session.flow_variables.chatwoot_conversation_id,
-                                content: messageText
-                            });
-                        } else {
-                             console.error(`[Flow Engine - ${session.session_id}] Chatwoot instance with ID ${workspace.chatwoot_instance_id} not found.`);
-                        }
-                    } else {
-                         await sendWhatsAppMessageAction({
-                            ...apiConfig,
-                            recipientPhoneNumber: session.session_id.split("@@")[0],
-                            messageType: 'text',
-                            textContent: messageText,
-                        });
-                    }
-                }
+                await sendOmniChannelMessage(messageText);
                 nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
                 break;
             }
@@ -146,25 +155,7 @@ async function executeFlow(
 
                 const promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
                 if (promptText) {
-                    if (session.flow_context === 'chatwoot' && workspace.chatwoot_enabled && workspace.chatwoot_instance_id) {
-                         const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
-                         if (chatwootInstance) {
-                             await sendChatwootMessageAction({
-                                baseUrl: chatwootInstance.baseUrl,
-                                apiAccessToken: chatwootInstance.apiAccessToken,
-                                accountId: session.flow_variables.chatwoot_account_id,
-                                conversationId: session.flow_variables.chatwoot_conversation_id,
-                                content: promptText
-                             });
-                         }
-                    } else {
-                         await sendWhatsAppMessageAction({
-                            ...apiConfig,
-                            recipientPhoneNumber: session.session_id.split("@@")[0],
-                            messageType: 'text',
-                            textContent: promptText,
-                        });
-                    }
+                  await sendOmniChannelMessage(promptText);
                 }
                 session.awaiting_input_type = currentNode.type;
                 session.awaiting_input_details = { 
@@ -194,25 +185,7 @@ async function executeFlow(
                         finalMessage += "\nResponda com o número da opção desejada ou o texto exato da opção.";
                      }
                     
-                    if (session.flow_context === 'chatwoot' && workspace.chatwoot_enabled && workspace.chatwoot_instance_id) {
-                         const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
-                         if (chatwootInstance) {
-                            await sendChatwootMessageAction({
-                                baseUrl: chatwootInstance.baseUrl,
-                                apiAccessToken: chatwootInstance.apiAccessToken,
-                                accountId: session.flow_variables.chatwoot_account_id,
-                                conversationId: session.flow_variables.chatwoot_conversation_id,
-                                content: finalMessage
-                            });
-                         }
-                    } else {
-                         await sendWhatsAppMessageAction({
-                            ...apiConfig,
-                            recipientPhoneNumber: session.session_id.split("@@")[0],
-                            messageType: 'text',
-                            textContent: finalMessage,
-                        });
-                    }
+                    await sendOmniChannelMessage(finalMessage);
 
                     session.awaiting_input_type = 'option';
                     session.awaiting_input_details = {
