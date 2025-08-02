@@ -253,6 +253,29 @@ const TopBar: React.FC<TopBarProps> = ({
     }
   };
 
+  const handleDeleteAllSessions = async () => {
+    try {
+        const response = await fetch(`/api/sessions/active`, {
+            method: 'DELETE',
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.error || 'Falha ao encerrar todas as sessões');
+        }
+        toast({
+            title: "Sessões Encerradas",
+            description: result.message || "Todas as sessões ativas foram encerradas.",
+        });
+        fetchActiveSessions();
+    } catch (error: any) {
+        toast({
+            title: "Erro ao Encerrar Sessões",
+            description: error.message,
+            variant: "destructive",
+        });
+    }
+  };
+
 
   const getSessionStatus = (session: FlowSession): { text: string; color: string } => {
     if (session.awaiting_input_type) {
@@ -663,7 +686,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                 </ScrollArea>
                             </CardContent>
                              <CardFooter>
-                                <p className="text-xs text-muted-foreground">O token de acesso pode ser encontrado no seu Perfil &gt; Configurações dentro do Chatwoot.</p>
+                                <p className="text-xs text-muted-foreground">O token de acesso pode ser encontrado no seu Perfil > Configurações dentro do Chatwoot.</p>
                             </CardFooter>
                         </Card>
                     </TabsContent>
@@ -679,16 +702,43 @@ const TopBar: React.FC<TopBarProps> = ({
       <Dialog open={isSessionsDialogOpen} onOpenChange={setIsSessionsDialogOpen}>
         <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl max-h-[85vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Sessões Ativas</DialogTitle>
-            <DialogDescription>
-              Lista de conversas e fluxos atualmente ativos no banco de dados.
-            </DialogDescription>
+             <div className="flex items-center justify-between">
+                <div>
+                  <DialogTitle>Sessões Ativas</DialogTitle>
+                  <DialogDescription>
+                    Lista de conversas e fluxos atualmente ativos no banco de dados.
+                  </DialogDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button onClick={fetchActiveSessions} variant="outline" size="sm" className="h-9" disabled={isLoadingSessions}>
+                      <RefreshCw className={cn("mr-2 h-4 w-4", isLoadingSessions && "animate-spin")} />
+                      {isLoadingSessions ? "Atualizando..." : "Atualizar"}
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm" className="h-9" disabled={isLoadingSessions || activeSessions.length === 0}>
+                           <Trash2 className="mr-2 h-4 w-4" /> Encerrar Todas
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Encerrar Todas as Sessões?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Esta ação não pode ser desfeita. Isso encerrará permanentemente todas as sessões de fluxo ativas para sua conta.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDeleteAllSessions} className="bg-destructive hover:bg-destructive/90">
+                              Sim, encerrar todas
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                </div>
+             </div>
           </DialogHeader>
-          <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
-             <Button onClick={fetchActiveSessions} variant="outline" size="sm" className="self-start mb-2 h-9" disabled={isLoadingSessions}>
-              <RefreshCw className={cn("mr-2 h-4 w-4", isLoadingSessions && "animate-spin")} />
-              {isLoadingSessions ? "Atualizando..." : "Atualizar Sessões"}
-            </Button>
+          <div className="flex-1 overflow-hidden flex flex-col py-4">
             {isLoadingSessions && <div className="flex justify-center items-center h-full"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>}
             {sessionsError && (<div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm"><div className="flex items-center gap-2 font-medium"><AlertCircle className="h-5 w-5" /> Erro ao carregar sessões:</div><p className="mt-1 text-xs">{sessionsError}</p></div>)}
             {!isLoadingSessions && !sessionsError && activeSessions.length === 0 && (
@@ -785,7 +835,3 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
-
-    
-
-    

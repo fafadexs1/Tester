@@ -1,7 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { loadAllActiveSessionsFromDB, deleteSessionFromDB } from '@/app/actions/databaseActions';
+import { loadAllActiveSessionsFromDB, deleteSessionFromDB, deleteAllSessionsForOwnerFromDB } from '@/app/actions/databaseActions';
 import type { FlowSession, User } from '@/lib/types';
 import { getCurrentUser } from '@/lib/auth';
 
@@ -25,17 +25,30 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   console.log('[API /sessions/active] DELETE request received');
   const user = await getCurrentUser();
-   if (!user) {
+   if (!user || !user.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   
   const { searchParams } = new URL(request.url);
   const sessionId = searchParams.get('sessionId');
 
+  // Handle deleting all sessions for the user
   if (!sessionId) {
-    return NextResponse.json({ error: "Session ID is required" }, { status: 400 });
+      console.log(`[API /sessions/active] User ${user.username} attempting to delete ALL sessions.`);
+      try {
+          const result = await deleteAllSessionsForOwnerFromDB(user.id);
+          if (result.success) {
+              return NextResponse.json({ message: `${result.count} sessions deleted successfully` }, { status: 200 });
+          } else {
+              throw new Error(result.error || 'Failed to delete all sessions');
+          }
+      } catch (error: any) {
+          console.error(`[API /sessions/active] Error deleting all sessions for user ${user.id}:`, error);
+          return NextResponse.json({ error: 'Failed to delete all sessions', details: error.message }, { status: 500 });
+      }
   }
-  
+
+  // Handle deleting a single session
   console.log(`[API /sessions/active] User ${user.username} attempting to delete session with ID: ${sessionId}`);
   try {
     // TODO: For enhanced security, verify the user owns the workspace associated with the session before deleting.

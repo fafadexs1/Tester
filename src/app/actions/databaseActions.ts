@@ -563,6 +563,26 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
   }
 }
 
+export async function deleteAllSessionsForOwnerFromDB(ownerId: string): Promise<{ success: boolean; error?: string; count: number }> {
+  try {
+    if (!ownerId) {
+        return { success: false, error: "ID do proprietário não fornecido.", count: 0 };
+    }
+
+    const query = `
+        DELETE FROM flow_sessions
+        WHERE workspace_id IN (SELECT id FROM workspaces WHERE owner_id = $1);
+    `;
+    const result = await runQuery(query, [ownerId]);
+
+    console.log(`[DB Actions] Deleted ${result.rowCount} sessions for owner ID ${ownerId}.`);
+    return { success: true, count: result.rowCount };
+  } catch (error: any) {
+    console.error(`[DB Actions] deleteAllSessionsForOwnerFromDB Error for owner ID ${ownerId}:`, error);
+    return { success: false, error: error.message, count: 0 };
+  }
+}
+
 // --- Chatwoot Instance Actions ---
 export async function getChatwootInstancesForUser(userId: string): Promise<{ data?: ChatwootInstance[]; error?: string }> {
     try {
@@ -634,5 +654,3 @@ export async function loadWorkspaceByNameFromDB(name: string, ownerId: string): 
     return null;
   }
 }
-
-    
