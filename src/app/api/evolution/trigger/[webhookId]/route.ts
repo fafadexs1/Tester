@@ -181,7 +181,7 @@ async function executeFlow(
                         currentNode.type === 'input' ? 'promptText' : 
                         currentNode.type === 'date-input' ? 'dateInputLabel' :
                         currentNode.type === 'file-upload' ? 'uploadPromptText' :
-                        'rating-input' ? 'ratingQuestionText' : '';
+                        'ratingQuestionText';
 
                     promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
                     if (promptText) {
@@ -452,6 +452,7 @@ async function storeRequestDetails(
       const chatwootContent = getProperty(actualPayloadToExtractFrom, 'content');
       const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id');
       const chatwootMessageType = getProperty(actualPayloadToExtractFrom, 'message_type');
+      const chatwootSenderType = getProperty(actualPayloadToExtractFrom, 'sender_type');
       
       const evolutionSenderJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid');
       
@@ -503,8 +504,8 @@ async function storeRequestDetails(
   return logEntry;
 }
 
-export async function POST(request: NextRequest, { params }: { params: { webhookId: string } }) {
-  const { webhookId } = params;
+export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+  const { webhookId } = await params;
 
   console.log(`[API Evolution Trigger] POST received for webhook ID: "${webhookId}"`);
 
@@ -522,6 +523,19 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
     const sessionKeyIdentifier = loggedEntry.session_key_identifier; 
     const receivedMessageText = loggedEntry.extractedMessage;
     const flowContext = loggedEntry.flow_context;
+    
+    // Check for human agent intervention in Chatwoot
+    if (flowContext === 'chatwoot') {
+        let payloadToCheck = parsedBody;
+        if (Array.isArray(payloadToCheck) && payloadToCheck.length > 0) {
+            payloadToCheck = payloadToCheck[0];
+        }
+        if (getProperty(payloadToCheck, 'sender_type') === 'User') {
+            console.log(`[API Evolution Trigger] Human agent message detected in conversation ${sessionKeyIdentifier}. Pausing automation. No further action will be taken.`);
+            return NextResponse.json({ message: "Automation paused due to human intervention." }, { status: 200 });
+        }
+    }
+    
     const evolutionApiBaseUrl = getProperty(loggedEntry.payload, 'server_url') as string;
     const evolutionApiKey = getProperty(loggedEntry.payload, 'apikey') as string;
     const instanceName = getProperty(loggedEntry.payload, 'instance') as string;
@@ -830,8 +844,8 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: { webhookId: string } }) {
-  const { webhookId } = params;
+export async function GET(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+  const { webhookId } = await params;
   try {
     const workspace = await loadWorkspaceFromDB(webhookId);
     if (workspace) {
@@ -847,14 +861,12 @@ export async function GET(request: NextRequest, { params }: { params: { webhookI
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { webhookId: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
-export async function PATCH(request: NextRequest, { params }: { params: { webhookId: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
-export async function DELETE(request: NextRequest, { params }: { params: { webhookId: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
-
-    
