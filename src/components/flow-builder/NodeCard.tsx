@@ -78,14 +78,14 @@ const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onS
                     <div key={key}>
                         <button
                             onClick={(e) => {
-                                e.preventDefault(); 
+                                e.preventDefault();
                                 e.stopPropagation();
                                 onSelectPath([...currentPath, key].join('.'));
                             }}
                             className="text-red-500 hover:underline cursor-pointer focus:outline-none text-left"
                             title={`Clique para selecionar o caminho: ${[...currentPath, key].join('.')}`}
                         >
-                          "{key}":
+                           "{key}":
                         </button>
                         <span className="ml-1">
                             {typeof value === 'object' && value !== null ? <JsonTreeView data={value} onSelectPath={onSelectPath} currentPath={[...currentPath, key]} /> : <span className="text-green-600">{JSON.stringify(value)}</span>}
@@ -176,7 +176,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const [testResponseData, setTestResponseData] = useState<any | null>(null);
   const [testResponseError, setTestResponseError] = useState<string | null>(null);
   const [isTestingApi, setIsTestingApi] = useState(false);
-  
+
   const [isWebhookHistoryDialogOpen, setIsWebhookHistoryDialogOpen] = useState(false);
   const [webhookLogs, setWebhookLogs] = useState<WebhookLogEntry[]>([]);
   const [isLoadingWebhookLogs, setIsLoadingWebhookLogs] = useState(false);
@@ -200,17 +200,17 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         if (!hasManual || !hasWebhook) {
             const defaultTriggers: StartNodeTrigger[] = [
                 { id: uuidv4(), name: 'Manual', type: 'manual', enabled: true, keyword: '' },
-                { 
-                    id: uuidv4(), 
-                    name: 'Webhook', 
-                    type: 'webhook', 
+                {
+                    id: uuidv4(),
+                    name: 'Webhook',
+                    type: 'webhook',
                     enabled: false,
-                    keyword: '', 
-                    variableMappings: [], 
-                    sessionTimeoutSeconds: 0 
+                    keyword: '',
+                    variableMappings: [],
+                    sessionTimeoutSeconds: 0
                 },
             ];
-            
+
             let finalTriggers = [...(node.triggers || [])];
             if (!hasManual) {
                 finalTriggers.push(defaultTriggers.find(t => t.type === 'manual')!);
@@ -218,7 +218,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             if (!hasWebhook) {
                 finalTriggers.push(defaultTriggers.find(t => t.type === 'webhook')!);
             }
-            
+
             onUpdate(node.id, { triggers: finalTriggers });
         }
     }
@@ -251,7 +251,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               setSupabaseTables([]);
             }
           })
-           .catch(err => {
+            .catch(err => {
             setSupabaseSchemaError('Falha ao comunicar com o servidor para buscar tabelas.');
             setSupabaseTables([]);
           })
@@ -265,7 +265,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.type, node.id]); 
+  }, [node.type, node.id]);
 
   useEffect(() => {
     if (node.type.startsWith('supabase-') && node.supabaseTableName) {
@@ -292,7 +292,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               setSupabaseColumns([]);
             }
           })
-           .catch(err => {
+            .catch(err => {
             setSupabaseSchemaError(`Falha ao comunicar com o servidor para buscar colunas da tabela ${node.supabaseTableName}.`);
             setSupabaseColumns([]);
           })
@@ -385,14 +385,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     e.stopPropagation();
     onDeleteNode(node.id);
   }, [node.id, onDeleteNode]);
-  
+
   const handleStartTriggerChange = (triggerId: string, field: keyof StartNodeTrigger, value: any) => {
-    const updatedTriggers = (node.triggers || []).map(t => 
+    const updatedTriggers = (node.triggers || []).map(t =>
       t.id === triggerId ? { ...t, [field]: value } : t
     );
     onUpdate(node.id, { triggers: updatedTriggers });
   };
-  
+
   const handleAddVariableMapping = (triggerId: string) => {
     const updatedTriggers = (node.triggers || []).map(trigger => {
       if (trigger.id === triggerId) {
@@ -404,7 +404,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     });
     onUpdate(node.id, { triggers: updatedTriggers });
   };
-  
+
   const handleRemoveVariableMapping = (triggerId: string, mappingId: string) => {
     const updatedTriggers = (node.triggers || []).map(trigger => {
       if (trigger.id === triggerId) {
@@ -419,7 +419,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const handleVariableMappingChange = (triggerId: string, mappingId: string, field: 'jsonPath' | 'flowVariable', value: string) => {
     const updatedTriggers = (node.triggers || []).map(trigger => {
       if (trigger.id === triggerId) {
-        const updatedMappings = (trigger.variableMappings || []).map(m => 
+        const updatedMappings = (trigger.variableMappings || []).map(m =>
           m.id === mappingId ? { ...m, [field]: value } : m
         );
         return { ...trigger, variableMappings: updatedMappings };
@@ -539,7 +539,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     fetchWebhookLogs();
     setIsWebhookHistoryDialogOpen(true);
   };
-  
+
   const handleAddSwitchCase = () => {
       const newCase: SwitchCase = { id: uuidv4(), value: '' };
       const updatedCases = [...(node.switchCases || []), newCase];
@@ -698,7 +698,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   </PopoverTrigger>
                   <WebhookPathPicker onPathSelect={(path) => onUpdate(node.id, { apiResponsePathForValue: path })} />
                 </Popover>
-            </div>
+              </div>
               <p className="text-xs text-muted-foreground mt-1">O fluxo usará o valor deste caminho como se fosse a resposta do usuário.</p>
           </div>
         )}
@@ -739,7 +739,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       'supabase-update-row': <Edit3 {...iconProps} className="text-yellow-500" />,
       'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />,
       'end-flow': <StopCircle {...iconProps} className="text-destructive" />,
-      'external-response': <Hourglass {...iconProps} className="text-indigo-400" />,
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
     return icons[node.type] || icons.default;
@@ -901,7 +900,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     switch (node.type) {
       case 'start': {
         const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/trigger/${activeWorkspace?.id || '[ID_DO_FLUXO]'}`;
-        
+
         return (
           <div className="space-y-3" data-no-drag="true">
             <p className="text-xs text-muted-foreground">Configure os gatilhos que iniciam este fluxo. A ordem aqui define a prioridade de verificação.</p>
@@ -931,8 +930,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                       className="h-8 text-xs mt-1"
                     />
                      <p className="text-xs text-muted-foreground mt-1">Se preenchido, este caminho só será ativado se a mensagem do usuário corresponder exatamente.</p>
-                  </div>
-                  
+                   </div>
+
                   {trigger.type === 'webhook' && (
                     <div className="space-y-3 pt-2 border-t">
                       <div>
@@ -952,7 +951,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                         <Label htmlFor="webhook-url" className="text-xs font-medium">URL do Webhook (POST)</Label>
                         <div className="flex items-center space-x-1.5 mt-1">
                           <Input id="webhook-url" type="text" readOnly value={webhookUrl} className="bg-input/50 h-7 text-xs"/>
-                          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => { 
+                          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => {
                               if (navigator.clipboard && navigator.clipboard.writeText) {
                                 navigator.clipboard.writeText(webhookUrl).then(() => toast({ title: "URL Copiada!" })).catch(() => toast({ title: "Erro ao copiar", variant:"destructive"}));
                               } else {
@@ -966,17 +965,17 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                             <History className="w-3.5 h-3.5 mr-1" /> Ver Histórico de Webhooks
                           </Button>
                       </div>
-                      
+
                       <div className="pt-2">
                         <Label className="text-xs font-medium">Mapeamento de Variáveis do Webhook</Label>
                         <div className="space-y-2 mt-1">
                           {(trigger.variableMappings || []).map(mapping => (
                             <div key={mapping.id} className="flex items-center space-x-1.5">
                                <div className="relative flex-1">
-                                  <Input 
-                                      placeholder="Caminho (ex: data.message.text)" 
-                                      value={mapping.jsonPath} 
-                                      onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', e.target.value)} 
+                                  <Input
+                                      placeholder="Caminho (ex: data.message.text)"
+                                      value={mapping.jsonPath}
+                                      onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', e.target.value)}
                                       className="h-7 text-xs pl-2 pr-7"/>
                                   <Popover>
                                     <PopoverTrigger asChild>
@@ -984,7 +983,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                     </PopoverTrigger>
                                     <WebhookPathPicker onPathSelect={(path) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', path)} />
                                   </Popover>
-                              </div>
+                               </div>
                               <Input placeholder="Variável (ex: mensagem_usuario)" value={mapping.flowVariable} onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs flex-1"/>
                               <Button variant="ghost" size="icon" onClick={() => handleRemoveVariableMapping(trigger.id, mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6"><Trash2 className="w-3.5 h-3.5" /></Button>
                             </div>
@@ -1025,7 +1024,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 {renderVariableInserter(isOptionNode ? 'questionText' : 'promptText', true)}
               </div>
             </div>
-            
+
             {!isOptionNode && (
               <div>
                 <Label htmlFor={`${node.id}-inputtype`}>Tipo de Entrada</Label>
@@ -1038,14 +1037,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 </Select>
               </div>
             )}
-            
+
             {isOptionNode && (
                <div>
                 <Label htmlFor={`${node.id}-optionslist`}>Opções (uma por linha)</Label>
                 <Textarea id={`${node.id}-optionslist`} placeholder="Opção 1\nOpção 2" value={node.optionsList || ''} onChange={(e) => onUpdate(node.id, { optionsList: e.target.value })} rows={3}/>
                </div>
             )}
-            
+
             <div>
                 <Label htmlFor={`${node.id}-varsave`}>Salvar Resposta na Variável</Label>
                 <Input id={`${node.id}-varsave`} placeholder="nome_da_variavel" value={node.variableToSaveResponse || node.variableToSaveChoice || ''} onChange={(e) => onUpdate(node.id, isOptionNode ? { variableToSaveChoice: e.target.value } : { variableToSaveResponse: e.target.value })} />
@@ -1087,7 +1086,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
                   <div className="relative">
                       <Input id={`${node.id}-phone`} placeholder="55119... ou {{whatsapp_sender_jid}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8"/>
-                       {renderVariableInserter('phoneNumber')}
+                        {renderVariableInserter('phoneNumber')}
                   </div>
               </div>
             )}
@@ -1287,7 +1286,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                      <div className="relative">
                         <Input id={`${node.id}-apiauthbearertoken`} placeholder="Seu token aqui..." value={node.apiAuthBearerToken || ''} onChange={(e) => onUpdate(node.id, { apiAuthBearerToken: e.target.value })} className="pr-8"/>
                         {renderVariableInserter('apiAuthBearerToken')}
-                    </div>
+                     </div>
                   </div>
                 )}
                 {node.apiAuthType === 'basic' && (
@@ -1297,14 +1296,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                        <div className="relative">
                             <Input id={`${node.id}-apiauthbasicuser`} placeholder="Nome de usuário" value={node.apiAuthBasicUser || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicUser: e.target.value })} className="pr-8"/>
                             {renderVariableInserter('apiAuthBasicUser')}
-                        </div>
+                       </div>
                     </div>
                     <div>
                       <Label htmlFor={`${node.id}-apiauthbasicpassword`}>Senha</Label>
                        <div className="relative">
                             <Input id={`${node.id}-apiauthbasicpassword`} type="password" placeholder="Senha" value={node.apiAuthBasicPassword || ''} onChange={e => onUpdate(node.id, { apiAuthBasicPassword: e.target.value })} className="pr-8"/>
                             {renderVariableInserter('apiAuthBasicPassword')}
-                        </div>
+                       </div>
                     </div>
                   </>
                 )}
@@ -1356,7 +1355,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 )}
               </TabsContent>
             </Tabs>
-            
+
             <div className="space-y-3 pt-4 border-t">
               <div>
                 <Label htmlFor={`${node.id}-apiResponsePath`}>Caminho do Dado de Resposta (opcional)</Label>
@@ -1569,7 +1568,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <Label htmlFor={`${node.id}-aioutputvar`}>Salvar Resposta da IA na Variável</Label>
                 <Input id={`${node.id}-aioutputvar`} placeholder="resposta_ia" value={node.aiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { aiOutputVariable: e.target.value })} />
             </div>
-             <p className="text-xs text-muted-foreground">Esta integração usa Genkit. Configure seu modelo em `src/ai/genkit.ts`.</p>
+               <p className="text-xs text-muted-foreground">Esta integração usa Genkit. Configure seu modelo em `src/ai/genkit.ts`.</p>
           </div>
         );
       case 'send-email':
@@ -1640,7 +1639,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                  <div className="relative">
                     <Input id={`${node.id}-agentname`} placeholder="Agente de Suporte N1" value={node.agentName || ''} onChange={(e) => onUpdate(node.id, { agentName: e.target.value })} className="pr-8"/>
                     {renderVariableInserter('agentName')}
-                </div>
+                 </div>
             </div>
             <div>
                 <Label htmlFor={`${node.id}-agentsystemprompt`}>Prompt do Sistema / Instruções</Label>
@@ -1715,8 +1714,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     onValueChange={(value) => {
                       onUpdate(node.id, {
                         supabaseTableName: value,
-                        supabaseIdentifierColumn: '', 
-                        supabaseColumnsToSelect: '*'  
+                        supabaseIdentifierColumn: '',
+                        supabaseColumnsToSelect: '*'
                       });
                     }}
                 >
@@ -1796,58 +1795,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </div>
         );
       }
-      case 'external-response':
-        return (
-          <div className="space-y-3" data-no-drag="true">
-            <RadioGroup
-              value={node.responseMode || 'webhook'}
-              onValueChange={(value) => onUpdate(node.id, { responseMode: value as 'immediate' | 'webhook' })}
-              className="flex space-x-4"
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="immediate" id={`${node.id}-mode-immediate`} />
-                <Label htmlFor={`${node.id}-mode-immediate`}>Imediato</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="webhook" id={`${node.id}-mode-webhook`} />
-                <Label htmlFor={`${node.id}-mode-webhook`}>Aguardar Webhook</Label>
-              </div>
-            </RadioGroup>
-
-            {node.responseMode === 'immediate' && (
-              <div>
-                <Label htmlFor={`${node.id}-responsevalue`}>Resposta a ser Injetada</Label>
-                <div className="relative">
-                  <Textarea
-                    id={`${node.id}-responsevalue`}
-                    placeholder='{"status": "aprovado", "valor": "{{some_var}}"}'
-                    value={node.responseValue || ''}
-                    onChange={(e) => onUpdate(node.id, { responseValue: e.target.value })}
-                    rows={3}
-                    className="pr-8"
-                  />
-                  {renderVariableInserter('responseValue', true)}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">Este valor será tratado como a resposta e o fluxo continuará imediatamente.</p>
-              </div>
-            )}
-
-            {node.responseMode === 'webhook' && (
-              <div className="space-y-3 pt-2">
-                <p className="text-xs text-muted-foreground">O fluxo irá pausar aqui e aguardar uma chamada `POST` para o webhook do fluxo com o corpo (body) contendo `{"resume_session_id": "{{session_id}}", ...}`.</p>
-                <div>
-                  <Label htmlFor={`${node.id}-responsevariable`}>Salvar Corpo (Body) do Webhook na Variável</Label>
-                  <Input
-                    id={`${node.id}-responsevariable`}
-                    placeholder="dados_webhook_retorno"
-                    value={node.responseVariable || ''}
-                    onChange={(e) => onUpdate(node.id, { responseVariable: e.target.value })}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        );
+      
       case 'end-flow':
         return <p className="text-sm text-muted-foreground italic">Este nó encerra o fluxo.</p>;
       default:
@@ -1898,48 +1846,48 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </div>
           <div className="flex items-center gap-1">
              {node.type === 'start' && (
-              <Popover open={isEvolutionPopoverOpen} onOpenChange={handleEvolutionPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="icon" className="p-0.5 text-muted-foreground hover:text-foreground w-6 h-6" aria-label="Instâncias da API Evolution">
-                    <BotMessageSquare className="w-4 h-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80" align="end" data-no-drag="true">
-                  <div className="grid gap-4">
-                    <div className="space-y-2">
-                      <h4 className="font-medium leading-none">Instâncias da API Evolution</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Status das suas instâncias configuradas.
-                      </p>
-                    </div>
-                     <ScrollArea className="h-auto max-h-[200px]">
-                      <div className="grid gap-2">
-                         {isLoadingEvolutionInstances ? (
-                            <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin"/> Carregando...
-                            </div>
-                         ) : evolutionInstances.length > 0 ? evolutionInstances.map((instance) => (
-                           <div key={instance.id} className="grid grid-cols-[auto,1fr,auto] items-center gap-x-2 text-sm p-2 rounded-md border bg-muted/50">
-                              <div
-                                  className={cn("w-2.5 h-2.5 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
-                                  title={instance.status}
-                              />
-                              <div className="font-medium truncate" title={instance.name}>{instance.name}</div>
-                              <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
-                          </div>
-                        )) : (
-                          <p className="text-xs text-muted-foreground text-center py-2">Nenhuma instância configurada.</p>
-                        )}
-                      </div>
-                    </ScrollArea>
-                    <Button variant="outline" size="sm" onClick={() => { /* Lógica para abrir config global */ }}>
-                        <Settings2 className="w-4 h-4 mr-2" />
-                        Gerenciar Instâncias
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            )}
+               <Popover open={isEvolutionPopoverOpen} onOpenChange={handleEvolutionPopoverOpen}>
+                 <PopoverTrigger asChild>
+                   <Button variant="ghost" size="icon" className="p-0.5 text-muted-foreground hover:text-foreground w-6 h-6" aria-label="Instâncias da API Evolution">
+                     <BotMessageSquare className="w-4 h-4" />
+                   </Button>
+                 </PopoverTrigger>
+                 <PopoverContent className="w-80" align="end" data-no-drag="true">
+                   <div className="grid gap-4">
+                     <div className="space-y-2">
+                       <h4 className="font-medium leading-none">Instâncias da API Evolution</h4>
+                       <p className="text-sm text-muted-foreground">
+                         Status das suas instâncias configuradas.
+                       </p>
+                     </div>
+                      <ScrollArea className="h-auto max-h-[200px]">
+                        <div className="grid gap-2">
+                           {isLoadingEvolutionInstances ? (
+                               <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
+                                   <Loader2 className="mr-2 h-4 w-4 animate-spin"/> Carregando...
+                               </div>
+                           ) : evolutionInstances.length > 0 ? evolutionInstances.map((instance) => (
+                             <div key={instance.id} className="grid grid-cols-[auto,1fr,auto] items-center gap-x-2 text-sm p-2 rounded-md border bg-muted/50">
+                               <div
+                                   className={cn("w-2.5 h-2.5 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
+                                   title={instance.status}
+                               />
+                               <div className="font-medium truncate" title={instance.name}>{instance.name}</div>
+                               <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
+                             </div>
+                           )) : (
+                             <p className="text-xs text-muted-foreground text-center py-2">Nenhuma instância configurada.</p>
+                           )}
+                        </div>
+                      </ScrollArea>
+                     <Button variant="outline" size="sm" onClick={() => { /* Lógica para abrir config global */ }}>
+                         <Settings2 className="w-4 h-4 mr-2" />
+                         Gerenciar Instâncias
+                     </Button>
+                   </div>
+                 </PopoverContent>
+               </Popover>
+             )}
             <Button
               variant="ghost"
               size="icon"
@@ -1989,16 +1937,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
                 {isLoadingWebhookLogs && <div className="flex justify-center items-center h-full"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>}
                 {webhookLogsError && (
-                  <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm">
-                    <div className="flex items-center gap-2 font-medium"><AlertCircle className="h-5 w-5" /> Erro ao carregar logs:</div>
-                    <p className="mt-1 text-xs">{webhookLogsError}</p>
-                  </div>
+                    <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm">
+                        <div className="flex items-center gap-2 font-medium"><AlertCircle className="h-5 w-5" /> Erro ao carregar logs:</div>
+                        <p className="mt-1 text-xs">{webhookLogsError}</p>
+                    </div>
                 )}
                 {!isLoadingWebhookLogs && !webhookLogsError && webhookLogs.length === 0 && (
-                  <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4">
-                    <FileText className="w-12 h-12 mb-3" />
-                    <p className="text-sm">Nenhum log de webhook encontrado.</p>
-                  </div>
+                    <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4">
+                        <FileText className="w-12 h-12 mb-3" />
+                        <p className="text-sm">Nenhum log de webhook encontrado.</p>
+                    </div>
                 )}
                 {!isLoadingWebhookLogs && webhookLogs.length > 0 && (
                     <ScrollArea className="flex-1 border rounded-md bg-muted/30">
@@ -2081,5 +2029,3 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
-    

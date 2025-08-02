@@ -59,7 +59,6 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
         { type: "log-console", label: "Registrar no Console", icon: <TerminalSquare {...iconProps} className="text-slate-500" />, description: "Imprime dados no log do servidor.", defaultData: { logMessage: 'Log: {{input.status}}' } },
         { type: "code-execution", label: "Executar Código (JS)", icon: <Code2 {...iconProps} className="text-amber-500" />, description: "Roda um script JavaScript no servidor.", defaultData: { codeSnippet: "return { resultado: 'sucesso' };", codeOutputVariable: 'resultado_codigo' } },
         { type: "json-transform", label: "Transformar JSON", icon: <Shuffle {...iconProps} className="text-violet-500" />, description: "Manipula dados JSON com JSONata.", defaultData: { inputJson: '{ "nome": "Exemplo" }', jsonataExpression: '$.nome', jsonOutputVariable: 'nome_transformado' } },
-        { type: "external-response", label: "Resposta Externa", icon: <Hourglass {...iconProps} className="text-indigo-400" />, description: "Pausa e aguarda uma resposta via API.", defaultData: { responseMode: 'webhook', responseVariable: 'dados_externos' } },
       ]
     },
     {

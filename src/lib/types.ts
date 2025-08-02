@@ -1,5 +1,4 @@
 
-
 export interface DraggableBlockItemData {
   type: string;
   label: string;
@@ -36,8 +35,8 @@ export type NodeType =
   | 'supabase-read-row'
   | 'supabase-update-row'
   | 'supabase-delete-row'
-  | 'end-flow'
-  | 'external-response';
+  | 'end-flow';
+  
 
 export interface ApiHeader {
   id: string;
@@ -217,10 +216,6 @@ export interface NodeData {
   // Start Node
   triggers?: StartNodeTrigger[];
 
-  // External Response Node
-  responseMode?: 'immediate' | 'webhook';
-  responseValue?: string; // For immediate mode
-  responseVariable?: string; // To save webhook body
 }
 
 export interface Connection {
