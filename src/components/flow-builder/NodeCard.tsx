@@ -607,19 +607,19 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[200px] p-0" data-no-drag="true" align="end">
-          <ScrollArea className="max-h-[150px] p-1">
-              <div className="text-xs">
-                {allVars.map((varName) => (
-                  <Button
-                    key={varName}
-                    variant="ghost"
-                    className="w-full justify-start h-7 px-2 text-xs"
-                    onClick={() => handleVariableInsert(fieldName, varName, isTextarea, isListItem, itemId, itemKeyOrValue)}
-                  >
-                    {varName}
-                  </Button>
-                ))}
-              </div>
+          <ScrollArea className="h-[150px]">
+            <div className="p-1 text-xs">
+              {allVars.map((varName) => (
+                <Button
+                  key={varName}
+                  variant="ghost"
+                  className="w-full justify-start h-7 px-2 text-xs"
+                  onClick={() => handleVariableInsert(fieldName, varName, isTextarea, isListItem, itemId, itemKeyOrValue)}
+                >
+                  {varName}
+                </Button>
+              ))}
+            </div>
           </ScrollArea>
         </PopoverContent>
       </Popover>
@@ -2032,4 +2032,4 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
 
-
+    
