@@ -443,26 +443,30 @@ async function storeRequestDetails(
   let actualPayloadToExtractFrom = parsedPayload;
   
   // Handle Chatwoot array payload structure
-  if (Array.isArray(parsedPayload) && parsedPayload.length > 0 && typeof parsedPayload[0] === 'object' && parsedPayload[0].event === 'message_created') {
+  if (Array.isArray(parsedPayload) && parsedPayload.length > 0 && typeof parsedPayload[0] === 'object' && (parsedPayload[0].event === 'message_created' || parsedPayload[0].event === 'message_updated')) {
     actualPayloadToExtractFrom = parsedPayload[0];
   }
   
   if (actualPayloadToExtractFrom && typeof actualPayloadToExtractFrom === 'object') {
       const chatwootEvent = getProperty(actualPayloadToExtractFrom, 'event');
       const chatwootContent = getProperty(actualPayloadToExtractFrom, 'content');
-      const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id');
+      const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'id') || getProperty(actualPayloadToExtractFrom, 'conversation.id');
       const chatwootMessageType = getProperty(actualPayloadToExtractFrom, 'message_type');
-      const chatwootSenderType = getProperty(actualPayloadToExtractFrom, 'sender_type');
       
       const evolutionSenderJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid');
       
       // Prioritize Chatwoot detection for incoming messages
-      if (chatwootEvent === 'message_created' && chatwootConversationId && chatwootMessageType === 'incoming') {
+      if ((chatwootEvent === 'message_created' && chatwootMessageType === 'incoming') || chatwootEvent === 'conversation_status_changed') {
           flowContext = 'chatwoot';
           sessionKeyIdentifier = `chatwoot_conv_${chatwootConversationId}`;
           extractedMessage = String(chatwootContent || '').trim();
-          console.log(`[storeRequestDetails] Detected Chatwoot payload. Session Identifier: "${sessionKeyIdentifier}"`);
-      } else if (evolutionSenderJid) { // Fallback to Evolution
+          console.log(`[storeRequestDetails] Detected Chatwoot payload (${chatwootEvent}). Session Identifier: "${sessionKeyIdentifier}"`);
+      } else if (chatwootEvent && chatwootConversationId && (chatwootEvent === 'message_updated' || chatwootEvent === 'conversation_updated')) {
+          flowContext = 'chatwoot';
+          sessionKeyIdentifier = `chatwoot_conv_${chatwootConversationId}`;
+          console.log(`[storeRequestDetails] Detected Chatwoot update payload (${chatwootEvent}). Session Identifier: "${sessionKeyIdentifier}"`);
+      }
+      else if (evolutionSenderJid) { // Fallback to Evolution
           flowContext = 'evolution';
           sessionKeyIdentifier = `evolution_jid_${evolutionSenderJid}`;
           const commonMessagePaths = [
@@ -504,8 +508,8 @@ async function storeRequestDetails(
   return logEntry;
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
-  const { webhookId } = await params;
+export async function POST(request: NextRequest, { params }: { params: { webhookId: string } }) {
+  const { webhookId } = params;
 
   console.log(`[API Evolution Trigger] POST received for webhook ID: "${webhookId}"`);
 
@@ -524,15 +528,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const receivedMessageText = loggedEntry.extractedMessage;
     const flowContext = loggedEntry.flow_context;
     
-    // Check for human agent intervention in Chatwoot
+    // Handle Chatwoot specific events before session logic
     if (flowContext === 'chatwoot') {
         let payloadToCheck = parsedBody;
         if (Array.isArray(payloadToCheck) && payloadToCheck.length > 0) {
             payloadToCheck = payloadToCheck[0];
         }
-        if (getProperty(payloadToCheck, 'sender_type') === 'User') {
-            console.log(`[API Evolution Trigger] Human agent message detected in conversation ${sessionKeyIdentifier}. Pausing automation. No further action will be taken.`);
+        
+        const eventType = getProperty(payloadToCheck, 'event');
+        const conversationStatus = getProperty(payloadToCheck, 'status') || getProperty(payloadToCheck, 'conversation.status');
+        const senderType = getProperty(payloadToCheck, 'sender_type');
+
+        // Rule 1: Human agent intervention pauses automation
+        if (senderType === 'User') {
+            console.log(`[API Evolution Trigger] Human agent message detected in conversation ${sessionKeyIdentifier}. Pausing automation by ignoring event.`);
             return NextResponse.json({ message: "Automation paused due to human intervention." }, { status: 200 });
+        }
+        
+        // Rule 2: Conversation resolved event ends the flow session
+        if ((eventType === 'conversation_status_changed' || eventType === 'conversation_updated' || eventType === 'message_updated') && conversationStatus === 'resolved') {
+             if (sessionKeyIdentifier) {
+                console.log(`[API Evolution Trigger] Chatwoot conversation ${sessionKeyIdentifier} was resolved. Deleting corresponding flow session.`);
+                await deleteSessionFromDB(sessionKeyIdentifier);
+             }
+             return NextResponse.json({ message: "Conversation resolved, session terminated." }, { status: 200 });
         }
     }
     
@@ -731,31 +750,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       let matchingTrigger: StartNodeTrigger | null = null;
       let startNodeForFlow: NodeData | null = null;
       
-      const defaultWorkspace = await loadWorkspaceFromDB(webhookId);
+      const mainWorkspace = await loadWorkspaceFromDB(webhookId);
+      if (!mainWorkspace || !mainWorkspace.owner_id) {
+          console.error(`[API Evolution Trigger] Main workspace with ID "${webhookId}" not found or has no owner. Cannot determine context.`);
+          return NextResponse.json({ error: `Main workspace with ID "${webhookId}" not found or misconfigured.` }, { status: 404 });
+      }
+      
+      const allWorkspaces = await loadWorkspacesForOwnerFromDB(mainWorkspace.owner_id);
 
-      if (defaultWorkspace?.owner_id) {
-          const ownerId = defaultWorkspace.owner_id;
-          const allWorkspaces = await loadWorkspacesForOwnerFromDB(ownerId);
-
-          for (const ws of allWorkspaces) {
-              const startNode = ws.nodes.find(n => n.type === 'start');
-              if (startNode?.triggers) {
-                  for (const trigger of startNode.triggers) {
-                      if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword && receivedMessageText && trigger.keyword.toLowerCase() === receivedMessageText.toLowerCase()) {
-                          workspaceToStart = ws;
-                          matchingTrigger = trigger;
-                          startNodeForFlow = startNode;
-                          break;
-                      }
+      for (const ws of allWorkspaces) {
+          const startNode = ws.nodes.find(n => n.type === 'start');
+          if (startNode?.triggers) {
+              for (const trigger of startNode.triggers) {
+                  if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword && receivedMessageText && trigger.keyword.toLowerCase() === receivedMessageText.toLowerCase()) {
+                      workspaceToStart = ws;
+                      matchingTrigger = trigger;
+                      startNodeForFlow = startNode;
+                      break;
                   }
               }
-              if (workspaceToStart) break;
           }
+          if (workspaceToStart) break;
       }
-
-      if (!workspaceToStart && defaultWorkspace) {
+      
+      if (!workspaceToStart) {
           console.log(`[API Evolution Trigger] No keyword match found. Falling back to default flow from URL: ${webhookId}`);
-          workspaceToStart = defaultWorkspace;
+          workspaceToStart = mainWorkspace;
           startNodeForFlow = workspaceToStart.nodes.find(n => n.type === 'start');
           matchingTrigger = startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled && !t.keyword) || startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled) || null;
       }
@@ -844,8 +864,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
-  const { webhookId } = await params;
+export async function GET(request: NextRequest, { params }: { params: { webhookId: string } }) {
+  const { webhookId } = params;
   try {
     const workspace = await loadWorkspaceFromDB(webhookId);
     if (workspace) {
@@ -861,12 +881,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+export async function PUT(request: NextRequest, { params }: { params: { webhookId: string } }) {
   return POST(request, { params });
 }
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+export async function PATCH(request: NextRequest, { params }: { params: { webhookId: string } }) {
   return POST(request, { params });
 }
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: { webhookId: string } }) {
   return POST(request, { params });
 }
