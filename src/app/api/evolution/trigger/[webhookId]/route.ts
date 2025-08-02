@@ -1,4 +1,3 @@
-
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -443,30 +442,26 @@ async function storeRequestDetails(
   let actualPayloadToExtractFrom = parsedPayload;
   
   // Handle Chatwoot array payload structure
-  if (Array.isArray(parsedPayload) && parsedPayload.length > 0 && typeof parsedPayload[0] === 'object' && (parsedPayload[0].event === 'message_created' || parsedPayload[0].event === 'message_updated')) {
+  if (Array.isArray(parsedPayload) && parsedPayload.length > 0 && typeof parsedPayload[0] === 'object' && parsedPayload[0].event === 'message_created') {
     actualPayloadToExtractFrom = parsedPayload[0];
   }
   
   if (actualPayloadToExtractFrom && typeof actualPayloadToExtractFrom === 'object') {
       const chatwootEvent = getProperty(actualPayloadToExtractFrom, 'event');
       const chatwootContent = getProperty(actualPayloadToExtractFrom, 'content');
-      const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'id') || getProperty(actualPayloadToExtractFrom, 'conversation.id');
+      const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id');
       const chatwootMessageType = getProperty(actualPayloadToExtractFrom, 'message_type');
+      const chatwootSenderType = getProperty(actualPayloadToExtractFrom, 'sender_type');
       
       const evolutionSenderJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid');
       
       // Prioritize Chatwoot detection for incoming messages
-      if ((chatwootEvent === 'message_created' && chatwootMessageType === 'incoming') || chatwootEvent === 'conversation_status_changed') {
+      if (chatwootEvent === 'message_created' && chatwootConversationId && chatwootMessageType === 'incoming') {
           flowContext = 'chatwoot';
           sessionKeyIdentifier = `chatwoot_conv_${chatwootConversationId}`;
           extractedMessage = String(chatwootContent || '').trim();
-          console.log(`[storeRequestDetails] Detected Chatwoot payload (${chatwootEvent}). Session Identifier: "${sessionKeyIdentifier}"`);
-      } else if (chatwootEvent && chatwootConversationId && (chatwootEvent === 'message_updated' || chatwootEvent === 'conversation_updated')) {
-          flowContext = 'chatwoot';
-          sessionKeyIdentifier = `chatwoot_conv_${chatwootConversationId}`;
-          console.log(`[storeRequestDetails] Detected Chatwoot update payload (${chatwootEvent}). Session Identifier: "${sessionKeyIdentifier}"`);
-      }
-      else if (evolutionSenderJid) { // Fallback to Evolution
+          console.log(`[storeRequestDetails] Detected Chatwoot payload. Session Identifier: "${sessionKeyIdentifier}"`);
+      } else if (evolutionSenderJid) { // Fallback to Evolution
           flowContext = 'evolution';
           sessionKeyIdentifier = `evolution_jid_${evolutionSenderJid}`;
           const commonMessagePaths = [
@@ -508,8 +503,8 @@ async function storeRequestDetails(
   return logEntry;
 }
 
-export async function POST(request: NextRequest, { params }: { params: { webhookId: string } }) {
-  const { webhookId } = params;
+export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+  const { webhookId } = await params;
 
   console.log(`[API Evolution Trigger] POST received for webhook ID: "${webhookId}"`);
 
@@ -528,28 +523,15 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
     const receivedMessageText = loggedEntry.extractedMessage;
     const flowContext = loggedEntry.flow_context;
     
-    // Handle Chatwoot specific events before session logic
+    // Check for human agent intervention in Chatwoot
     if (flowContext === 'chatwoot') {
         let payloadToCheck = parsedBody;
-        // The webhook payload can be an array of events
         if (Array.isArray(payloadToCheck) && payloadToCheck.length > 0) {
             payloadToCheck = payloadToCheck[0];
         }
-        
-        const eventType = getProperty(payloadToCheck, 'event');
-        const messageType = getProperty(payloadToCheck, 'message_type');
-        const senderType = getProperty(payloadToCheck, 'sender_type');
-
-        // Rule 1: Human agent intervention pauses automation by ignoring event.
-        if (eventType === 'message_created' && senderType === 'User') {
-            console.log(`[API Evolution Trigger] Human agent message detected in conversation ${sessionKeyIdentifier}. Pausing automation by ignoring event.`);
+        if (getProperty(payloadToCheck, 'sender_type') === 'User') {
+            console.log(`[API Evolution Trigger] Human agent message detected in conversation ${sessionKeyIdentifier}. Pausing automation. No further action will be taken.`);
             return NextResponse.json({ message: "Automation paused due to human intervention." }, { status: 200 });
-        }
-        
-        // Rule 2: Do not process outgoing messages from the bot itself to prevent loops
-        if (eventType === 'message_created' && messageType === 'outgoing') {
-            console.log(`[API Evolution Trigger] Outgoing message event detected for conversation ${sessionKeyIdentifier}. Ignoring to prevent loop.`);
-            return NextResponse.json({ message: "Outgoing message event ignored." }, { status: 200 });
         }
     }
     
@@ -861,8 +843,8 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: { webhookId: string } }) {
-  const { webhookId } = params;
+export async function GET(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+  const { webhookId } = await params;
   try {
     const workspace = await loadWorkspaceFromDB(webhookId);
     if (workspace) {
@@ -878,12 +860,14 @@ export async function GET(request: NextRequest, { params }: { params: { webhookI
   }
 }
 
-export async function PUT(request: NextRequest, context: { params: { webhookId: string } }) {
-  return POST(request, context);
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+  return POST(request, { params });
 }
-export async function PATCH(request: NextRequest, context: { params: { webhookId: string } }) {
-  return POST(request, context);
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+  return POST(request, { params });
 }
-export async function DELETE(request: NextRequest, context: { params: { webhookId: string } }) {
-  return POST(request, context);
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+  return POST(request, { params });
 }
+
+    
