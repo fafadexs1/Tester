@@ -12,7 +12,8 @@ if (!globalThis.evolutionWebhookLogs || !Array.isArray(globalThis.evolutionWebho
   console.log(`[GLOBAL_INIT in webhook-logs/route.ts] Initializing globalThis.evolutionWebhookLogs as new array.`);
   globalThis.evolutionWebhookLogs = [];
 } else {
-  console.log(`[GLOBAL_INIT in webhook-logs/route.ts] globalThis.evolutionWebhookLogs already exists. Length: ${globalThis.evolutionWebhookLogs.length}`);
+  // Opcional: Logar que já existe para depuração de HMR (Hot Module Replacement)
+  // console.log(`[GLOBAL_INIT in webhook-logs/route.ts] globalThis.evolutionWebhookLogs already exists. Length: ${globalThis.evolutionWebhookLogs.length}`);
 }
 
 export async function GET() {
@@ -22,10 +23,11 @@ export async function GET() {
      globalThis.evolutionWebhookLogs = [];
   }
   
-  console.log(`[Evolution API Webhook Logs Route - GET] Current state of globalThis.evolutionWebhookLogs. Length: ${globalThis.evolutionWebhookLogs.length}, IsArray: ${Array.isArray(globalThis.evolutionWebhookLogs)}`);
+  // console.log(`[Evolution API Webhook Logs Route - GET] Current state of globalThis.evolutionWebhookLogs. Length: ${globalThis.evolutionWebhookLogs.length}, IsArray: ${Array.isArray(globalThis.evolutionWebhookLogs)}`);
+  
   // Para depuração, logar um resumo dos timestamps se houver logs
   if (globalThis.evolutionWebhookLogs.length > 0) {
-    console.log(`[Evolution API Webhook Logs Route - GET] Timestamps of stored logs: ${globalThis.evolutionWebhookLogs.map(log => log.timestamp).join(', ')}`);
+    // console.log(`[Evolution API Webhook Logs Route - GET] Timestamps of stored logs: ${globalThis.evolutionWebhookLogs.map(log => log.timestamp).join(', ')}`);
   }
 
   return NextResponse.json(globalThis.evolutionWebhookLogs, { status: 200 });
