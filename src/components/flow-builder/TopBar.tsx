@@ -45,7 +45,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from '@/hooks/use-toast';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Switch } from '@/components/ui/switch';
-import { cn } from "@/lib/utils';
+import { cn } from "@/lib/utils";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -661,6 +661,9 @@ const TopBar: React.FC<TopBarProps> = ({
                                     </Table>
                                 </ScrollArea>
                             </CardContent>
+                             <CardFooter>
+                                <p className="text-xs text-muted-foreground">O token de acesso pode ser encontrado no seu Perfil &gt; Configurações dentro do Chatwoot.</p>
+                            </CardFooter>
                         </Card>
                     </TabsContent>
                 </Tabs>
@@ -781,3 +784,5 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
+
+    
