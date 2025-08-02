@@ -253,7 +253,7 @@ export interface WorkspaceData {
 }
 
 export type AwaitingInputNode = 'input' | 'option' | 'date-input' | 'file-upload' | 'rating-input';
-export type FlowSessionAwaitingInputType = AwaitingInputNode | 'external_response' | null;
+export type FlowSessionAwaitingInputType = AwaitingInputNode | null;
 
 export interface FlowSession {
   session_id: string; 

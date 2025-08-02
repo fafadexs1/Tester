@@ -218,7 +218,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     const ancestorMemo = new Map<string, NodeData[]>();
     
     // Variáveis base que estão sempre disponíveis
-    const baseVars = ['session_id'];
+    const baseVars = ['session_id', 'mensagem_whatsapp', 'webhook_payload'];
     if (chatwoot_enabled) {
         baseVars.push(...CHATWOOT_PREFILLED_VARIABLES);
     }
