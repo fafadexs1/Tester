@@ -81,10 +81,11 @@ function getVariablesFromNode(node: NodeData): string[] {
 /**
  * Encontra todos os nós ancestrais para um nó específico, navegando para trás no fluxo.
  * Utiliza busca em largura (BFS) para evitar recursão infinita em loops.
+ * A versão corrigida garante que a travessia seja mais eficiente e precisa.
  */
 function getAncestorsForNode(
-    nodeId: string, 
-    nodes: NodeData[], 
+    nodeId: string,
+    nodes: NodeData[],
     connections: Connection[],
     memo: Map<string, NodeData[]> = new Map()
 ): NodeData[] {
@@ -95,10 +96,19 @@ function getAncestorsForNode(
     const ancestors = new Map<string, NodeData>();
     const nodesMap = new Map(nodes.map(n => [n.id, n]));
     const queue: string[] = [nodeId];
-    const visited = new Set<string>([nodeId]); // Previne re-processamento do mesmo nó na fila
+    const visited = new Set<string>(); // Visitados agora controla o que já foi totalmente processado
+
+    // O nó inicial não tem ancestrais dentro do fluxo, então podemos parar se chegarmos nele na busca.
+    const startNodes = new Set(nodes.filter(n => n.type === 'start').map(n => n.id));
+
 
     while (queue.length > 0) {
         const currentId = queue.shift()!;
+
+        if(visited.has(currentId) || startNodes.has(currentId)) {
+            continue;
+        }
+        visited.add(currentId);
         
         const incomingConnections = connections.filter(c => c.to === currentId);
 
@@ -106,12 +116,11 @@ function getAncestorsForNode(
             const parentId = conn.from;
             const parentNode = nodesMap.get(parentId);
 
-            if (parentNode && !ancestors.has(parentId)) {
-                ancestors.set(parentId, parentNode);
-                if (!visited.has(parentId)) {
-                    visited.add(parentId);
-                    queue.push(parentId);
+            if (parentNode) {
+                if (!ancestors.has(parentId)) {
+                    ancestors.set(parentId, parentNode);
                 }
+                queue.push(parentId);
             }
         }
     }
