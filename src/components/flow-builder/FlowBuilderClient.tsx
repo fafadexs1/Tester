@@ -185,6 +185,8 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const [isLoading, setIsLoading] = useState(!initialWorkspace); 
   
   const [drawingLine, setDrawingLine] = useState<DrawingLineData | null>(null);
+  const drawingLineRef = useRef(drawingLine);
+  
   const [highlightedConnectionId, setHighlightedConnectionId] = useState<string | null>(null);
   const [highlightedNodeIdBySession, setHighlightedNodeIdBySession] = useState<string | null>(null);
 
@@ -204,6 +206,10 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const [hasMounted, setHasMounted] = useState(false);
   
   const [availableVariablesByNode, setAvailableVariablesByNode] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    drawingLineRef.current = drawingLine;
+  }, [drawingLine]);
 
   useEffect(() => {
     setHasMounted(true);
@@ -454,7 +460,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
         currentY: logicalCurrentY,
       });
     },
-    [canvasRef, setDrawingLine, canvasOffsetCbRef, zoomLevelCbRef] 
+    []
   ); 
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -465,7 +471,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
       if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
       setHighlightedNodeIdBySession(null); 
     }
-  }, [canvasRef, canvasOffsetCbRef]); 
+  }, []); 
 
   const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -475,7 +481,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
         x: initialCanvasOffsetOnPanStart.current.x + dx,
         y: initialCanvasOffsetOnPanStart.current.y + dy,
       });
-    } else if (drawingLine && canvasRef.current) {
+    } else if (drawingLineRef.current && canvasRef.current) {
       const canvasRect = canvasRef.current.getBoundingClientRect();
       const currentCanvasOffset = canvasOffsetCbRef.current;
       const currentZoomLevel = zoomLevelCbRef.current;
@@ -495,13 +501,13 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
         };
       });
     }
-  }, [drawingLine, setDrawingLine, setCanvasOffset, canvasRef, canvasOffsetCbRef, zoomLevelCbRef]); 
+  }, []); 
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
       isPanning.current = false;
       if (canvasRef.current) canvasRef.current.style.cursor = 'grab'; 
-    } else if (drawingLine) {
+    } else if (drawingLineRef.current) {
       const targetElement = document.elementFromPoint(e.clientX, e.clientY);
       const targetHandleElement = targetElement?.closest('[data-handle-type="target"]');
       const targetNodeElement = targetElement?.closest('[data-node-id]');
@@ -513,14 +519,14 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
           toId = targetNodeElement.getAttribute('data-node-id');
       }
 
-      if (toId && drawingLine.fromId !== toId) {
+      if (toId && drawingLineRef.current.fromId !== toId) {
         updateActiveWorkspace(ws => {
             let newConnectionsArray = [...(ws.connections || [])]; 
             const newConnection: Connection = {
                 id: uuidv4(),
-                from: drawingLine.fromId,
+                from: drawingLineRef.current!.fromId,
                 to: toId as string,
-                sourceHandle: drawingLine.sourceHandleId, 
+                sourceHandle: drawingLineRef.current!.sourceHandleId, 
             };
 
             const isDuplicate = newConnectionsArray.some(
@@ -546,7 +552,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
       }
       setDrawingLine(null);
     }
-  }, [drawingLine, updateActiveWorkspace, setDrawingLine, canvasRef]); 
+  }, [updateActiveWorkspace]); 
 
   const deleteConnection = useCallback((connectionId: string) => {
     updateActiveWorkspace(ws => ({
@@ -566,7 +572,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
         isPanning.current = false;
         if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
       }
-      if (drawingLine) {
+      if (drawingLineRef.current) {
         setDrawingLine(null);
       }
     };
@@ -577,7 +583,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
       document.removeEventListener('mouseup', handleGlobalMouseUp);
       document.body.removeEventListener('mouseleave', handleMouseLeaveWindow);
     };
-  }, [handleGlobalMouseMove, handleGlobalMouseUp, drawingLine, hasMounted, canvasRef, setDrawingLine]);
+  }, [handleGlobalMouseMove, handleGlobalMouseUp, hasMounted]);
   
 
   const handleZoom = useCallback((direction: 'in' | 'out' | 'reset') => {
@@ -616,7 +622,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     setZoomLevel(newZoomLevel);
     setCanvasOffset({ x: newOffsetX, y: newOffsetY });
 
-  }, [setZoomLevel, setCanvasOffset, canvasRef, zoomLevelCbRef, canvasOffsetCbRef]); 
+  }, []); 
 
   const handleHighlightNodeInFlow = useCallback((nodeId: string | null) => {
     setHighlightedNodeIdBySession(nodeId);
