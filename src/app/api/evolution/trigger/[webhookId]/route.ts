@@ -504,8 +504,8 @@ async function storeRequestDetails(
   return logEntry;
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
-  const { webhookId } = await params;
+export async function POST(request: NextRequest, { params }: { params: { webhookId: string } }) {
+  const { webhookId } = params;
 
   console.log(`[API Evolution Trigger] POST received for webhook ID: "${webhookId}"`);
 
@@ -719,20 +719,28 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       let matchingTrigger: StartNodeTrigger | null = null;
       let startNodeForFlow: NodeData | null = null;
       
-      const defaultWorkspace = await loadWorkspaceFromDB(webhookId);
+      // **REVISED FLOW FINDING LOGIC**
+      let allWorkspacesForOwner: WorkspaceData[] = [];
+      const mainWorkspace = await loadWorkspaceFromDB(webhookId);
+      if (mainWorkspace?.owner_id) {
+          allWorkspacesForOwner = await loadWorkspacesForOwnerFromDB(mainWorkspace.owner_id);
+      } else {
+          // If the webhookId doesn't correspond to a valid workspace, we can't determine the owner.
+          // This might be a configuration error, but we can't proceed.
+          console.error(`[API Evolution Trigger] Main workspace with ID "${webhookId}" not found or has no owner. Cannot search for keyword-triggered flows.`);
+      }
 
-      if (defaultWorkspace?.owner_id) {
-          const ownerId = defaultWorkspace.owner_id;
-          const allWorkspaces = await loadWorkspacesForOwnerFromDB(ownerId);
-
-          for (const ws of allWorkspaces) {
+      // 1. Prioritize keyword-based trigger across all workspaces of the owner
+      if (receivedMessageText && allWorkspacesForOwner.length > 0) {
+          for (const ws of allWorkspacesForOwner) {
               const startNode = ws.nodes.find(n => n.type === 'start');
               if (startNode?.triggers) {
                   for (const trigger of startNode.triggers) {
-                      if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword && receivedMessageText && trigger.keyword.toLowerCase() === receivedMessageText.toLowerCase()) {
+                      if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword && receivedMessageText.toLowerCase() === trigger.keyword.toLowerCase()) {
                           workspaceToStart = ws;
                           matchingTrigger = trigger;
                           startNodeForFlow = startNode;
+                          console.log(`[API Evolution Trigger] Found keyword match in workspace "${ws.name}" (ID: ${ws.id}).`);
                           break;
                       }
                   }
@@ -741,11 +749,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           }
       }
 
-      if (!workspaceToStart && defaultWorkspace) {
+      // 2. Fallback to the default workspace from URL if no keyword match
+      if (!workspaceToStart && mainWorkspace) {
           console.log(`[API Evolution Trigger] No keyword match found. Falling back to default flow from URL: ${webhookId}`);
-          workspaceToStart = defaultWorkspace;
-          startNodeForFlow = workspaceToStart.nodes.find(n => n.type === 'start');
-          matchingTrigger = startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled && !t.keyword) || startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled) || null;
+          const startNode = mainWorkspace.nodes.find(n => n.type === 'start');
+          if (startNode?.triggers) {
+              // Find a generic webhook trigger (enabled and no keyword)
+              const genericTrigger = startNode.triggers.find(t => t.type === 'webhook' && t.enabled && !t.keyword);
+              if (genericTrigger) {
+                  workspaceToStart = mainWorkspace;
+                  matchingTrigger = genericTrigger;
+                  startNodeForFlow = startNode;
+              }
+          }
       }
 
 
@@ -832,8 +848,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
-  const { webhookId } = await params;
+export async function GET(request: NextRequest, { params }: { params: { webhookId: string } }) {
+  const { webhookId } = params;
   try {
     const workspace = await loadWorkspaceFromDB(webhookId);
     if (workspace) {
@@ -849,12 +865,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+export async function PUT(request: NextRequest, { params }: { params: { webhookId: string } }) {
   return POST(request, { params });
 }
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+export async function PATCH(request: NextRequest, { params }: { params: { webhookId: string } }) {
   return POST(request, { params });
 }
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: { webhookId: string } }) {
   return POST(request, { params });
 }
+
+    
+    
