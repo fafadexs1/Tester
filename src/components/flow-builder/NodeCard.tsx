@@ -606,18 +606,20 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <Braces className="h-4 w-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[200px] p-1" data-no-drag="true" align="end">
-          <ScrollArea className="max-h-[150px] text-xs">
-            {allVars.map((varName) => (
-              <Button
-                key={varName}
-                variant="ghost"
-                className="w-full justify-start h-7 px-2 text-xs"
-                onClick={() => handleVariableInsert(fieldName, varName, isTextarea, isListItem, itemId, itemKeyOrValue)}
-              >
-                {varName}
-              </Button>
-            ))}
+        <PopoverContent className="w-[200px] p-0" data-no-drag="true" align="end">
+          <ScrollArea className="max-h-[150px] p-1">
+              <div className="text-xs">
+                {allVars.map((varName) => (
+                  <Button
+                    key={varName}
+                    variant="ghost"
+                    className="w-full justify-start h-7 px-2 text-xs"
+                    onClick={() => handleVariableInsert(fieldName, varName, isTextarea, isListItem, itemId, itemKeyOrValue)}
+                  >
+                    {varName}
+                  </Button>
+                ))}
+              </div>
           </ScrollArea>
         </PopoverContent>
       </Popover>
@@ -1162,7 +1164,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <SelectContent>
                   <SelectItem value="==">Igual a</SelectItem><SelectItem value="!=">Diferente de</SelectItem>
                   <SelectItem value=">">Maior que</SelectItem><SelectItem value="<">Menor que</SelectItem>
-                  <SelectItem value="contains">Contém</SelectItem><SelectItem value="startsWith">Começa com</SelectItem>
+                  <SelectItem value="contains">Contém</SelectItem>
+                  <SelectItem value="startsWith">Começa com</SelectItem>
                   <SelectItem value="endsWith">Termina com</SelectItem>
                   <SelectItem value="isEmpty">É vazio</SelectItem>
                   <SelectItem value="isNotEmpty">Não é vazio</SelectItem>
@@ -2028,4 +2031,5 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
 
