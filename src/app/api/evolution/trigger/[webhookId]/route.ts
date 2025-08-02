@@ -203,26 +203,44 @@ async function executeFlow(
 
             case 'condition': {
                 const varNameCond = currentNode.conditionVariable?.replace(/\{\{|\}\}/g, '').trim();
-                const actualValueCond = varNameCond ? getProperty(session.flow_variables, varNameCond) : undefined;
-                const compareValueCond = substituteVariablesInText(currentNode.conditionValue, session.flow_variables);
+                const actualValueRaw = varNameCond ? getProperty(session.flow_variables, varNameCond) : undefined;
+                const compareValueRaw = substituteVariablesInText(currentNode.conditionValue, session.flow_variables);
                 let conditionMet = false;
 
-                const valStr = String(actualValueCond ?? '').toLowerCase();
-                const compareValStr = String(compareValueCond ?? '').toLowerCase();
+                const tryParse = (value: any) => {
+                    if (value === null || value === undefined || value === '') return value;
+                    const strValue = String(value).toLowerCase();
+                    if (strValue === 'true') return true;
+                    if (strValue === 'false') return false;
+                    if (!isNaN(Number(strValue)) && strValue.trim() !== '') return Number(strValue);
+                    const date = new Date(value);
+                    if (!isNaN(date.getTime())) return date;
+                    return value;
+                };
+
+                const valA = tryParse(actualValueRaw);
+                const valB = tryParse(compareValueRaw);
 
                 switch (currentNode.conditionOperator) {
-                    case '==': conditionMet = valStr === compareValStr; break;
-                    case '!=': conditionMet = valStr !== compareValStr; break;
-                    case '>': conditionMet = !isNaN(parseFloat(valStr)) && !isNaN(parseFloat(compareValStr)) && parseFloat(valStr) > parseFloat(compareValStr); break;
-                    case '<': conditionMet = !isNaN(parseFloat(valStr)) && !isNaN(parseFloat(compareValStr)) && parseFloat(valStr) < parseFloat(compareValStr); break;
-                    case 'contains': conditionMet = valStr.includes(compareValStr); break;
-                    case 'startsWith': conditionMet = valStr.startsWith(compareValStr); break;
-                    case 'endsWith': conditionMet = valStr.endsWith(compareValStr); break;
-                    case 'isEmpty': conditionMet = actualValueCond === undefined || actualValueCond === null || String(actualValueCond).trim() === ''; break;
-                    case 'isNotEmpty': conditionMet = actualValueCond !== undefined && actualValueCond !== null && String(actualValueCond).trim() !== ''; break;
+                    case '==': conditionMet = valA == valB; break;
+                    case '!=': conditionMet = valA != valB; break;
+                    case '>': conditionMet = valA > valB; break;
+                    case '<': conditionMet = valA < valB; break;
+                    case '>=': conditionMet = valA >= valB; break;
+                    case '<=': conditionMet = valA <= valB; break;
+                    case 'contains': conditionMet = String(valA).toLowerCase().includes(String(valB).toLowerCase()); break;
+                    case 'startsWith': conditionMet = String(valA).toLowerCase().startsWith(String(valB).toLowerCase()); break;
+                    case 'endsWith': conditionMet = String(valA).toLowerCase().endsWith(String(valB).toLowerCase()); break;
+                    case 'isEmpty': conditionMet = valA === undefined || valA === null || String(valA).trim() === ''; break;
+                    case 'isNotEmpty': conditionMet = valA !== undefined && valA !== null && String(valA).trim() !== ''; break;
+                    case 'isTrue': conditionMet = valA === true; break;
+                    case 'isFalse': conditionMet = valA === false; break;
+                    case 'isDateAfter': conditionMet = valA instanceof Date && valB instanceof Date && valA > valB; break;
+                    case 'isDateBefore': conditionMet = valA instanceof Date && valB instanceof Date && valA < valB; break;
                     default: conditionMet = false;
                 }
-                console.log(`[Flow Engine - ${session.session_id}] Condition: Var ('${varNameCond}')='${actualValueCond}' ${currentNode.conditionOperator} '${compareValueCond}' -> ${conditionMet}`);
+                
+                console.log(`[Flow Engine - ${session.session_id}] Condition: Var ('${varNameCond}')='${actualValueRaw}'(parsed: ${valA}) ${currentNode.conditionOperator} '${compareValueRaw}'(parsed: ${valB}) -> ${conditionMet}`);
                 nextNodeId = findNextNodeId(currentNode.id, conditionMet ? 'true' : 'false', connections);
                 break;
             }
@@ -869,5 +887,3 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
-
-    
