@@ -12,7 +12,7 @@ import {
   deleteSessionFromDB,
   loadWorkspaceFromDB,
   loadChatwootInstanceFromDB,
-  loadWorkspacesForOwnerFromDB, // Importado para buscar todos os workspaces
+  loadWorkspacesForOwnerFromDB, 
 } from '@/app/actions/databaseActions';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData, FlowContextType, User } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
@@ -92,7 +92,7 @@ async function executeFlow(
             return;
         }
 
-        if (session.flow_context === 'chatwoot' && workspace.chatwoot_enabled && workspace.chatwoot_instance_id) {
+        if (session.flow_context === 'chatwoot' && workspace.chatwoot_instance_id) {
             const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
             if (chatwootInstance && session.flow_variables.chatwoot_account_id && session.flow_variables.chatwoot_conversation_id) {
                 console.log(`[Flow Engine - ${session.session_id}] Sending message via Chatwoot...`);
@@ -149,58 +149,59 @@ async function executeFlow(
             case 'date-input':
             case 'file-upload':
             case 'rating-input':
-                const promptFieldName = 
-                    currentNode.type === 'input' ? 'promptText' : 
-                    currentNode.type === 'date-input' ? 'dateInputLabel' :
-                    currentNode.type === 'file-upload' ? 'uploadPromptText' :
-                    'ratingQuestionText';
-
-                const promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
-                if (promptText) {
-                  await sendOmniChannelMessage(promptText);
-                }
-                session.awaiting_input_type = currentNode.type;
-                session.awaiting_input_details = { 
-                    variableToSave: 
-                        currentNode.variableToSaveResponse || 
-                        currentNode.variableToSaveDate ||
-                        currentNode.fileUrlVariable ||
-                        currentNode.ratingOutputVariable ||
-                        'last_user_input', 
-                    originalNodeId: currentNode.id 
-                };
-                shouldContinue = false; // Pause execution
-                break;
-
-            case 'option':
-                const questionText = substituteVariablesInText(currentNode.questionText, session.flow_variables);
-                const optionsList = (currentNode.optionsList || '').split('\n').map(opt => substituteVariablesInText(opt.trim(), session.flow_variables)).filter(Boolean);
-
-                if (questionText && optionsList.length > 0) {
-                    let messageWithOptions = questionText + '\n\n';
-                    optionsList.forEach((opt, index) => {
-                        messageWithOptions += `${index + 1}. ${opt}\n`;
-                    });
-                    
-                    let finalMessage = messageWithOptions.trim();
-                     if (session.flow_context !== 'chatwoot') {
-                        finalMessage += "\nResponda com o número da opção desejada ou o texto exato da opção.";
-                     }
-                    
-                    await sendOmniChannelMessage(finalMessage);
-
-                    session.awaiting_input_type = 'option';
-                    session.awaiting_input_details = {
-                        variableToSave: currentNode.variableToSaveChoice || 'last_user_choice',
-                        options: optionsList,
-                        originalNodeId: currentNode.id
-                    };
-                    shouldContinue = false; // Pause execution
+            case 'option': {
+                let promptText: string | undefined = '';
+                if (currentNode.type === 'option') {
+                    promptText = substituteVariablesInText(currentNode.questionText, session.flow_variables);
+                    const optionsList = (currentNode.optionsList || '').split('\n').map(opt => substituteVariables(opt.trim(), session.flow_variables)).filter(Boolean);
+                    if (promptText && optionsList.length > 0) {
+                        let messageWithOptions = promptText + '\n\n';
+                        optionsList.forEach((opt, index) => {
+                            messageWithOptions += `${index + 1}. ${opt}\n`;
+                        });
+                        
+                        let finalMessage = messageWithOptions.trim();
+                         if (session.flow_context !== 'chatwoot') {
+                            finalMessage += "\nResponda com o número da opção desejada ou o texto exato da opção.";
+                         }
+                        
+                        await sendOmniChannelMessage(finalMessage);
+                        session.awaiting_input_type = 'option';
+                        session.awaiting_input_details = {
+                            variableToSave: currentNode.variableToSaveChoice || 'last_user_choice',
+                            options: optionsList,
+                            originalNodeId: currentNode.id
+                        };
+                        shouldContinue = false;
+                    } else {
+                        console.warn(`[Flow Engine - ${session.session_id}] Option node ${currentNode.id} misconfigured. Trying default output.`);
+                        nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+                    }
                 } else {
-                    console.warn(`[Flow Engine - ${session.session_id}] Option node ${currentNode.id} misconfigured. Trying default output.`);
-                    nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+                     const promptFieldName = 
+                        currentNode.type === 'input' ? 'promptText' : 
+                        currentNode.type === 'date-input' ? 'dateInputLabel' :
+                        currentNode.type === 'file-upload' ? 'uploadPromptText' :
+                        'ratingQuestionText';
+
+                    promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
+                    if (promptText) {
+                      await sendOmniChannelMessage(promptText);
+                    }
+                    session.awaiting_input_type = currentNode.type;
+                    session.awaiting_input_details = { 
+                        variableToSave: 
+                            currentNode.variableToSaveResponse || 
+                            currentNode.variableToSaveDate ||
+                            currentNode.fileUrlVariable ||
+                            currentNode.ratingOutputVariable ||
+                            'last_user_input', 
+                        originalNodeId: currentNode.id 
+                    };
+                    shouldContinue = false;
                 }
                 break;
+            }
 
             case 'condition': {
                 const varNameCond = currentNode.conditionVariable?.replace(/\{\{|\}\}/g, '').trim();
@@ -442,7 +443,8 @@ async function storeRequestDetails(
 
   let actualPayloadToExtractFrom = parsedPayload;
   
-  if (Array.isArray(parsedPayload) && parsedPayload.length > 0 && typeof parsedPayload[0] === 'object') {
+  // Handle Chatwoot array payload structure
+  if (Array.isArray(parsedPayload) && parsedPayload.length > 0 && typeof parsedPayload[0] === 'object' && parsedPayload[0].event === 'message_created') {
     actualPayloadToExtractFrom = parsedPayload[0];
   }
   
@@ -451,12 +453,12 @@ async function storeRequestDetails(
       const chatwootContent = getProperty(actualPayloadToExtractFrom, 'content');
       const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id');
       const chatwootMessageType = getProperty(actualPayloadToExtractFrom, 'message_type');
-      const chatwootSenderId = getProperty(actualPayloadToExtractFrom, 'sender.id');
+      const chatwootSenderType = getProperty(actualPayloadToExtractFrom, 'sender_type');
       
       const evolutionSenderJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid');
       
-      // Prioritize Chatwoot detection
-      if (chatwootEvent === 'message_created' && chatwootConversationId && chatwootMessageType === 'incoming' && chatwootSenderId) {
+      // Prioritize Chatwoot detection for incoming messages
+      if (chatwootEvent === 'message_created' && chatwootConversationId && chatwootMessageType === 'incoming') {
           flowContext = 'chatwoot';
           sessionKeyIdentifier = `chatwoot_conv_${chatwootConversationId}`;
           extractedMessage = String(chatwootContent || '').trim();
@@ -694,50 +696,40 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
       let workspaceToStart: WorkspaceData | null = null;
       let matchingTrigger: StartNodeTrigger | null = null;
       let startNodeForFlow: NodeData | null = null;
-      let ownerId: string | null = null;
-
-      // Determine ownerId from payload to search all their workspaces
-      if (loggedEntry?.payload?.account?.id) {
-          // This is a placeholder. You need a way to map Chatwoot account ID to your system's user/owner ID.
-          // For now, let's assume we can't get owner from Chatwoot and must rely on a different mechanism.
-          // This logic needs to be adapted based on your multi-tenancy model.
-      }
       
-      // Let's assume for now, we search all workspaces for a keyword match.
-      // This is NOT multi-tenant safe without an owner_id filter.
-      const allWorkspaces = await loadWorkspacesForOwnerFromDB(ownerId || ''); // Pass ownerId if available, otherwise searches all (if logic allows)
+      const defaultWorkspace = await loadWorkspaceFromDB(webhookId);
 
-      // Find the first workspace that has a matching, enabled webhook trigger with the right keyword
-      for (const ws of allWorkspaces) {
-          const startNode = ws.nodes.find(n => n.type === 'start');
-          if (startNode?.triggers) {
-              for (const trigger of startNode.triggers) {
-                  if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword && receivedMessageText && trigger.keyword.toLowerCase() === receivedMessageText.toLowerCase()) {
-                      workspaceToStart = ws;
-                      matchingTrigger = trigger;
-                      startNodeForFlow = startNode;
-                      break;
+      if (defaultWorkspace?.owner_id) {
+          const ownerId = defaultWorkspace.owner_id;
+          const allWorkspaces = await loadWorkspacesForOwnerFromDB(ownerId);
+
+          for (const ws of allWorkspaces) {
+              const startNode = ws.nodes.find(n => n.type === 'start');
+              if (startNode?.triggers) {
+                  for (const trigger of startNode.triggers) {
+                      if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword && receivedMessageText && trigger.keyword.toLowerCase() === receivedMessageText.toLowerCase()) {
+                          workspaceToStart = ws;
+                          matchingTrigger = trigger;
+                          startNodeForFlow = startNode;
+                          break;
+                      }
                   }
               }
+              if (workspaceToStart) break;
           }
-          if (workspaceToStart) break;
       }
-      
-      // Fallback to webhookId if no keyword match is found
-      if (!workspaceToStart) {
-          console.log(`[API Evolution Trigger] No keyword match found. Falling back to webhookId from URL: ${webhookId}`);
-          workspaceToStart = await loadWorkspaceFromDB(webhookId);
-           if (workspaceToStart) {
-                startNodeForFlow = workspaceToStart.nodes.find(n => n.type === 'start');
-                // Use the first enabled webhook trigger as the default
-                matchingTrigger = startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled) || null;
-           }
+
+      if (!workspaceToStart && defaultWorkspace) {
+          console.log(`[API Evolution Trigger] No keyword match found. Falling back to default flow from URL: ${webhookId}`);
+          workspaceToStart = defaultWorkspace;
+          startNodeForFlow = workspaceToStart.nodes.find(n => n.type === 'start');
+          matchingTrigger = startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled && !t.keyword) || startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled) || null;
       }
 
 
       if (!workspaceToStart || !startNodeForFlow || !matchingTrigger) {
-          console.log(`[API Evolution Trigger] No matching workspace/start node/trigger found. Flow will not start.`);
-          return NextResponse.json({ message: "No active trigger for this message." }, { status: 200 });
+          console.log(`[API Evolution Trigger] No matching workspace/start node/trigger found for this request. Default flow ID from URL: ${webhookId}.`);
+          return NextResponse.json({ error: `Workspace with ID "${webhookId}" not found or has no enabled webhook trigger.` }, { status: 404 });
       }
 
       console.log(`[API Evolution Trigger] Determined to start flow: ${workspaceToStart.name} (ID: ${workspaceToStart.id}) with trigger: ${matchingTrigger.name}`);
