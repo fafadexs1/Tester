@@ -132,10 +132,11 @@ const TopBar: React.FC<TopBarProps> = ({
   const fetchChatwootInstances = useCallback(async () => {
     setIsLoadingChatwootInstances(true);
     try {
-      const result = await getChatwootInstancesForUserAction();
-      if (result.error) throw new Error(result.error);
-      setChatwootInstances(result.data || []);
-      return result.data || [];
+      const response = await fetch('/api/instances/chatwoot');
+      if (!response.ok) throw new Error('Falha ao buscar instâncias Chatwoot.');
+      const data = await response.json();
+      setChatwootInstances(data || []);
+      return data || [];
     } catch (error: any) {
       toast({ title: "Erro ao Carregar Instâncias Chatwoot", description: error.message, variant: "destructive" });
       setChatwootInstances([]);
@@ -784,5 +785,7 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
+
+    
 
     
