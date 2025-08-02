@@ -45,7 +45,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from '@/hooks/use-toast';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Switch } from '@/components/ui/switch';
-import { cn } from '@/lib/utils';
+import { cn } from "@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -144,6 +144,63 @@ const TopBar: React.FC<TopBarProps> = ({
       setIsLoadingChatwootInstances(false);
     }
   }, [toast]);
+
+  const handleOpenSettings = async () => {
+    setIsSettingsDialogOpen(true);
+    // Pré-carrega ambas as listas de instâncias para o dropdown
+    await Promise.all([
+      fetchEvolutionInstances(),
+      fetchChatwootInstances()
+    ]);
+  };
+
+  const handleSaveEvolutionInstance = async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      const result = await saveEvolutionInstanceAction(formData);
+
+      if (result.success) {
+          toast({ title: "Sucesso!", description: "Instância da API Evolution salva." });
+          setEditingEvolutionInstance(null);
+          await fetchEvolutionInstances();
+      } else {
+          toast({ title: "Erro", description: result.error || "Falha ao salvar instância.", variant: "destructive" });
+      }
+  };
+
+  const handleDeleteEvolutionInstance = async (instanceId: string) => {
+      const result = await deleteEvolutionInstanceAction(instanceId);
+      if (result.success) {
+          toast({ title: "Sucesso!", description: "Instância da API Evolution excluída." });
+          await fetchEvolutionInstances();
+      } else {
+          toast({ title: "Erro", description: result.error || "Falha ao excluir instância.", variant: "destructive" });
+      }
+  };
+
+  const handleSaveChatwootInstance = async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const formData = new FormData(event.currentTarget);
+      const result = await saveChatwootInstanceAction(formData);
+
+      if (result.success) {
+          toast({ title: "Sucesso!", description: "Instância do Chatwoot salva." });
+          setEditingChatwootInstance(null);
+          await fetchChatwootInstances();
+      } else {
+          toast({ title: "Erro", description: result.error || "Falha ao salvar instância.", variant: "destructive" });
+      }
+  };
+
+  const handleDeleteChatwootInstance = async (instanceId: string) => {
+      const result = await deleteChatwootInstanceAction(instanceId);
+      if (result.success) {
+          toast({ title: "Sucesso!", description: "Instância do Chatwoot excluída." });
+          await fetchChatwootInstances();
+      } else {
+          toast({ title: "Erro", description: result.error || "Falha ao excluir instância.", variant: "destructive" });
+      }
+  };
 
 
   useEffect(() => {
@@ -352,7 +409,7 @@ const TopBar: React.FC<TopBarProps> = ({
                     <span>Perfil</span>
                 </DropdownMenuItem>
               </Link>
-              <DropdownMenuItem onSelect={() => setIsSettingsDialogOpen(true)}>
+              <DropdownMenuItem onSelect={handleOpenSettings}>
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Configurações do Fluxo</span>
               </DropdownMenuItem>
@@ -364,9 +421,9 @@ const TopBar: React.FC<TopBarProps> = ({
                     </DropdownMenuItem>
                 </Link>
               )}
-              <DropdownMenuItem disabled>
-                <CreditCard className="mr-2 h-4 w-4" />
-                <span>Assinatura</span>
+              <DropdownMenuItem onSelect={() => setIsInstanceManagerOpen(true)}>
+                <PlugZap className="mr-2 h-4 w-4" />
+                <span>Gerenciar Instâncias</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={logout}>
@@ -436,17 +493,41 @@ const TopBar: React.FC<TopBarProps> = ({
                   </div>
                   </AccordionTrigger>
                   <AccordionContent className="pt-4 space-y-4">
-                    <div className="flex items-center space-x-2">
+                     <div className="flex items-center space-x-2">
                         <Switch
                           id="chatwoot-enabled"
                           checked={activeWorkspace?.chatwoot_enabled || false}
                           onCheckedChange={(checked) => onUpdateWorkspace({ chatwoot_enabled: checked })}
                         />
-                        <Label htmlFor="chatwoot-enabled">Habilitar Integração Nativa com Chatwoot</Label>
+                        <Label htmlFor="chatwoot-enabled">Habilitar Detecção de Webhook Chatwoot</Label>
                     </div>
                      <p className="text-xs text-muted-foreground">
-                        Se habilitado, o sistema irá automaticamente detectar webhooks do Chatwoot, extrair dados do contato e da conversa, e injetá-los como variáveis no início do fluxo.
+                        Habilite para que o sistema identifique webhooks do Chatwoot e injete variáveis como `chatwoot_conversation_id` no fluxo.
                     </p>
+                    <div className="space-y-3">
+                      <Label htmlFor="chatwoot_instance_id">Instância do Chatwoot para Respostas</Label>
+                       <Select
+                          value={activeWorkspace?.chatwoot_instance_id || 'none'}
+                          onValueChange={(value) => onUpdateWorkspace({ chatwoot_instance_id: value === 'none' ? undefined : value })}
+                        >
+                          <SelectTrigger id="chatwoot_instance_id">
+                            <SelectValue placeholder="Nenhuma instância selecionada" />
+                          </SelectTrigger>
+                          <SelectContent>
+                             <SelectItem value="none">
+                                <em>Nenhuma (não responderá no Chatwoot)</em>
+                              </SelectItem>
+                            {chatwootInstances.map(instance => (
+                              <SelectItem key={instance.id} value={instance.id}>
+                                {instance.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                         Selecione uma instância para que nós como "Exibir Texto" possam responder diretamente na conversa do Chatwoot.
+                        </p>
+                    </div>
                   </AccordionContent>
               </AccordionItem>
             </Accordion>
@@ -463,15 +544,126 @@ const TopBar: React.FC<TopBarProps> = ({
       
       {/* Instance Management Dialog */}
       <Dialog open={isInstanceManagerOpen} onOpenChange={setIsInstanceManagerOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
             <DialogHeader>
-              <DialogTitle>Gerenciar Instâncias</DialogTitle>
+              <DialogTitle>Gerenciar Instâncias de Integração</DialogTitle>
               <DialogDescription>
-                Adicione e configure suas instâncias da API Evolution e Chatwoot.
+                Adicione e configure suas conexões com a API Evolution e Chatwoot.
               </DialogDescription>
             </DialogHeader>
-            <div className="flex-1 overflow-hidden mt-4">
-              <p>Gerenciador de instâncias aqui.</p>
+            <div className="flex-1 overflow-hidden mt-2">
+                <Tabs value={instanceManagerTab} onValueChange={setInstanceManagerTab} className="flex flex-col h-full">
+                    <TabsList className="self-start">
+                        <TabsTrigger value="evolution">API Evolution</TabsTrigger>
+                        <TabsTrigger value="chatwoot">Chatwoot</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="evolution" className="flex-1 overflow-y-auto pr-2 -mr-2 mt-2">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Instâncias da API Evolution</CardTitle>
+                                <CardDescription>Gerencie suas conexões com a API do WhatsApp.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {editingEvolutionInstance ? (
+                                    <form onSubmit={handleSaveEvolutionInstance} className="p-4 border rounded-lg space-y-3">
+                                        <h3 className="font-semibold">{editingEvolutionInstance.id ? 'Editando Instância' : 'Nova Instância'}</h3>
+                                        <input type="hidden" name="id" value={editingEvolutionInstance.id || ''} />
+                                        <div>
+                                            <Label htmlFor="evo-name">Nome</Label>
+                                            <Input id="evo-name" name="name" defaultValue={editingEvolutionInstance.name} required />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="evo-baseUrl">URL Base</Label>
+                                            <Input id="evo-baseUrl" name="baseUrl" defaultValue={editingEvolutionInstance.baseUrl} placeholder="http://localhost:8080" required />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="evo-apiKey">API Key (Opcional)</Label>
+                                            <Input id="evo-apiKey" name="apiKey" defaultValue={editingEvolutionInstance.apiKey} />
+                                        </div>
+                                        <div className="flex justify-end gap-2">
+                                            <Button type="button" variant="ghost" onClick={() => setEditingEvolutionInstance(null)}>Cancelar</Button>
+                                            <Button type="submit">Salvar</Button>
+                                        </div>
+                                    </form>
+                                ) : (
+                                    <Button onClick={() => setEditingEvolutionInstance({ id: '', name: '', baseUrl: '', apiKey: '', status: 'unconfigured' })}>
+                                        <PlusCircle className="mr-2" /> Adicionar Instância Evolution
+                                    </Button>
+                                )}
+                                 <ScrollArea className="h-64">
+                                    <Table>
+                                        <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>URL</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                                        <TableBody>
+                                            {evolutionInstances.map(instance => (
+                                                <TableRow key={instance.id}>
+                                                    <TableCell>{instance.name}</TableCell>
+                                                    <TableCell>{instance.baseUrl}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button variant="ghost" size="sm" onClick={() => setEditingEvolutionInstance(instance)}>Editar</Button>
+                                                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteEvolutionInstance(instance.id)}>Excluir</Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </ScrollArea>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                    <TabsContent value="chatwoot" className="flex-1 overflow-y-auto pr-2 -mr-2 mt-2">
+                        <Card>
+                             <CardHeader>
+                                <CardTitle>Instâncias do Chatwoot</CardTitle>
+                                <CardDescription>Gerencie suas conexões com a API do Chatwoot.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {editingChatwootInstance ? (
+                                    <form onSubmit={handleSaveChatwootInstance} className="p-4 border rounded-lg space-y-3">
+                                        <h3 className="font-semibold">{editingChatwootInstance.id ? 'Editando Instância' : 'Nova Instância'}</h3>
+                                        <input type="hidden" name="id" value={editingChatwootInstance.id || ''} />
+                                        <div>
+                                            <Label htmlFor="cw-name">Nome</Label>
+                                            <Input id="cw-name" name="name" defaultValue={editingChatwootInstance.name} required />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="cw-baseUrl">URL da Instância Chatwoot</Label>
+                                            <Input id="cw-baseUrl" name="baseUrl" defaultValue={editingChatwootInstance.baseUrl} placeholder="https://app.chatwoot.com" required />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="cw-apiAccessToken">Token de Acesso da API (Agente)</Label>
+                                            <Input id="cw-apiAccessToken" name="apiAccessToken" defaultValue={editingChatwootInstance.apiAccessToken} required />
+                                        </div>
+                                        <div className="flex justify-end gap-2">
+                                            <Button type="button" variant="ghost" onClick={() => setEditingChatwootInstance(null)}>Cancelar</Button>
+                                            <Button type="submit">Salvar</Button>
+                                        </div>
+                                    </form>
+                                ) : (
+                                    <Button onClick={() => setEditingChatwootInstance({ id: '', name: '', baseUrl: '', apiAccessToken: '', status: 'unconfigured' })}>
+                                        <PlusCircle className="mr-2" /> Adicionar Instância Chatwoot
+                                    </Button>
+                                )}
+                                 <ScrollArea className="h-64">
+                                    <Table>
+                                        <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>URL</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                                        <TableBody>
+                                            {chatwootInstances.map(instance => (
+                                                <TableRow key={instance.id}>
+                                                    <TableCell>{instance.name}</TableCell>
+                                                    <TableCell>{instance.baseUrl}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button variant="ghost" size="sm" onClick={() => setEditingChatwootInstance(instance)}>Editar</Button>
+                                                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteChatwootInstance(instance.id)}>Excluir</Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </ScrollArea>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
             </div>
             <DialogFooter>
                 <DialogClose asChild><Button type="button" variant="secondary" onClick={() => { setIsInstanceManagerOpen(false); }}>Fechar</Button></DialogClose>
