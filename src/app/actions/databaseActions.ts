@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { Pool, type QueryResult } from 'pg';
@@ -128,7 +129,8 @@ async function initializeDatabaseSchema(): Promise<void> {
         owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW(),
-        evolution_instance_id UUID
+        evolution_instance_id UUID,
+        chatwoot_enabled BOOLEAN DEFAULT false
       );
     `);
     
@@ -169,6 +171,12 @@ async function initializeDatabaseSchema(): Promise<void> {
     if (evoInstanceIdColInfo.rowCount === 0) {
       console.log("[DB Actions] 'evolution_instance_id' column not found in 'workspaces'. Adding column...");
       await client.query('ALTER TABLE workspaces ADD COLUMN evolution_instance_id UUID;');
+    }
+    
+    const chatwootEnabledColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='chatwoot_enabled'`);
+    if (chatwootEnabledColInfo.rowCount === 0) {
+      console.log("[DB Actions] 'chatwoot_enabled' column not found in 'workspaces'. Adding column...");
+      await client.query('ALTER TABLE workspaces ADD COLUMN chatwoot_enabled BOOLEAN DEFAULT false;');
     }
     
     const fkConstraintExists = await client.query(`
@@ -282,6 +290,7 @@ export async function createWorkspaceAction(
             nodes: [defaultStartNode],
             connections: [],
             owner_id: ownerId,
+            chatwoot_enabled: false,
         };
 
         const saveResult = await saveWorkspaceToDB(newWorkspace);
@@ -305,14 +314,15 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
     }
     
     const query = `
-      INSERT INTO workspaces (id, name, nodes, connections, owner_id, evolution_instance_id, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+      INSERT INTO workspaces (id, name, nodes, connections, owner_id, evolution_instance_id, chatwoot_enabled, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
       ON CONFLICT (id) DO UPDATE
       SET name = EXCLUDED.name,
           nodes = EXCLUDED.nodes,
           connections = EXCLUDED.connections,
           updated_at = NOW(),
-          evolution_instance_id = EXCLUDED.evolution_instance_id;
+          evolution_instance_id = EXCLUDED.evolution_instance_id,
+          chatwoot_enabled = EXCLUDED.chatwoot_enabled;
     `;
     
     await runQuery(query, [
@@ -322,6 +332,7 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
       JSON.stringify(workspaceData.connections || []),
       workspaceData.owner_id,
       workspaceData.evolution_instance_id || null,
+      workspaceData.chatwoot_enabled || false,
     ]);
     
     return { success: true };
@@ -340,7 +351,7 @@ export async function loadWorkspaceFromDB(workspaceId: string): Promise<Workspac
   try {
     const result = await runQuery<WorkspaceData>(`
         SELECT 
-            id, name, nodes, connections, owner_id, created_at, updated_at, evolution_instance_id
+            id, name, nodes, connections, owner_id, created_at, updated_at, evolution_instance_id, chatwoot_enabled
         FROM workspaces 
         WHERE id = $1
     `, [workspaceId]);
@@ -367,7 +378,7 @@ export async function loadWorkspacesForOwnerFromDB(ownerId: string): Promise<Wor
     }
     const result = await runQuery<WorkspaceData>(
       `SELECT 
-        id, name, nodes, connections, owner_id, created_at, updated_at, evolution_instance_id
+        id, name, nodes, connections, owner_id, created_at, updated_at, evolution_instance_id, chatwoot_enabled
        FROM workspaces 
        WHERE owner_id = $1 
        ORDER BY updated_at DESC`,

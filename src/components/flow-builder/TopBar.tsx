@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import {
   Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard,
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy, FileJson2,
-  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut, Trash2, Home, ChevronsLeft, CircleDot, Circle, Cloud, CloudOff, Loader2, PlusCircle, Shield
+  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut, Trash2, Home, ChevronsLeft, CircleDot, Circle, Cloud, CloudOff, Loader2, PlusCircle, Shield, MessageCircle
 } from 'lucide-react';
 import {
   Dialog,
@@ -484,6 +485,27 @@ const TopBar: React.FC<TopBarProps> = ({
                         </p>
                       </div>
                   </div>
+                  </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="chatwoot">
+                  <AccordionTrigger className="font-semibold text-base py-3">
+                  <div className="flex items-center gap-3">
+                      <MessageCircle className="w-6 h-6 text-blue-500" />
+                      Chatwoot
+                  </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-4 space-y-4">
+                    <div className="flex items-center space-x-2">
+                        <Switch
+                          id="chatwoot-enabled"
+                          checked={activeWorkspace?.chatwoot_enabled || false}
+                          onCheckedChange={(checked) => onUpdateWorkspace({ chatwoot_enabled: checked })}
+                        />
+                        <Label htmlFor="chatwoot-enabled">Habilitar Integração Nativa com Chatwoot</Label>
+                    </div>
+                     <p className="text-xs text-muted-foreground">
+                        Se habilitado, o sistema irá automaticamente detectar webhooks do Chatwoot, extrair dados do contato e da conversa, e injetá-los como variáveis no início do fluxo.
+                    </p>
                   </AccordionContent>
               </AccordionItem>
             </Accordion>

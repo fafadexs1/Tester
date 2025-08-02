@@ -1,4 +1,5 @@
 
+
 export interface DraggableBlockItemData {
   type: string;
   label: string;
@@ -248,6 +249,7 @@ export interface WorkspaceData {
   created_at?: string | Date;
   updated_at?: string | Date;
   evolution_instance_id?: string | null;
+  chatwoot_enabled?: boolean;
 }
 
 export type AwaitingInputNode = 'input' | 'option' | 'date-input' | 'file-upload' | 'rating-input';

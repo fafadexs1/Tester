@@ -1,4 +1,5 @@
 
+
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -723,8 +724,8 @@ export async function POST(request: NextRequest, context: { params: { webhookId:
         session_id: sessionId,
       };
 
-      // Auto-inject Chatwoot variables if it's a Chatwoot payload
-      if (getProperty(payloadToUse, 'event') === 'message_created' || getProperty(payloadToUse, 'body.event') === 'message_created') {
+      // Auto-inject Chatwoot variables if it's a Chatwoot payload and the integration is enabled
+      if (workspace.chatwoot_enabled && (getProperty(payloadToUse, 'event') === 'message_created' || getProperty(payloadToUse, 'body.event') === 'message_created')) {
         const chatwootMappings = {
             chatwoot_conversation_id: 'body.conversation.id',
             chatwoot_contact_id: 'body.sender.id',
