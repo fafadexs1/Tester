@@ -5,14 +5,14 @@ import { loadWorkspaceFromDB } from "@/app/actions/databaseActions";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import FlowBuilderClient from "@/components/flow-builder/FlowBuilderClient";
 
-export default async function FlowEditorPage({ params }: { params: { workspaceId: string } }) {
+export default async function FlowEditorPage({ params }: { params: Promise<{ workspaceId: string }> }) {
   const user = await getCurrentUser();
 
   if (!user || !user.id) {
     redirect('/login');
   }
 
-  const { workspaceId } = params;
+  const { workspaceId } = await params;
 
   // A criação de 'new' agora é tratada no dashboard, então se chegarmos aqui com 'new', redirecionamos.
   if (workspaceId === 'new') {
