@@ -48,29 +48,39 @@ const CHATWOOT_PREFILLED_VARIABLES = [
 
 /**
  * Extrai todas as variáveis que um nó específico define.
+ * Agora é mais estrito, só adiciona se o campo existir e não for uma string vazia.
  */
 function getVariablesFromNode(node: NodeData): string[] {
     const variables: string[] = [];
-    VARIABLE_DEFINING_FIELDS.forEach(field => {
-        const varName = node[field] as string | undefined;
-        if (varName && varName.trim() !== '') {
-            variables.push(varName.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
-        }
-    });
-    if (node.type === 'start' && Array.isArray(node.triggers)) {
-        node.triggers.forEach(trigger => {
-            if (trigger.type === 'webhook' && Array.isArray(trigger.variableMappings)) {
-                trigger.variableMappings.forEach(mapping => {
-                    if(mapping.flowVariable) variables.push(mapping.flowVariable.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
-                });
+
+    // Itera sobre os campos que definem variáveis
+    for (const field of VARIABLE_DEFINING_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(node, field)) {
+            const varName = node[field] as string | undefined;
+            if (varName && typeof varName === 'string' && varName.trim() !== '') {
+                variables.push(varName.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
             }
-        });
+        }
+    }
+
+    // Lógica específica para o nó de início e seus mapeamentos de webhook
+    if (node.type === 'start' && Array.isArray(node.triggers)) {
+        for (const trigger of node.triggers) {
+            if (trigger.type === 'webhook' && Array.isArray(trigger.variableMappings)) {
+                for (const mapping of trigger.variableMappings) {
+                    if (mapping.flowVariable && typeof mapping.flowVariable === 'string' && mapping.flowVariable.trim() !== '') {
+                        variables.push(mapping.flowVariable.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
+                    }
+                }
+            }
+        }
     }
     return variables;
 }
 
 /**
  * Encontra todos os nós ancestrais para um nó específico, navegando para trás no fluxo.
+ * Utiliza busca em largura (BFS) para evitar recursão infinita em loops.
  */
 function getAncestorsForNode(
     nodeId: string, 
@@ -84,21 +94,24 @@ function getAncestorsForNode(
 
     const ancestors = new Map<string, NodeData>();
     const nodesMap = new Map(nodes.map(n => [n.id, n]));
+    const queue: string[] = [nodeId];
+    const visited = new Set<string>([nodeId]); // Previne re-processamento do mesmo nó na fila
 
-    const q: string[] = [nodeId];
-    const visitedForThisRun = new Set<string>();
-
-    while(q.length > 0) {
-        const currentId = q.shift()!;
-        if(visitedForThisRun.has(currentId)) continue;
-        visitedForThisRun.add(currentId);
-
+    while (queue.length > 0) {
+        const currentId = queue.shift()!;
+        
         const incomingConnections = connections.filter(c => c.to === currentId);
-        for(const conn of incomingConnections) {
-            const parentNode = nodesMap.get(conn.from);
-            if(parentNode && !ancestors.has(parentNode.id)) {
-                ancestors.set(parentNode.id, parentNode);
-                q.push(parentNode.id);
+
+        for (const conn of incomingConnections) {
+            const parentId = conn.from;
+            const parentNode = nodesMap.get(parentId);
+
+            if (parentNode && !ancestors.has(parentId)) {
+                ancestors.set(parentId, parentNode);
+                if (!visited.has(parentId)) {
+                    visited.add(parentId);
+                    queue.push(parentId);
+                }
             }
         }
     }
@@ -331,37 +344,10 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
       });
     }
     
-    const baseNodeData: Omit<NodeData, 'id' | 'type' | 'title' | 'x' | 'y'> = {
-      text: '', promptText: '', inputType: 'text', variableToSaveResponse: 'entrada_usuario',
-      questionText: '', optionsList: 'Opção 1\nOpção 2', variableToSaveChoice: 'escolha_usuario',
-      mediaDisplayType: 'image', mediaDisplayUrl: 'https://placehold.co/300x200.png', mediaDisplayText: 'Imagem de exemplo', dataAiHint: 'placeholder abstract',
-      conditionVariable: '{{variavel}}', conditionOperator: '==', conditionValue: 'valor',
-      variableName: 'minha_variavel', variableValue: 'valor_padrao', delayDuration: 1000, typingDuration: 1500,
-      logMessage: 'Log: {{status}}', codeSnippet: "return { resultado: 'sucesso' };", codeOutputVariable: 'resultado_codigo', 
-      inputJson: '{ "nome": "Exemplo" }', jsonataExpression: '$.nome', jsonOutputVariable: 'nome_transformado',
-      uploadPromptText: 'Envie seu arquivo.', fileTypeFilter: 'image/*,.pdf', maxFileSizeMB: 5, fileUrlVariable: 'url_arquivo',
-      ratingQuestionText: 'Como você avalia?', maxRatingValue: 5, ratingIconType: 'star', ratingOutputVariable: 'avaliacao',
-      apiUrl: 'https://', apiMethod: 'GET', apiAuthType: 'none',
-      apiAuthBearerToken: '', apiAuthBasicUser: '', apiAuthBasicPassword: '',
-      apiHeadersList: [], apiQueryParamsList: [],
-      apiBodyType: 'none', apiBodyJson: '{}', apiBodyFormDataList: [], apiBodyRaw: '',
-      apiOutputVariable: 'resposta_api',
-      redirectUrl: 'https://', dateInputLabel: 'Qual a data?', variableToSaveDate: 'data_selecionada',
-      emailTo: 'dest@ex.com', emailSubject: 'Assunto', emailBody: 'Corpo', emailFrom: 'remet@ex.com',
-      googleSheetId: '', googleSheetName: 'Página1', googleSheetRowData: '["{{col1}}", "{{col2}}"]',
-      instanceName: '', phoneNumber: '', textMessage: 'Olá de NexusFlow!', mediaUrl: '', mediaType: 'image', caption: '', groupName: 'Novo Grupo', participants: '',
-      aiPromptText: 'Escreva um poema sobre {{tema}}', aiModelName: '', aiOutputVariable: 'texto_ia',
-      agentName: 'Agente IA', agentSystemPrompt: 'Você é um assistente prestativo.',
-      userInputVariable: '{{entrada_usuario_agente}}', agentResponseVariable: 'resposta_agente_ia', maxConversationTurns: 5, temperature: 0.7,
-      supabaseTableName: '', supabaseIdentifierColumn: 'id', supabaseIdentifierValue: '{{id_registro}}', supabaseDataJson: '{ "coluna": "valor" }', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase',
-    };
-
     const newNode: NodeData = {
       id: uuidv4(),
       type: item.type as NodeData['type'],
       title: item.label,
-      ...baseNodeData, 
-      ...(item.type === 'start' && !itemDefaultDataCopy.triggers && { triggers: [{ id: uuidv4(), name: 'Manual', type: 'manual', enabled: true }, { id: uuidv4(), name: 'Webhook', type: 'webhook', enabled: false, variableMappings: [], sessionTimeoutSeconds: 0 }] }),
       ...itemDefaultDataCopy, 
       x: Math.round((logicalDropCoords.x - NODE_WIDTH / 2) / GRID_SIZE) * GRID_SIZE, 
       y: Math.round((logicalDropCoords.y - NODE_HEADER_HEIGHT_APPROX / 2) / GRID_SIZE) * GRID_SIZE, 
