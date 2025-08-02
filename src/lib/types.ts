@@ -249,11 +249,13 @@ export interface WorkspaceData {
   created_at?: string | Date;
   updated_at?: string | Date;
   evolution_instance_id?: string | null;
+  chatwoot_instance_id?: string | null;
   chatwoot_enabled?: boolean;
 }
 
 export type AwaitingInputNode = 'input' | 'option' | 'date-input' | 'file-upload' | 'rating-input';
 export type FlowSessionAwaitingInputType = AwaitingInputNode | null;
+export type FlowContextType = 'evolution' | 'chatwoot' | 'test';
 
 export interface FlowSession {
   session_id: string; 
@@ -269,6 +271,7 @@ export interface FlowSession {
   session_timeout_seconds?: number;
   last_interaction_at?: string | Date;
   created_at?: string | Date;
+  flow_context?: FlowContextType;
 }
 
 export interface User {
@@ -283,5 +286,13 @@ export interface EvolutionInstance {
   name: string;
   baseUrl: string;
   apiKey: string;
+  status: 'online' | 'offline' | 'unconfigured' | 'connecting';
+}
+
+export interface ChatwootInstance {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiAccessToken: string;
   status: 'online' | 'offline' | 'unconfigured' | 'connecting';
 }
