@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, WorkspaceData, StartNodeTrigger, User } from '@/lib/types';
 import { 
   NODE_WIDTH, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX, GRID_SIZE,
@@ -33,6 +33,81 @@ const VARIABLE_DEFINING_FIELDS: (keyof NodeData)[] = [
   'jsonOutputVariable', 'fileUrlVariable', 'ratingOutputVariable', 
   'aiOutputVariable', 'agentResponseVariable', 'supabaseResultVariable',
 ];
+
+const CHATWOOT_PREFILLED_VARIABLES = [
+    'chatwoot_conversation_id',
+    'chatwoot_contact_id',
+    'chatwoot_account_id',
+    'chatwoot_inbox_id',
+    'contact_name',
+    'contact_phone'
+];
+
+
+// --- Funções de Escopo de Variáveis ---
+
+/**
+ * Extrai todas as variáveis que um nó específico define.
+ */
+function getVariablesFromNode(node: NodeData): string[] {
+    const variables: string[] = [];
+    VARIABLE_DEFINING_FIELDS.forEach(field => {
+        const varName = node[field] as string | undefined;
+        if (varName && varName.trim() !== '') {
+            variables.push(varName.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
+        }
+    });
+    if (node.type === 'start' && Array.isArray(node.triggers)) {
+        node.triggers.forEach(trigger => {
+            if (trigger.type === 'webhook' && Array.isArray(trigger.variableMappings)) {
+                trigger.variableMappings.forEach(mapping => {
+                    if(mapping.flowVariable) variables.push(mapping.flowVariable.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
+                });
+            }
+        });
+    }
+    return variables;
+}
+
+/**
+ * Encontra todos os nós ancestrais para um nó específico, navegando para trás no fluxo.
+ */
+function getAncestorsForNode(
+    nodeId: string, 
+    nodes: NodeData[], 
+    connections: Connection[],
+    memo: Map<string, NodeData[]> = new Map()
+): NodeData[] {
+    if (memo.has(nodeId)) {
+        return memo.get(nodeId)!;
+    }
+
+    const ancestors = new Map<string, NodeData>();
+    const nodesMap = new Map(nodes.map(n => [n.id, n]));
+
+    const q: string[] = [nodeId];
+    const visitedForThisRun = new Set<string>();
+
+    while(q.length > 0) {
+        const currentId = q.shift()!;
+        if(visitedForThisRun.has(currentId)) continue;
+        visitedForThisRun.add(currentId);
+
+        const incomingConnections = connections.filter(c => c.to === currentId);
+        for(const conn of incomingConnections) {
+            const parentNode = nodesMap.get(conn.from);
+            if(parentNode && !ancestors.has(parentNode.id)) {
+                ancestors.set(parentNode.id, parentNode);
+                q.push(parentNode.id);
+            }
+        }
+    }
+    
+    const result = Array.from(ancestors.values());
+    memo.set(nodeId, result);
+    return result;
+}
+
 
 function generateUniqueVariableName(baseName: string, existingNames: string[]): string {
   if (!baseName || baseName.trim() === '') return '';
@@ -82,7 +157,8 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
 
   const [isChatPanelOpen, setIsChatPanelOpen] = useState(true);
   const [hasMounted, setHasMounted] = useState(false);
-  const [definedVariablesInFlow, setDefinedVariablesInFlow] = useState<string[]>([]);
+  
+  const [availableVariablesByNode, setAvailableVariablesByNode] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     setHasMounted(true);
@@ -108,40 +184,31 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const currentNodes = activeWorkspace?.nodes || [];
   const currentConnections = activeWorkspace?.connections || [];
 
- useEffect(() => {
-    if (activeWorkspace?.nodes) {
-      const variablesSet: Set<string> = new Set();
-      activeWorkspace.nodes.forEach(n => {
-        VARIABLE_DEFINING_FIELDS.forEach(field => {
-          const varName = n[field] as string | undefined;
-          if (varName && varName.trim() !== '') {
-            variablesSet.add(varName.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
-          }
-        });
-        if (n.type === 'start' && Array.isArray(n.triggers)) {
-          n.triggers.forEach(trigger => {
-            if (trigger.type === 'webhook' && Array.isArray(trigger.variableMappings)) {
-              trigger.variableMappings.forEach(mapping => {
-                if(mapping.flowVariable) variablesSet.add(mapping.flowVariable.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
-              })
-            }
-          });
-        }
-      });
-      const newVarsArray = Array.from(variablesSet).sort();
-      setDefinedVariablesInFlow(prevDefinedVars => {
-        if (JSON.stringify(prevDefinedVars) === JSON.stringify(newVarsArray)) {
-          return prevDefinedVars;
-        }
-        return newVarsArray;
-      });
-    } else {
-       setDefinedVariablesInFlow(prevDefinedVars => {
-        if (prevDefinedVars.length === 0) return prevDefinedVars;
-        return [];
-      });
+  // Recalcula o escopo de variáveis sempre que o fluxo mudar
+  useEffect(() => {
+    if (!activeWorkspace || !activeWorkspace.nodes) {
+        setAvailableVariablesByNode({});
+        return;
     }
-  }, [activeWorkspace?.nodes]);
+
+    const { nodes, connections, chatwoot_enabled } = activeWorkspace;
+    const newVarsByNode: Record<string, string[]> = {};
+    const ancestorMemo = new Map<string, NodeData[]>();
+    
+    // Variáveis base que estão sempre disponíveis
+    const baseVars = ['session_id'];
+    if (chatwoot_enabled) {
+        baseVars.push(...CHATWOOT_PREFILLED_VARIABLES);
+    }
+
+    for (const node of nodes) {
+        const ancestors = getAncestorsForNode(node.id, nodes, connections, ancestorMemo);
+        const ancestorVars = ancestors.flatMap(getVariablesFromNode);
+        const uniqueVars = Array.from(new Set([...baseVars, ...ancestorVars])).sort();
+        newVarsByNode[node.id] = uniqueVars;
+    }
+    setAvailableVariablesByNode(newVarsByNode);
+  }, [activeWorkspace]);
 
 
   const toggleChatPanel = useCallback(() => {
@@ -227,24 +294,8 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const handleDropNode = useCallback((item: DraggableBlockItemData, logicalDropCoords: { x: number, y: number }) => {
     let tempExistingVars: string[] = [];
     if (activeWorkspace?.nodes) {
-        activeWorkspace.nodes.forEach(n => {
-            VARIABLE_DEFINING_FIELDS.forEach(field => {
-                const varName = n[field] as string | undefined;
-                if (varName && varName.trim() !== '') {
-                    tempExistingVars.push(varName.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
-                }
-            });
-            if (n.type === 'start' && Array.isArray(n.triggers)) {
-              n.triggers.forEach(trigger => {
-                if (trigger.type === 'webhook' && Array.isArray(trigger.variableMappings)) {
-                  trigger.variableMappings.forEach(mapping => {
-                    if(mapping.flowVariable) tempExistingVars.push(mapping.flowVariable.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
-                  })
-                }
-              });
-            }
-        });
-        tempExistingVars = Array.from(new Set(tempExistingVars));
+        const allVarsInFlow = Object.values(availableVariablesByNode).flat();
+        tempExistingVars = Array.from(new Set(allVarsInFlow));
     }
     
     const itemDefaultDataCopy = item.defaultData ? JSON.parse(JSON.stringify(item.defaultData)) : {};
@@ -320,7 +371,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
       const updatedNodes = [...(ws.nodes || []), newNode]; 
       return { ...ws, nodes: updatedNodes };
     });
-  }, [activeWorkspace, updateActiveWorkspace]);
+  }, [activeWorkspace, updateActiveWorkspace, availableVariablesByNode]);
 
   const updateNode = useCallback((id: string, changes: Partial<NodeData>) => {
     updateActiveWorkspace(ws => ({
@@ -598,7 +649,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
               onCanvasMouseDown={handleCanvasMouseDownForPanning}
               highlightedConnectionId={highlightedConnectionId}
               setHighlightedConnectionId={setHighlightedConnectionId}
-              definedVariablesInFlow={definedVariablesInFlow}
+              availableVariablesByNode={availableVariablesByNode}
               highlightedNodeIdBySession={highlightedNodeIdBySession}
               activeWorkspace={activeWorkspace}
             />

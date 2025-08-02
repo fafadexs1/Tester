@@ -30,7 +30,7 @@ interface CanvasProps {
   onCanvasMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
   highlightedConnectionId: string | null;
   setHighlightedConnectionId: (id: string | null) => void;
-  definedVariablesInFlow: string[];
+  availableVariablesByNode: Record<string, string[]>;
   highlightedNodeIdBySession: string | null;
   activeWorkspace: WorkspaceData | undefined | null;
 }
@@ -41,7 +41,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   nodes, connections, drawingLine, canvasOffset, zoomLevel,
   onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDeleteConnection,
   onCanvasMouseDown, highlightedConnectionId, setHighlightedConnectionId,
-  definedVariablesInFlow, highlightedNodeIdBySession, activeWorkspace
+  availableVariablesByNode, highlightedNodeIdBySession, activeWorkspace
 }, ref) => {
   const localCanvasRef = useRef<HTMLDivElement>(null);
   const flowContentWrapperRef = useRef<HTMLDivElement>(null);
@@ -149,13 +149,13 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
           onUpdate={onUpdateNode}
           onStartConnection={onStartConnection} 
           onDeleteNode={onDeleteNode}
-          definedVariablesInFlow={definedVariablesInFlow}
+          availableVariables={availableVariablesByNode[node.id] || []}
           isSessionHighlighted={node.id === highlightedNodeIdBySession}
           activeWorkspace={activeWorkspace}
         />
       </motion.div>
     ))
-  ), [nodes, onUpdateNode, onStartConnection, onDeleteNode, definedVariablesInFlow, highlightedNodeIdBySession, activeWorkspace]);
+  ), [nodes, onUpdateNode, onStartConnection, onDeleteNode, availableVariablesByNode, highlightedNodeIdBySession, activeWorkspace]);
 
   const renderedConnections = useMemo(() => (
     (connections || []).map((conn) => {

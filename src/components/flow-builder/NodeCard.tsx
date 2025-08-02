@@ -42,7 +42,7 @@ interface NodeCardProps {
   onUpdate: (id: string, changes: Partial<NodeData>) => void;
   onStartConnection: (event: React.MouseEvent, fromNodeData: NodeData, sourceHandleId?: string) => void;
   onDeleteNode: (id: string) => void;
-  definedVariablesInFlow: string[];
+  availableVariables: string[];
   isSessionHighlighted?: boolean;
   activeWorkspace: WorkspaceData | undefined | null;
 }
@@ -165,7 +165,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   onUpdate,
   onStartConnection,
   onDeleteNode,
-  definedVariablesInFlow,
+  availableVariables,
   isSessionHighlighted,
   activeWorkspace
 }) => {
@@ -590,7 +590,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     itemId?: string,
     itemKeyOrValue?: 'key' | 'value'
   ) => {
-    const allVars = ['session_id', ...definedVariablesInFlow].filter((v, i, a) => a.indexOf(v) === i).sort();
+    const allVars = availableVariables;
     if (allVars.length === 0) return null;
 
     return (
