@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger, WebhookVariableMapping, WorkspaceData, EvolutionInstance, SwitchCase } from '@/lib/types';
+import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger, WebhookVariableMapping, WorkspaceData, EvolutionInstance, SwitchCase, ChatwootInstance } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target, Hourglass, GitCommitHorizontal
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target, Hourglass, GitCommitHorizontal, MessageCircle
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -34,6 +34,7 @@ import {
 } from '@/lib/constants';
 import { fetchSupabaseTablesAction, fetchSupabaseTableColumnsAction } from '@/lib/supabase/actions';
 import { checkEvolutionInstanceStatus } from '@/app/actions/evolutionApiActions';
+import { checkChatwootInstanceStatus } from '@/app/actions/chatwootApiActions';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 
@@ -188,9 +189,11 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const [isLoadingSupabaseColumns, setIsLoadingSupabaseColumns] = useState(false);
   const [supabaseSchemaError, setSupabaseSchemaError] = useState<string | null>(null);
 
-  const [isEvolutionPopoverOpen, setIsEvolutionPopoverOpen] = useState(false);
+  const [isIntegrationsPopoverOpen, setIsIntegrationsPopoverOpen] = useState(false);
   const [evolutionInstances, setEvolutionInstances] = useState<EvolutionInstance[]>([]);
   const [isLoadingEvolutionInstances, setIsLoadingEvolutionInstances] = useState(false);
+  const [chatwootInstances, setChatwootInstances] = useState<ChatwootInstance[]>([]);
+  const [isLoadingChatwootInstances, setIsLoadingChatwootInstances] = useState(false);
 
   useEffect(() => {
     if (node.type === 'start') {
@@ -310,38 +313,57 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id, node.supabaseTableName]);
 
-  const handleCheckInstanceStatus = useCallback(async (instance: EvolutionInstance) => {
+  const handleCheckEvolutionInstanceStatus = useCallback(async (instance: EvolutionInstance) => {
     setEvolutionInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: 'connecting' } : i));
     const result = await checkEvolutionInstanceStatus(instance.baseUrl, instance.name, instance.apiKey);
     setEvolutionInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: result.status } : i));
   }, []);
 
-  const loadEvolutionInstancesAndCheckStatus = useCallback(async () => {
+  const handleCheckChatwootInstanceStatus = useCallback(async (instance: ChatwootInstance) => {
+    setChatwootInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: 'connecting' } : i));
+    const result = await checkChatwootInstanceStatus(instance.baseUrl, instance.apiAccessToken);
+    setChatwootInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: result.status } : i));
+  }, []);
+
+  const loadInstancesAndCheckStatus = useCallback(async () => {
     setIsLoadingEvolutionInstances(true);
+    setIsLoadingChatwootInstances(true);
+    
     try {
-      const response = await fetch('/api/instances/evolution');
-      if (!response.ok) {
-        throw new Error('Falha ao buscar instâncias do servidor.');
-      }
-      const data: EvolutionInstance[] = await response.json();
-      const instancesWithStatus = data.map(d => ({ ...d, status: 'unconfigured' as const }));
-      setEvolutionInstances(instancesWithStatus);
-      instancesWithStatus.forEach(instance => {
-          handleCheckInstanceStatus(instance);
-      });
+      const evoResponse = await fetch('/api/instances/evolution');
+      if (!evoResponse.ok) throw new Error('Falha ao buscar instâncias Evolution.');
+      const evoData: EvolutionInstance[] = await evoResponse.json();
+      const evoInstancesWithStatus = evoData.map(d => ({ ...d, status: 'unconfigured' as const }));
+      setEvolutionInstances(evoInstancesWithStatus);
+      evoInstancesWithStatus.forEach(instance => handleCheckEvolutionInstanceStatus(instance));
     } catch (error: any) {
-      toast({ title: "Erro ao Carregar Instâncias", description: error.message, variant: "destructive" });
+      toast({ title: "Erro ao Carregar Instâncias Evolution", description: error.message, variant: "destructive" });
       setEvolutionInstances([]);
     } finally {
       setIsLoadingEvolutionInstances(false);
     }
-  }, [toast, handleCheckInstanceStatus]);
-
-  const handleEvolutionPopoverOpen = (open: boolean) => {
-    if(open) {
-      loadEvolutionInstancesAndCheckStatus();
+    
+    try {
+      const cwResponse = await fetch('/api/instances/chatwoot');
+      if (!cwResponse.ok) throw new Error('Falha ao buscar instâncias Chatwoot.');
+      const cwData: ChatwootInstance[] = await cwResponse.json();
+      const cwInstancesWithStatus = cwData.map(d => ({ ...d, status: 'unconfigured' as const }));
+      setChatwootInstances(cwInstancesWithStatus);
+      cwInstancesWithStatus.forEach(instance => handleCheckChatwootInstanceStatus(instance));
+    } catch (error: any) {
+      toast({ title: "Erro ao Carregar Instâncias Chatwoot", description: error.message, variant: "destructive" });
+      setChatwootInstances([]);
+    } finally {
+      setIsLoadingChatwootInstances(false);
     }
-    setIsEvolutionPopoverOpen(open);
+
+  }, [toast, handleCheckEvolutionInstanceStatus, handleCheckChatwootInstanceStatus]);
+
+  const handleIntegrationsPopoverOpen = (open: boolean) => {
+    if(open) {
+      loadInstancesAndCheckStatus();
+    }
+    setIsIntegrationsPopoverOpen(open);
   }
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent) => {
@@ -607,7 +629,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[200px] p-0" data-no-drag="true" align="end">
-          <ScrollArea className="h-[150px]">
+          <ScrollArea className="h-auto max-h-[150px]">
             <div className="p-1 text-xs">
               {allVars.map((varName) => (
                 <Button
@@ -1848,44 +1870,62 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </div>
           <div className="flex items-center gap-1">
              {node.type === 'start' && (
-               <Popover open={isEvolutionPopoverOpen} onOpenChange={handleEvolutionPopoverOpen}>
+               <Popover open={isIntegrationsPopoverOpen} onOpenChange={handleIntegrationsPopoverOpen}>
                  <PopoverTrigger asChild>
-                   <Button variant="ghost" size="icon" className="p-0.5 text-muted-foreground hover:text-foreground w-6 h-6" aria-label="Instâncias da API Evolution">
+                   <Button variant="ghost" size="icon" className="p-0.5 text-muted-foreground hover:text-foreground w-6 h-6" aria-label="Status das Integrações">
                      <BotMessageSquare className="w-4 h-4" />
                    </Button>
                  </PopoverTrigger>
                  <PopoverContent className="w-80" align="end" data-no-drag="true">
                    <div className="grid gap-4">
                      <div className="space-y-2">
-                       <h4 className="font-medium leading-none">Instâncias da API Evolution</h4>
+                       <h4 className="font-medium leading-none">Status das Integrações</h4>
                        <p className="text-sm text-muted-foreground">
                          Status das suas instâncias configuradas.
                        </p>
                      </div>
                       <ScrollArea className="h-auto max-h-[200px]">
-                        <div className="grid gap-2">
-                           {isLoadingEvolutionInstances ? (
-                               <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
-                                   <Loader2 className="mr-2 h-4 w-4 animate-spin"/> Carregando...
+                        <div className="grid gap-4">
+                          <div>
+                            <h5 className="text-sm font-semibold mb-2 flex items-center gap-2"><BotMessageSquare className="w-4 h-4 text-teal-500" /> API Evolution</h5>
+                             {isLoadingEvolutionInstances ? (
+                                 <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
+                                     <Loader2 className="mr-2 h-4 w-4 animate-spin"/> Carregando...
+                                 </div>
+                             ) : evolutionInstances.length > 0 ? evolutionInstances.map((instance) => (
+                               <div key={instance.id} className="grid grid-cols-[auto,1fr,auto] items-center gap-x-2 text-sm p-2 rounded-md border bg-muted/50">
+                                 <div
+                                     className={cn("w-2.5 h-2.5 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
+                                     title={instance.status}
+                                 />
+                                 <div className="font-medium truncate" title={instance.name}>{instance.name}</div>
+                                 <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
                                </div>
-                           ) : evolutionInstances.length > 0 ? evolutionInstances.map((instance) => (
-                             <div key={instance.id} className="grid grid-cols-[auto,1fr,auto] items-center gap-x-2 text-sm p-2 rounded-md border bg-muted/50">
-                               <div
-                                   className={cn("w-2.5 h-2.5 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
-                                   title={instance.status}
-                               />
-                               <div className="font-medium truncate" title={instance.name}>{instance.name}</div>
-                               <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
-                             </div>
-                           )) : (
-                             <p className="text-xs text-muted-foreground text-center py-2">Nenhuma instância configurada.</p>
-                           )}
+                             )) : (
+                               <p className="text-xs text-muted-foreground text-center py-2">Nenhuma instância configurada.</p>
+                             )}
+                          </div>
+                          <div>
+                            <h5 className="text-sm font-semibold mb-2 flex items-center gap-2"><MessageCircle className="w-4 h-4 text-blue-500"/> Chatwoot</h5>
+                             {isLoadingChatwootInstances ? (
+                                 <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
+                                     <Loader2 className="mr-2 h-4 w-4 animate-spin"/> Carregando...
+                                 </div>
+                             ) : chatwootInstances.length > 0 ? chatwootInstances.map((instance) => (
+                               <div key={instance.id} className="grid grid-cols-[auto,1fr,auto] items-center gap-x-2 text-sm p-2 rounded-md border bg-muted/50">
+                                 <div
+                                     className={cn("w-2.5 h-2.5 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
+                                     title={instance.status}
+                                 />
+                                 <div className="font-medium truncate" title={instance.name}>{instance.name}</div>
+                                 <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
+                               </div>
+                             )) : (
+                               <p className="text-xs text-muted-foreground text-center py-2">Nenhuma instância configurada.</p>
+                             )}
+                          </div>
                         </div>
                       </ScrollArea>
-                     <Button variant="outline" size="sm" onClick={() => { /* Lógica para abrir config global */ }}>
-                         <Settings2 className="w-4 h-4 mr-2" />
-                         Gerenciar Instâncias
-                     </Button>
                    </div>
                  </PopoverContent>
                </Popover>
