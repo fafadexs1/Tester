@@ -607,7 +607,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[200px] p-1" data-no-drag="true" align="end">
-          <ScrollArea className="h-auto max-h-[150px] text-xs">
+          <ScrollArea className="max-h-[150px] text-xs">
             {allVars.map((varName) => (
               <Button
                 key={varName}
@@ -1696,9 +1696,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       case 'supabase-update-row':
       case 'supabase-delete-row': {
         const isReadOp = node.type === 'supabase-read-row';
-        const isDeleteOp = node.type === 'supabase-delete-row';
         const isCreateOp = node.type === 'supabase-create-row';
-        const needsIdentifier = isReadOp || node.type === 'supabase-update-row' || isDeleteOp;
+        const needsIdentifier = isReadOp || node.type === 'supabase-update-row' || node.type === 'supabase-delete-row';
         const needsDataJson = isCreateOp || node.type === 'supabase-update-row';
 
         return (
@@ -2029,3 +2028,4 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
