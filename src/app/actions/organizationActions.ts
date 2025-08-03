@@ -2,9 +2,10 @@
 'use server';
 
 import { getCurrentUser } from '@/lib/auth';
-import type { Organization, OrganizationUser, Team, User } from '@/lib/types';
+import type { Organization, OrganizationUser, Team, User, UserRole } from '@/lib/types';
 import { getOrganizationsForUser, runQuery, findUserByUsername } from './databaseActions';
 import { revalidatePath } from 'next/cache';
+import { getDbPool } from './databaseActions';
 
 interface GetOrgsResult {
     success: boolean;
@@ -106,7 +107,8 @@ export async function createTeamAction(formData: FormData): Promise<{ success: b
         return { success: false, error: "O nome do time é obrigatório." };
     }
 
-    const client = await (await getDbPool()).connect();
+    const pool = getDbPool();
+    const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
@@ -175,6 +177,3 @@ export async function inviteUserToOrganizationAction(formData: FormData): Promis
         return { success: false, error: `Erro de banco de dados: ${error.message}` };
     }
 }
-
-// Import getDbPool to use transactions
-import { getDbPool } from './databaseActions';

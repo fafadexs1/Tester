@@ -12,7 +12,7 @@ dotenv.config();
 
 let pool: Pool | null = null;
 
-export function getDbPool(): Pool {
+function getDbPool(): Pool {
     if (pool) {
         return pool;
     }
@@ -805,3 +805,5 @@ export async function getTeamsForOrganization(organizationId: string): Promise<T
         members: row.members || [],
     }));
 }
+
+export { getDbPool };
