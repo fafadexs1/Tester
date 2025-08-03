@@ -5,7 +5,8 @@ import { loadWorkspaceFromDB } from "@/app/actions/databaseActions";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import FlowBuilderClient from "@/components/flow-builder/FlowBuilderClient";
 
-export default async function FlowEditorPage({ params }: { params: Promise<{ workspaceId: string }> }) {
+// O flow editor não usará o AppShell, então o layout aqui é diferente
+export default async function FlowEditorPage({ params }: { params: { workspaceId: string } }) {
   const user = await getCurrentUser();
 
   if (!user || !user.id) {
@@ -14,13 +15,11 @@ export default async function FlowEditorPage({ params }: { params: Promise<{ wor
 
   const { workspaceId } = await params;
 
-  // A criação de 'new' agora é tratada no dashboard, então se chegarmos aqui com 'new', redirecionamos.
   if (workspaceId === 'new') {
     console.warn(`[FlowEditorPage] Rota /flow/new acessada diretamente. Redirecionando para o dashboard...`);
     redirect('/');
   }
 
-  // Carrega os dados do workspace no servidor para um carregamento inicial mais rápido
   const initialWorkspace = await loadWorkspaceFromDB(workspaceId);
   
   if (!initialWorkspace) {
@@ -28,9 +27,13 @@ export default async function FlowEditorPage({ params }: { params: Promise<{ wor
     redirect('/');
   }
   
-  // Verifica se o usuário logado é o dono do workspace
-  if (initialWorkspace.owner_id !== user.id) {
-      console.warn(`[FlowEditorPage] Usuário ${user.username} (ID: ${user.id}) tentou acessar o workspace ${workspaceId} que pertence ao owner ID ${initialWorkspace.owner_id}. Acesso negado.`);
+  const organizationId = initialWorkspace.organization_id;
+  const userOrgs = await loadOrganizationsForUser(user.id);
+
+  const isUserInOrg = userOrgs.some(org => org.id === organizationId);
+
+  if (!isUserInOrg && user.role !== 'desenvolvedor') {
+      console.warn(`[FlowEditorPage] User ${user.username} (ID: ${user.id}) tried to access workspace ${workspaceId} from org ${organizationId} but is not a member. Access denied.`);
       redirect('/');
   }
 
@@ -45,3 +48,6 @@ export default async function FlowEditorPage({ params }: { params: Promise<{ wor
     </ErrorBoundary>
   );
 }
+
+// Helper function to get user organizations
+import { getOrganizationsForUser as loadOrganizationsForUser } from '@/app/actions/databaseActions';
