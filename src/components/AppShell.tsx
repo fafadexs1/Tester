@@ -137,8 +137,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { state, isMobile } = useSidebar();
   const pathname = usePathname();
   
-  // Do not render the shell for the flow editor page
-  if (pathname.startsWith('/flow/')) {
+  const publicPages = ['/login', '/logout'];
+  const isPublicPage = publicPages.includes(pathname);
+
+  // Do not render the shell for certain pages
+  if (pathname.startsWith('/flow/') || isPublicPage) {
     return <>{children}</>;
   }
   
