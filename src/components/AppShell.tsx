@@ -1,17 +1,15 @@
 'use client';
 
 import {
-  Sidebar,
+  Sidebar as SidebarPrimitive,
   SidebarContent,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarHeader,
-  SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarTrigger,
-  useSidebar,
 } from '@/components/ui/sidebar';
 import {
   DropdownMenu,
@@ -132,8 +130,7 @@ const OrganizationSwitcher = () => {
 };
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
-  const { state, isMobile } = useSidebar();
+  const { user } = useAuth();
   const pathname = usePathname();
   
   const noShellPages = ['/login', '/logout', '/flow'];
@@ -146,24 +143,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   
   // Otherwise, render the full shell with the sidebar and the main content area.
   return (
-    <Sidebar>
-      <SidebarHeader>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Zap className="w-7 h-7 text-primary" />
-            {state === 'expanded' && <h1 className="text-lg font-semibold">NexusFlow</h1>}
+    <div className='flex'>
+      <SidebarPrimitive>
+        <SidebarHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="w-7 h-7 text-primary" />
+              <h1 className="text-lg font-semibold">NexusFlow</h1>
+            </div>
+            <SidebarTrigger />
           </div>
-          <SidebarTrigger />
-        </div>
-        <OrganizationSwitcher />
-      </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <MainNav />
-        </SidebarGroup>
-        <OrgNav />
-      </SidebarContent>
-      <SidebarInset>{children}</SidebarInset>
-    </Sidebar>
+          <OrganizationSwitcher />
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            <MainNav />
+          </SidebarGroup>
+          <OrgNav />
+        </SidebarContent>
+      </SidebarPrimitive>
+      <main className="flex-1 overflow-y-auto">
+        {children}
+      </main>
+    </div>
   );
 }
