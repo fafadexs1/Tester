@@ -47,7 +47,7 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
         await setCurrentOrganizationForUser(dbUser.id, currentOrganizationId);
     }
 
-    // Cria a sessão com os dados do usuário do banco, incluindo id e role.
+    // Cria a sessão com os dados do usuário do banco, incluindo id, role e o ID da organização atual.
     const user: User = { 
         id: dbUser.id, 
         username: dbUser.username, 
