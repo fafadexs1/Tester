@@ -1,9 +1,9 @@
-
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { loadWorkspacesForOrganizationFromDB } from '@/app/actions/databaseActions';
 import DashboardClient from '@/components/dashboard/DashboardClient';
 import type { WorkspaceData } from '@/lib/types';
+import AppShell from "@/components/AppShell";
 
 // Agora esta é uma página de servidor (Server Component)
 export default async function DashboardPage() {
@@ -26,5 +26,9 @@ export default async function DashboardPage() {
   const initialWorkspaces: WorkspaceData[] = await loadWorkspacesForOrganizationFromDB(user.current_organization_id);
   
   // Renderiza o componente de cliente, passando os dados pré-carregados
-  return <DashboardClient user={user} initialWorkspaces={initialWorkspaces} />;
+  return (
+    <AppShell>
+        <DashboardClient user={user} initialWorkspaces={initialWorkspaces} />
+    </AppShell>
+  );
 }

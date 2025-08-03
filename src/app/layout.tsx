@@ -3,8 +3,6 @@ import { Inter as FontSans } from "next/font/google";
 import './globals.css';
 import { cn } from "@/lib/utils";
 import Providers from '@/components/Providers';
-import { SidebarProvider } from '@/components/ui/sidebar';
-import AppShell from '@/components/AppShell';
 
 const fontSans = FontSans({
     subsets: ["latin"],
@@ -31,11 +29,7 @@ export default function RootLayout({
                 )}
             >
                 <Providers>
-                    <SidebarProvider>
-                        <AppShell>
-                            {children}
-                        </AppShell>
-                    </SidebarProvider>
+                    {children}
                 </Providers>
             </body>
         </html>

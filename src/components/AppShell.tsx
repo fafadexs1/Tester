@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -137,15 +136,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { state, isMobile } = useSidebar();
   const pathname = usePathname();
   
-  const publicPages = ['/login', '/logout'];
-  const isPublicPage = publicPages.includes(pathname);
+  const noShellPages = ['/login', '/logout', '/flow'];
+  const isNoShellPage = noShellPages.some(p => pathname.startsWith(p));
 
-  // Do not render the shell for certain pages
-  if (pathname.startsWith('/flow/') || isPublicPage) {
+  if (isNoShellPage) {
     return <>{children}</>;
   }
   
-  if (!user) return null; // Or a loader, AuthProvider handles this mostly
+  if (!user) return null;
 
   return (
     <Sidebar>
