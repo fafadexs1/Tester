@@ -4,7 +4,7 @@
 
 import { Pool, type QueryResult } from 'pg';
 import dotenv from 'dotenv';
-import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization } from '@/lib/types';
+import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { redirect } from 'next/navigation';
 
@@ -133,6 +133,28 @@ async function initializeDatabaseSchema(): Promise<void> {
         );
     `);
     
+    // Tabela de Times
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS teams (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            description TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(organization_id, name)
+        );
+    `);
+
+    // Tabela de associação Membro-Time
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS team_members (
+            team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, -- Para integridade e queries mais fáceis
+            PRIMARY KEY (team_id, user_id)
+        );
+    `);
+
     await client.query(`
         CREATE TABLE IF NOT EXISTS audit_logs (
             id BIGSERIAL PRIMARY KEY,
@@ -751,4 +773,35 @@ export async function loadWorkspaceByNameFromDB(name: string, ownerId: string): 
     console.error(`[DB Actions] loadWorkspaceByNameFromDB Error for name ${name}:`, error);
     return null;
   }
+}
+
+// --- Team & Member Actions ---
+export async function getUsersForOrganization(organizationId: string): Promise<OrganizationUser[]> {
+    const query = `
+        SELECT u.id, u.username, ou.role
+        FROM users u
+        JOIN organization_users ou ON u.id = ou.user_id
+        WHERE ou.organization_id = $1
+    `;
+    const result = await runQuery<OrganizationUser>(query, [organizationId]);
+    return result.rows;
+}
+
+export async function getTeamsForOrganization(organizationId: string): Promise<Team[]> {
+    const query = `
+        SELECT t.id, t.name, t.description,
+               (SELECT json_agg(u.*)
+                FROM users u
+                JOIN team_members tm ON u.id = tm.user_id
+                WHERE tm.team_id = t.id) as members
+        FROM teams t
+        WHERE t.organization_id = $1
+    `;
+    const result = await runQuery<any>(query, [organizationId]);
+    
+    // Process rows to ensure members is an array, even if null from DB
+    return result.rows.map(row => ({
+        ...row,
+        members: row.members || [],
+    }));
 }

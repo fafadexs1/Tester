@@ -298,11 +298,12 @@ export interface Team {
     name: string;
     description?: string;
     organization_id: string;
+    members: Pick<User, 'id' | 'username'>[];
 }
 
 export interface OrganizationUser {
-  user_id: string;
-  organization_id: string;
+  id: string; // This is the user's ID
+  username: string;
   role: UserRole;
 }
 
