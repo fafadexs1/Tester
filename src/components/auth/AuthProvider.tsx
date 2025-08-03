@@ -84,11 +84,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('[AuthProvider] Iniciando logout...');
     await logoutAction();
     setUser(null);
-    console.log('[AuthProvider] Estado do usuário definido como nulo, redirecionando para /login...');
-    // O redirecionamento será tratado pelo useEffect, que verá que o usuário é nulo e não está na página de login.
-    // Forçar a navegação aqui para uma resposta mais imediata.
-    router.push('/login');
-  }, [router]);
+    console.log('[AuthProvider] Estado do usuário definido como nulo. Forçando recarregamento para /login...');
+    // Forçar um recarregamento completo para a página de login.
+    // Isso é mais robusto para limpar qualquer estado restante do lado do cliente.
+    window.location.href = '/login';
+  }, []);
 
   const value = { user, loading, login, logout, register };
   
