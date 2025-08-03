@@ -109,6 +109,16 @@ async function initializeDatabaseSchema(): Promise<void> {
         console.log("[DB Actions] 'email' column not found in 'users' table. Adding column...");
         await client.query('ALTER TABLE users ADD COLUMN email TEXT UNIQUE;');
     }
+    
+    // **INÍCIO DA CORREÇÃO** - Adiciona um bloco de migração para a coluna 'full_name'
+    const fullNameColExists = await client.query(`
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name='users' AND column_name='full_name';
+    `);
+    if (fullNameColExists.rowCount === 0) {
+        console.log("[DB Actions] 'full_name' column not found in 'users' table. Adding column...");
+        await client.query('ALTER TABLE users ADD COLUMN full_name TEXT;');
+    }
     // **FIM DA CORREÇÃO**
 
     // Tabela de Organizações
