@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, FormEvent } from 'react';
@@ -8,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, Loader2 } from 'lucide-react';
+import { Zap, Loader2, Mail, User, KeyRound } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function LoginPage() {
@@ -16,6 +15,8 @@ export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login, register, loading, user } = useAuth();
   const { toast } = useToast();
@@ -27,6 +28,11 @@ export default function LoginPage() {
     const formData = new FormData();
     formData.append('username', username);
     formData.append('password', password);
+    
+    if (!isLoginView) {
+      formData.append('fullName', fullName);
+      formData.append('email', email);
+    }
 
     try {
       let result;
@@ -41,8 +47,6 @@ export default function LoginPage() {
         result = await register(formData);
       }
       
-      // O AuthProvider agora é o único responsável pelo redirecionamento.
-      // A página de login apenas exibe o erro se houver um.
       if (!result.success) {
         toast({
           title: isLoginView ? "Erro no Login" : "Erro no Registro",
@@ -62,11 +66,8 @@ export default function LoginPage() {
     }
   };
   
-  // O AuthProvider renderiza um loader global. 
-  // Esta página só renderiza o formulário se o loading inicial tiver terminado
-  // e não houver usuário logado. O AuthProvider lida com o redirecionamento.
   if (loading || user) {
-     return null; // O AuthProvider está mostrando a tela de carregamento/redirecionamento
+     return null; 
   }
 
   return (
@@ -99,30 +100,81 @@ export default function LoginPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="username">Usuário</Label>
-                <Input
-                  id="username"
-                  name="username"
-                  type="text"
-                  placeholder="seu-usuario"
-                  required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="bg-input/80"
-                  disabled={isSubmitting}
-                />
+                 <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="username"
+                      name="username"
+                      type="text"
+                      placeholder="seu-usuario"
+                      required
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="bg-input/80 pl-9"
+                      disabled={isSubmitting}
+                    />
+                </div>
               </div>
+              
+              {!isLoginView && (
+                 <motion.div
+                    className="space-y-4"
+                    initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                    animate={{ opacity: 1, height: 'auto', marginTop: '1rem' }}
+                    transition={{ duration: 0.3 }}
+                >
+                    <div className="space-y-2">
+                        <Label htmlFor="fullName">Nome Completo</Label>
+                        <div className="relative">
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                id="fullName"
+                                name="fullName"
+                                type="text"
+                                placeholder="Seu nome completo"
+                                required
+                                value={fullName}
+                                onChange={(e) => setFullName(e.target.value)}
+                                className="bg-input/80 pl-9"
+                                disabled={isSubmitting}
+                            />
+                        </div>
+                    </div>
+                     <div className="space-y-2">
+                        <Label htmlFor="email">Email</Label>
+                        <div className="relative">
+                           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                id="email"
+                                name="email"
+                                type="email"
+                                placeholder="seu@email.com"
+                                required
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="bg-input/80 pl-9"
+                                disabled={isSubmitting}
+                            />
+                        </div>
+                    </div>
+                </motion.div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="password">Senha</Label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="bg-input/80"
-                  disabled={isSubmitting}
-                />
+                 <div className="relative">
+                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="password"
+                      name="password"
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="bg-input/80 pl-9"
+                      disabled={isSubmitting}
+                    />
+                </div>
               </div>
               {!isLoginView && (
                 <motion.div
@@ -132,15 +184,18 @@ export default function LoginPage() {
                     transition={{ duration: 0.3 }}
                 >
                   <Label htmlFor="confirm-password">Confirmar Senha</Label>
-                  <Input
-                    id="confirm-password"
-                    type="password"
-                    required
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="bg-input/80"
-                    disabled={isSubmitting}
-                  />
+                  <div className="relative">
+                     <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        id="confirm-password"
+                        type="password"
+                        required
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="bg-input/80 pl-9"
+                        disabled={isSubmitting}
+                    />
+                  </div>
                 </motion.div>
               )}
             </CardContent>

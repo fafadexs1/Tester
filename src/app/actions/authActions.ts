@@ -64,6 +64,8 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
     const user: User = { 
         id: dbUser.id, 
         username: dbUser.username, 
+        email: dbUser.email,
+        fullName: dbUser.full_name,
         role: dbUser.role,
         current_organization_id: currentOrganizationId
     };
@@ -89,9 +91,11 @@ export async function registerAction(formData: FormData): Promise<{ success: boo
     console.log('[authActions.ts] registerAction: Iniciando...');
     const username = formData.get('username') as string;
     const password = formData.get('password') as string;
+    const fullName = formData.get('fullName') as string;
+    const email = formData.get('email') as string;
 
-    if (!username || !password) {
-        return { success: false, error: "Nome de usuário e senha são obrigatórios." };
+    if (!username || !password || !fullName || !email) {
+        return { success: false, error: "Todos os campos são obrigatórios." };
     }
 
     try {
@@ -102,8 +106,8 @@ export async function registerAction(formData: FormData): Promise<{ success: boo
         
         const passwordHash = simpleHash(password);
 
-        // Cria o usuário com a role padrão 'user'
-        const createResult = await createUser(username, passwordHash, 'user');
+        // Cria o usuário com a role padrão 'user' e os novos campos
+        const createResult = await createUser(username, passwordHash, fullName, email, 'user');
 
         if (!createResult.success || !createResult.user) {
             return { success: false, error: createResult.error || "Falha ao registrar usuário." };

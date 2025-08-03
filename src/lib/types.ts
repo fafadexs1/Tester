@@ -281,6 +281,8 @@ export type UserRole = 'admin' | 'desenvolvedor' | 'Editor de Fluxo' | 'Publicad
 export interface User {
     id: string; // UUID
     username: string;
+    fullName?: string;
+    email?: string;
     role: UserRole;
     password_hash?: string;
     current_organization_id?: string;

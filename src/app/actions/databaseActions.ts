@@ -91,6 +91,8 @@ async function initializeDatabaseSchema(): Promise<void> {
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         username TEXT NOT NULL UNIQUE,
+        email TEXT UNIQUE,
+        full_name TEXT,
         password_hash TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'user',
         created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -367,7 +369,7 @@ export async function createAuditLog(
 // --- User Actions ---
 export async function findUserByUsername(username: string): Promise<User | null> {
     const result = await runQuery<User>(
-        'SELECT id, username, role, password_hash, current_organization_id FROM users WHERE username = $1',
+        'SELECT id, username, email, full_name, role, password_hash, current_organization_id FROM users WHERE username = $1',
         [username]
     );
     if (result.rows.length > 0) {
@@ -376,11 +378,17 @@ export async function findUserByUsername(username: string): Promise<User | null>
     return null;
 }
 
-export async function createUser(username: string, passwordHash: string, role: 'user' | 'desenvolvedor' = 'user'): Promise<{ success: boolean; user?: User; error?: string }> {
+export async function createUser(
+    username: string, 
+    passwordHash: string, 
+    fullName: string, 
+    email: string, 
+    role: 'user' | 'desenvolvedor' = 'user'
+): Promise<{ success: boolean; user?: User; error?: string }> {
     try {
         const result = await runQuery<User>(
-            'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username, role',
-            [username, passwordHash, role]
+            'INSERT INTO users (username, password_hash, full_name, email, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, full_name, email, role',
+            [username, passwordHash, fullName, email, role]
         );
         if (result.rows.length > 0) {
             return { success: true, user: result.rows[0] };
@@ -389,7 +397,13 @@ export async function createUser(username: string, passwordHash: string, role: '
 
     } catch (error: any) {
         if (error.code === '23505') { 
-            return { success: false, error: 'Este nome de usuário já está em uso.' };
+            const constraint = error.constraint || '';
+            if (constraint.includes('username')) {
+                return { success: false, error: 'Este nome de usuário já está em uso.' };
+            }
+            if (constraint.includes('email')) {
+                return { success: false, error: 'Este endereço de e-mail já está em uso.' };
+            }
         }
         console.error("[DB Actions] Error creating user:", error);
         return { success: false, error: `Erro de banco de dados: ${error.message}` };
