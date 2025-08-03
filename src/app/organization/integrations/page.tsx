@@ -1,9 +1,11 @@
+
 'use client';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, BotMessageSquare, MessageCircle, Settings } from "lucide-react";
 import React from 'react';
+import { cn } from "@/lib/utils";
 
 const integrations = [
     {
