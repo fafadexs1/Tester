@@ -1,4 +1,3 @@
-
 'use server';
 
 import type { User } from '@/lib/types';
@@ -39,7 +38,7 @@ export async function createSession(user: User) {
     maxAge: 60 * 60 * 24, // 24 horas
     path: '/',
   });
-   console.log(`[auth.ts] Cookie de sessão criado para o usuário: ${user.username}, ID: ${user.id}, role: ${user.role}`);
+   console.log(`[auth.ts] Cookie de sessão criado para o usuário: ${user.username}, ID: ${user.id}, role: ${user.role}, org: ${user.current_organization_id}`);
 }
 
 export async function deleteSession() {
