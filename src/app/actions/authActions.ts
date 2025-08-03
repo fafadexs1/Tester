@@ -103,14 +103,15 @@ export async function registerAction(formData: FormData): Promise<{ success: boo
         
         // Define a organização recém-criada como a atual do usuário
         await setCurrentOrganizationForUser(newUser.id, orgResult.organization.id);
-        newUser.current_organization_id = orgResult.organization.id;
+        
+        const finalUser: User = { ...newUser, current_organization_id: orgResult.organization.id };
 
         // Cria a sessão para o novo usuário
-        await createSession(newUser);
-        await createAuditLog(newUser.id, newUser.current_organization_id, 'user_register');
+        await createSession(finalUser);
+        await createAuditLog(finalUser.id, finalUser.current_organization_id, 'user_register');
 
-        console.log(`[authActions.ts] registerAction: Sessão criada com sucesso para o novo usuário: ${newUser.username}`);
-        return { success: true, user: newUser };
+        console.log(`[authActions.ts] registerAction: Sessão criada com sucesso para o novo usuário: ${finalUser.username}`);
+        return { success: true, user: finalUser };
 
     } catch (error: any) {
         console.error("[authActions.ts] registerAction: Exceção durante o registro:", error);

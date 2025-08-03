@@ -1,6 +1,5 @@
 
 
-
 'use server';
 
 import { Pool, type QueryResult } from 'pg';
@@ -87,6 +86,18 @@ async function initializeDatabaseSchema(): Promise<void> {
     
     await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
     
+    // Tabela de Usuários - Criada antes de organizations para a foreign key
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        current_organization_id UUID -- Será referenciado mais tarde
+      );
+    `);
+
     // Tabela de Organizações
     await client.query(`
         CREATE TABLE IF NOT EXISTS organizations (
@@ -96,17 +107,21 @@ async function initializeDatabaseSchema(): Promise<void> {
             created_at TIMESTAMPTZ DEFAULT NOW()
         );
     `);
-    
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        username TEXT NOT NULL UNIQUE,
-        password_hash TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'user',
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        current_organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL
-      );
+
+    // Agora que 'organizations' existe, podemos adicionar a foreign key em 'users'
+    const fkExists = await client.query(`
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'users_current_organization_id_fkey' AND conrelid = 'users'::regclass
     `);
+
+    if (fkExists.rowCount === 0) {
+        await client.query(`
+            ALTER TABLE users 
+            ADD CONSTRAINT users_current_organization_id_fkey 
+            FOREIGN KEY (current_organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
+        `);
+    }
+
     
     // Tabela de associação Usuário-Organização (muitos para muitos)
     await client.query(`
@@ -128,40 +143,6 @@ async function initializeDatabaseSchema(): Promise<void> {
             created_at TIMESTAMPTZ DEFAULT NOW()
         );
     `);
-
-    // Adiciona a coluna `current_organization_id` se não existir
-    const currentOrgIdColExists = await client.query(`
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name='users' AND column_name='current_organization_id';
-    `);
-    if (currentOrgIdColExists.rowCount === 0) {
-        console.log(`[DB Actions] 'current_organization_id' column not found in 'users' table. Adding column...`);
-        await client.query('ALTER TABLE users ADD COLUMN current_organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL;');
-    }
-    
-    const idColumnExists = await client.query(`
-      SELECT 1 FROM information_schema.columns 
-      WHERE table_name='users' AND column_name='id';
-    `);
-
-    if (idColumnExists.rowCount === 0) {
-      console.log("[DB Actions] 'id' column not found in 'users' table. Migrating schema...");
-      const pkConstraint = await client.query(`
-        SELECT conname FROM pg_constraint 
-        WHERE conrelid = 'users'::regclass AND contype = 'p';
-      `);
-      if (pkConstraint.rowCount > 0 && pkConstraint.rows[0].conname) {
-          await client.query(`ALTER TABLE users DROP CONSTRAINT "${pkConstraint.rows[0].conname}";`);
-          console.log(`[DB Actions] Dropped old primary key constraint: ${pkConstraint.rows[0].conname}`);
-      }
-
-      await client.query('ALTER TABLE users ADD COLUMN id UUID;');
-      await client.query('UPDATE users SET id = gen_random_uuid() WHERE id IS NULL;');
-      await client.query('ALTER TABLE users ALTER COLUMN id SET NOT NULL;');
-      await client.query('ALTER TABLE users ALTER COLUMN id SET DEFAULT gen_random_uuid();');
-      await client.query('ALTER TABLE users ADD PRIMARY KEY (id);');
-      console.log("[DB Actions] 'id' column added and set as PRIMARY KEY on 'users' table.");
-    }
     
     await client.query(`
       CREATE TABLE IF NOT EXISTS workspaces (
