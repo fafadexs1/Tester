@@ -30,7 +30,7 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import type { Organization } from '@/lib/types';
 import { getOrganizationsForUserAction } from '@/app/actions/organizationActions';
-import { ChevronsUpDown, Workflow, BarChart2, Building, Users, CreditCard, ScrollText, Settings, LogOut, Zap, LifeBuoy, Loader2 } from 'lucide-react';
+import { ChevronsUpDown, Workflow, BarChart2, Building, Users, CreditCard, ScrollText, Settings, LogOut, Zap, LifeBuoy, Loader2, PlusCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const MainNav = () => {
