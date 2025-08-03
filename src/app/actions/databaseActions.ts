@@ -100,6 +100,17 @@ async function initializeDatabaseSchema(): Promise<void> {
       );
     `);
 
+    // **INÍCIO DA CORREÇÃO** - Adiciona um bloco de migração para a coluna 'email'
+    const emailColExists = await client.query(`
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name='users' AND column_name='email';
+    `);
+    if (emailColExists.rowCount === 0) {
+        console.log("[DB Actions] 'email' column not found in 'users' table. Adding column...");
+        await client.query('ALTER TABLE users ADD COLUMN email TEXT UNIQUE;');
+    }
+    // **FIM DA CORREÇÃO**
+
     // Tabela de Organizações
     await client.query(`
         CREATE TABLE IF NOT EXISTS organizations (
