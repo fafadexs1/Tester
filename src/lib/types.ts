@@ -1,5 +1,6 @@
 
 
+
 export interface DraggableBlockItemData {
   type: string;
   label: string;
@@ -246,7 +247,8 @@ export interface WorkspaceData {
   name: string;
   nodes: NodeData[];
   connections: Connection[];
-  owner_id: string; 
+  owner_id: string; // Mantido para compatibilidade inicial, mas o org_id é o futuro
+  organization_id: string; // Novo campo para associar a uma organização
   created_at?: string | Date;
   updated_at?: string | Date;
   evolution_instance_id?: string | null;
@@ -278,9 +280,24 @@ export interface FlowSession {
 export interface User {
     id: string; // UUID
     username: string;
-    role: 'user' | 'desenvolvedor';
+    role: 'user' | 'desenvolvedor'; // Este campo 'role' será substituído por um sistema de permissões mais granular
     password_hash?: string;
+    current_organization_id?: string; // A organização ativa do usuário
 }
+
+export interface Organization {
+  id: string; // UUID
+  name: string;
+  owner_id: string; // ID do usuário que criou a organização
+  created_at?: string | Date;
+}
+
+export interface OrganizationUser {
+  user_id: string;
+  organization_id: string;
+  role: 'admin' | 'editor' | 'viewer'; // Exemplo de papéis dentro da organização
+}
+
 
 export interface EvolutionInstance {
   id: string;

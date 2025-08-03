@@ -1,7 +1,7 @@
 
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { loadWorkspacesForOwnerFromDB } from '@/app/actions/databaseActions';
+import { loadWorkspacesForOrganizationFromDB } from '@/app/actions/databaseActions';
 import DashboardClient from '@/components/dashboard/DashboardClient';
 import type { WorkspaceData } from '@/lib/types';
 
@@ -14,8 +14,16 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  // Carrega os workspaces no servidor antes de renderizar a página
-  const initialWorkspaces: WorkspaceData[] = await loadWorkspacesForOwnerFromDB(user.id);
+  // Se o usuário não tiver uma organização selecionada, talvez redirecionar para uma página de seleção de organização
+  if (!user.current_organization_id) {
+    // Por enquanto, redirecionamos para uma página de erro/aviso ou perfil
+    // Em uma implementação futura, seria uma página de seleção de organização.
+    console.warn(`Usuário ${user.username} sem organização atual. Redirecionando para o perfil.`);
+    redirect('/profile'); 
+  }
+
+  // Carrega os workspaces da organização ativa do usuário
+  const initialWorkspaces: WorkspaceData[] = await loadWorkspacesForOrganizationFromDB(user.current_organization_id);
   
   // Renderiza o componente de cliente, passando os dados pré-carregados
   return <DashboardClient user={user} initialWorkspaces={initialWorkspaces} />;

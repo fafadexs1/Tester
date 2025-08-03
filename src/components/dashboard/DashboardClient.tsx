@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, Zap, Loader2 } from 'lucide-react';
-import { loadWorkspacesForOwnerFromDB, createWorkspaceAction } from '@/app/actions/databaseActions';
+import { loadWorkspacesForOrganizationFromDB, createWorkspaceAction } from '@/app/actions/databaseActions';
 import WorkspaceList from '@/components/dashboard/WorkspaceList';
 import { useAuth } from '@/components/auth/AuthProvider';
 import type { WorkspaceData, User } from '@/lib/types';
@@ -41,10 +41,10 @@ export default function DashboardClient({ user, initialWorkspaces }: DashboardCl
   const { toast } = useToast();
 
   const loadWorkspaces = useCallback(async () => {
-    if (user && user.id) {
+    if (user && user.current_organization_id) {
       setIsLoading(true);
       try {
-        const loadedWorkspaces = await loadWorkspacesForOwnerFromDB(user.id);
+        const loadedWorkspaces = await loadWorkspacesForOrganizationFromDB(user.current_organization_id);
         setWorkspaces(loadedWorkspaces);
       } catch (error) {
         console.error("[DashboardClient] Error loading workspaces:", error);
@@ -80,17 +80,17 @@ export default function DashboardClient({ user, initialWorkspaces }: DashboardCl
   }, [isCreateDialogOpen, getSuggestedWorkspaceName]);
 
   const handleCreateWorkspace = async () => {
-    if (!user || !user.id || !newWorkspaceName.trim()) {
+    if (!user || !user.id || !user.current_organization_id || !newWorkspaceName.trim()) {
         toast({
             title: "Erro de Validação",
-            description: "O nome do fluxo não pode estar vazio e você deve estar logado.",
+            description: "O nome do fluxo não pode estar vazio e você deve estar em uma organização.",
             variant: "destructive",
         });
         return;
     }
     setIsCreating(true);
     try {
-        const result = await createWorkspaceAction(newWorkspaceName.trim(), user.id);
+        const result = await createWorkspaceAction(newWorkspaceName.trim(), user.id, user.current_organization_id);
         if (result.success && result.workspaceId) {
             toast({
                 title: "Fluxo Criado!",

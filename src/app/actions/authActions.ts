@@ -2,9 +2,9 @@
 'use server';
 
 import { createSession, deleteSession } from '@/lib/auth';
-import type { User } from '@/lib/types';
+import type { User, Organization } from '@/lib/types';
 import { cookies } from 'next/headers';
-import { findUserByUsername, createUser } from './databaseActions';
+import { findUserByUsername, createUser, createOrganization, getOrganizationsForUser, setCurrentOrganizationForUser, createAuditLog } from './databaseActions';
 
 // Simulação de hashing de senha. Em um app real, use uma biblioteca como bcrypt.
 // AVISO: NÃO USE ISTO EM PRODUÇÃO.
@@ -37,10 +37,28 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
         return { success: false, error: "Usuário ou senha inválidos." };
     }
 
+    // Após o login bem-sucedido, busca as organizações do usuário
+    const organizations = await getOrganizationsForUser(dbUser.id);
+    let currentOrganizationId = dbUser.current_organization_id;
+
+    if (!currentOrganizationId && organizations.length > 0) {
+        // Se o usuário não tiver uma organização atual definida, define a primeira da lista como padrão
+        currentOrganizationId = organizations[0].id;
+        await setCurrentOrganizationForUser(dbUser.id, currentOrganizationId);
+    }
+
     // Cria a sessão com os dados do usuário do banco, incluindo id e role.
-    const user: User = { id: dbUser.id, username: dbUser.username, role: dbUser.role };
+    const user: User = { 
+        id: dbUser.id, 
+        username: dbUser.username, 
+        role: dbUser.role,
+        current_organization_id: currentOrganizationId
+    };
     await createSession(user);
-    console.log(`[authActions.ts] loginAction: Sessão criada com sucesso para o usuário: ${username}, role: ${user.role}`);
+    
+    await createAuditLog(user.id, currentOrganizationId, 'user_login', { method: 'password' });
+
+    console.log(`[authActions.ts] loginAction: Sessão criada com sucesso para o usuário: ${username}, role: ${user.role}, org: ${user.current_organization_id}`);
     return { success: true, user };
 
   } catch (error: any) {
@@ -74,11 +92,23 @@ export async function registerAction(formData: FormData): Promise<{ success: boo
             return { success: false, error: createResult.error || "Falha ao registrar usuário." };
         }
         
-        // createResult.user contém o usuário recém-criado com id, username, e role
         const newUser = createResult.user;
+
+        // Cria a primeira organização para o novo usuário
+        const orgResult = await createOrganization(`Organização de ${username}`, newUser.id);
+        if (!orgResult.success || !orgResult.organization) {
+            // Em um cenário real, aqui seria necessário fazer um rollback da criação do usuário ou lidar com o erro
+            return { success: false, error: "Falha ao criar a organização inicial do usuário." };
+        }
+        
+        // Define a organização recém-criada como a atual do usuário
+        await setCurrentOrganizationForUser(newUser.id, orgResult.organization.id);
+        newUser.current_organization_id = orgResult.organization.id;
 
         // Cria a sessão para o novo usuário
         await createSession(newUser);
+        await createAuditLog(newUser.id, newUser.current_organization_id, 'user_register');
+
         console.log(`[authActions.ts] registerAction: Sessão criada com sucesso para o novo usuário: ${newUser.username}`);
         return { success: true, user: newUser };
 
@@ -96,5 +126,3 @@ export async function logoutAction(): Promise<{ success: boolean }> {
   console.log('[authActions.ts] logoutAction: Sessão do usuário deletada.');
   return { success: true };
 }
-
-    
