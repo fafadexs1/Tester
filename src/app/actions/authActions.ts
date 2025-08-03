@@ -40,12 +40,10 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
     // Após o login bem-sucedido, busca as organizações do usuário
     let organizations = await getOrganizationsForUser(dbUser.id);
     
-    // *** CORREÇÃO: Se o usuário não tem organização, cria uma para ele ***
     if (organizations.length === 0) {
         console.warn(`[authActions.ts] Usuário ${dbUser.username} não possui organizações. Criando uma organização padrão...`);
         const orgResult = await createOrganization(`Organização de ${dbUser.username}`, dbUser.id);
         if (orgResult.success && orgResult.organization) {
-            // Re-busca as organizações para incluir a recém-criada
             organizations = await getOrganizationsForUser(dbUser.id);
              console.log(`[authActions.ts] Organização padrão criada com sucesso: ${orgResult.organization.name}`);
         } else {
@@ -58,12 +56,11 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
     let currentOrganizationId = dbUser.current_organization_id;
 
     if (!currentOrganizationId && organizations.length > 0) {
-        // Se o usuário não tiver uma organização atual definida, define a primeira da lista como padrão
         currentOrganizationId = organizations[0].id;
         await setCurrentOrganizationForUser(dbUser.id, currentOrganizationId);
     }
 
-    // Cria a sessão com os dados do usuário do banco, incluindo id, role e o ID da organização atual.
+    // Cria a sessão com os dados do usuário, garantindo que o ID da organização atual esteja presente.
     const user: User = { 
         id: dbUser.id, 
         username: dbUser.username, 
@@ -72,7 +69,11 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
     };
     await createSession(user);
     
-    await createAuditLog(user.id, currentOrganizationId, 'user_login', { method: 'password' });
+    if (currentOrganizationId) {
+        await createAuditLog(user.id, currentOrganizationId, 'user_login', { method: 'password' });
+    } else {
+        console.error(`[authActions.ts] loginAction: currentOrganizationId é nulo para o usuário ${user.username}, não foi possível criar o log de auditoria.`);
+    }
 
     console.log(`[authActions.ts] loginAction: Sessão criada com sucesso para o usuário: ${username}, role: ${user.role}, org: ${user.current_organization_id}`);
     return { success: true, user };
