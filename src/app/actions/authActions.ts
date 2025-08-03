@@ -38,7 +38,23 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
     }
 
     // Após o login bem-sucedido, busca as organizações do usuário
-    const organizations = await getOrganizationsForUser(dbUser.id);
+    let organizations = await getOrganizationsForUser(dbUser.id);
+    
+    // *** CORREÇÃO: Se o usuário não tem organização, cria uma para ele ***
+    if (organizations.length === 0) {
+        console.warn(`[authActions.ts] Usuário ${dbUser.username} não possui organizações. Criando uma organização padrão...`);
+        const orgResult = await createOrganization(`Organização de ${dbUser.username}`, dbUser.id);
+        if (orgResult.success && orgResult.organization) {
+            // Re-busca as organizações para incluir a recém-criada
+            organizations = await getOrganizationsForUser(dbUser.id);
+             console.log(`[authActions.ts] Organização padrão criada com sucesso: ${orgResult.organization.name}`);
+        } else {
+            console.error(`[authActions.ts] Falha crítica ao criar organização padrão para o usuário ${dbUser.username}.`);
+            return { success: false, error: "Falha ao configurar a conta do usuário. Não foi possível criar a organização inicial." };
+        }
+    }
+
+
     let currentOrganizationId = dbUser.current_organization_id;
 
     if (!currentOrganizationId && organizations.length > 0) {
@@ -98,7 +114,7 @@ export async function registerAction(formData: FormData): Promise<{ success: boo
         const orgResult = await createOrganization(`Organização de ${username}`, newUser.id);
         if (!orgResult.success || !orgResult.organization) {
             // Em um cenário real, aqui seria necessário fazer um rollback da criação do usuário ou lidar com o erro
-            return { success: false, error: "Falha ao criar a organização inicial do usuário." };
+            return { success: false, error: "Falha ao criar la organização inicial do usuário." };
         }
         
         // Define a organização recém-criada como a atual do usuário
