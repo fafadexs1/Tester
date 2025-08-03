@@ -7,13 +7,13 @@ import { z } from 'zod';
 import { redirect } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, Mail } from 'lucide-react';
-import { getSmtpSettingsAction, saveSmtpSettingsAction } from '@/app/actions/smtpActions';
+import { Loader2, Save, Mail, TestTube2 } from 'lucide-react';
+import { getSmtpSettingsAction, saveSmtpSettingsAction, testSmtpConnectionAction } from '@/app/actions/smtpActions';
 import type { SmtpSettings } from '@/lib/types';
 
 
@@ -24,7 +24,7 @@ const smtpSettingsSchema = z.object({
     username: z.string().optional(),
     password: z.string().optional(),
     from_name: z.string().optional(),
-    from_email: z.string().email("E-mail do remetente inválido.").optional(),
+    from_email: z.string().email("E-mail do remetente inválido.").optional().or(z.literal('')),
 });
 
 
@@ -33,8 +33,9 @@ export default function SmtpSettingsPage() {
     const { toast } = useToast();
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isTesting, setIsTesting] = useState(false);
     
-    const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<z.infer<typeof smtpSettingsSchema>>({
+    const { register, handleSubmit, reset, setValue, getValues, trigger, formState: { errors } } = useForm<z.infer<typeof smtpSettingsSchema>>({
         resolver: zodResolver(smtpSettingsSchema),
         defaultValues: {
             secure: true,
@@ -50,7 +51,10 @@ export default function SmtpSettingsPage() {
             getSmtpSettingsAction()
                 .then(result => {
                     if (result.success && result.data) {
-                        reset(result.data);
+                        reset({
+                            ...result.data,
+                            from_email: result.data.from_email || '', // Garante que nulo vira string vazia para o form
+                        });
                     } else if (!result.success) {
                         toast({ title: 'Erro ao carregar configurações', description: result.error, variant: 'destructive' });
                     }
@@ -68,6 +72,24 @@ export default function SmtpSettingsPage() {
             toast({ title: 'Erro ao salvar', description: result.error, variant: 'destructive' });
         }
         setIsSaving(false);
+    };
+
+    const handleTestConnection = async () => {
+        const isValid = await trigger();
+        if (!isValid) {
+            toast({ title: 'Campos Inválidos', description: 'Por favor, corrija os erros no formulário antes de testar.', variant: 'destructive'});
+            return;
+        }
+        setIsTesting(true);
+        const formData = getValues();
+        const result = await testSmtpConnectionAction(formData);
+
+        if (result.success) {
+            toast({ title: 'Conexão Bem-sucedida!', description: 'A conexão com o servidor SMTP foi estabelecida com sucesso.', className: 'bg-green-100 dark:bg-green-900 border-green-300 dark:border-green-700' });
+        } else {
+            toast({ title: 'Falha na Conexão', description: result.error, variant: 'destructive' });
+        }
+        setIsTesting(false);
     };
 
     if (isLoading) {
@@ -88,10 +110,16 @@ export default function SmtpSettingsPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="flex-1 space-y-4 p-4 md:p-8 pt-6">
             <div className="flex items-center justify-between space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight">Configurações de E-mail (SMTP)</h2>
-                <Button type="submit" disabled={isSaving}>
-                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    Salvar Alterações
-                </Button>
+                 <div className="flex gap-2">
+                    <Button type="button" variant="outline" onClick={handleTestConnection} disabled={isTesting}>
+                        {isTesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <TestTube2 className="mr-2 h-4 w-4" />}
+                        Testar Conexão
+                    </Button>
+                    <Button type="submit" disabled={isSaving}>
+                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                        Salvar Alterações
+                    </Button>
+                </div>
             </div>
             
             <Card>
@@ -99,7 +127,7 @@ export default function SmtpSettingsPage() {
                     <CardTitle>Configuração do Servidor SMTP</CardTitle>
                     <CardDescription>
                         Forneça os detalhes do seu servidor de e-mail para habilitar o envio de e-mails transacionais e promocionais.
-                        As senhas são armazenadas de forma segura (criptografadas em um cenário real).
+                        As senhas são armazenadas de forma segura.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -124,20 +152,25 @@ export default function SmtpSettingsPage() {
                         {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
                     </div>
                      <div className="space-y-2 col-span-1 md:col-span-2">
-                        <Label htmlFor="from_name">Nome do Remetente</Label>
+                        <Label htmlFor="from_name">Nome do Remetente (Opcional)</Label>
                         <Input id="from_name" {...register("from_name")} placeholder="Nome da Sua Empresa" />
                         {errors.from_name && <p className="text-sm text-destructive">{errors.from_name.message}</p>}
                     </div>
                      <div className="space-y-2 col-span-1 md:col-span-2">
-                        <Label htmlFor="from_email">E-mail do Remetente</Label>
+                        <Label htmlFor="from_email">E-mail do Remetente (Opcional)</Label>
                         <Input id="from_email" {...register("from_email")} placeholder="nao-responda@suaempresa.com" />
                         {errors.from_email && <p className="text-sm text-destructive">{errors.from_email.message}</p>}
                     </div>
                     <div className="flex items-center space-x-2">
-                        <Switch id="secure" {...register("secure")} onCheckedChange={(checked) => setValue('secure', checked)} />
+                        <Switch id="secure" {...register("secure")} onCheckedChange={(checked) => setValue('secure', checked)} checked={getValues('secure')} />
                         <Label htmlFor="secure">Usar Conexão Segura (SSL/TLS)</Label>
                     </div>
                 </CardContent>
+                 <CardFooter>
+                    <p className="text-sm text-muted-foreground">
+                        Após salvar, use o botão "Testar Conexão" para verificar se as credenciais estão corretas.
+                    </p>
+                 </CardFooter>
             </Card>
         </form>
     );
