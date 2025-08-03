@@ -194,7 +194,7 @@ const OrganizationSwitcher = () => {
 };
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const pathname = usePathname();
   
   const noShellPages = ['/login', '/logout'];
@@ -223,6 +223,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </SidebarGroup>
                 <OrgNav />
             </SidebarContent>
+             <SidebarFooter>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="w-full justify-start gap-2">
+                             <Avatar className="w-8 h-8">
+                                <AvatarImage src="https://i.pravatar.cc/40?u=user" data-ai-hint="user avatar" />
+                                <AvatarFallback>{user?.username?.slice(0,2).toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <span className="truncate text-left">{user?.username || 'Usuário'}</span>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-[var(--sidebar-width)] mb-2">
+                        <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <Link href="/profile" passHref>
+                           <DropdownMenuItem>Perfil</DropdownMenuItem>
+                        </Link>
+                         <DropdownMenuItem disabled>Configurações</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={logout}>
+                            <LogOut className="mr-2 h-4 w-4" />
+                            <span>Sair</span>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </SidebarFooter>
         </SidebarPrimitive>
         <SidebarInset>
             {children}

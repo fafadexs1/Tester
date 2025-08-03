@@ -12,7 +12,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (formData: FormData) => Promise<{ success: boolean; error?: string; user?: User }>;
-  logout: () => void; // A função logout agora não precisa ser async aqui
+  logout: () => void; 
   register: (formData: FormData) => Promise<{ success: boolean; error?: string; user?: User }>;
 }
 
@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user && isAuthPage) {
       console.log('[AuthProvider] Usuário logado na página de login, redirecionando para /...');
       router.push('/');
-    } else if (!user && !isAuthPage) {
+    } else if (!user && !isAuthPage && pathname !== '/logout') { // Não redirecionar se já estiver na página de logout
       console.log('[AuthProvider] Usuário não logado fora da página de login. Redirecionando para /login...');
       router.push('/login');
     }
@@ -66,7 +66,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const result = await loginAction(formData);
     if (result.success && result.user) {
       setUser(result.user);
-      // O useEffect cuidará do redirecionamento para /
     }
     return result;
   }, []);
@@ -75,20 +74,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const result = await registerAction(formData);
     if (result.success && result.user) {
       setUser(result.user);
-       // O useEffect cuidará do redirecionamento para /
     }
     return result;
   }, []);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(() => {
     console.log('[AuthProvider] Iniciando logout...');
-    await logoutAction();
-    setUser(null);
-    console.log('[AuthProvider] Estado do usuário definido como nulo. Forçando recarregamento para /login...');
-    // Forçar um recarregamento completo para a página de login.
-    // Isso é mais robusto para limpar qualquer estado restante do lado do cliente.
-    window.location.href = '/login';
-  }, []);
+    router.push('/logout');
+  }, [router]);
 
   const value = { user, loading, login, logout, register };
   
@@ -103,9 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
   }
   
-  // Se o usuário não está logado e não está na página de login, o useEffect irá redirecionar,
-  // mas podemos mostrar o loader para evitar um piscar de conteúdo indesejado.
-  if (!user && pathname !== '/login') {
+  if (!user && !['/login', '/logout'].includes(pathname)) {
      return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -116,7 +107,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
   }
 
-  // Similarmente, se o usuário está logado e na página de login, mostramos o loader enquanto redirecionamos.
   if (user && pathname === '/login') {
      return (
          <div className="flex h-screen w-full items-center justify-center bg-background">
