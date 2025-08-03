@@ -276,7 +276,7 @@ export interface FlowSession {
   flow_context?: FlowContextType;
 }
 
-export type UserRole = 'Admin' | 'Editor de Fluxo' | 'Publicador' | 'Visualizador' | 'desenvolvedor';
+export type UserRole = 'admin' | 'desenvolvedor' | 'Editor de Fluxo' | 'Publicador' | 'Visualizador' | 'user';
 
 export interface User {
     id: string; // UUID
@@ -331,4 +331,18 @@ export interface ChatwootInstance {
   baseUrl: string;
   apiAccessToken: string;
   status: 'online' | 'offline' | 'unconfigured' | 'connecting';
+}
+
+export interface SmtpSettings {
+    id: string;
+    organization_id: string;
+    host: string;
+    port: number;
+    secure: boolean;
+    username?: string | null;
+    password?: string | null;
+    from_name?: string | null;
+    from_email?: string | null;
+    created_at: string | Date;
+    updated_at: string | Date;
 }

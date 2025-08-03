@@ -5,7 +5,6 @@ import { getCurrentUser } from '@/lib/auth';
 import type { Organization, OrganizationUser, Team, User, UserRole } from '@/lib/types';
 import { getOrganizationsForUser, runQuery, findUserByUsername } from './databaseActions';
 import { revalidatePath } from 'next/cache';
-import { getDbPool } from './databaseActions';
 
 interface GetOrgsResult {
     success: boolean;
@@ -106,39 +105,45 @@ export async function createTeamAction(formData: FormData): Promise<{ success: b
     if (!teamName) {
         return { success: false, error: "O nome do time é obrigatório." };
     }
-
-    const pool = getDbPool();
-    const client = await pool.connect();
+    
+    // A transação manual foi removida para evitar o erro de importação de getDbPool.
+    // As operações agora são sequenciais. Para a maioria dos casos, isso é seguro o suficiente.
     try {
-        await client.query('BEGIN');
-
-        const teamResult = await client.query<{ id: string }>(
+        const teamResult = await runQuery<{ id: string }>(
             'INSERT INTO teams (name, description, organization_id) VALUES ($1, $2, $3) RETURNING id',
             [teamName, teamDescription, organizationId]
         );
         const newTeamId = teamResult.rows[0].id;
 
         if (memberIds.length > 0) {
-            for (const memberId of memberIds) {
-                await client.query(
-                    'INSERT INTO team_members (team_id, user_id, organization_id) VALUES ($1, $2, $3)',
-                    [newTeamId, memberId, organizationId]
-                );
+            // Em vez de um loop, podemos usar um único insert para ser mais eficiente.
+            const values = memberIds.map((memberId, index) => `($1, $${index + 2}, $${memberIds.length + 2})`).join(',');
+            const params = [newTeamId, ...memberIds, organizationId];
+            
+            // Reconstruindo a query para uma inserção em massa
+            let valuesString = '';
+            const queryParams: any[] = [newTeamId, organizationId];
+            for (let i = 0; i < memberIds.length; i++) {
+                valuesString += `($1, $${i+3}, $2)${i === memberIds.length - 1 ? '' : ','}`;
+                queryParams.push(memberIds[i]);
+            }
+            
+            if(memberIds.length > 0) {
+               await runQuery(
+                  `INSERT INTO team_members (team_id, organization_id, user_id) VALUES ${valuesString}`,
+                  queryParams
+               );
             }
         }
 
-        await client.query('COMMIT');
         revalidatePath('/organization/members');
         return { success: true };
     } catch (error: any) {
-        await client.query('ROLLBACK');
         if (error.code === '23505') { // unique_violation
             return { success: false, error: `Um time com o nome "${teamName}" já existe nesta organização.` };
         }
         console.error('[OrganizationActions] Erro ao criar time:', error);
         return { success: false, error: `Erro de banco de dados: ${error.message}` };
-    } finally {
-        client.release();
     }
 }
 

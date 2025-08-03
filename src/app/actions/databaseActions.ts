@@ -4,7 +4,7 @@
 
 import { Pool, type QueryResult } from 'pg';
 import dotenv from 'dotenv';
-import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser } from '@/lib/types';
+import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser, SmtpSettings } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { redirect } from 'next/navigation';
 
@@ -216,6 +216,22 @@ async function initializeDatabaseSchema(): Promise<void> {
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(user_id, name)
       );
+    `);
+
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS smtp_settings (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            organization_id UUID NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+            host TEXT NOT NULL,
+            port INTEGER NOT NULL,
+            secure BOOLEAN NOT NULL DEFAULT true,
+            username TEXT,
+            password TEXT,
+            from_name TEXT,
+            from_email TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
     `);
     
     const ownerIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='owner_id'`);
@@ -806,4 +822,39 @@ export async function getTeamsForOrganization(organizationId: string): Promise<T
     }));
 }
 
-export { getDbPool };
+
+// --- SMTP Settings Actions ---
+
+export async function getSmtpSettings(organizationId: string): Promise<SmtpSettings | null> {
+    if (!organizationId) return null;
+    const result = await runQuery<SmtpSettings>(
+        'SELECT * FROM smtp_settings WHERE organization_id = $1',
+        [organizationId]
+    );
+    return result.rows.length > 0 ? result.rows[0] : null;
+}
+
+export async function saveSmtpSettings(settings: Omit<SmtpSettings, 'id' | 'created_at' | 'updated_at'>): Promise<{ success: boolean, error?: string }> {
+    const { organization_id, host, port, secure, username, password, from_name, from_email } = settings;
+
+    const query = `
+        INSERT INTO smtp_settings (organization_id, host, port, secure, username, password, from_name, from_email, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        ON CONFLICT (organization_id) DO UPDATE
+        SET host = EXCLUDED.host,
+            port = EXCLUDED.port,
+            secure = EXCLUDED.secure,
+            username = EXCLUDED.username,
+            password = EXCLUDED.password,
+            from_name = EXCLUDED.from_name,
+            from_email = EXCLUDED.from_email,
+            updated_at = NOW();
+    `;
+    try {
+        await runQuery(query, [organization_id, host, port, secure, username, password, from_name, from_email]);
+        return { success: true };
+    } catch (error: any) {
+        console.error('[DB Actions] Error saving SMTP settings:', error);
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    }
+}
