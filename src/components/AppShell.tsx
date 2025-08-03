@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -10,6 +11,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarTrigger,
+  SidebarInset,
+  SidebarProvider,
 } from '@/components/ui/sidebar';
 import {
   DropdownMenu,
@@ -136,35 +139,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const noShellPages = ['/login', '/logout', '/flow'];
   const isNoShellPage = noShellPages.some(p => pathname.startsWith(p));
 
-  // If we are on a no-shell page, or there's no user, just render the children directly.
   if (isNoShellPage || !user) {
     return <>{children}</>;
   }
   
-  // Otherwise, render the full shell with the sidebar and the main content area.
   return (
-    <div className='flex'>
-      <SidebarPrimitive>
-        <SidebarHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Zap className="w-7 h-7 text-primary" />
-              <h1 className="text-lg font-semibold">NexusFlow</h1>
-            </div>
-            <SidebarTrigger />
-          </div>
-          <OrganizationSwitcher />
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarGroup>
-            <MainNav />
-          </SidebarGroup>
-          <OrgNav />
-        </SidebarContent>
-      </SidebarPrimitive>
-      <main className="flex-1 overflow-y-auto">
-        {children}
-      </main>
-    </div>
+    <SidebarProvider>
+        <SidebarPrimitive>
+            <SidebarHeader>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Zap className="w-7 h-7 text-primary" />
+                        <h1 className="text-lg font-semibold">NexusFlow</h1>
+                    </div>
+                    <SidebarTrigger />
+                </div>
+                <OrganizationSwitcher />
+            </SidebarHeader>
+            <SidebarContent>
+                <SidebarGroup>
+                    <MainNav />
+                </SidebarGroup>
+                <OrgNav />
+            </SidebarContent>
+        </SidebarPrimitive>
+        <SidebarInset>
+            {children}
+        </SidebarInset>
+    </SidebarProvider>
   );
 }
