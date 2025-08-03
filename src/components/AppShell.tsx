@@ -27,7 +27,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/components/auth/AuthProvider';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronsUpDown, Workflow, BarChart2, Building, Users, CreditCard, ScrollText, Settings, LogOut, Zap, LifeBuoy } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import type { Organization } from '@/lib/types';
+import { getOrganizationsForUserAction } from '@/app/actions/organizationActions';
+import { ChevronsUpDown, Workflow, BarChart2, Building, Users, CreditCard, ScrollText, Settings, LogOut, Zap, LifeBuoy, Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 const MainNav = () => {
   const pathname = usePathname();
@@ -107,25 +111,71 @@ const OrgNav = () => {
 }
 
 const OrganizationSwitcher = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchOrgs = async () => {
+      if (!user) return;
+      setIsLoading(true);
+      const result = await getOrganizationsForUserAction();
+      if (result.success && result.data) {
+        setOrganizations(result.data);
+      } else {
+        toast({
+          title: "Erro ao carregar organizações",
+          description: result.error || "Não foi possível buscar os dados das suas organizações.",
+          variant: "destructive",
+        });
+      }
+      setIsLoading(false);
+    };
+
+    fetchOrgs();
+  }, [user, toast]);
+
+  const currentOrg = organizations.find(org => org.id === user?.current_organization_id);
+
   return (
     <div className="p-2">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="w-full justify-between">
-            <div className="flex items-center gap-2">
-              <Avatar className="w-6 h-6">
-                <AvatarImage src="https://i.pravatar.cc/40?u=org1" data-ai-hint="logo organization" />
-                <AvatarFallback>MO</AvatarFallback>
-              </Avatar>
-              <span className="truncate">Minha Organização</span>
-            </div>
+          <Button variant="outline" className="w-full justify-between" disabled={isLoading}>
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="truncate">Carregando...</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Avatar className="w-6 h-6">
+                  <AvatarImage src={`https://i.pravatar.cc/40?u=${currentOrg?.id || 'org'}`} data-ai-hint="logo organization" />
+                  <AvatarFallback>{currentOrg?.name?.slice(0, 2).toUpperCase() || 'OG'}</AvatarFallback>
+                </Avatar>
+                <span className="truncate">{currentOrg?.name || 'Selecione a Organização'}</span>
+              </div>
+            )}
             <ChevronsUpDown className="w-4 h-4 text-muted-foreground" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-[var(--sidebar-width)]">
-          <DropdownMenuLabel>Organizações</DropdownMenuLabel>
-          <DropdownMenuItem>Organização 2</DropdownMenuItem>
-          <DropdownMenuItem>Organização 3</DropdownMenuItem>
+          <DropdownMenuLabel>Suas Organizações</DropdownMenuLabel>
+          {organizations.map(org => (
+            <DropdownMenuItem key={org.id} onSelect={() => console.log('Mudar para org:', org.id)}>
+              <Avatar className="w-5 h-5 mr-2">
+                <AvatarImage src={`https://i.pravatar.cc/40?u=${org.id}`} data-ai-hint="logo organization" />
+                <AvatarFallback>{org.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <span>{org.name}</span>
+            </DropdownMenuItem>
+          ))}
+           <DropdownMenuSeparator />
+           <DropdownMenuItem>
+             <PlusCircle className="mr-2 h-4 w-4" />
+             Criar nova organização
+           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -136,8 +186,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const pathname = usePathname();
   
-  const noShellPages = ['/login', '/logout', '/flow'];
-  const isNoShellPage = noShellPages.some(p => pathname.startsWith(p));
+  const noShellPages = ['/login', '/logout'];
+  const isNoShellPage = noShellPages.some(p => pathname.startsWith(p)) || pathname.startsWith('/flow/');
 
   if (isNoShellPage || !user) {
     return <>{children}</>;
