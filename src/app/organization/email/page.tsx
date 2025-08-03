@@ -1,4 +1,3 @@
-
 'use client';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -85,7 +84,7 @@ export default function SmtpSettingsPage() {
         const result = await testSmtpConnectionAction(formData);
 
         if (result.success) {
-            toast({ title: 'Conexão Bem-sucedida!', description: 'A conexão com o servidor SMTP foi estabelecida com sucesso.', className: 'bg-green-100 dark:bg-green-900 border-green-300 dark:border-green-700' });
+            toast({ title: 'Conexão Bem-sucedida!', description: 'A conexão com o servidor SMTP foi estabelecida com sucesso.', variant: 'success' });
         } else {
             toast({ title: 'Falha na Conexão', description: result.error, variant: 'destructive' });
         }
