@@ -12,7 +12,7 @@ dotenv.config();
 
 let pool: Pool | null = null;
 
-function getDbPool(): Pool {
+export function getDbPool(): Pool {
     if (pool) {
         return pool;
     }

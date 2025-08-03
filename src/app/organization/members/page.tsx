@@ -1,6 +1,6 @@
 
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -26,10 +26,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import type { OrganizationUser, Team } from '@/lib/types';
-import { getUsersForOrganization, getTeamsForOrganization } from '@/app/actions/organizationActions';
+import type { OrganizationUser, Team, UserRole } from '@/lib/types';
+import { getUsersForOrganization, getTeamsForOrganization, createTeamAction, inviteUserToOrganizationAction } from '@/app/actions/organizationActions';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useToast } from '@/hooks/use-toast';
+import { Combobox } from '@/components/ui/combobox';
+
 
 export default function MembersPage() {
     const { user } = useAuth();
@@ -38,7 +40,11 @@ export default function MembersPage() {
     const [members, setMembers] = useState<OrganizationUser[]>([]);
     const [teams, setTeams] = useState<Team[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [openInvite, setOpenInvite] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    const [openInviteDialog, setOpenInviteDialog] = useState(false);
+    const [openCreateTeamDialog, setOpenCreateTeamDialog] = useState(false);
+
 
     const fetchData = useCallback(async () => {
         if (!user?.current_organization_id) return;
@@ -72,6 +78,46 @@ export default function MembersPage() {
         fetchData();
     }, [fetchData]);
 
+    const handleInviteSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setIsSubmitting(true);
+        const formData = new FormData(event.currentTarget);
+        const result = await inviteUserToOrganizationAction(formData);
+
+        if (result.success) {
+            toast({ title: "Sucesso!", description: "Usuário convidado para a organização." });
+            setOpenInviteDialog(false);
+            fetchData();
+        } else {
+            toast({ title: "Erro ao Convidar", description: result.error, variant: "destructive" });
+        }
+        setIsSubmitting(false);
+    };
+
+    const handleCreateTeamSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setIsSubmitting(true);
+        const formData = new FormData(event.currentTarget);
+        const result = await createTeamAction(formData);
+
+        if (result.success) {
+            toast({ title: "Sucesso!", description: "Time criado com sucesso." });
+            setOpenCreateTeamDialog(false);
+            fetchData();
+        } else {
+            toast({ title: "Erro ao Criar Time", description: result.error, variant: "destructive" });
+        }
+        setIsSubmitting(false);
+    };
+
+    const memberOptions = useMemo(() => {
+        return members.map(member => ({
+            value: member.id,
+            label: member.username
+        }));
+    }, [members]);
+
+
     if (isLoading) {
         return (
             <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 flex items-center justify-center">
@@ -84,40 +130,48 @@ export default function MembersPage() {
         <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
             <div className="flex items-center justify-between space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight">Membros e Times</h2>
-                <Dialog open={openInvite} onOpenChange={setOpenInvite}>
+                 <Dialog open={openInviteDialog} onOpenChange={setOpenInviteDialog}>
                     <DialogTrigger asChild>
                         <Button>
                             <PlusCircle className="mr-2 h-4 w-4" /> Convidar Membro
                         </Button>
                     </DialogTrigger>
                     <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Convidar Novo(s) Membro(s) (Em breve)</DialogTitle>
-                            <DialogDescription>
-                                Digite os emails, atribua uma função e adicione a times se desejar.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="py-4 space-y-4">
-                            <div>
-                                <Label htmlFor="emails">Email(s)</Label>
-                                <Textarea id="emails" placeholder="Digite um ou mais emails, separados por vírgula." disabled />
+                        <form onSubmit={handleInviteSubmit}>
+                            <DialogHeader>
+                                <DialogTitle>Convidar Novo Membro</DialogTitle>
+                                <DialogDescription>
+                                    Digite o nome de usuário do membro existente para adicioná-lo à sua organização.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="py-4 space-y-4">
+                                <div>
+                                    <Label htmlFor="username">Nome de Usuário</Label>
+                                    <Input id="username" name="username" placeholder="nome.de.usuario" required />
+                                </div>
+                                <div>
+                                    <Label htmlFor="role">Atribuir Função</Label>
+                                    <Select name="role" defaultValue="Visualizador" required>
+                                        <SelectTrigger id="role">
+                                            <SelectValue placeholder="Selecione uma função" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Admin">Admin</SelectItem>
+                                            <SelectItem value="Editor de Fluxo">Editor de Fluxo</SelectItem>
+                                            <SelectItem value="Publicador">Publicador</SelectItem>
+                                            <SelectItem value="Visualizador">Visualizador</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
-                             <div>
-                                <Label htmlFor="role">Atribuir Função</Label>
-                                <Select defaultValue="editor" disabled>
-                                    <SelectTrigger id="role">
-                                        <SelectValue placeholder="Selecione uma função" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="editor">Editor de Fluxo</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setOpenInvite(false)}>Cancelar</Button>
-                            <Button onClick={() => setOpenInvite(false)} disabled>Enviar Convites</Button>
-                        </DialogFooter>
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setOpenInviteDialog(false)} disabled={isSubmitting}>Cancelar</Button>
+                                <Button type="submit" disabled={isSubmitting}>
+                                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                    Convidar
+                                </Button>
+                            </DialogFooter>
+                        </form>
                     </DialogContent>
                 </Dialog>
             </div>
@@ -149,20 +203,19 @@ export default function MembersPage() {
                                             </Avatar>
                                             <div>
                                                 <p>{member.username}</p>
-                                                {/* Email não está no model OrganizationUser, precisaria adicionar se necessário */}
                                             </div>
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <Select defaultValue={member.role.toLowerCase().replace(/ /g, '-')} disabled>
+                                        <Select defaultValue={member.role} disabled>
                                             <SelectTrigger className="w-[180px]">
                                                 <SelectValue placeholder="Selecione a função" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="admin">Admin</SelectItem>
-                                                <SelectItem value="editor-de-fluxo">Editor de Fluxo</SelectItem>
-                                                <SelectItem value="publicador">Publicador</SelectItem>
-                                                <SelectItem value="visualizador">Visualizador</SelectItem>
+                                                <SelectItem value="Admin">Admin</SelectItem>
+                                                <SelectItem value="Editor de Fluxo">Editor de Fluxo</SelectItem>
+                                                <SelectItem value="Publicador">Publicador</SelectItem>
+                                                <SelectItem value="Visualizador">Visualizador</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </TableCell>
@@ -212,13 +265,54 @@ export default function MembersPage() {
                                  <CardFooter className="flex justify-end gap-2">
                                     <Button variant="outline" disabled>Editar</Button>
                                     <Button variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" disabled>Excluir</Button>
-                                </CardFooter>
+                                 </CardFooter>
                             </Card>
                         ))}
-                         <Button variant="outline" className="h-full min-h-[150px] border-dashed flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground hover:bg-muted" disabled>
-                            <PlusCircle className="w-8 h-8"/>
-                            Criar Novo Time (Em breve)
-                        </Button>
+                         <Dialog open={openCreateTeamDialog} onOpenChange={setOpenCreateTeamDialog}>
+                            <DialogTrigger asChild>
+                                <Button variant="outline" className="h-full min-h-[150px] border-dashed flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground hover:bg-muted">
+                                    <PlusCircle className="w-8 h-8"/>
+                                    Criar Novo Time
+                                </Button>
+                            </DialogTrigger>
+                             <DialogContent>
+                                <form onSubmit={handleCreateTeamSubmit}>
+                                    <DialogHeader>
+                                        <DialogTitle>Criar Novo Time</DialogTitle>
+                                        <DialogDescription>
+                                           Organize membros em times para facilitar a gestão de permissões.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="py-4 space-y-4">
+                                        <div>
+                                            <Label htmlFor="team-name">Nome do Time</Label>
+                                            <Input id="team-name" name="name" required/>
+                                        </div>
+                                         <div>
+                                            <Label htmlFor="team-description">Descrição (Opcional)</Label>
+                                            <Textarea id="team-description" name="description" />
+                                        </div>
+                                        <div>
+                                            <Label>Adicionar Membros</Label>
+                                            <Combobox
+                                                options={memberOptions}
+                                                placeholder="Selecione os membros..."
+                                                searchPlaceholder="Buscar membro..."
+                                                notFoundMessage="Nenhum membro encontrado."
+                                                name="members"
+                                            />
+                                        </div>
+                                    </div>
+                                    <DialogFooter>
+                                        <Button type="button" variant="outline" onClick={() => setOpenCreateTeamDialog(false)} disabled={isSubmitting}>Cancelar</Button>
+                                        <Button type="submit" disabled={isSubmitting}>
+                                            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                            Criar Time
+                                        </Button>
+                                    </DialogFooter>
+                                </form>
+                            </DialogContent>
+                        </Dialog>
                     </div>
                 </TabsContent>
             </Tabs>
