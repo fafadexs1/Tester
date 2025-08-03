@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, BotMessageSquare, MessageCircle, Settings } from "lucide-react";
+import { CheckCircle, BotMessageSquare, MessageCircle, Settings, BrainCircuit } from "lucide-react";
 import React from 'react';
 import { cn } from "@/lib/utils";
 
@@ -23,47 +23,12 @@ const integrations = [
         verified: true,
     },
     {
-        icon: <Settings className="w-8 h-8 text-gray-500" />,
-        title: "Slack",
-        description: "Integre com o Slack para receber notificações e alertas.",
-        badge: "BETA",
-        verified: false,
-    },
-        {
-        icon: <Settings className="w-8 h-8 text-gray-500" />,
-        title: "Jira",
-        description: "Crie e gerencie chamados no Jira a partir de conversas.",
-        badge: "BETA",
-        verified: false,
-    },
-    {
-        icon: <Settings className="w-8 h-8 text-gray-500" />,
-        title: "Hubspot",
-        description: "Crie Leads no Hubspot a partir de conversas nos seus canais.",
-        badge: "BETA",
-        verified: false,
-    },
-    {
-        icon: <Settings className="w-8 h-8 text-gray-500" />,
-        title: "Instagram",
-        description: "Responda a mensagens diretas do Instagram pelo nosso painel.",
-        badge: "Grátis",
-        verified: true,
-    },
-     {
-        icon: <Settings className="w-8 h-8 text-gray-500" />,
-        title: "Messenger",
-        description: "Responda a mensagens do Facebook Messenger pelo nosso painel.",
-        badge: "Grátis",
-        verified: true,
-    },
-    {
-        icon: <Settings className="w-8 h-8 text-gray-500" />,
-        title: "Chatbot",
+        icon: <BrainCircuit className="w-8 h-8 text-rose-500" />,
+        title: "Chatbot com IA",
         description: "Transforme seu atendimento com nosso poderoso plugin de Chatbot.",
         badge: "Grátis",
         verified: true,
-    }
+    },
 ];
 
 const IntegrationCard = ({ icon, title, description, badge, verified }: (typeof integrations)[0]) => {
