@@ -27,8 +27,6 @@ export default async function DashboardPage() {
   
   // Renderiza o componente de cliente, passando os dados pré-carregados
   return (
-    <AppShell>
-        <DashboardClient user={user} initialWorkspaces={initialWorkspaces} />
-    </AppShell>
+    <DashboardClient user={user} initialWorkspaces={initialWorkspaces} />
   );
 }

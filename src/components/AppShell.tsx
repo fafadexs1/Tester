@@ -139,12 +139,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const noShellPages = ['/login', '/logout', '/flow'];
   const isNoShellPage = noShellPages.some(p => pathname.startsWith(p));
 
-  if (isNoShellPage) {
+  // If we are on a no-shell page, or there's no user, just render the children directly.
+  if (isNoShellPage || !user) {
     return <>{children}</>;
   }
   
-  if (!user) return null;
-
+  // Otherwise, render the full shell with the sidebar and the main content area.
   return (
     <Sidebar>
       <SidebarHeader>
