@@ -16,6 +16,7 @@ import {
   SidebarProvider,
   SidebarMenuSub,
   SidebarMenuSubButton,
+  SidebarTrigger,
   ChevronDown
 } from '@/components/ui/sidebar';
 import {
