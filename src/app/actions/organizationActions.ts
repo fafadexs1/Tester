@@ -3,7 +3,7 @@
 
 import { getCurrentUser } from '@/lib/auth';
 import type { Organization, OrganizationUser, Team, User, UserRole, Role } from '@/lib/types';
-import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization } from './databaseActions';
+import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization, getUsersForOrganization } from './databaseActions';
 import { revalidatePath } from 'next/cache';
 
 interface GetOrgsResult {
