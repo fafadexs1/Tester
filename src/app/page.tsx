@@ -1,3 +1,4 @@
+
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { loadWorkspacesForOrganizationFromDB } from '@/app/actions/databaseActions';
@@ -25,8 +26,10 @@ export default async function DashboardPage() {
   // Carrega os workspaces da organização ativa do usuário
   const initialWorkspaces: WorkspaceData[] = await loadWorkspacesForOrganizationFromDB(user.current_organization_id);
   
-  // Renderiza o componente de cliente, passando os dados pré-carregados
+  // Renderiza o componente de cliente, passando os dados pré-carregados DENTRO do AppShell
   return (
-    <DashboardClient user={user} initialWorkspaces={initialWorkspaces} />
+    <AppShell>
+        <DashboardClient user={user} initialWorkspaces={initialWorkspaces} />
+    </AppShell>
   );
 }
