@@ -281,7 +281,7 @@ async function initializeDatabaseSchema(): Promise<void> {
     
     await client.query(`
       CREATE TABLE IF NOT EXISTS workspaces (
-        id UUID PRIMARY KEY,
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name TEXT NOT NULL,
         nodes JSONB,
         connections JSONB,
@@ -291,7 +291,8 @@ async function initializeDatabaseSchema(): Promise<void> {
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         evolution_instance_id UUID,
         chatwoot_enabled BOOLEAN DEFAULT false,
-        chatwoot_instance_id UUID
+        chatwoot_instance_id UUID,
+        UNIQUE (organization_id, name)
       );
     `);
 
@@ -1414,3 +1415,4 @@ export async function deleteRole(roleId: string): Promise<{ success: boolean; er
         return { success: false, error: `Erro de banco de dados: ${error.message}` };
     }
 }
+

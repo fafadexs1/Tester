@@ -25,7 +25,8 @@ const actionIcons: Record<string, React.ReactNode> = {
 };
 
 const formatActionText = (log: AuditLog): React.ReactNode => {
-    const user = <span className="font-semibold">{log.user?.username || 'Sistema'}</span>;
+    const userDisplayName = log.user?.full_name || log.user?.username || 'Sistema';
+    const user = <span className="font-semibold">{userDisplayName}</span>;
     switch (log.action) {
         case 'user_login':
             return <>{user} fez login no sistema.</>;
@@ -143,7 +144,7 @@ export default function AuditLogPage() {
                         <SelectContent>
                             <SelectItem value="all">Todos os Membros</SelectItem>
                             {members.map(member => (
-                                <SelectItem key={member.id} value={member.id}>{member.username}</SelectItem>
+                                <SelectItem key={member.id} value={member.id}>{member.full_name || member.username}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
