@@ -16,7 +16,8 @@ import {
   SidebarProvider,
   SidebarMenuSub,
   SidebarMenuSubButton,
-  SidebarMenuSubItem
+  SidebarMenuSubItem,
+  ChevronDown
 } from '@/components/ui/sidebar';
 import {
   DropdownMenu,
@@ -74,7 +75,7 @@ const OrgNav = () => {
         if (isActive('/organization/members')) {
             setIsAccessMenuOpen(true);
         }
-    }, [isActive]);
+    }, [pathname]);
 
     return (
         <SidebarGroup>
