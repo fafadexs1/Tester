@@ -1056,7 +1056,7 @@ export async function getRolesForOrganization(organizationId: string): Promise<R
                 (SELECT json_agg(rp.permission_id) 
                  FROM role_permissions rp 
                  WHERE rp.role_id = r.id),
-                '[]'::jsonb
+                '[]'::json
             ) as permissions
         FROM roles r
         WHERE r.organization_id = $1
