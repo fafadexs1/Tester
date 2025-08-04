@@ -41,12 +41,12 @@ import { cn } from '@/lib/utils';
 
 const MainNav = () => {
   const pathname = usePathname();
-  const isActive = (path: string) => pathname.startsWith(path);
+  const isActive = (path: string) => pathname === path;
   return (
     <SidebarMenu>
       <SidebarMenuItem>
         <Link href="/" passHref>
-          <SidebarMenuButton isActive={pathname === '/'} tooltip="Fluxos de Trabalho">
+          <SidebarMenuButton isActive={isActive('/')} tooltip="Fluxos de Trabalho">
             <Workflow />
             <span>Fluxos de Trabalho</span>
           </SidebarMenuButton>
@@ -66,13 +66,16 @@ const MainNav = () => {
 
 const OrgNav = () => {
     const pathname = usePathname();
-    const isActive = (path: string) => pathname.startsWith(path);
     const { user } = useAuth();
     const [isAccessMenuOpen, setIsAccessMenuOpen] = useState(false);
+    
+    // Verificação mais precisa para o estado ativo
+    const isMembersActive = pathname === '/organization/members';
+    const isRolesActive = pathname.startsWith('/organization/members') && pathname.includes('tab=roles');
 
     useEffect(() => {
         // Abre o menu se uma das suas subpáginas estiver ativa
-        if (isActive('/organization/members')) {
+        if (pathname.startsWith('/organization/members')) {
             setIsAccessMenuOpen(true);
         }
     }, [pathname]);
@@ -83,7 +86,7 @@ const OrgNav = () => {
             <SidebarMenu>
                 <SidebarMenuItem>
                     <Link href="/organization/general" passHref>
-                        <SidebarMenuButton isActive={isActive('/organization/general')} tooltip="Geral">
+                        <SidebarMenuButton isActive={pathname === '/organization/general'} tooltip="Geral">
                            <Building />
                            <span>Geral</span>
                         </SidebarMenuButton>
@@ -101,14 +104,14 @@ const OrgNav = () => {
                         <SidebarMenuSub>
                             <SidebarMenuSubItem>
                                 <Link href="/organization/members" passHref>
-                                    <SidebarMenuSubButton isActive={isActive('/organization/members')}>
+                                    <SidebarMenuSubButton isActive={isMembersActive}>
                                         Membros e Times
                                     </SidebarMenuSubButton>
                                 </Link>
                             </SidebarMenuSubItem>
                             <SidebarMenuSubItem>
                                 <Link href="/organization/members?tab=roles" passHref>
-                                    <SidebarMenuSubButton isActive={pathname.includes('?tab=roles')}>
+                                    <SidebarMenuSubButton isActive={isRolesActive}>
                                         Cargos e Permissões
                                     </SidebarMenuSubButton>
                                 </Link>
@@ -118,7 +121,7 @@ const OrgNav = () => {
                 </SidebarMenuItem>
                  <SidebarMenuItem>
                     <Link href="/organization/billing" passHref>
-                        <SidebarMenuButton isActive={isActive('/organization/billing')} tooltip="Billing e Assinatura">
+                        <SidebarMenuButton isActive={pathname === '/organization/billing'} tooltip="Billing e Assinatura">
                            <CreditCard />
                            <span>Billing e Assinatura</span>
                         </SidebarMenuButton>
@@ -126,7 +129,7 @@ const OrgNav = () => {
                 </SidebarMenuItem>
                  <SidebarMenuItem>
                     <Link href="/organization/audit" passHref>
-                        <SidebarMenuButton isActive={isActive('/organization/audit')} tooltip="Logs de Auditoria">
+                        <SidebarMenuButton isActive={pathname === '/organization/audit'} tooltip="Logs de Auditoria">
                            <ScrollText />
                            <span>Logs de Auditoria</span>
                         </SidebarMenuButton>
@@ -135,7 +138,7 @@ const OrgNav = () => {
                 {user?.role === 'desenvolvedor' && (
                     <SidebarMenuItem>
                         <Link href="/organization/email" passHref>
-                            <SidebarMenuButton isActive={isActive('/organization/email')} tooltip="E-mail (SMTP)">
+                            <SidebarMenuButton isActive={pathname === '/organization/email'} tooltip="E-mail (SMTP)">
                                <Mail />
                                <span>E-mail (SMTP)</span>
                             </SidebarMenuButton>
@@ -144,7 +147,7 @@ const OrgNav = () => {
                 )}
                  <SidebarMenuItem>
                     <Link href="/organization/integrations" passHref>
-                        <SidebarMenuButton isActive={isActive('/organization/integrations')} tooltip="Integrações">
+                        <SidebarMenuButton isActive={pathname === '/organization/integrations'} tooltip="Integrações">
                            <Settings />
                            <span>Integrações</span>
                         </SidebarMenuButton>
@@ -231,10 +234,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout, loading } = useAuth();
   const pathname = usePathname();
   
-  const noShellPages = ['/login', '/logout'];
-  const isNoShellPage = noShellPages.some(p => pathname.startsWith(p)) || pathname.startsWith('/flow/');
+  const noShellPages = ['/login', '/logout', '/profile', '/admin'];
+  const isNoShellPage = noShellPages.some(p => pathname === p) || pathname.startsWith('/flow/');
 
-  if (loading || isNoShellPage || !user) {
+
+  if (loading || !user) {
+    return <>{children}</>;
+  }
+  
+  if (isNoShellPage) {
     return <>{children}</>;
   }
   
