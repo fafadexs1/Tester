@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { Pool, type QueryResult } from 'pg';
@@ -82,10 +81,11 @@ async function initializeDatabaseSchema(): Promise<void> {
   const client = await poolInstance.connect();
   try {
     console.log('[DB Actions] Initializing database schema if needed...');
-    await client.query('BEGIN');
     
-    // Garante que a extensão para gerar UUIDs esteja habilitada ANTES de criar tabelas que a usam.
+    // Garante que a extensão para gerar UUIDs esteja habilitada ANTES de qualquer transação.
     await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
+
+    await client.query('BEGIN');
     
     // Tabela de Usuários - Criada antes de organizations para a foreign key
     await client.query(`
@@ -1205,3 +1205,5 @@ export async function deleteRole(roleId: string): Promise<{ success: boolean; er
         return { success: false, error: `Erro de banco de dados: ${error.message}` };
     }
 }
+
+    
