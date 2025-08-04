@@ -195,13 +195,13 @@ const OrganizationSwitcher = () => {
 };
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, logout, loading } = useAuth();
   const pathname = usePathname();
   
   const noShellPages = ['/login', '/logout'];
   const isNoShellPage = noShellPages.some(p => pathname.startsWith(p)) || pathname.startsWith('/flow/');
 
-  if (isNoShellPage || !user) {
+  if (loading || isNoShellPage || !user) {
     return <>{children}</>;
   }
   

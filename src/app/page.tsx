@@ -26,10 +26,8 @@ export default async function DashboardPage() {
   // Carrega os workspaces da organização ativa do usuário
   const initialWorkspaces: WorkspaceData[] = await loadWorkspacesForOrganizationFromDB(user.current_organization_id);
   
-  // Renderiza o componente de cliente, passando os dados pré-carregados DENTRO do AppShell
+  // O AppShell agora está no layout.tsx, então renderizamos apenas o cliente aqui.
   return (
-    <AppShell>
-        <DashboardClient user={user} initialWorkspaces={initialWorkspaces} />
-    </AppShell>
+    <DashboardClient user={user} initialWorkspaces={initialWorkspaces} />
   );
 }
