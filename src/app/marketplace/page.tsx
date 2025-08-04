@@ -96,6 +96,10 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
     useEffect(() => {
         if (open) {
             fetchDetails();
+        } else {
+            // Reset state when dialog closes
+            setListing(null);
+            setIsLoading(false);
         }
     }, [open, fetchDetails]);
 
@@ -108,15 +112,14 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>{children}</DialogTrigger>
             <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0">
-                {isLoading ? (
-                    <div className="flex-1 flex items-center justify-center">
-                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                    </div>
-                ) : listing ? (
-                    <>
-                    <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] h-full overflow-hidden">
-                        <div className="relative h-full bg-muted/30 overflow-hidden" ref={previewCanvasRef}>
-                             <Canvas
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] h-full overflow-hidden">
+                    <div className="relative h-full bg-muted/30 overflow-hidden" ref={previewCanvasRef}>
+                        {isLoading ? (
+                            <div className="flex-1 flex items-center justify-center h-full">
+                                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                            </div>
+                        ) : listing ? (
+                            <Canvas
                                 nodes={listing.preview_data.nodes}
                                 connections={listing.preview_data.connections}
                                 drawingLine={null}
@@ -134,27 +137,37 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
                                 highlightedNodeIdBySession={null}
                                 activeWorkspace={listing.preview_data as WorkspaceData}
                             />
-                        </div>
+                        ) : (
+                             <div className="flex-1 flex items-center justify-center text-destructive h-full">
+                                Não foi possível carregar a pré-visualização do fluxo.
+                            </div>
+                        )}
+                    </div>
 
-                        <div className="flex flex-col border-l">
-                            <DialogHeader className="p-4 border-b">
-                                <DialogTitle className="text-2xl">{listing?.name}</DialogTitle>
-                                {listing && (
-                                    <DialogDescription asChild>
-                                        <div className="flex items-center gap-4 pt-1">
-                                            <div className="flex items-center text-sm text-muted-foreground">
-                                                <User className="w-4 h-4 mr-1.5" />
-                                                Criado por {listing.creator_username}
-                                            </div>
-                                            <div className="flex items-center text-sm text-muted-foreground">
-                                                <Download className="w-4 h-4 mr-1.5" />
-                                                {listing.downloads || 0} downloads
-                                            </div>
+                    <div className="flex flex-col border-l">
+                        <DialogHeader className="p-4 border-b">
+                            <DialogTitle className="text-2xl">{listing?.name || 'Carregando...'}</DialogTitle>
+                            {listing && (
+                                <DialogDescription asChild>
+                                    <div className="flex items-center gap-4 pt-1">
+                                        <div className="flex items-center text-sm text-muted-foreground">
+                                            <User className="w-4 h-4 mr-1.5" />
+                                            Criado por {listing.creator_username}
                                         </div>
-                                    </DialogDescription>
-                                )}
-                            </DialogHeader>
-                            <ScrollArea className="flex-1">
+                                        <div className="flex items-center text-sm text-muted-foreground">
+                                            <Download className="w-4 h-4 mr-1.5" />
+                                            {listing.downloads || 0} downloads
+                                        </div>
+                                    </div>
+                                </DialogDescription>
+                            )}
+                        </DialogHeader>
+                        <ScrollArea className="flex-1">
+                             {isLoading ? (
+                                <div className="p-4 text-center text-muted-foreground">
+                                    <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                                </div>
+                            ) : listing ? (
                                 <div className="p-4 space-y-4">
                                     <div>
                                         <h3 className="font-semibold text-sm">Descrição</h3>
@@ -173,22 +186,27 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
                                         </ul>
                                     </div>
                                 </div>
-                            </ScrollArea>
-                            <DialogFooter className="p-4 border-t bg-background">
-                                <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Fechar</Button>
-                                <Button type="button" className="flex-1">
-                                    <Download className="mr-2 h-4 w-4" />
-                                    {parseFloat(String(listing.price)) > 0 ? `Comprar por R$${parseFloat(String(listing.price)).toFixed(2)}` : 'Obter Gratuitamente'}
-                                </Button>
-                            </DialogFooter>
-                        </div>
+                            ) : (
+                                <div className="p-4 text-destructive">
+                                    Não foi possível carregar os detalhes.
+                                </div>
+                            )}
+                        </ScrollArea>
+                        <DialogFooter className="p-4 border-t bg-background">
+                            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Fechar</Button>
+                            <Button type="button" className="flex-1" disabled={!listing}>
+                                {listing ? (
+                                    <>
+                                        <Download className="mr-2 h-4 w-4" />
+                                        {parseFloat(String(listing.price)) > 0 ? `Comprar por R$${parseFloat(String(listing.price)).toFixed(2)}` : 'Obter Gratuitamente'}
+                                    </>
+                                ) : (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                )}
+                            </Button>
+                        </DialogFooter>
                     </div>
-                    </>
-                ) : (
-                    <div className="flex-1 flex items-center justify-center text-destructive">
-                        Não foi possível carregar os detalhes do fluxo.
-                    </div>
-                )}
+                </div>
             </DialogContent>
         </Dialog>
     );
