@@ -12,7 +12,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSubItem,
-  SidebarTrigger,
   SidebarInset,
   SidebarProvider,
   SidebarMenuSub,
@@ -47,7 +46,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
 import type { Organization } from '@/lib/types';
 import { getOrganizationsForUserAction, createOrganizationAction } from '@/app/actions/organizationActions';
-import { ChevronsUpDown, Workflow, BarChart2, Building, Users, CreditCard, ScrollText, Settings, LogOut, Zap, LifeBuoy, Loader2, PlusCircle, Mail, ShieldCheck } from 'lucide-react';
+import { ChevronsUpDown, Workflow, BarChart2, Building, Users, CreditCard, ScrollText, Settings, LogOut, Zap, LifeBuoy, Loader2, PlusCircle, Mail, ShieldCheck, Store } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { refreshUserSessionAction } from '@/app/actions/authActions';
@@ -63,6 +62,14 @@ const MainNav = () => {
           <SidebarMenuButton isActive={isActive('/')} tooltip="Fluxos de Trabalho">
             <Workflow />
             <span>Fluxos de Trabalho</span>
+          </SidebarMenuButton>
+        </Link>
+      </SidebarMenuItem>
+      <SidebarMenuItem>
+        <Link href="/marketplace" passHref>
+          <SidebarMenuButton isActive={isActive('/marketplace')} tooltip="Marketplace">
+            <Store />
+            <span>Marketplace</span>
           </SidebarMenuButton>
         </Link>
       </SidebarMenuItem>
@@ -306,7 +313,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout, loading } = useAuth();
   const pathname = usePathname();
   
-  const noShellPages = ['/login', '/logout', '/profile', '/admin'];
+  const noShellPages = ['/login', '/logout', '/profile', '/admin', '/presentation'];
   const isNoShellPage = noShellPages.some(p => pathname === p) || pathname.startsWith('/flow/');
 
 
