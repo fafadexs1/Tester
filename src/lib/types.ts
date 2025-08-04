@@ -306,6 +306,8 @@ export interface Team {
 export interface OrganizationUser {
   id: string; // This is the user's ID
   username: string;
+  email: string | null;
+  full_name: string | null;
   role: string | null;
   is_owner: boolean; // Add is_owner field
 }
@@ -353,8 +355,8 @@ export interface SmtpSettings {
 // --- NEW RBAC TYPES ---
 
 export type PermissionAction = 'create' | 'read' | 'update' | 'delete';
-export type PermissionSubject = 'Workspace' | 'User' | 'Billing' | 'OrganizationSettings' | 'Role';
-export type PermissionIdentifier = `${Lowercase<PermissionSubject>}:${PermissionAction}`;
+export type PermissionSubject = 'Workspace' | 'Member' | 'Billing' | 'Organization' | 'Role';
+export type PermissionIdentifier = string;
 
 export interface Permission {
     id: PermissionIdentifier;

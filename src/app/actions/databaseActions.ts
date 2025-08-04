@@ -4,7 +4,7 @@
 
 import { Pool, type QueryResult } from 'pg';
 import dotenv from 'dotenv';
-import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser, SmtpSettings, Role } from '@/lib/types';
+import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser, SmtpSettings, Role, Permission } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { redirect } from 'next/navigation';
 
@@ -161,7 +161,7 @@ async function initializeDatabaseSchema(): Promise<void> {
     await client.query(`
         CREATE TABLE IF NOT EXISTS permissions (
             id TEXT PRIMARY KEY,
-            description TEXT,
+            description TEXT NOT NULL,
             subject TEXT NOT NULL
         );
     `);
@@ -438,6 +438,44 @@ async function initializeDatabaseSchema(): Promise<void> {
         await client.query(`ALTER TABLE flow_sessions ADD COLUMN flow_context TEXT;`);
     }
 
+    // --- Seed Permissions ---
+    const permissionsToSeed: Permission[] = [
+      { id: 'workspace:create', subject: 'Workspace', description: 'Pode criar novos fluxos.' },
+      { id: 'workspace:read', subject: 'Workspace', description: 'Pode visualizar fluxos.' },
+      { id: 'workspace:update', subject: 'Workspace', description: 'Pode editar e salvar fluxos.' },
+      { id: 'workspace:delete', subject: 'Workspace', description: 'Pode excluir fluxos.' },
+      { id: 'member:invite', subject: 'Member', description: 'Pode convidar novos membros para a organização.' },
+      { id: 'member:remove', subject: 'Member', description: 'Pode remover membros da organização.' },
+      { id: 'member:update_role', subject: 'Member', description: 'Pode alterar o cargo de outros membros.' },
+      { id: 'billing:read', subject: 'Billing', description: 'Pode visualizar o faturamento e o plano atual.' },
+      { id: 'billing:update', subject: 'Billing', description: 'Pode gerenciar a assinatura e alterar o plano.' },
+      { id: 'organization:update', subject: 'Organization', description: 'Pode alterar as configurações gerais da organização.' },
+      { id: 'role:create', subject: 'Role', description: 'Pode criar novos cargos.' },
+      { id: 'role:update', subject: 'Role', description: 'Pode editar cargos e suas permissões.' },
+      { id: 'role:delete', subject: 'Role', description: 'Pode excluir cargos personalizados.' },
+    ];
+
+    const insertPermissionQuery = `
+      INSERT INTO permissions (id, subject, description) VALUES ($1, $2, $3)
+      ON CONFLICT (id) DO UPDATE SET subject = EXCLUDED.subject, description = EXCLUDED.description;
+    `;
+    for (const p of permissionsToSeed) {
+      await client.query(insertPermissionQuery, [p.id, p.subject, p.description]);
+    }
+
+    // Associar todas as permissões ao cargo 'Admin' para cada organização que o tiver
+    const adminRoles = await client.query<{ id: string }>(`SELECT id FROM roles WHERE name = 'Admin'`);
+    if (adminRoles.rowCount > 0) {
+        const allPermissionIds = permissionsToSeed.map(p => p.id);
+        for (const role of adminRoles.rows) {
+            for (const permId of allPermissionIds) {
+                await client.query(
+                    `INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                    [role.id, permId]
+                );
+            }
+        }
+    }
     
     await client.query('COMMIT');
     console.log('[DB Actions] Schema initialization and migration check complete.');
@@ -934,6 +972,8 @@ export async function getUsersForOrganization(organizationId: string): Promise<O
         SELECT 
             u.id, 
             u.username, 
+            u.email,
+            u.full_name,
             r.name as role,
             (o.owner_id = u.id) as is_owner
         FROM users u
@@ -941,6 +981,7 @@ export async function getUsersForOrganization(organizationId: string): Promise<O
         JOIN organizations o ON ou.organization_id = o.id
         LEFT JOIN roles r ON ou.role_id = r.id
         WHERE ou.organization_id = $1
+        ORDER BY u.username;
     `;
     const result = await runQuery<OrganizationUser>(query, [organizationId]);
     return result.rows;
@@ -1015,12 +1056,115 @@ export async function getRolesForOrganization(organizationId: string): Promise<R
                 (SELECT json_agg(rp.permission_id) 
                  FROM role_permissions rp 
                  WHERE rp.role_id = r.id),
-                '[]'::json
+                '[]'::jsonb
             ) as permissions
         FROM roles r
         WHERE r.organization_id = $1
         ORDER BY r.is_system_role DESC, r.name ASC;
     `;
     const result = await runQuery<Role>(query, [organizationId]);
+    return result.rows.map(row => ({
+        ...row,
+        permissions: Array.isArray(row.permissions) ? row.permissions : [],
+    }));
+}
+
+export async function getPermissions(): Promise<Permission[]> {
+    const result = await runQuery<Permission>('SELECT id, subject, description FROM permissions ORDER BY subject, id');
     return result.rows;
+}
+
+export async function createRole(
+    organizationId: string,
+    name: string,
+    description: string,
+    permissionIds: string[]
+): Promise<{ success: boolean; role?: Role; error?: string }> {
+    let client;
+    try {
+        const pool = getDbPool();
+        client = await pool.connect();
+        await client.query('BEGIN');
+
+        const roleResult = await client.query<Role>(
+            'INSERT INTO roles (organization_id, name, description, is_system_role) VALUES ($1, $2, $3, FALSE) RETURNING *',
+            [organizationId, name, description]
+        );
+        const newRole = roleResult.rows[0];
+        if (!newRole) throw new Error("Falha ao criar o cargo.");
+
+        if (permissionIds.length > 0) {
+            const values = permissionIds.map(permId => `('${newRole.id}', '${permId}')`).join(',');
+            await client.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ${values}`);
+        }
+
+        await client.query('COMMIT');
+        
+        newRole.permissions = permissionIds;
+        return { success: true, role: newRole };
+    } catch (error: any) {
+        if (client) await client.query('ROLLBACK');
+        if (error.code === '23505') { // unique_violation
+            return { success: false, error: `Um cargo com o nome "${name}" já existe.` };
+        }
+        console.error('[DB Actions] Erro ao criar cargo:', error);
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    } finally {
+        if (client) client.release();
+    }
+}
+
+export async function updateRole(
+    roleId: string,
+    name: string,
+    description: string,
+    permissionIds: string[]
+): Promise<{ success: boolean; role?: Role; error?: string }> {
+     let client;
+    try {
+        const pool = getDbPool();
+        client = await pool.connect();
+        await client.query('BEGIN');
+
+        const roleResult = await client.query<Role>(
+            'UPDATE roles SET name = $1, description = $2 WHERE id = $3 RETURNING *',
+            [name, description, roleId]
+        );
+        const updatedRole = roleResult.rows[0];
+        if (!updatedRole) throw new Error("Cargo não encontrado para atualização.");
+
+        await client.query('DELETE FROM role_permissions WHERE role_id = $1', [roleId]);
+
+        if (permissionIds.length > 0) {
+            const values = permissionIds.map(permId => `('${roleId}', '${permId}')`).join(',');
+            await client.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ${values}`);
+        }
+
+        await client.query('COMMIT');
+        
+        updatedRole.permissions = permissionIds;
+        return { success: true, role: updatedRole };
+    } catch (error: any) {
+        if (client) await client.query('ROLLBACK');
+        if (error.code === '23505') { // unique_violation
+            return { success: false, error: `Um cargo com o nome "${name}" já existe.` };
+        }
+        console.error('[DB Actions] Erro ao atualizar cargo:', error);
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    } finally {
+        if (client) client.release();
+    }
+}
+
+export async function deleteRole(roleId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        const result = await runQuery('DELETE FROM roles WHERE id = $1 AND is_system_role = FALSE', [roleId]);
+        if (result.rowCount === 0) {
+            return { success: false, error: "Cargo não encontrado ou é um cargo do sistema que não pode ser excluído." };
+        }
+        return { success: true };
+    } catch (error: any) {
+        console.error('[DB Actions] Erro ao excluir cargo:', error);
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    }
 }

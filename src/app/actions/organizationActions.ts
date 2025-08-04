@@ -1,9 +1,10 @@
 
+
 'use server';
 
 import { getCurrentUser } from '@/lib/auth';
-import type { Organization, OrganizationUser, Team, User, UserRole, Role } from '@/lib/types';
-import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization, getUsersForOrganization } from './databaseActions';
+import type { Organization, OrganizationUser, Team, User, Role, Permission } from '@/lib/types';
+import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization, getUsersForOrganization, getPermissions, createRole, updateRole, deleteRole } from './databaseActions';
 import { revalidatePath } from 'next/cache';
 
 interface GetOrgsResult {
@@ -183,4 +184,65 @@ export async function getRolesForOrganizationAction(): Promise<{ success: boolea
     } catch (error: any) {
         return { success: false, error: `Erro de banco de dados: ${error.message}` };
     }
+}
+
+export async function getPermissionsAction(): Promise<{ success: boolean; data?: Permission[]; error?: string }> {
+    try {
+        const permissions = await getPermissions();
+        return { success: true, data: permissions };
+    } catch (error: any) {
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    }
+}
+
+export async function createRoleAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
+    const user = await getCurrentUser();
+    const organizationId = user?.current_organization_id;
+
+    if (!user || !organizationId) {
+        return { success: false, error: "Usuário não autenticado ou organização não selecionada." };
+    }
+
+    const name = formData.get('name') as string;
+    const description = formData.get('description') as string;
+    const permissionIds = formData.getAll('permissions') as string[];
+
+    if (!name) {
+        return { success: false, error: "O nome do cargo é obrigatório." };
+    }
+
+    const result = await createRole(organizationId, name, description, permissionIds);
+    if (result.success) {
+        revalidatePath('/organization/members');
+    }
+    return result;
+}
+
+export async function updateRoleAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
+    const user = await getCurrentUser();
+    if (!user?.current_organization_id) return { success: false, error: "Usuário não autenticado." };
+
+    const roleId = formData.get('roleId') as string;
+    const name = formData.get('name') as string;
+    const description = formData.get('description') as string;
+    const permissionIds = formData.getAll('permissions') as string[];
+
+    if (!roleId || !name) return { success: false, error: "ID e nome do cargo são obrigatórios." };
+    
+    const result = await updateRole(roleId, name, description, permissionIds);
+    if (result.success) {
+        revalidatePath('/organization/members');
+    }
+    return result;
+}
+
+export async function deleteRoleAction(roleId: string): Promise<{ success: boolean; error?: string }> {
+    const user = await getCurrentUser();
+    if (!user?.current_organization_id) return { success: false, error: "Usuário não autenticado." };
+
+    const result = await deleteRole(roleId);
+     if (result.success) {
+        revalidatePath('/organization/members');
+    }
+    return result;
 }

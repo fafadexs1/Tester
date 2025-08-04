@@ -1,4 +1,5 @@
 
+
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
@@ -16,8 +17,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MoreHorizontal, PlusCircle, Trash2, Loader2, Crown, ShieldCheck } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Trash2, Loader2, Crown, ShieldCheck, Edit, UserPlus, Users, Key, AlertCircle } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,55 +37,56 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import type { OrganizationUser, Team, Role } from '@/lib/types';
-import { getUsersForOrganizationAction, getTeamsForOrganizationAction, createTeamAction, inviteUserToOrganizationAction, getRolesForOrganizationAction } from '@/app/actions/organizationActions';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import type { OrganizationUser, Team, Role, Permission } from '@/lib/types';
+import { getUsersForOrganizationAction, getTeamsForOrganizationAction, createTeamAction, inviteUserToOrganizationAction, getRolesForOrganizationAction, getPermissionsAction, createRoleAction, updateRoleAction, deleteRoleAction } from '@/app/actions/organizationActions';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useToast } from '@/hooks/use-toast';
 import { Combobox } from '@/components/ui/combobox';
+import { useSearchParams } from 'next/navigation';
 
 
 export default function MembersPage() {
     const { user } = useAuth();
     const { toast } = useToast();
+    const searchParams = useSearchParams();
+    const initialTab = searchParams.get('tab') || 'members';
 
     const [members, setMembers] = useState<OrganizationUser[]>([]);
     const [teams, setTeams] = useState<Team[]>([]);
     const [roles, setRoles] = useState<Role[]>([]);
+    const [permissions, setPermissions] = useState<Permission[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const [openInviteDialog, setOpenInviteDialog] = useState(false);
     const [openCreateTeamDialog, setOpenCreateTeamDialog] = useState(false);
-    const [openCreateRoleDialog, setOpenCreateRoleDialog] = useState(false);
-
+    const [editingRole, setEditingRole] = useState<Role | null>(null);
+    const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
 
     const fetchData = useCallback(async () => {
         if (!user?.current_organization_id) return;
         setIsLoading(true);
         try {
-            const [membersResult, teamsResult, rolesResult] = await Promise.all([
+            const [membersResult, teamsResult, rolesResult, permissionsResult] = await Promise.all([
                 getUsersForOrganizationAction(user.current_organization_id),
                 getTeamsForOrganizationAction(user.current_organization_id),
-                getRolesForOrganizationAction()
+                getRolesForOrganizationAction(),
+                getPermissionsAction(),
             ]);
 
-            if (membersResult.success && membersResult.data) {
-                setMembers(membersResult.data);
-            } else {
-                toast({ title: "Erro ao buscar membros", description: membersResult.error, variant: "destructive" });
-            }
+            if (membersResult.success && membersResult.data) setMembers(membersResult.data);
+            else toast({ title: "Erro ao buscar membros", description: membersResult.error, variant: "destructive" });
 
-            if (teamsResult.success && teamsResult.data) {
-                setTeams(teamsResult.data);
-            } else {
-                toast({ title: "Erro ao buscar times", description: teamsResult.error, variant: "destructive" });
-            }
+            if (teamsResult.success && teamsResult.data) setTeams(teamsResult.data);
+            else toast({ title: "Erro ao buscar times", description: teamsResult.error, variant: "destructive" });
 
-            if (rolesResult.success && rolesResult.data) {
-                setRoles(rolesResult.data);
-            } else {
-                 toast({ title: "Erro ao buscar cargos", description: rolesResult.error, variant: "destructive" });
-            }
+            if (rolesResult.success && rolesResult.data) setRoles(rolesResult.data);
+            else toast({ title: "Erro ao buscar cargos", description: rolesResult.error, variant: "destructive" });
+
+            if (permissionsResult.success && permissionsResult.data) setPermissions(permissionsResult.data);
+            else toast({ title: "Erro ao buscar permissões", description: permissionsResult.error, variant: "destructive" });
 
         } catch (error: any) {
             toast({ title: "Erro de Conexão", description: "Não foi possível carregar os dados da organização.", variant: "destructive" });
@@ -119,12 +131,56 @@ export default function MembersPage() {
         setIsSubmitting(false);
     };
 
+    const handleRoleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setIsSubmitting(true);
+        const formData = new FormData(event.currentTarget);
+        
+        const result = editingRole?.id
+            ? await updateRoleAction(formData)
+            : await createRoleAction(formData);
+        
+        if (result.success) {
+            toast({ title: "Sucesso!", description: `Cargo ${editingRole?.id ? 'atualizado' : 'criado'} com sucesso.` });
+            setEditingRole(null);
+            fetchData();
+        } else {
+            toast({ title: "Erro ao Salvar Cargo", description: result.error, variant: "destructive" });
+        }
+        setIsSubmitting(false);
+    };
+
+    const handleDeleteRole = async () => {
+        if (!roleToDelete) return;
+        setIsSubmitting(true);
+        const result = await deleteRoleAction(roleToDelete.id);
+        if (result.success) {
+            toast({ title: "Sucesso!", description: `O cargo "${roleToDelete.name}" foi excluído.` });
+            setRoleToDelete(null);
+            fetchData();
+        } else {
+            toast({ title: "Erro ao Excluir", description: result.error, variant: "destructive" });
+        }
+        setIsSubmitting(false);
+    }
+
     const memberOptions = useMemo(() => {
         return members.map(member => ({
             value: member.id,
             label: member.username
         }));
     }, [members]);
+
+    const permissionsBySubject = useMemo(() => {
+        return permissions.reduce((acc, permission) => {
+            const subject = permission.subject;
+            if (!acc[subject]) {
+                acc[subject] = [];
+            }
+            acc[subject].push(permission);
+            return acc;
+        }, {} as Record<string, Permission[]>);
+    }, [permissions]);
 
 
     if (isLoading) {
@@ -142,7 +198,7 @@ export default function MembersPage() {
                  <Dialog open={openInviteDialog} onOpenChange={setOpenInviteDialog}>
                     <DialogTrigger asChild>
                         <Button>
-                            <PlusCircle className="mr-2 h-4 w-4" /> Convidar Membro
+                            <UserPlus className="mr-2 h-4 w-4" /> Convidar Membro
                         </Button>
                     </DialogTrigger>
                     <DialogContent>
@@ -184,12 +240,14 @@ export default function MembersPage() {
                 </Dialog>
             </div>
             
-            <Tabs defaultValue="members" className="mt-4">
+            <Tabs defaultValue={initialTab} className="mt-4">
                 <TabsList>
-                    <TabsTrigger value="members">Membros ({members.length})</TabsTrigger>
-                    <TabsTrigger value="teams">Times ({teams.length})</TabsTrigger>
-                    <TabsTrigger value="roles">Cargos ({roles.length})</TabsTrigger>
+                    <TabsTrigger value="members"><Users className="mr-2 h-4 w-4" />Membros ({members.length})</TabsTrigger>
+                    <TabsTrigger value="teams"><Users className="mr-2 h-4 w-4" />Times ({teams.length})</TabsTrigger>
+                    <TabsTrigger value="roles"><Key className="mr-2 h-4 w-4" />Cargos ({roles.length})</TabsTrigger>
                 </TabsList>
+
+                {/* MEMBERS TAB */}
                 <TabsContent value="members" className="mt-4">
                     <Card>
                         <Table>
@@ -210,14 +268,17 @@ export default function MembersPage() {
                                                 <AvatarImage src={`https://i.pravatar.cc/40?u=${member.username}`} data-ai-hint="avatar person" />
                                                 <AvatarFallback>{member.username.slice(0,2).toUpperCase()}</AvatarFallback>
                                             </Avatar>
-                                            <div className="flex items-center gap-2">
-                                                <p>{member.username}</p>
-                                                {member.is_owner && (
-                                                    <Badge variant="outline" className="text-amber-600 border-amber-500">
-                                                        <Crown className="w-3 h-3 mr-1" />
-                                                        Proprietário
-                                                    </Badge>
-                                                )}
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <p>{member.full_name || member.username}</p>
+                                                    {member.is_owner && (
+                                                        <Badge variant="outline" className="text-amber-600 border-amber-500">
+                                                            <Crown className="w-3 h-3 mr-1" />
+                                                            Proprietário
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">{member.email}</p>
                                             </div>
                                         </div>
                                     </TableCell>
@@ -232,14 +293,14 @@ export default function MembersPage() {
                                     <TableCell>
                                         <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
-                                            <Button aria-haspopup="true" size="icon" variant="ghost">
+                                            <Button aria-haspopup="true" size="icon" variant="ghost" disabled={member.is_owner}>
                                             <MoreHorizontal className="h-4 w-4" />
                                             <span className="sr-only">Toggle menu</span>
                                             </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
-                                            <DropdownMenuItem disabled>Ver Atividade</DropdownMenuItem>
-                                            <DropdownMenuItem disabled className="text-destructive focus:text-destructive">Remover da Organização</DropdownMenuItem>
+                                            <DropdownMenuItem>Editar Cargo</DropdownMenuItem>
+                                            <DropdownMenuItem className="text-destructive focus:text-destructive">Remover da Organização</DropdownMenuItem>
                                         </DropdownMenuContent>
                                         </DropdownMenu>
                                     </TableCell>
@@ -249,6 +310,8 @@ export default function MembersPage() {
                         </Table>
                     </Card>
                 </TabsContent>
+
+                 {/* TEAMS TAB */}
                  <TabsContent value="teams" className="mt-4">
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {teams.map(team => (
@@ -320,6 +383,8 @@ export default function MembersPage() {
                         </Dialog>
                     </div>
                 </TabsContent>
+
+                {/* ROLES TAB */}
                 <TabsContent value="roles" className="mt-4">
                     <Card>
                         <CardHeader>
@@ -328,7 +393,7 @@ export default function MembersPage() {
                                     <CardTitle>Cargos e Permissões</CardTitle>
                                     <CardDescription>Crie e gerencie cargos para controlar o acesso na sua organização.</CardDescription>
                                 </div>
-                                 <Button onClick={() => setOpenCreateRoleDialog(true)} disabled>
+                                 <Button onClick={() => setEditingRole({} as Role)}>
                                     <PlusCircle className="mr-2 h-4 w-4" /> Novo Cargo
                                 </Button>
                             </div>
@@ -340,7 +405,7 @@ export default function MembersPage() {
                                        <TableHead>Cargo</TableHead>
                                        <TableHead>Descrição</TableHead>
                                        <TableHead>Permissões</TableHead>
-                                       <TableHead><span className="sr-only">Ações</span></TableHead>
+                                       <TableHead className="text-right">Ações</TableHead>
                                    </TableRow>
                                </TableHeader>
                                <TableBody>
@@ -355,8 +420,11 @@ export default function MembersPage() {
                                                <Badge variant="secondary">{role.permissions.length} permissões</Badge>
                                            </TableCell>
                                            <TableCell className="text-right">
-                                                <Button variant="ghost" size="icon" disabled>
-                                                    <MoreHorizontal className="h-4 w-4" />
+                                                <Button variant="ghost" size="icon" onClick={() => setEditingRole(role)} disabled={role.is_system_role}>
+                                                    <Edit className="h-4 w-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" onClick={() => setRoleToDelete(role)} disabled={role.is_system_role} className="text-destructive hover:text-destructive">
+                                                    <Trash2 className="h-4 w-4" />
                                                 </Button>
                                            </TableCell>
                                        </TableRow>
@@ -367,8 +435,81 @@ export default function MembersPage() {
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* Role Editor Dialog */}
+            <Dialog open={!!editingRole} onOpenChange={(open) => !open && setEditingRole(null)}>
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+                    <form onSubmit={handleRoleSubmit}>
+                        <DialogHeader>
+                            <DialogTitle>{editingRole?.id ? 'Editar Cargo' : 'Criar Novo Cargo'}</DialogTitle>
+                            <DialogDescription>
+                                Defina um nome, descrição e as permissões para este cargo.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="py-4 space-y-4 flex-1 overflow-y-auto pr-6 -mr-6">
+                            <input type="hidden" name="roleId" value={editingRole?.id || ''} />
+                            <div>
+                                <Label htmlFor="role-name">Nome do Cargo</Label>
+                                <Input id="role-name" name="name" defaultValue={editingRole?.name} required />
+                            </div>
+                            <div>
+                                <Label htmlFor="role-description">Descrição</Label>
+                                <Textarea id="role-description" name="description" defaultValue={editingRole?.description} />
+                            </div>
+                            <div>
+                                <Label>Permissões</Label>
+                                <div className="space-y-4 mt-2">
+                                    {Object.entries(permissionsBySubject).map(([subject, perms]) => (
+                                        <div key={subject}>
+                                            <h4 className="font-semibold text-sm mb-2">{subject}</h4>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 pl-2">
+                                                {perms.map(perm => (
+                                                    <div key={perm.id} className="flex items-center space-x-2">
+                                                        <Checkbox
+                                                            id={`perm-${perm.id}`}
+                                                            name="permissions"
+                                                            value={perm.id}
+                                                            defaultChecked={editingRole?.permissions?.includes(perm.id)}
+                                                        />
+                                                        <label htmlFor={`perm-${perm.id}`} className="text-sm font-normal leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70" title={perm.description}>
+                                                            {perm.description}
+                                                        </label>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setEditingRole(null)} disabled={isSubmitting}>Cancelar</Button>
+                            <Button type="submit" disabled={isSubmitting}>
+                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Salvar Cargo
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+             {/* Role Delete Confirmation */}
+            <AlertDialog open={!!roleToDelete} onOpenChange={(open) => !open && setRoleToDelete(null)}>
+                <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                    Esta ação não pode ser desfeita. Isso excluirá permanentemente o cargo <strong>{roleToDelete?.name}</strong>. Nenhum usuário será removido, mas você precisará atribuir um novo cargo a eles.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setRoleToDelete(null)}>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteRole} className="bg-destructive hover:bg-destructive/90">
+                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : 'Sim, Excluir Cargo'}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
-
-    
