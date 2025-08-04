@@ -36,6 +36,7 @@ import type { Organization } from '@/lib/types';
 import { getOrganizationsForUserAction } from '@/app/actions/organizationActions';
 import { ChevronsUpDown, Workflow, BarChart2, Building, Users, CreditCard, ScrollText, Settings, LogOut, Zap, LifeBuoy, Loader2, PlusCircle, Mail, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 const MainNav = () => {
   const pathname = usePathname();
@@ -66,6 +67,15 @@ const OrgNav = () => {
     const pathname = usePathname();
     const isActive = (path: string) => pathname.startsWith(path);
     const { user } = useAuth();
+    const [isAccessMenuOpen, setIsAccessMenuOpen] = useState(false);
+
+    useEffect(() => {
+        // Abre o menu se uma das suas subpáginas estiver ativa
+        if (isActive('/organization/members')) {
+            setIsAccessMenuOpen(true);
+        }
+    }, [isActive]);
+
     return (
         <SidebarGroup>
             <SidebarGroupLabel>Configurações da Organização</SidebarGroupLabel>
@@ -79,26 +89,31 @@ const OrgNav = () => {
                     </Link>
                 </SidebarMenuItem>
                  <SidebarMenuItem>
-                    <SidebarMenuButton>
-                       <Users />
-                       <span>Gerenciar Acesso</span>
+                    <SidebarMenuButton onClick={() => setIsAccessMenuOpen(!isAccessMenuOpen)} className="justify-between">
+                       <div className="flex items-center gap-2">
+                         <Users />
+                         <span>Gerenciar Acesso</span>
+                       </div>
+                       <ChevronDown className={cn("h-4 w-4 transition-transform", isAccessMenuOpen && "rotate-180")} />
                     </SidebarMenuButton>
-                    <SidebarMenuSub>
-                        <SidebarMenuSubItem>
-                             <Link href="/organization/members" passHref>
-                                <SidebarMenuSubButton isActive={isActive('/organization/members')}>
-                                    Membros e Times
-                                </SidebarMenuSubButton>
-                            </Link>
-                        </SidebarMenuSubItem>
-                         <SidebarMenuSubItem>
-                             <Link href="/organization/members?tab=roles" passHref>
-                                <SidebarMenuSubButton isActive={isActive('/organization/roles')}>
-                                    Cargos e Permissões
-                                </SidebarMenuSubButton>
-                            </Link>
-                        </SidebarMenuSubItem>
-                    </SidebarMenuSub>
+                    {isAccessMenuOpen && (
+                        <SidebarMenuSub>
+                            <SidebarMenuSubItem>
+                                <Link href="/organization/members" passHref>
+                                    <SidebarMenuSubButton isActive={isActive('/organization/members')}>
+                                        Membros e Times
+                                    </SidebarMenuSubButton>
+                                </Link>
+                            </SidebarMenuSubItem>
+                            <SidebarMenuSubItem>
+                                <Link href="/organization/members?tab=roles" passHref>
+                                    <SidebarMenuSubButton isActive={pathname.includes('?tab=roles')}>
+                                        Cargos e Permissões
+                                    </SidebarMenuSubButton>
+                                </Link>
+                            </SidebarMenuSubItem>
+                        </SidebarMenuSub>
+                    )}
                 </SidebarMenuItem>
                  <SidebarMenuItem>
                     <Link href="/organization/billing" passHref>
@@ -274,5 +289,3 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
-
-    
