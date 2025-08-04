@@ -4,7 +4,7 @@
 
 import { Pool, type QueryResult } from 'pg';
 import dotenv from 'dotenv';
-import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser, SmtpSettings, Role, Permission, WorkspaceVersion, AuditLog } from '@/lib/types';
+import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser, SmtpSettings, Role, Permission, WorkspaceVersion, AuditLog, MarketplaceListing, UserPurchase } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { redirect } from 'next/navigation';
 
@@ -463,6 +463,36 @@ async function initializeDatabaseSchema(): Promise<void> {
         console.log("[DB Actions] 'flow_context' column not found in 'flow_sessions'. Adding column...");
         await client.query(`ALTER TABLE flow_sessions ADD COLUMN flow_context TEXT;`);
     }
+
+    // --- Marketplace Tables ---
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS marketplace_listings (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            name TEXT NOT NULL,
+            description TEXT,
+            price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+            creator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            preview_data JSONB, -- Snapshot of nodes/connections
+            tags TEXT[],
+            downloads INTEGER DEFAULT 0,
+            rating NUMERIC(3, 2) DEFAULT 0.00,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(workspace_id) -- A workspace can only be listed once
+        );
+    `);
+
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS user_purchases (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            listing_id UUID NOT NULL REFERENCES marketplace_listings(id) ON DELETE CASCADE,
+            price_paid NUMERIC(10, 2) NOT NULL,
+            purchased_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(user_id, listing_id) -- A user can only buy a listing once
+        );
+    `);
 
     // --- Seed Permissions ---
     const permissionsToSeed: Permission[] = [
@@ -1416,3 +1446,39 @@ export async function deleteRole(roleId: string): Promise<{ success: boolean; er
     }
 }
 
+
+// --- Marketplace Actions ---
+export async function getListings(): Promise<{ data?: MarketplaceListing[]; error?: string }> {
+    try {
+        const query = `
+            SELECT ml.*, u.username as creator_username
+            FROM marketplace_listings ml
+            JOIN users u ON ml.creator_id = u.id
+            ORDER BY ml.created_at DESC;
+        `;
+        const result = await runQuery<MarketplaceListing>(query);
+        return { data: result.rows };
+    } catch (error: any) {
+        console.error('[DB Actions] Error fetching marketplace listings:', error);
+        return { error: `Erro de banco de dados: ${error.message}` };
+    }
+}
+
+export async function getListingDetails(listingId: string): Promise<{ data?: MarketplaceListing; error?: string }> {
+    try {
+        const query = `
+            SELECT ml.*, u.username as creator_username
+            FROM marketplace_listings ml
+            JOIN users u ON ml.creator_id = u.id
+            WHERE ml.id = $1;
+        `;
+        const result = await runQuery<MarketplaceListing>(query, [listingId]);
+        if (result.rows.length === 0) {
+            return { error: "Fluxo não encontrado no marketplace." };
+        }
+        return { data: result.rows[0] };
+    } catch (error: any) {
+        console.error(`[DB Actions] Error fetching listing details for ID ${listingId}:`, error);
+        return { error: `Erro de banco de dados: ${error.message}` };
+    }
+}

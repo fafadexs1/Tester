@@ -395,3 +395,32 @@ export interface Role {
     permissions: PermissionIdentifier[];
     is_system_role?: boolean; // Para distinguir 'Admin', 'Membro' de cargos customizados
 }
+
+// --- Marketplace Types ---
+
+export interface MarketplaceListing {
+    id: string;
+    name: string;
+    description: string;
+    price: number;
+    creator_id: string;
+    creator_username?: string;
+    workspace_id: string;
+    preview_data: {
+        nodes: NodeData[];
+        connections: Connection[];
+    };
+    tags: string[];
+    downloads: number;
+    rating: number;
+    created_at: string | Date;
+    updated_at: string | Date;
+}
+
+export interface UserPurchase {
+    id: string;
+    user_id: string;
+    listing_id: string;
+    price_paid: number;
+    purchased_at: string | Date;
+}
