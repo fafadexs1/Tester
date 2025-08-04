@@ -115,6 +115,9 @@ export async function listWorkspaceForSaleAction(
 
     } catch (error: any) {
         console.error("[MarketplaceActions] Erro ao listar fluxo:", error);
+        if (error.code === '23505' && error.constraint === 'marketplace_listings_workspace_id_key') {
+            return { success: false, error: "Este fluxo já está listado no marketplace." };
+        }
         return { success: false, error: `Erro de servidor: ${error.message}` };
     }
 }

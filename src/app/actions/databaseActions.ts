@@ -1,5 +1,6 @@
 
 
+
 'use server';
 
 import { Pool, type QueryResult } from 'pg';
@@ -1456,8 +1457,14 @@ export async function getListings(): Promise<{ data?: MarketplaceListing[]; erro
             JOIN users u ON ml.creator_id = u.id
             ORDER BY ml.created_at DESC;
         `;
-        const result = await runQuery<MarketplaceListing>(query);
-        return { data: result.rows };
+        const result = await runQuery<any>(query);
+        // Convert numeric fields from string to number
+        const listings = result.rows.map(row => ({
+            ...row,
+            price: parseFloat(row.price),
+            rating: parseFloat(row.rating)
+        }));
+        return { data: listings };
     } catch (error: any) {
         console.error('[DB Actions] Error fetching marketplace listings:', error);
         return { error: `Erro de banco de dados: ${error.message}` };
@@ -1472,11 +1479,16 @@ export async function getListingDetails(listingId: string): Promise<{ data?: Mar
             JOIN users u ON ml.creator_id = u.id
             WHERE ml.id = $1;
         `;
-        const result = await runQuery<MarketplaceListing>(query, [listingId]);
+        const result = await runQuery<any>(query, [listingId]);
         if (result.rows.length === 0) {
             return { error: "Fluxo não encontrado no marketplace." };
         }
-        return { data: result.rows[0] };
+         const listing = {
+            ...result.rows[0],
+            price: parseFloat(result.rows[0].price),
+            rating: parseFloat(result.rows[0].rating)
+        };
+        return { data: listing };
     } catch (error: any) {
         console.error(`[DB Actions] Error fetching listing details for ID ${listingId}:`, error);
         return { error: `Erro de banco de dados: ${error.message}` };
