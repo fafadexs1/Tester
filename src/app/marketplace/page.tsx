@@ -27,6 +27,10 @@ const ListingCard = ({ listing, index }: { listing: MarketplaceListing, index: n
         },
     };
 
+    // Convert string-based numeric types from DB to actual numbers for calculation/formatting
+    const ratingValue = typeof listing.rating === 'string' ? parseFloat(listing.rating) : listing.rating;
+    const priceValue = typeof listing.price === 'string' ? parseFloat(listing.price) : listing.price;
+
     return (
         <motion.div variants={cardVariants}>
             <Card 
@@ -48,11 +52,11 @@ const ListingCard = ({ listing, index }: { listing: MarketplaceListing, index: n
                 <CardFooter className="flex justify-between items-center">
                     <div className="flex items-center gap-1">
                         <Star className="w-4 h-4 text-yellow-400" />
-                        <span className="text-sm font-medium">{listing.rating?.toFixed(1) || '0.0'}</span>
+                        <span className="text-sm font-medium">{ratingValue?.toFixed(1) || '0.0'}</span>
                         <span className="text-xs text-muted-foreground">({listing.downloads || 0})</span>
                     </div>
-                    <Badge variant={listing.price > 0 ? "secondary" : "default"}>
-                        {listing.price > 0 ? `R$${listing.price.toFixed(2)}` : 'Grátis'}
+                    <Badge variant={priceValue > 0 ? "secondary" : "default"}>
+                        {priceValue > 0 ? `R$${priceValue.toFixed(2)}` : 'Grátis'}
                     </Badge>
                 </CardFooter>
             </Card>
