@@ -4,8 +4,9 @@
 
 import { getCurrentUser } from '@/lib/auth';
 import type { Organization, OrganizationUser, Team, User, Role, Permission } from '@/lib/types';
-import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization, getUsersForOrganization, getPermissions, createRole, updateRole, deleteRole, createOrganization as createOrgDbAction } from './databaseActions';
+import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization, getUsersForOrganization, getPermissions, createRole, updateRole, deleteRole, createOrganization as createOrgDbAction, setCurrentOrganizationForUser } from './databaseActions';
 import { revalidatePath } from 'next/cache';
+import { refreshUserSessionAction } from './authActions';
 
 interface GetOrgsResult {
     success: boolean;
@@ -41,7 +42,12 @@ export async function createOrganizationAction(formData: FormData): Promise<{ su
 
     const result = await createOrgDbAction(name.trim(), user.id);
 
-    if (result.success) {
+    if (result.success && result.organization) {
+        // Define a nova organização como a organização atual do usuário
+        await setCurrentOrganizationForUser(user.id, result.organization.id);
+        // Atualiza a sessão do usuário com o novo current_organization_id
+        await refreshUserSessionAction(user.id);
+        
         revalidatePath('/organization/members');
         revalidatePath('/');
     }

@@ -4,7 +4,7 @@
 import { createSession, deleteSession } from '@/lib/auth';
 import type { User, Organization } from '@/lib/types';
 import { cookies } from 'next/headers';
-import { findUserByUsername, createUser, createOrganization, getOrganizationsForUser, setCurrentOrganizationForUser, createAuditLog } from './databaseActions';
+import { findUserByUsername, createUser, createOrganization, getOrganizationsForUser, setCurrentOrganizationForUser, createAuditLog, getUserById } from './databaseActions';
 
 // Simulação de hashing de senha. Em um app real, use uma biblioteca como bcrypt.
 // AVISO: NÃO USE ISTO EM PRODUÇÃO.
@@ -147,4 +147,17 @@ export async function logoutAction(): Promise<{ success: boolean }> {
   await deleteSession();
   console.log('[authActions.ts] logoutAction: Sessão do usuário deletada.');
   return { success: true };
+}
+
+export async function refreshUserSessionAction(userId: string): Promise<{ success: boolean; user?: User; error?: string }> {
+    try {
+        const user = await getUserById(userId);
+        if (!user) {
+            return { success: false, error: 'Usuário não encontrado para atualizar a sessão.' };
+        }
+        await createSession(user);
+        return { success: true, user };
+    } catch (error: any) {
+        return { success: false, error: `Erro ao atualizar a sessão: ${error.message}` };
+    }
 }

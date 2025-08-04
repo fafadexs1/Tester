@@ -43,13 +43,15 @@ import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/components/auth/AuthProvider';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
 import type { Organization } from '@/lib/types';
 import { getOrganizationsForUserAction, createOrganizationAction } from '@/app/actions/organizationActions';
 import { ChevronsUpDown, Workflow, BarChart2, Building, Users, CreditCard, ScrollText, Settings, LogOut, Zap, LifeBuoy, Loader2, PlusCircle, Mail, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { refreshUserSessionAction } from '@/app/actions/authActions';
+import { setCurrentOrganizationForUser } from '@/app/actions/databaseActions';
 
 const MainNav = () => {
   const pathname = usePathname();
@@ -82,8 +84,8 @@ const OrgNav = () => {
     const [isAccessMenuOpen, setIsAccessMenuOpen] = useState(false);
     
     // Verificação mais precisa para o estado ativo
-    const isMembersActive = pathname === '/organization/members';
-    const isRolesActive = pathname.startsWith('/organization/members') && pathname.includes('tab=roles');
+    const isMembersActive = pathname.startsWith('/organization/members');
+    const isGeneralActive = pathname === '/organization/general';
 
     useEffect(() => {
         // Abre o menu se uma das suas subpáginas estiver ativa
@@ -98,14 +100,14 @@ const OrgNav = () => {
             <SidebarMenu>
                 <SidebarMenuItem>
                     <Link href="/organization/general" passHref>
-                        <SidebarMenuButton isActive={pathname === '/organization/general'} tooltip="Geral">
+                        <SidebarMenuButton isActive={isGeneralActive} tooltip="Geral">
                            <Building />
                            <span>Geral</span>
                         </SidebarMenuButton>
                     </Link>
                 </SidebarMenuItem>
                  <SidebarMenuItem>
-                    <SidebarMenuButton onClick={() => setIsAccessMenuOpen(!isAccessMenuOpen)} className="justify-between">
+                    <SidebarMenuButton onClick={() => setIsAccessMenuOpen(!isAccessMenuOpen)} className="justify-between" isActive={isMembersActive}>
                        <div className="flex items-center gap-2">
                          <Users />
                          <span>Gerenciar Acesso</span>
@@ -115,14 +117,10 @@ const OrgNav = () => {
                     {isAccessMenuOpen && (
                         <SidebarMenuSub>
                             <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild isActive={isMembersActive}>
-                                    <Link href="/organization/members">Membros e Times</Link>
-                                </SidebarMenuSubButton>
+                                <SidebarMenuSubButton href="/organization/members" isActive={pathname === '/organization/members'}>Membros e Times</SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                             <SidebarMenuSubItem>
-                                <SidebarMenuSubButton asChild isActive={isRolesActive}>
-                                    <Link href="/organization/members?tab=roles">Cargos e Permissões</Link>
-                                </SidebarMenuSubButton>
+                                <SidebarMenuSubButton href="/organization/members?tab=roles" isActive={pathname.includes('?tab=roles')}>Cargos e Permissões</SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                         </SidebarMenuSub>
                     )}
@@ -167,10 +165,12 @@ const OrgNav = () => {
 }
 
 const OrganizationSwitcher = () => {
-  const { user } = useAuth();
+  const { user, login } = useAuth(); // Usando login para "re-logar" e atualizar a sessão
+  const router = useRouter();
   const { toast } = useToast();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSwitching, setIsSwitching] = useState(false);
   const [isCreateOrgOpen, setIsCreateOrgOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -201,14 +201,34 @@ const OrganizationSwitcher = () => {
     const result = await createOrganizationAction(formData);
 
     if (result.success) {
-      toast({ title: "Sucesso!", description: "Nova organização criada." });
-      setIsCreateOrgOpen(false);
-      await fetchOrgs(); // Refetch organizations to update the list
+      toast({ title: "Sucesso!", description: "Nova organização criada e selecionada." });
+      // Força a recarga da página para refletir a nova organização em todos os lugares
+      window.location.reload();
     } else {
       toast({ title: "Erro ao Criar", description: result.error, variant: "destructive" });
     }
     setIsSubmitting(false);
   };
+  
+  const handleSwitchOrganization = async (orgId: string) => {
+    if (!user || orgId === user.current_organization_id) return;
+
+    setIsSwitching(true);
+    try {
+        await setCurrentOrganizationForUser(user.id, orgId);
+        const refreshResult = await refreshUserSessionAction(user.id);
+        if (refreshResult.success) {
+            toast({ title: "Organização Alterada", description: "Você agora está na nova organização." });
+            window.location.reload();
+        } else {
+            throw new Error(refreshResult.error || "Falha ao atualizar a sessão do usuário.");
+        }
+    } catch(e: any) {
+        toast({ title: "Erro ao trocar de organização", description: e.message, variant: "destructive" });
+        setIsSwitching(false);
+    }
+  };
+
 
   const currentOrg = organizations.find(org => org.id === user?.current_organization_id);
 
@@ -217,11 +237,11 @@ const OrganizationSwitcher = () => {
        <Dialog open={isCreateOrgOpen} onOpenChange={setIsCreateOrgOpen}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="w-full justify-between" disabled={isLoading}>
-              {isLoading ? (
+            <Button variant="outline" className="w-full justify-between" disabled={isLoading || isSwitching}>
+              {isLoading || isSwitching ? (
                 <div className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="truncate">Carregando...</span>
+                  <span className="truncate">{isSwitching ? 'Trocando...' : 'Carregando...'}</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
@@ -238,7 +258,7 @@ const OrganizationSwitcher = () => {
           <DropdownMenuContent align="start" className="w-[var(--sidebar-width)]">
             <DropdownMenuLabel>Suas Organizações</DropdownMenuLabel>
             {organizations.map(org => (
-              <DropdownMenuItem key={org.id} onSelect={() => console.log('Mudar para org:', org.id)}>
+              <DropdownMenuItem key={org.id} onSelect={() => handleSwitchOrganization(org.id)} disabled={org.id === user?.current_organization_id}>
                 <Avatar className="w-5 h-5 mr-2">
                   <AvatarImage src={`https://i.pravatar.cc/40?u=${org.id}`} data-ai-hint="logo organization" />
                   <AvatarFallback>{org.name.slice(0, 2).toUpperCase()}</AvatarFallback>

@@ -518,6 +518,14 @@ export async function findUserByUsername(username: string): Promise<User | null>
     return null;
 }
 
+export async function getUserById(userId: string): Promise<User | null> {
+    const result = await runQuery<User>(
+        'SELECT id, username, email, full_name, role, password_hash, current_organization_id FROM users WHERE id = $1',
+        [userId]
+    );
+    return result.rows.length > 0 ? result.rows[0] : null;
+}
+
 export async function createUser(
     username: string, 
     passwordHash: string, 
@@ -1062,7 +1070,7 @@ export async function getRolesForOrganization(organizationId: string): Promise<R
         WHERE r.organization_id = $1
         ORDER BY r.is_system_role DESC, r.name ASC;
     `;
-    const result = await runQuery<Role>(query, [organizationId]);
+    const result = await runQuery<any>(query, [organizationId]);
     return result.rows.map(row => ({
         ...row,
         permissions: Array.isArray(row.permissions) ? row.permissions : [],
