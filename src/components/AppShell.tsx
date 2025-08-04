@@ -27,14 +27,26 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/components/auth/AuthProvider';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Organization } from '@/lib/types';
-import { getOrganizationsForUserAction } from '@/app/actions/organizationActions';
+import { getOrganizationsForUserAction, createOrganizationAction } from '@/app/actions/organizationActions';
 import { ChevronsUpDown, Workflow, BarChart2, Building, Users, CreditCard, ScrollText, Settings, LogOut, Zap, LifeBuoy, Loader2, PlusCircle, Mail, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -159,69 +171,113 @@ const OrganizationSwitcher = () => {
   const { toast } = useToast();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreateOrgOpen, setIsCreateOrgOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const fetchOrgs = useCallback(async () => {
+    if (!user) return;
+    setIsLoading(true);
+    const result = await getOrganizationsForUserAction();
+    if (result.success && result.data) {
+      setOrganizations(result.data);
+    } else {
+      toast({
+        title: "Erro ao carregar organizações",
+        description: result.error || "Não foi possível buscar os dados das suas organizações.",
+        variant: "destructive",
+      });
+    }
+    setIsLoading(false);
+  }, [user, toast]);
 
   useEffect(() => {
-    const fetchOrgs = async () => {
-      if (!user) return;
-      setIsLoading(true);
-      const result = await getOrganizationsForUserAction();
-      if (result.success && result.data) {
-        setOrganizations(result.data);
-      } else {
-        toast({
-          title: "Erro ao carregar organizações",
-          description: result.error || "Não foi possível buscar os dados das suas organizações.",
-          variant: "destructive",
-        });
-      }
-      setIsLoading(false);
-    };
-
     fetchOrgs();
-  }, [user, toast]);
+  }, [fetchOrgs]);
+
+  const handleCreateOrgSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    const formData = new FormData(event.currentTarget);
+    const result = await createOrganizationAction(formData);
+
+    if (result.success) {
+      toast({ title: "Sucesso!", description: "Nova organização criada." });
+      setIsCreateOrgOpen(false);
+      await fetchOrgs(); // Refetch organizations to update the list
+    } else {
+      toast({ title: "Erro ao Criar", description: result.error, variant: "destructive" });
+    }
+    setIsSubmitting(false);
+  };
 
   const currentOrg = organizations.find(org => org.id === user?.current_organization_id);
 
   return (
     <div className="p-2">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="w-full justify-between" disabled={isLoading}>
-            {isLoading ? (
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="truncate">Carregando...</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Avatar className="w-6 h-6">
-                  <AvatarImage src={`https://i.pravatar.cc/40?u=${currentOrg?.id || 'org'}`} data-ai-hint="logo organization" />
-                  <AvatarFallback>{currentOrg?.name?.slice(0, 2).toUpperCase() || 'OG'}</AvatarFallback>
+       <Dialog open={isCreateOrgOpen} onOpenChange={setIsCreateOrgOpen}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-full justify-between" disabled={isLoading}>
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="truncate">Carregando...</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Avatar className="w-6 h-6">
+                    <AvatarImage src={`https://i.pravatar.cc/40?u=${currentOrg?.id || 'org'}`} data-ai-hint="logo organization" />
+                    <AvatarFallback>{currentOrg?.name?.slice(0, 2).toUpperCase() || 'OG'}</AvatarFallback>
+                  </Avatar>
+                  <span className="truncate">{currentOrg?.name || 'Selecione a Organização'}</span>
+                </div>
+              )}
+              <ChevronsUpDown className="w-4 h-4 text-muted-foreground" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-[var(--sidebar-width)]">
+            <DropdownMenuLabel>Suas Organizações</DropdownMenuLabel>
+            {organizations.map(org => (
+              <DropdownMenuItem key={org.id} onSelect={() => console.log('Mudar para org:', org.id)}>
+                <Avatar className="w-5 h-5 mr-2">
+                  <AvatarImage src={`https://i.pravatar.cc/40?u=${org.id}`} data-ai-hint="logo organization" />
+                  <AvatarFallback>{org.name.slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
-                <span className="truncate">{currentOrg?.name || 'Selecione a Organização'}</span>
+                <span>{org.name}</span>
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DialogTrigger asChild>
+              <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Criar nova organização
+              </DropdownMenuItem>
+            </DialogTrigger>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DialogContent>
+            <form onSubmit={handleCreateOrgSubmit}>
+              <DialogHeader>
+                  <DialogTitle>Criar Nova Organização</DialogTitle>
+                  <DialogDescription>
+                      Dê um nome para a sua nova organização.
+                  </DialogDescription>
+              </DialogHeader>
+              <div className="py-4">
+                  <Label htmlFor="org-name">Nome da Organização</Label>
+                  <Input id="org-name" name="name" required autoFocus />
               </div>
-            )}
-            <ChevronsUpDown className="w-4 h-4 text-muted-foreground" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-[var(--sidebar-width)]">
-          <DropdownMenuLabel>Suas Organizações</DropdownMenuLabel>
-          {organizations.map(org => (
-            <DropdownMenuItem key={org.id} onSelect={() => console.log('Mudar para org:', org.id)}>
-              <Avatar className="w-5 h-5 mr-2">
-                <AvatarImage src={`https://i.pravatar.cc/40?u=${org.id}`} data-ai-hint="logo organization" />
-                <AvatarFallback>{org.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-              </Avatar>
-              <span>{org.name}</span>
-            </DropdownMenuItem>
-          ))}
-           <DropdownMenuSeparator />
-           <DropdownMenuItem>
-             <PlusCircle className="mr-2 h-4 w-4" />
-             Criar nova organização
-           </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+              <DialogFooter>
+                  <DialogClose asChild>
+                      <Button type="button" variant="outline" disabled={isSubmitting}>Cancelar</Button>
+                  </DialogClose>
+                  <Button type="submit" disabled={isSubmitting}>
+                      {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : 'Criar'}
+                  </Button>
+              </DialogFooter>
+            </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
@@ -234,11 +290,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isNoShellPage = noShellPages.some(p => pathname === p) || pathname.startsWith('/flow/');
 
 
-  if (loading || !user) {
-    return <>{children}</>;
+  if (loading || (!user && !isNoShellPage)) {
+     return <div className="flex h-screen w-full items-center justify-center bg-background">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+           </div>;
   }
   
   if (isNoShellPage) {
+    return <>{children}</>;
+  }
+  
+  if (!user) {
     return <>{children}</>;
   }
   

@@ -4,7 +4,7 @@
 
 import { getCurrentUser } from '@/lib/auth';
 import type { Organization, OrganizationUser, Team, User, Role, Permission } from '@/lib/types';
-import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization, getUsersForOrganization, getPermissions, createRole, updateRole, deleteRole } from './databaseActions';
+import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization, getUsersForOrganization, getPermissions, createRole, updateRole, deleteRole, createOrganization as createOrgDbAction } from './databaseActions';
 import { revalidatePath } from 'next/cache';
 
 interface GetOrgsResult {
@@ -26,6 +26,27 @@ export async function getOrganizationsForUserAction(): Promise<GetOrgsResult> {
         console.error('[OrganizationActions] Erro ao buscar organizações:', error);
         return { success: false, error: `Erro de banco de dados: ${error.message}` };
     }
+}
+
+export async function createOrganizationAction(formData: FormData): Promise<{ success: boolean; organization?: Organization; error?: string }> {
+    const user = await getCurrentUser();
+    if (!user) {
+        return { success: false, error: "Usuário não autenticado." };
+    }
+
+    const name = formData.get('name') as string;
+    if (!name || name.trim() === '') {
+        return { success: false, error: "O nome da organização é obrigatório." };
+    }
+
+    const result = await createOrgDbAction(name.trim(), user.id);
+
+    if (result.success) {
+        revalidatePath('/organization/members');
+        revalidatePath('/');
+    }
+
+    return result;
 }
 
 
