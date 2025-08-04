@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -131,7 +132,7 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
                                 setHighlightedConnectionId={() => {}}
                                 availableVariablesByNode={{}}
                                 highlightedNodeIdBySession={null}
-                                activeWorkspace={null}
+                                activeWorkspace={listing.preview_data as WorkspaceData}
                             />
                         </div>
 
@@ -245,7 +246,7 @@ const ListingCard = ({ listing, index }: { listing: MarketplaceListing, index: n
                             <span className="font-medium text-foreground/80">{listing.creator_username}</span>
                         </div>
                          <Badge variant={priceValue > 0 ? "secondary" : "default"} className="text-sm">
-                            {priceValue > 0 ? `R$${priceValue.toFixed(2)}` : 'Grátis'}
+                            {priceValue > 0 ? `R$${parseFloat(String(listing.price)).toFixed(2)}` : 'Grátis'}
                         </Badge>
                     </CardFooter>
                 </Card>
@@ -267,7 +268,13 @@ export default function MarketplacePage() {
     try {
         const listingsResult = await getListings();
         if (listingsResult.success && listingsResult.data) {
-            setListings(listingsResult.data);
+            // Convert numeric fields from string to number after fetching
+            const parsedListings = listingsResult.data.map(listing => ({
+                ...listing,
+                price: parseFloat(String(listing.price)),
+                rating: parseFloat(String(listing.rating)),
+            }));
+            setListings(parsedListings);
         } else {
             throw new Error(listingsResult.error || "Não foi possível carregar os fluxos do marketplace.");
         }
