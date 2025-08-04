@@ -16,7 +16,6 @@ import {
   SidebarProvider,
   SidebarMenuSub,
   SidebarMenuSubButton,
-  SidebarMenuSubItem,
   ChevronDown
 } from '@/components/ui/sidebar';
 import {
@@ -117,7 +116,7 @@ const OrgNav = () => {
                     {isAccessMenuOpen && (
                         <SidebarMenuSub>
                             <SidebarMenuSubItem>
-                                <SidebarMenuSubButton href="/organization/members" isActive={pathname === '/organization/members'}>Membros e Times</SidebarMenuSubButton>
+                                <SidebarMenuSubButton href="/organization/members" isActive={pathname === '/organization/members' && !pathname.includes('?tab=roles')}>Membros e Times</SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                             <SidebarMenuSubItem>
                                 <SidebarMenuSubButton href="/organization/members?tab=roles" isActive={pathname.includes('?tab=roles')}>Cargos e Permissões</SidebarMenuSubButton>
