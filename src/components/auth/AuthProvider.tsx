@@ -18,6 +18,7 @@ interface AuthContextType {
   logout: () => void; 
   register: (formData: FormData) => Promise<{ success: boolean; error?: string; user?: User }>;
   setCurrentOrganization: (org: Organization) => void;
+  refreshAuth: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -114,7 +115,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       register, 
       organizations, 
       currentOrganization,
-      setCurrentOrganization: handleSetCurrentOrg
+      setCurrentOrganization: handleSetCurrentOrg,
+      refreshAuth: fetchUserAndOrgs,
   };
   
   if (loading) {

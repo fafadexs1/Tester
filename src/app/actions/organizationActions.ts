@@ -3,7 +3,7 @@
 
 import { getCurrentUser } from '@/lib/auth';
 import type { Organization, OrganizationUser, Team, User, Role, Permission } from '@/lib/types';
-import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization, getUsersForOrganization, getPermissions, createRole, updateRole, deleteRole, createOrganization as createOrgDbAction, setCurrentOrganizationForUser, deleteOrganizationFromDB } from './databaseActions';
+import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization, getUsersForOrganization, getPermissions, createRole, updateRole, deleteRole, createOrganization as createOrgDbAction, setCurrentOrganizationForUser, deleteOrganizationFromDB, updateOrganizationInDB } from './databaseActions';
 import { revalidatePath } from 'next/cache';
 import { refreshUserSessionAction } from './authActions';
 import { redirect } from 'next/navigation';
@@ -55,6 +55,34 @@ export async function createOrganizationAction(formData: FormData): Promise<{ su
     return result;
 }
 
+export async function updateOrganizationAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
+    const user = await getCurrentUser();
+    if (!user || !user.current_organization_id) {
+        return { success: false, error: "Usuário não autenticado ou organização não selecionada." };
+    }
+
+    const orgName = formData.get('name') as string;
+    if (!orgName || orgName.trim() === '') {
+        return { success: false, error: "O nome da organização é obrigatório." };
+    }
+
+    // Security check: Verify the user is the owner of the organization
+    const orgs = await getOrganizationsForUser(user.id);
+    const orgToUpdate = orgs.find(org => org.id === user.current_organization_id);
+
+    if (!orgToUpdate || orgToUpdate.owner_id !== user.id) {
+        return { success: false, error: "Apenas o proprietário pode alterar o nome da organização." };
+    }
+
+    const result = await updateOrganizationInDB(user.current_organization_id, orgName.trim());
+
+    if (result.success) {
+        await refreshUserSessionAction(user.id);
+        revalidatePath('/organization/general');
+    }
+    
+    return result;
+}
 
 // New Actions for Members and Teams
 

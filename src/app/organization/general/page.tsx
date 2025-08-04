@@ -1,6 +1,6 @@
 
 'use client';
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
@@ -19,19 +19,45 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { deleteOrganizationAction } from '@/app/actions/organizationActions';
+import { deleteOrganizationAction, updateOrganizationAction } from '@/app/actions/organizationActions';
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, AlertTriangle } from 'lucide-react';
 import type { Organization } from '@/lib/types';
 
 
 export default function GeneralSettingsPage() {
-    const { currentOrganization, organizations, setCurrentOrganization } = useAuth();
+    const { currentOrganization, refreshAuth } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
+    
+    const [orgName, setOrgName] = useState(currentOrganization?.name || '');
+    const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [confirmationText, setConfirmationText] = useState("");
     
+    useEffect(() => {
+        setOrgName(currentOrganization?.name || '');
+    }, [currentOrganization]);
+    
+    const handleUpdateOrganization = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (!currentOrganization || !currentOrganization.is_owner) {
+            toast({ title: "Permissão Negada", description: "Apenas o proprietário pode alterar o nome da organização.", variant: "destructive" });
+            return;
+        }
+        setIsSaving(true);
+        const formData = new FormData(event.currentTarget);
+        const result = await updateOrganizationAction(formData);
+        
+        if (result.success) {
+            toast({ title: "Sucesso!", description: "Nome da organização atualizado." });
+            await refreshAuth(); // Atualiza o contexto de autenticação com o novo nome
+        } else {
+            toast({ title: "Erro ao Salvar", description: result.error, variant: "destructive" });
+        }
+        setIsSaving(false);
+    };
+
     const handleDeleteOrganization = async () => {
         if (!currentOrganization) return;
         if (confirmationText !== currentOrganization.name) {
@@ -63,23 +89,35 @@ export default function GeneralSettingsPage() {
         }
     };
 
+    const isOwner = currentOrganization?.is_owner === true;
+
     return (
         <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
              <div className="flex items-center justify-between space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight">Configurações Gerais</h2>
             </div>
-             <Card>
-                <CardHeader>
-                    <CardTitle>Nome da Organização</CardTitle>
-                    <CardDescription>Este é o nome que será exibido para toda a sua equipe.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Input defaultValue={currentOrganization?.name || ''} disabled />
-                </CardContent>
-                 <CardFooter>
-                    <Button disabled>Salvar Alterações</Button>
-                </CardFooter>
-            </Card>
+            <form onSubmit={handleUpdateOrganization}>
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Nome da Organização</CardTitle>
+                        <CardDescription>Este é o nome que será exibido para toda a sua equipe.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Input 
+                          name="name" 
+                          value={orgName}
+                          onChange={(e) => setOrgName(e.target.value)}
+                          disabled={!isOwner || isSaving}
+                        />
+                    </CardContent>
+                     <CardFooter>
+                        <Button type="submit" disabled={!isOwner || isSaving || orgName === currentOrganization?.name}>
+                            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                            Salvar Alterações
+                        </Button>
+                    </CardFooter>
+                </Card>
+            </form>
              <Card>
                 <CardHeader>
                     <CardTitle>Ícone da Organização</CardTitle>
@@ -111,8 +149,8 @@ export default function GeneralSettingsPage() {
                     </div>
                      <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button variant="destructive" disabled={!currentOrganization?.is_owner}>
-                                {currentOrganization?.is_owner ? 'Excluir Organização' : 'Apenas o proprietário pode excluir'}
+                            <Button variant="destructive" disabled={!isOwner}>
+                                {isOwner ? 'Excluir Organização' : 'Apenas o proprietário pode excluir'}
                             </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>

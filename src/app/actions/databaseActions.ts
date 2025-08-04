@@ -602,6 +602,18 @@ export async function createOrganization(name: string, ownerId: string): Promise
     }
 }
 
+export async function updateOrganizationInDB(id: string, name: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        const result = await runQuery('UPDATE organizations SET name = $1 WHERE id = $2', [name, id]);
+        if (result.rowCount === 0) {
+            return { success: false, error: "Organização não encontrada para atualização." };
+        }
+        return { success: true };
+    } catch (error: any) {
+        console.error('[DB Actions] Error updating organization:', error);
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    }
+}
 
 export async function getOrganizationsForUser(userId: string): Promise<Organization[]> {
     const result = await runQuery<Organization>(
