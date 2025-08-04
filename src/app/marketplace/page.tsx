@@ -139,14 +139,16 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
                             <DialogHeader className="p-4 border-b">
                                 <DialogTitle className="text-2xl">{listing?.name}</DialogTitle>
                                 {listing && (
-                                    <DialogDescription className="flex items-center gap-4 pt-1">
-                                        <div className="flex items-center text-sm text-muted-foreground">
-                                            <User className="w-4 h-4 mr-1.5" />
-                                            Criado por {listing.creator_username}
-                                        </div>
-                                        <div className="flex items-center text-sm text-muted-foreground">
-                                            <Download className="w-4 h-4 mr-1.5" />
-                                            {listing.downloads || 0} downloads
+                                    <DialogDescription asChild>
+                                        <div className="flex items-center gap-4 pt-1">
+                                            <div className="flex items-center text-sm text-muted-foreground">
+                                                <User className="w-4 h-4 mr-1.5" />
+                                                Criado por {listing.creator_username}
+                                            </div>
+                                            <div className="flex items-center text-sm text-muted-foreground">
+                                                <Download className="w-4 h-4 mr-1.5" />
+                                                {listing.downloads || 0} downloads
+                                            </div>
                                         </div>
                                     </DialogDescription>
                                 )}
