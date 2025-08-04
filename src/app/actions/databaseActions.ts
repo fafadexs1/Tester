@@ -931,9 +931,14 @@ export async function loadWorkspaceByNameFromDB(name: string, ownerId: string): 
 // --- Team & Member Actions ---
 export async function getUsersForOrganization(organizationId: string): Promise<OrganizationUser[]> {
     const query = `
-        SELECT u.id, u.username, r.name as role
+        SELECT 
+            u.id, 
+            u.username, 
+            r.name as role,
+            (o.owner_id = u.id) as is_owner
         FROM users u
         JOIN organization_users ou ON u.id = ou.user_id
+        JOIN organizations o ON ou.organization_id = o.id
         LEFT JOIN roles r ON ou.role_id = r.id
         WHERE ou.organization_id = $1
     `;

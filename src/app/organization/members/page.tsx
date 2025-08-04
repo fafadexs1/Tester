@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MoreHorizontal, PlusCircle, Trash2, Loader2 } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Trash2, Loader2, Crown } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -208,8 +208,14 @@ export default function MembersPage() {
                                                 <AvatarImage src={`https://i.pravatar.cc/40?u=${member.username}`} data-ai-hint="avatar person" />
                                                 <AvatarFallback>{member.username.slice(0,2).toUpperCase()}</AvatarFallback>
                                             </Avatar>
-                                            <div>
+                                            <div className="flex items-center gap-2">
                                                 <p>{member.username}</p>
+                                                {member.is_owner && (
+                                                    <Badge variant="outline" className="text-amber-600 border-amber-500">
+                                                        <Crown className="w-3 h-3 mr-1" />
+                                                        Proprietário
+                                                    </Badge>
+                                                )}
                                             </div>
                                         </div>
                                     </TableCell>

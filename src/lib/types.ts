@@ -307,6 +307,7 @@ export interface OrganizationUser {
   id: string; // This is the user's ID
   username: string;
   role: string | null;
+  is_owner: boolean; // Add is_owner field
 }
 
 export interface AuditLog {
