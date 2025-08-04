@@ -56,7 +56,7 @@ import { checkChatwootInstanceStatus } from '@/app/actions/chatwootApiActions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { saveEvolutionInstanceAction, deleteEvolutionInstanceAction, getChatwootInstancesForUserAction, saveChatwootInstanceAction, deleteChatwootInstanceAction } from '@/app/actions/instanceActions';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { getWorkspaceVersions, restoreWorkspaceVersion } from '@/app/actions/versionActions';
+import { getWorkspaceVersionsAction, restoreWorkspaceVersionAction } from '@/app/actions/versionActions';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Textarea } from '@/components/ui/textarea';
