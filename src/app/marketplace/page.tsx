@@ -1,16 +1,19 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ShoppingCart, Search, Flame, Loader2, ServerCrash, Star } from "lucide-react";
-import type { MarketplaceListing } from '@/lib/types';
+import type { MarketplaceListing, WorkspaceData } from '@/lib/types';
 import { getListings } from '@/app/actions/marketplaceActions';
 import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion } from 'framer-motion';
+import { ListWorkspaceDialog } from '@/components/marketplace/ListWorkspaceDialog';
+import { loadWorkspacesForOrganizationFromDB } from '@/app/actions/databaseActions';
+import { useAuth } from '@/components/auth/AuthProvider';
 
 const ListingCard = ({ listing, index }: { listing: MarketplaceListing, index: number }) => {
     const router = useRouter();
@@ -45,8 +48,8 @@ const ListingCard = ({ listing, index }: { listing: MarketplaceListing, index: n
                 <CardFooter className="flex justify-between items-center">
                     <div className="flex items-center gap-1">
                         <Star className="w-4 h-4 text-yellow-400" />
-                        <span className="text-sm font-medium">{listing.rating.toFixed(1)}</span>
-                        <span className="text-xs text-muted-foreground">({listing.downloads})</span>
+                        <span className="text-sm font-medium">{listing.rating?.toFixed(1) || '0.0'}</span>
+                        <span className="text-xs text-muted-foreground">({listing.downloads || 0})</span>
                     </div>
                     <Badge variant={listing.price > 0 ? "secondary" : "default"}>
                         {listing.price > 0 ? `R$${listing.price.toFixed(2)}` : 'Grátis'}
@@ -59,28 +62,37 @@ const ListingCard = ({ listing, index }: { listing: MarketplaceListing, index: n
 
 export default function MarketplacePage() {
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
+  const [userWorkspaces, setUserWorkspaces] = useState<WorkspaceData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user, currentOrganization } = useAuth();
+
+  const fetchInitialData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+        const listingsResult = await getListings();
+        if (listingsResult.success && listingsResult.data) {
+            setListings(listingsResult.data);
+        } else {
+            throw new Error(listingsResult.error || "Não foi possível carregar os fluxos do marketplace.");
+        }
+
+        if (user && currentOrganization) {
+            const workspacesResult = await loadWorkspacesForOrganizationFromDB(currentOrganization.id);
+            setUserWorkspaces(workspacesResult);
+        }
+
+    } catch (e: any) {
+        setError(e.message || "Ocorreu um erro de conexão.");
+    } finally {
+        setIsLoading(false);
+    }
+  }, [user, currentOrganization]);
 
   useEffect(() => {
-    const fetchListings = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const result = await getListings();
-            if (result.success && result.data) {
-                setListings(result.data);
-            } else {
-                setError(result.error || "Não foi possível carregar os fluxos do marketplace.");
-            }
-        } catch (e) {
-            setError("Ocorreu um erro de conexão.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-    fetchListings();
-  }, []);
+    fetchInitialData();
+  }, [fetchInitialData]);
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -96,9 +108,7 @@ export default function MarketplacePage() {
             <Search className="mr-2 h-4 w-4" />
             Buscar Fluxos
           </Button>
-          <Button>
-             Vender meu Fluxo
-          </Button>
+          <ListWorkspaceDialog userWorkspaces={userWorkspaces} onListingCreated={fetchInitialData} />
         </div>
       </div>
       
