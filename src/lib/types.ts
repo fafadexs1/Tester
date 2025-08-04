@@ -306,7 +306,7 @@ export interface Team {
 export interface OrganizationUser {
   id: string; // This is the user's ID
   username: string;
-  role: UserRole;
+  role: string | null;
 }
 
 export interface AuditLog {

@@ -2,8 +2,8 @@
 'use server';
 
 import { getCurrentUser } from '@/lib/auth';
-import type { Organization, OrganizationUser, Team, User, UserRole } from '@/lib/types';
-import { getOrganizationsForUser, runQuery, findUserByUsername } from './databaseActions';
+import type { Organization, OrganizationUser, Team, User, UserRole, Role } from '@/lib/types';
+import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization } from './databaseActions';
 import { revalidatePath } from 'next/cache';
 
 interface GetOrgsResult {
@@ -36,20 +36,13 @@ interface GetOrgUsersResult {
     error?: string;
 }
 
-export async function getUsersForOrganization(organizationId: string): Promise<GetOrgUsersResult> {
+export async function getUsersForOrganizationAction(organizationId: string): Promise<GetOrgUsersResult> {
     if (!organizationId) {
         return { success: false, error: "ID da organização não fornecido." };
     }
     try {
-        const query = `
-            SELECT u.id, u.username, ou.role
-            FROM users u
-            JOIN organization_users ou ON u.id = ou.user_id
-            WHERE ou.organization_id = $1
-            ORDER BY u.username;
-        `;
-        const result = await runQuery<OrganizationUser>(query, [organizationId]);
-        return { success: true, data: result.rows };
+        const result = await getUsersForOrganization(organizationId);
+        return { success: true, data: result };
     } catch (error: any) {
         console.error('[OrganizationActions] Erro ao buscar usuários da organização:', error);
         return { success: false, error: `Erro de banco de dados: ${error.message}` };
@@ -62,7 +55,7 @@ interface GetOrgTeamsResult {
     error?: string;
 }
 
-export async function getTeamsForOrganization(organizationId: string): Promise<GetOrgTeamsResult> {
+export async function getTeamsForOrganizationAction(organizationId: string): Promise<GetOrgTeamsResult> {
     if (!organizationId) {
         return { success: false, error: "ID da organização não fornecido." };
     }
@@ -106,8 +99,6 @@ export async function createTeamAction(formData: FormData): Promise<{ success: b
         return { success: false, error: "O nome do time é obrigatório." };
     }
     
-    // A transação manual foi removida para evitar o erro de importação de getDbPool.
-    // As operações agora são sequenciais. Para a maioria dos casos, isso é seguro o suficiente.
     try {
         const teamResult = await runQuery<{ id: string }>(
             'INSERT INTO teams (name, description, organization_id) VALUES ($1, $2, $3) RETURNING id',
@@ -116,15 +107,10 @@ export async function createTeamAction(formData: FormData): Promise<{ success: b
         const newTeamId = teamResult.rows[0].id;
 
         if (memberIds.length > 0) {
-            // Em vez de um loop, podemos usar um único insert para ser mais eficiente.
-            const values = memberIds.map((memberId, index) => `($1, $${index + 2}, $${memberIds.length + 2})`).join(',');
-            const params = [newTeamId, ...memberIds, organizationId];
-            
-            // Reconstruindo a query para uma inserção em massa
             let valuesString = '';
             const queryParams: any[] = [newTeamId, organizationId];
             for (let i = 0; i < memberIds.length; i++) {
-                valuesString += `($1, $${i+3}, $2)${i === memberIds.length - 1 ? '' : ','}`;
+                valuesString += `($1, $2, $${i+3})${i === memberIds.length - 1 ? '' : ','}`;
                 queryParams.push(memberIds[i]);
             }
             
@@ -150,14 +136,14 @@ export async function createTeamAction(formData: FormData): Promise<{ success: b
 export async function inviteUserToOrganizationAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
     const currentUser = await getCurrentUser();
     const usernameToInvite = formData.get('username') as string;
-    const role = formData.get('role') as UserRole;
+    const roleId = formData.get('roleId') as string; // Changed from role to roleId
     const organizationId = currentUser?.current_organization_id;
 
     if (!currentUser || !organizationId) {
         return { success: false, error: "Usuário não autenticado ou organização não selecionada." };
     }
-     if (!usernameToInvite || !role) {
-        return { success: false, error: "Nome de usuário e função são obrigatórios." };
+     if (!usernameToInvite || !roleId) {
+        return { success: false, error: "Nome de usuário e cargo são obrigatórios." };
     }
 
     try {
@@ -166,9 +152,10 @@ export async function inviteUserToOrganizationAction(formData: FormData): Promis
             return { success: false, error: `Usuário "${usernameToInvite}" não encontrado.` };
         }
 
+        // Insert/update using role_id now
         await runQuery(
-            'INSERT INTO organization_users (user_id, organization_id, role) VALUES ($1, $2, $3) ON CONFLICT (user_id, organization_id) DO UPDATE SET role = EXCLUDED.role',
-            [userToInvite.id, organizationId, role]
+            'INSERT INTO organization_users (user_id, organization_id, role_id) VALUES ($1, $2, $3) ON CONFLICT (user_id, organization_id) DO UPDATE SET role_id = EXCLUDED.role_id',
+            [userToInvite.id, organizationId, roleId]
         );
         
         revalidatePath('/organization/members');
@@ -179,6 +166,21 @@ export async function inviteUserToOrganizationAction(formData: FormData): Promis
             return { success: false, error: `O usuário "${usernameToInvite}" já pertence a esta organização.` };
         }
         console.error('[OrganizationActions] Erro ao convidar usuário:', error);
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    }
+}
+
+// --- RBAC Actions ---
+
+export async function getRolesForOrganizationAction(): Promise<{ success: boolean; data?: Role[]; error?: string }> {
+    const user = await getCurrentUser();
+    if (!user?.current_organization_id) {
+        return { success: false, error: 'Usuário ou organização não encontrados.' };
+    }
+    try {
+        const roles = await getRolesForOrganization(user.current_organization_id);
+        return { success: true, data: roles };
+    } catch (error: any) {
         return { success: false, error: `Erro de banco de dados: ${error.message}` };
     }
 }

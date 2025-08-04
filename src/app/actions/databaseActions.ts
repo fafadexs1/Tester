@@ -4,7 +4,7 @@
 
 import { Pool, type QueryResult } from 'pg';
 import dotenv from 'dotenv';
-import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser, SmtpSettings } from '@/lib/types';
+import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser, SmtpSettings, Role } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { redirect } from 'next/navigation';
 
@@ -179,43 +179,61 @@ async function initializeDatabaseSchema(): Promise<void> {
         CREATE TABLE IF NOT EXISTS organization_users (
             user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-            role_id UUID REFERENCES roles(id) ON DELETE SET NULL, -- Alterado de 'role TEXT'
-            PRIMARY KEY (user_id, organization_id)
+            role_id UUID REFERENCES roles(id) ON DELETE SET NULL -- Alterado de 'role TEXT'
         );
     `);
 
-    // Bloco de Migração para a coluna `role_id`
-    const roleIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='organization_users' AND column_name='role_id'`);
-    if(roleIdColInfo.rowCount === 0) {
-      console.log(`[DB Migration] Column 'role_id' not found in 'organization_users'. Migrating...`);
-      // 1. Adicionar a nova coluna `role_id`
-      await client.query(`ALTER TABLE organization_users ADD COLUMN role_id UUID;`);
-      // 2. Criar roles padrão para as organizações existentes se não existirem
-      await client.query(`
-        INSERT INTO roles (organization_id, name, description, is_system_role)
-        SELECT id, 'Admin', 'Acesso total a todas as configurações e fluxos.', TRUE FROM organizations
-        ON CONFLICT (organization_id, name) DO NOTHING;
-      `);
-      await client.query(`
-        INSERT INTO roles (organization_id, name, description, is_system_role)
-        SELECT id, 'Membro', 'Acesso para visualizar e editar fluxos.', TRUE FROM organizations
-        ON CONFLICT (organization_id, name) DO NOTHING;
-      `);
-      // 3. Popular `role_id` com base na antiga coluna `role` (melhor esforço)
-      await client.query(`
-        UPDATE organization_users ou SET role_id = (
-          SELECT r.id FROM roles r
-          WHERE r.organization_id = ou.organization_id
-            AND r.name = (CASE WHEN ou.role = 'Admin' THEN 'Admin' ELSE 'Membro' END)
-          LIMIT 1
-        )
-        WHERE ou.role_id IS NULL;
-      `);
-      // 4. Remover a coluna antiga `role`
-      await client.query(`ALTER TABLE organization_users DROP COLUMN role;`);
-      // 5. Adicionar a foreign key
-      await client.query(`ALTER TABLE organization_users ADD CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;`);
-      console.log(`[DB Migration] Migration for 'role_id' in 'organization_users' completed.`);
+    // Bloco de Migração para a coluna `role_id` em organization_users
+    // Verifica se a coluna role (antiga) existe. Se sim, migra.
+    const oldRoleColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='organization_users' AND column_name='role'`);
+    if(oldRoleColInfo.rowCount > 0) {
+        console.log(`[DB Migration] Old 'role' column found in 'organization_users'. Migrating to 'role_id'...`);
+        
+        // 1. Adicionar a nova coluna `role_id` se ainda não existir
+        const newRoleIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='organization_users' AND column_name='role_id'`);
+        if (newRoleIdColInfo.rowCount === 0) {
+            await client.query(`ALTER TABLE organization_users ADD COLUMN role_id UUID;`);
+        }
+        
+        // 2. Criar roles padrão 'Admin' e 'Membro' para organizações que ainda não os têm
+        await client.query(`
+            INSERT INTO roles (organization_id, name, description, is_system_role)
+            SELECT id, 'Admin', 'Acesso total a todas as configurações e fluxos.', TRUE FROM organizations
+            ON CONFLICT (organization_id, name) DO NOTHING;
+        `);
+        await client.query(`
+            INSERT INTO roles (organization_id, name, description, is_system_role)
+            SELECT id, 'Membro', 'Acesso para visualizar e editar fluxos.', TRUE FROM organizations
+            ON CONFLICT (organization_id, name) DO NOTHING;
+        `);
+        
+        // 3. Popular `role_id` com base na antiga coluna `role`
+        await client.query(`
+            UPDATE organization_users ou SET role_id = (
+                SELECT r.id FROM roles r
+                WHERE r.organization_id = ou.organization_id
+                  AND r.name = (CASE 
+                                WHEN ou.role = 'admin' THEN 'Admin' 
+                                ELSE 'Membro' 
+                               END)
+                LIMIT 1
+            )
+            WHERE ou.role_id IS NULL AND ou.role IS NOT NULL;
+        `);
+        
+        // 4. Remover a coluna antiga `role`
+        await client.query(`ALTER TABLE organization_users DROP COLUMN role;`);
+        
+        // 5. Adicionar a foreign key
+        await client.query(`ALTER TABLE organization_users ADD CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;`);
+        
+        console.log(`[DB Migration] Migration from 'role' to 'role_id' in 'organization_users' completed.`);
+    }
+
+    // Adiciona a PRIMARY KEY se não existir
+    const pkConstraintInfo = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = 'organization_users_pkey'`);
+    if (pkConstraintInfo.rowCount === 0) {
+        await client.query(`ALTER TABLE organization_users ADD PRIMARY KEY (user_id, organization_id);`);
     }
 
     
@@ -497,26 +515,47 @@ export async function createUser(
 
 // --- Organization Actions ---
 export async function createOrganization(name: string, ownerId: string): Promise<{ success: boolean; organization?: Organization; error?: string }> {
+    let client;
     try {
-        const result = await runQuery<Organization>(
+        const pool = getDbPool();
+        client = await pool.connect();
+        await client.query('BEGIN');
+
+        const orgResult = await client.query<Organization>(
             'INSERT INTO organizations (name, owner_id) VALUES ($1, $2) RETURNING id, name, owner_id, created_at',
             [name, ownerId]
         );
-        if (result.rows.length > 0) {
-            const org = result.rows[0];
-            // Automatically add the owner as an admin to the new organization
-            await runQuery(
-                'INSERT INTO organization_users (user_id, organization_id, role) VALUES ($1, $2, $3)',
-                [ownerId, org.id, 'admin']
-            );
-            return { success: true, organization: org };
+        const newOrg = orgResult.rows[0];
+        if (!newOrg) {
+            throw new Error("Failed to create organization row.");
         }
-        return { success: false, error: 'Failed to create organization.' };
+
+        // Cria o role de Admin para a nova organização
+        const adminRoleResult = await client.query<{ id: string }>(
+            `INSERT INTO roles (organization_id, name, description, is_system_role) VALUES ($1, 'Admin', 'Acesso total a todas as configurações e fluxos.', TRUE) RETURNING id`,
+            [newOrg.id]
+        );
+        const adminRoleId = adminRoleResult.rows[0].id;
+
+        // Associa o owner à organização com o role de Admin
+        await client.query(
+            'INSERT INTO organization_users (user_id, organization_id, role_id) VALUES ($1, $2, $3)',
+            [ownerId, newOrg.id, adminRoleId]
+        );
+        
+        await client.query('COMMIT');
+        
+        return { success: true, organization: newOrg };
+        
     } catch (error: any) {
+        if (client) await client.query('ROLLBACK');
         console.error('[DB Actions] Error creating organization:', error);
         return { success: false, error: `Database error: ${error.message}` };
+    } finally {
+        if (client) client.release();
     }
 }
+
 
 export async function getOrganizationsForUser(userId: string): Promise<Organization[]> {
     const result = await runQuery<Organization>(
@@ -892,9 +931,10 @@ export async function loadWorkspaceByNameFromDB(name: string, ownerId: string): 
 // --- Team & Member Actions ---
 export async function getUsersForOrganization(organizationId: string): Promise<OrganizationUser[]> {
     const query = `
-        SELECT u.id, u.username, ou.role
+        SELECT u.id, u.username, r.name as role
         FROM users u
         JOIN organization_users ou ON u.id = ou.user_id
+        LEFT JOIN roles r ON ou.role_id = r.id
         WHERE ou.organization_id = $1
     `;
     const result = await runQuery<OrganizationUser>(query, [organizationId]);
@@ -955,4 +995,27 @@ export async function saveSmtpSettings(settings: Omit<SmtpSettings, 'id' | 'crea
         console.error('[DB Actions] Error saving SMTP settings:', error);
         return { success: false, error: `Erro de banco de dados: ${error.message}` };
     }
+}
+
+
+// --- RBAC Actions ---
+export async function getRolesForOrganization(organizationId: string): Promise<Role[]> {
+    const query = `
+        SELECT 
+            r.id, 
+            r.name, 
+            r.description,
+            r.is_system_role,
+            COALESCE(
+                (SELECT json_agg(rp.permission_id) 
+                 FROM role_permissions rp 
+                 WHERE rp.role_id = r.id),
+                '[]'::json
+            ) as permissions
+        FROM roles r
+        WHERE r.organization_id = $1
+        ORDER BY r.is_system_role DESC, r.name ASC;
+    `;
+    const result = await runQuery<Role>(query, [organizationId]);
+    return result.rows;
 }

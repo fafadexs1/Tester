@@ -26,8 +26,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import type { OrganizationUser, Team, UserRole } from '@/lib/types';
-import { getUsersForOrganization, getTeamsForOrganization, createTeamAction, inviteUserToOrganizationAction } from '@/app/actions/organizationActions';
+import type { OrganizationUser, Team, Role } from '@/lib/types';
+import { getUsersForOrganizationAction, getTeamsForOrganizationAction, createTeamAction, inviteUserToOrganizationAction, getRolesForOrganizationAction } from '@/app/actions/organizationActions';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useToast } from '@/hooks/use-toast';
 import { Combobox } from '@/components/ui/combobox';
@@ -39,6 +39,7 @@ export default function MembersPage() {
 
     const [members, setMembers] = useState<OrganizationUser[]>([]);
     const [teams, setTeams] = useState<Team[]>([]);
+    const [roles, setRoles] = useState<Role[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
@@ -50,9 +51,10 @@ export default function MembersPage() {
         if (!user?.current_organization_id) return;
         setIsLoading(true);
         try {
-            const [membersResult, teamsResult] = await Promise.all([
-                getUsersForOrganization(user.current_organization_id),
-                getTeamsForOrganization(user.current_organization_id)
+            const [membersResult, teamsResult, rolesResult] = await Promise.all([
+                getUsersForOrganizationAction(user.current_organization_id),
+                getTeamsForOrganizationAction(user.current_organization_id),
+                getRolesForOrganizationAction()
             ]);
 
             if (membersResult.success && membersResult.data) {
@@ -65,6 +67,12 @@ export default function MembersPage() {
                 setTeams(teamsResult.data);
             } else {
                 toast({ title: "Erro ao buscar times", description: teamsResult.error, variant: "destructive" });
+            }
+
+            if (rolesResult.success && rolesResult.data) {
+                setRoles(rolesResult.data);
+            } else {
+                 toast({ title: "Erro ao buscar cargos", description: rolesResult.error, variant: "destructive" });
             }
 
         } catch (error: any) {
@@ -150,16 +158,15 @@ export default function MembersPage() {
                                     <Input id="username" name="username" placeholder="nome.de.usuario" required />
                                 </div>
                                 <div>
-                                    <Label htmlFor="role">Atribuir Função</Label>
-                                    <Select name="role" defaultValue="Visualizador" required>
-                                        <SelectTrigger id="role">
-                                            <SelectValue placeholder="Selecione uma função" />
+                                    <Label htmlFor="roleId">Atribuir Cargo</Label>
+                                    <Select name="roleId" required>
+                                        <SelectTrigger id="roleId">
+                                            <SelectValue placeholder="Selecione um cargo" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="Admin">Admin</SelectItem>
-                                            <SelectItem value="Editor de Fluxo">Editor de Fluxo</SelectItem>
-                                            <SelectItem value="Publicador">Publicador</SelectItem>
-                                            <SelectItem value="Visualizador">Visualizador</SelectItem>
+                                            {roles.map(role => (
+                                                <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -187,7 +194,7 @@ export default function MembersPage() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Nome</TableHead>
-                                    <TableHead>Função</TableHead>
+                                    <TableHead>Cargo</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead><span className="sr-only">Ações</span></TableHead>
                                 </TableRow>
@@ -207,17 +214,7 @@ export default function MembersPage() {
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <Select defaultValue={member.role} disabled>
-                                            <SelectTrigger className="w-[180px]">
-                                                <SelectValue placeholder="Selecione a função" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Admin">Admin</SelectItem>
-                                                <SelectItem value="Editor de Fluxo">Editor de Fluxo</SelectItem>
-                                                <SelectItem value="Publicador">Publicador</SelectItem>
-                                                <SelectItem value="Visualizador">Visualizador</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                        <Badge variant="secondary">{member.role || 'Sem cargo'}</Badge>
                                     </TableCell>
                                      <TableCell>
                                         <Badge variant='outline' className={'bg-green-500/20 text-green-700 border-green-400'}>
