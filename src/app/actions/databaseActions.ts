@@ -77,17 +77,16 @@ export async function runQuery<T>(query: string, params: any[] = []): Promise<Qu
 
 
 async function initializeDatabaseSchema(): Promise<void> {
-  const poolInstance = getDbPool();
-  const client = await poolInstance.connect();
-  try {
+ const client = await getDbPool().connect();
+ try {
     console.log('[DB Actions] Initializing database schema if needed...');
     
-    // Garante que a extensão para gerar UUIDs esteja habilitada ANTES de qualquer transação.
+    // Ensure the extension for generating UUIDs is enabled BEFORE any transaction.
     await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
 
     await client.query('BEGIN');
     
-    // Tabela de Usuários - Criada antes de organizations para a foreign key
+    // Users Table - Created before organizations for the foreign key
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -97,11 +96,27 @@ async function initializeDatabaseSchema(): Promise<void> {
         password_hash TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'user',
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        current_organization_id UUID -- Será referenciado mais tarde
+        current_organization_id UUID -- Will be referenced later
       );
     `);
 
-    // **INÍCIO DA CORREÇÃO** - Adiciona um bloco de migração para a coluna 'email'
+    // **START OF FIX FOR NULL ID ERROR**
+    // Ensures the 'id' column has the default value to generate UUIDs,
+    // even if the table already existed from an older schema version.
+    const idDefaultCheck = await client.query(`
+        SELECT column_default
+        FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'id';
+    `);
+
+    if (idDefaultCheck.rowCount > 0 && !idDefaultCheck.rows[0].column_default) {
+        console.log("[DB Migration] Default value for 'users.id' is missing. Applying fix...");
+        await client.query('ALTER TABLE users ALTER COLUMN id SET DEFAULT gen_random_uuid();');
+        console.log("[DB Migration] Default value for 'users.id' has been set.");
+    }
+    // **END OF FIX FOR NULL ID ERROR**
+
+    // Migration block for the 'email' column
     const emailColExists = await client.query(`
         SELECT 1 FROM information_schema.columns 
         WHERE table_name='users' AND column_name='email';
@@ -111,7 +126,7 @@ async function initializeDatabaseSchema(): Promise<void> {
         await client.query('ALTER TABLE users ADD COLUMN email TEXT UNIQUE;');
     }
     
-    // **INÍCIO DA CORREÇÃO** - Adiciona um bloco de migração para a coluna 'full_name'
+    // Migration block for the 'full_name' column
     const fullNameColExists = await client.query(`
         SELECT 1 FROM information_schema.columns 
         WHERE table_name='users' AND column_name='full_name';
@@ -120,9 +135,8 @@ async function initializeDatabaseSchema(): Promise<void> {
         console.log("[DB Actions] 'full_name' column not found in 'users' table. Adding column...");
         await client.query('ALTER TABLE users ADD COLUMN full_name TEXT;');
     }
-    // **FIM DA CORREÇÃO**
 
-    // Tabela de Organizações
+    // Organizations Table
     await client.query(`
         CREATE TABLE IF NOT EXISTS organizations (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -132,7 +146,7 @@ async function initializeDatabaseSchema(): Promise<void> {
         );
     `);
 
-    // Agora que 'organizations' existe, podemos adicionar a foreign key em 'users'
+    // Now that 'organizations' exists, we can add the foreign key in 'users'
     const fkExists = await client.query(`
         SELECT 1 FROM pg_constraint 
         WHERE conname = 'users_current_organization_id_fkey' AND conrelid = 'users'::regclass
@@ -175,28 +189,25 @@ async function initializeDatabaseSchema(): Promise<void> {
         );
     `);
 
-    // Tabela de associação Usuário-Organização (muitos para muitos) - agora com role_id
+    // User-Organization association table (many-to-many) - now with role_id
     await client.query(`
         CREATE TABLE IF NOT EXISTS organization_users (
             user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-            role_id UUID REFERENCES roles(id) ON DELETE SET NULL -- Alterado de 'role TEXT'
+            role_id UUID REFERENCES roles(id) ON DELETE SET NULL -- Changed from 'role TEXT'
         );
     `);
 
-    // Bloco de Migração para a coluna `role_id` em organization_users
-    // Verifica se a coluna role (antiga) existe. Se sim, migra.
+    // Migration block for the `role_id` column in organization_users
     const oldRoleColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='organization_users' AND column_name='role'`);
     if(oldRoleColInfo.rowCount > 0) {
         console.log(`[DB Migration] Old 'role' column found in 'organization_users'. Migrating to 'role_id'...`);
         
-        // 1. Adicionar a nova coluna `role_id` se ainda não existir
         const newRoleIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='organization_users' AND column_name='role_id'`);
         if (newRoleIdColInfo.rowCount === 0) {
             await client.query(`ALTER TABLE organization_users ADD COLUMN role_id UUID;`);
         }
         
-        // 2. Criar roles padrão 'Admin' e 'Membro' para organizações que ainda não os têm
         await client.query(`
             INSERT INTO roles (organization_id, name, description, is_system_role)
             SELECT id, 'Admin', 'Acesso total a todas as configurações e fluxos.', TRUE FROM organizations
@@ -208,37 +219,33 @@ async function initializeDatabaseSchema(): Promise<void> {
             ON CONFLICT (organization_id, name) DO NOTHING;
         `);
         
-        // 3. Popular `role_id` com base na antiga coluna `role`
         await client.query(`
             UPDATE organization_users ou SET role_id = (
                 SELECT r.id FROM roles r
                 WHERE r.organization_id = ou.organization_id
                   AND r.name = (CASE 
-                                WHEN ou.role = 'admin' THEN 'Admin' 
-                                ELSE 'Membro' 
-                               END)
+                                  WHEN ou.role = 'admin' THEN 'Admin' 
+                                  ELSE 'Membro' 
+                                END)
                 LIMIT 1
             )
             WHERE ou.role_id IS NULL AND ou.role IS NOT NULL;
         `);
         
-        // 4. Remover a coluna antiga `role`
         await client.query(`ALTER TABLE organization_users DROP COLUMN role;`);
         
-        // 5. Adicionar a foreign key
         await client.query(`ALTER TABLE organization_users ADD CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;`);
         
         console.log(`[DB Migration] Migration from 'role' to 'role_id' in 'organization_users' completed.`);
     }
 
-    // Adiciona a PRIMARY KEY se não existir
     const pkConstraintInfo = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = 'organization_users_pkey'`);
     if (pkConstraintInfo.rowCount === 0) {
         await client.query(`ALTER TABLE organization_users ADD PRIMARY KEY (user_id, organization_id);`);
     }
 
     
-    // Tabela de Times
+    // Teams Table
     await client.query(`
         CREATE TABLE IF NOT EXISTS teams (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -250,12 +257,12 @@ async function initializeDatabaseSchema(): Promise<void> {
         );
     `);
 
-    // Tabela de associação Membro-Time
+    // Member-Team association table
     await client.query(`
         CREATE TABLE IF NOT EXISTS team_members (
             team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
             user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, -- Para integridade e queries mais fáceis
+            organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, -- For integrity and easier queries
             PRIMARY KEY (team_id, user_id)
         );
     `);
@@ -287,7 +294,6 @@ async function initializeDatabaseSchema(): Promise<void> {
       );
     `);
 
-    // Adiciona a coluna `organization_id` a `workspaces` se não existir
     const orgIdColExistsInWorkspaces = await client.query(`
         SELECT 1 FROM information_schema.columns 
         WHERE table_name='workspaces' AND column_name='organization_id';
@@ -464,7 +470,7 @@ async function initializeDatabaseSchema(): Promise<void> {
       await client.query(insertPermissionQuery, [p.id, p.subject, p.description]);
     }
 
-    // Associar todas as permissões ao cargo 'Admin' para cada organização que o tiver
+    // Associate all permissions with the 'Admin' role for each organization that has it
     const adminRoles = await client.query<{ id: string }>(`SELECT id FROM roles WHERE name = 'Admin'`);
     if (adminRoles.rowCount > 0) {
         const allPermissionIds = permissionsToSeed.map(p => p.id);
@@ -577,7 +583,7 @@ export async function createOrganization(name: string, ownerId: string): Promise
             throw new Error("Falha ao criar a linha da organização.");
         }
 
-        // Cria o cargo de Admin para a nova organização e obtém o ID
+        // Create the Admin role for the new organization and get the ID
         const adminRoleResult = await client.query<{ id: string }>(
             `INSERT INTO roles (organization_id, name, description, is_system_role) VALUES ($1, 'Admin', 'Acesso total a todas as configurações e fluxos.', TRUE) RETURNING id`,
             [newOrg.id]
@@ -587,7 +593,7 @@ export async function createOrganization(name: string, ownerId: string): Promise
             throw new Error("Falha ao criar o cargo de Admin para a nova organização.");
         }
 
-        // Associa o proprietário à organização com o cargo de Admin
+        // Associate the owner with the organization with the Admin role
         await client.query(
             'INSERT INTO organization_users (user_id, organization_id, role_id) VALUES ($1, $2, $3)',
             [ownerId, newOrg.id, adminRoleId]
@@ -1205,5 +1211,3 @@ export async function deleteRole(roleId: string): Promise<{ success: boolean; er
         return { success: false, error: `Erro de banco de dados: ${error.message}` };
     }
 }
-
-    
