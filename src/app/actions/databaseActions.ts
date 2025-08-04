@@ -145,16 +145,79 @@ async function initializeDatabaseSchema(): Promise<void> {
         `);
     }
 
-    
-    // Tabela de associação Usuário-Organização (muitos para muitos)
+    // --- RBAC TABLES ---
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS roles (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            description TEXT,
+            is_system_role BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(organization_id, name)
+        );
+    `);
+
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS permissions (
+            id TEXT PRIMARY KEY,
+            description TEXT,
+            subject TEXT NOT NULL
+        );
+    `);
+
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS role_permissions (
+            role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+            permission_id TEXT NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+            PRIMARY KEY (role_id, permission_id)
+        );
+    `);
+
+    // Tabela de associação Usuário-Organização (muitos para muitos) - agora com role_id
     await client.query(`
         CREATE TABLE IF NOT EXISTS organization_users (
             user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-            role TEXT NOT NULL DEFAULT 'viewer', -- Ex: admin, editor, viewer
+            role_id UUID REFERENCES roles(id) ON DELETE SET NULL, -- Alterado de 'role TEXT'
             PRIMARY KEY (user_id, organization_id)
         );
     `);
+
+    // Bloco de Migração para a coluna `role_id`
+    const roleIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='organization_users' AND column_name='role_id'`);
+    if(roleIdColInfo.rowCount === 0) {
+      console.log(`[DB Migration] Column 'role_id' not found in 'organization_users'. Migrating...`);
+      // 1. Adicionar a nova coluna `role_id`
+      await client.query(`ALTER TABLE organization_users ADD COLUMN role_id UUID;`);
+      // 2. Criar roles padrão para as organizações existentes se não existirem
+      await client.query(`
+        INSERT INTO roles (organization_id, name, description, is_system_role)
+        SELECT id, 'Admin', 'Acesso total a todas as configurações e fluxos.', TRUE FROM organizations
+        ON CONFLICT (organization_id, name) DO NOTHING;
+      `);
+      await client.query(`
+        INSERT INTO roles (organization_id, name, description, is_system_role)
+        SELECT id, 'Membro', 'Acesso para visualizar e editar fluxos.', TRUE FROM organizations
+        ON CONFLICT (organization_id, name) DO NOTHING;
+      `);
+      // 3. Popular `role_id` com base na antiga coluna `role` (melhor esforço)
+      await client.query(`
+        UPDATE organization_users ou SET role_id = (
+          SELECT r.id FROM roles r
+          WHERE r.organization_id = ou.organization_id
+            AND r.name = (CASE WHEN ou.role = 'Admin' THEN 'Admin' ELSE 'Membro' END)
+          LIMIT 1
+        )
+        WHERE ou.role_id IS NULL;
+      `);
+      // 4. Remover a coluna antiga `role`
+      await client.query(`ALTER TABLE organization_users DROP COLUMN role;`);
+      // 5. Adicionar a foreign key
+      await client.query(`ALTER TABLE organization_users ADD CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;`);
+      console.log(`[DB Migration] Migration for 'role_id' in 'organization_users' completed.`);
+    }
+
     
     // Tabela de Times
     await client.query(`

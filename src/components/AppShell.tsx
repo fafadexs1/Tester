@@ -31,7 +31,7 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import type { Organization } from '@/lib/types';
 import { getOrganizationsForUserAction } from '@/app/actions/organizationActions';
-import { ChevronsUpDown, Workflow, BarChart2, Building, Users, CreditCard, ScrollText, Settings, LogOut, Zap, LifeBuoy, Loader2, PlusCircle, Mail } from 'lucide-react';
+import { ChevronsUpDown, Workflow, BarChart2, Building, Users, CreditCard, ScrollText, Settings, LogOut, Zap, LifeBuoy, Loader2, PlusCircle, Mail, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const MainNav = () => {
@@ -80,6 +80,14 @@ const OrgNav = () => {
                         <SidebarMenuButton isActive={isActive('/organization/members')} tooltip="Membros e Times">
                            <Users />
                            <span>Membros e Times</span>
+                        </SidebarMenuButton>
+                    </Link>
+                </SidebarMenuItem>
+                 <SidebarMenuItem>
+                    <Link href="/organization/roles" passHref>
+                        <SidebarMenuButton isActive={isActive('/organization/roles')} tooltip="Cargos e Permissões">
+                           <ShieldCheck />
+                           <span>Cargos e Permissões</span>
                         </SidebarMenuButton>
                     </Link>
                 </SidebarMenuItem>

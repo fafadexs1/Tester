@@ -348,3 +348,24 @@ export interface SmtpSettings {
     created_at: string | Date;
     updated_at: string | Date;
 }
+
+// --- NEW RBAC TYPES ---
+
+export type PermissionAction = 'create' | 'read' | 'update' | 'delete';
+export type PermissionSubject = 'Workspace' | 'User' | 'Billing' | 'OrganizationSettings' | 'Role';
+export type PermissionIdentifier = `${Lowercase<PermissionSubject>}:${PermissionAction}`;
+
+export interface Permission {
+    id: PermissionIdentifier;
+    description: string;
+    subject: PermissionSubject;
+}
+
+export interface Role {
+    id: string; // UUID
+    organization_id: string;
+    name: string;
+    description?: string;
+    permissions: PermissionIdentifier[];
+    is_system_role?: boolean; // Para distinguir 'Admin', 'Membro' de cargos customizados
+}
