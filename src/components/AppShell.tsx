@@ -103,18 +103,14 @@ const OrgNav = () => {
                     {isAccessMenuOpen && (
                         <SidebarMenuSub>
                             <SidebarMenuSubItem>
-                                <Link href="/organization/members" passHref>
-                                    <SidebarMenuSubButton isActive={isMembersActive}>
-                                        Membros e Times
-                                    </SidebarMenuSubButton>
-                                </Link>
+                                <SidebarMenuSubButton asChild isActive={isMembersActive}>
+                                    <Link href="/organization/members">Membros e Times</Link>
+                                </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                             <SidebarMenuSubItem>
-                                <Link href="/organization/members?tab=roles" passHref>
-                                    <SidebarMenuSubButton isActive={isRolesActive}>
-                                        Cargos e Permissões
-                                    </SidebarMenuSubButton>
-                                </Link>
+                                <SidebarMenuSubButton asChild isActive={isRolesActive}>
+                                    <Link href="/organization/members?tab=roles">Cargos e Permissões</Link>
+                                </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                         </SidebarMenuSub>
                     )}
