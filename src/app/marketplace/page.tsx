@@ -37,7 +37,7 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
 
     const calculateInitialView = useCallback((nodes: NodeData[], containerWidth: number, containerHeight: number) => {
         if (!nodes || nodes.length === 0) {
-            return { zoom: 1, offset: { x: containerWidth / 2, y: containerHeight / 3 } };
+            return { zoom: 1, offset: { x: containerWidth / 3, y: containerHeight / 4 } };
         }
 
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -52,10 +52,10 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
         const contentHeight = maxY - minY;
 
         if (contentWidth <= 0 || contentHeight <= 0) {
-             return { zoom: 1, offset: { x: containerWidth / 2, y: containerHeight / 3 } };
+             return { zoom: 1, offset: { x: containerWidth / 3, y: containerHeight / 4 } };
         }
 
-        const padding = 80;
+        const padding = 120; // Aumenta o padding para garantir que não fique colado nas bordas
         const zoomX = (containerWidth - padding) / contentWidth;
         const zoomY = (containerHeight - padding) / contentHeight;
         const newZoom = Math.min(zoomX, zoomY, 1); // Cap zoom at 1x for initial view
@@ -70,20 +70,14 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
     }, []);
 
     const fetchDetails = useCallback(async () => {
-        if (!open || listing) return;
+        if (!open) return;
         setIsLoading(true);
+        setListing(null);
         try {
             const result = await getListingDetails(listingId);
             if (result.success && result.data) {
                 setListing(result.data);
-                setTimeout(() => {
-                    if (previewCanvasRef.current) {
-                        const { width, height } = previewCanvasRef.current.getBoundingClientRect();
-                        const { zoom, offset } = calculateInitialView(result.data!.preview_data.nodes, width, height);
-                        setZoomLevel(zoom);
-                        setCanvasOffset(offset);
-                    }
-                }, 100);
+                // O cálculo do zoom agora é feito no useEffect que observa a 'listing'
             } else {
                 toast({ title: "Erro ao carregar detalhes", description: result.error, variant: "destructive" });
                 setOpen(false);
@@ -91,17 +85,22 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
         } finally {
             setIsLoading(false);
         }
-    }, [listingId, open, listing, toast, calculateInitialView]);
+    }, [listingId, open, toast]);
     
     useEffect(() => {
-        if (open) {
-            fetchDetails();
-        } else {
-            // Reset state when dialog closes
-            setListing(null);
-            setIsLoading(false);
-        }
+        fetchDetails();
     }, [open, fetchDetails]);
+
+    useEffect(() => {
+        // Este useEffect reage à atualização do 'listing' para calcular a visão inicial
+        if (listing && previewCanvasRef.current) {
+            const { width, height } = previewCanvasRef.current.getBoundingClientRect();
+            const { zoom, offset } = calculateInitialView(listing.preview_data.nodes, width, height);
+            setZoomLevel(zoom);
+            setCanvasOffset(offset);
+        }
+    }, [listing, calculateInitialView]);
+
 
     const handlePan = (e: React.MouseEvent<HTMLDivElement>) => {
         if (e.buttons !== 1) return;
@@ -114,11 +113,17 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
             <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0">
                 <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] h-full overflow-hidden">
                     <div className="relative h-full bg-muted/30 overflow-hidden" ref={previewCanvasRef}>
-                        {isLoading ? (
+                        {isLoading && (
                             <div className="flex-1 flex items-center justify-center h-full">
                                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
                             </div>
-                        ) : listing ? (
+                        )}
+                        {!isLoading && !listing && (
+                             <div className="flex-1 flex items-center justify-center text-destructive h-full">
+                                Não foi possível carregar a pré-visualização do fluxo.
+                            </div>
+                        )}
+                        {!isLoading && listing && (
                             <Canvas
                                 nodes={listing.preview_data.nodes}
                                 connections={listing.preview_data.connections}
@@ -137,15 +142,11 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
                                 highlightedNodeIdBySession={null}
                                 activeWorkspace={listing.preview_data as WorkspaceData}
                             />
-                        ) : (
-                             <div className="flex-1 flex items-center justify-center text-destructive h-full">
-                                Não foi possível carregar a pré-visualização do fluxo.
-                            </div>
                         )}
                     </div>
 
                     <div className="flex flex-col border-l">
-                        <DialogHeader className="p-4 border-b">
+                         <DialogHeader className="p-4 border-b">
                             <DialogTitle className="text-2xl">{listing?.name || 'Carregando...'}</DialogTitle>
                             {listing && (
                                 <DialogDescription asChild>
@@ -370,3 +371,4 @@ export default function MarketplacePage() {
     </DndProvider>
   );
 }
+
