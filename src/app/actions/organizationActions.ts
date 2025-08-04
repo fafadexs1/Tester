@@ -1,12 +1,12 @@
 
-
 'use server';
 
 import { getCurrentUser } from '@/lib/auth';
 import type { Organization, OrganizationUser, Team, User, Role, Permission } from '@/lib/types';
-import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization, getUsersForOrganization, getPermissions, createRole, updateRole, deleteRole, createOrganization as createOrgDbAction, setCurrentOrganizationForUser } from './databaseActions';
+import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization, getUsersForOrganization, getPermissions, createRole, updateRole, deleteRole, createOrganization as createOrgDbAction, setCurrentOrganizationForUser, deleteOrganizationFromDB } from './databaseActions';
 import { revalidatePath } from 'next/cache';
 import { refreshUserSessionAction } from './authActions';
+import { redirect } from 'next/navigation';
 
 interface GetOrgsResult {
     success: boolean;
@@ -271,5 +271,45 @@ export async function deleteRoleAction(roleId: string): Promise<{ success: boole
      if (result.success) {
         revalidatePath('/organization/members');
     }
+    return result;
+}
+
+export async function deleteOrganizationAction(organizationId: string): Promise<{ success: boolean; error?: string }> {
+    const user = await getCurrentUser();
+    if (!user) {
+        return { success: false, error: "Usuário não autenticado." };
+    }
+
+    // Security check: Verify the user is the owner of the organization
+    const orgs = await getOrganizationsForUser(user.id);
+    const orgToDelete = orgs.find(org => org.id === organizationId);
+    
+    if (!orgToDelete) {
+        return { success: false, error: "Organização não encontrada ou você não tem permissão para excluí-la." };
+    }
+    
+    if (orgToDelete.owner_id !== user.id) {
+        return { success: false, error: "Apenas o proprietário pode excluir a organização." };
+    }
+    
+    // Check if user is trying to delete their last organization
+    if (orgs.length <= 1) {
+        return { success: false, error: "Você não pode excluir sua única organização." };
+    }
+
+    const result = await deleteOrganizationFromDB(organizationId);
+
+    if (result.success) {
+        // If the deleted org was the current one, switch to another one
+        if (user.current_organization_id === organizationId) {
+            const newCurrentOrg = orgs.find(org => org.id !== organizationId);
+            if (newCurrentOrg) {
+                await setCurrentOrganizationForUser(user.id, newCurrentOrg.id);
+                await refreshUserSessionAction(user.id);
+            }
+        }
+        revalidatePath('/');
+    }
+
     return result;
 }

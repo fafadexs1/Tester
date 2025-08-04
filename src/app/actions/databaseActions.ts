@@ -618,6 +618,19 @@ export async function setCurrentOrganizationForUser(userId: string, organization
     await runQuery('UPDATE users SET current_organization_id = $1 WHERE id = $2', [organizationId, userId]);
 }
 
+export async function deleteOrganizationFromDB(organizationId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        const result = await runQuery('DELETE FROM organizations WHERE id = $1', [organizationId]);
+        if (result.rowCount === 0) {
+            return { success: false, error: "Organização não encontrada para exclusão." };
+        }
+        return { success: true };
+    } catch (error: any) {
+        console.error('[DB Actions] Error deleting organization:', error);
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    }
+}
+
 
 // --- Workspace Actions ---
 export async function createWorkspaceAction(

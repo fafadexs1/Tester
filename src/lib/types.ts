@@ -293,6 +293,7 @@ export interface Organization {
   name: string;
   owner_id: string; // ID do usuário que criou a organização
   created_at?: string | Date;
+  is_owner?: boolean; // Propriedade opcional para o lado do cliente
 }
 
 export interface Team {
