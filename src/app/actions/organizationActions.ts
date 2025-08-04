@@ -2,8 +2,8 @@
 'use server';
 
 import { getCurrentUser } from '@/lib/auth';
-import type { Organization, OrganizationUser, Team, User, Role, Permission } from '@/lib/types';
-import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization, getUsersForOrganization, getPermissions, createRole, updateRole, deleteRole, createOrganization as createOrgDbAction, setCurrentOrganizationForUser, deleteOrganizationFromDB, updateOrganizationInDB } from './databaseActions';
+import type { Organization, OrganizationUser, Team, User, Role, Permission, AuditLog, WorkspaceData } from '@/lib/types';
+import { getOrganizationsForUser, runQuery, findUserByUsername, getRolesForOrganization, getUsersForOrganization, getPermissions, createRole, updateRole, deleteRole, createOrganization as createOrgDbAction, setCurrentOrganizationForUser, deleteOrganizationFromDB, updateOrganizationInDB, getAuditLogsForOrganization } from './databaseActions';
 import { revalidatePath } from 'next/cache';
 import { refreshUserSessionAction } from './authActions';
 import { redirect } from 'next/navigation';
@@ -340,4 +340,39 @@ export async function deleteOrganizationAction(organizationId: string): Promise<
     }
 
     return result;
+}
+
+// --- Audit Log Actions ---
+interface GetAuditLogsResult {
+    success: boolean;
+    data?: AuditLog[];
+    error?: string;
+}
+
+export async function getAuditLogsAction(filters: {
+    userId?: string;
+    actionType?: string;
+    workspaceId?: string;
+    date?: string;
+}): Promise<GetAuditLogsResult> {
+    const user = await getCurrentUser();
+    if (!user || !user.current_organization_id) {
+        return { success: false, error: "Usuário não autenticado ou organização não selecionada." };
+    }
+
+    try {
+        const dbFilters = {
+            userId: filters.userId,
+            actionType: filters.actionType,
+            workspaceId: filters.workspaceId,
+            startDate: filters.date,
+            endDate: filters.date,
+        };
+
+        const logs = await getAuditLogsForOrganization(user.current_organization_id, dbFilters);
+        return { success: true, data: logs };
+    } catch (error: any) {
+        console.error('[OrganizationActions] Erro ao buscar logs de auditoria:', error);
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    }
 }

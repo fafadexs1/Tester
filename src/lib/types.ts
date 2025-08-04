@@ -318,8 +318,16 @@ export interface AuditLog {
     organization_id: string;
     user_id: string;
     action: string;
-    details: Record<string, any>;
+    details: any;
     created_at: string | Date;
+    user?: {
+      id?: string,
+      username?: string,
+      full_name?: string | null,
+    };
+    // Adicionado para receber os dados do join
+    username?: string;
+    full_name?: string | null;
 }
 
 

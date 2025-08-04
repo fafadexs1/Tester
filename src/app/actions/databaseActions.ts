@@ -1,9 +1,8 @@
-
 'use server';
 
 import { Pool, type QueryResult } from 'pg';
 import dotenv from 'dotenv';
-import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser, SmtpSettings, Role, Permission } from '@/lib/types';
+import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser, SmtpSettings, Role, Permission, AuditLog } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { redirect } from 'next/navigation';
 
@@ -512,6 +511,74 @@ export async function createAuditLog(
     }
 }
 
+export async function getAuditLogsForOrganization(
+    organizationId: string,
+    filters: {
+        userId?: string;
+        actionType?: string;
+        workspaceId?: string;
+        startDate?: string;
+        endDate?: string;
+        limit?: number;
+        offset?: number;
+    } = {}
+): Promise<AuditLog[]> {
+    const { userId, actionType, workspaceId, startDate, endDate, limit = 50, offset = 0 } = filters;
+    let query = `
+        SELECT 
+            al.id,
+            al.user_id,
+            al.organization_id,
+            al.action,
+            al.details,
+            al.created_at,
+            u.username,
+            u.full_name
+        FROM audit_logs al
+        LEFT JOIN users u ON al.user_id = u.id
+        WHERE al.organization_id = $1
+    `;
+    const params: any[] = [organizationId];
+    let paramIndex = 2;
+
+    if (userId) {
+        query += ` AND al.user_id = $${paramIndex++}`;
+        params.push(userId);
+    }
+    if (actionType) {
+        query += ` AND al.action = $${paramIndex++}`;
+        params.push(actionType);
+    }
+     if (workspaceId) {
+        query += ` AND al.details->>'workspaceId' = $${paramIndex++}`;
+        params.push(workspaceId);
+    }
+    if (startDate) {
+        query += ` AND al.created_at >= $${paramIndex++}`;
+        params.push(startDate);
+    }
+    if (endDate) {
+        // Adiciona 1 dia para incluir todo o dia selecionado
+        const inclusiveEndDate = new Date(endDate);
+        inclusiveEndDate.setDate(inclusiveEndDate.getDate() + 1);
+        query += ` AND al.created_at < $${paramIndex++}`;
+        params.push(inclusiveEndDate.toISOString());
+    }
+
+    query += ` ORDER BY al.created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+    params.push(limit, offset);
+
+    const result = await runQuery<AuditLog>(query, params);
+    return result.rows.map(row => ({
+        ...row,
+        user: {
+            id: row.user_id,
+            username: row.username,
+            full_name: row.full_name
+        }
+    }));
+}
+
 
 // --- User Actions ---
 export async function findUserByUsername(username: string): Promise<User | null> {
@@ -866,7 +933,7 @@ export async function loadSessionFromDB(sessionId: string): Promise<FlowSession 
 
 export async function deleteSessionFromDB(sessionId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const result = await runQuery('DELETE FROM flow_sessions WHERE session_id = $1', [sessionId]);
+    const result = await runQuery('DELETE FROM flow_sessions WHERE id = $1', [sessionId]);
      if (result.rowCount > 0) {
         return { success: true };
     } else {
