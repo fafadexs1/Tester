@@ -1,8 +1,9 @@
+
 'use server';
 
 import { Pool, type QueryResult } from 'pg';
 import dotenv from 'dotenv';
-import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser, SmtpSettings, Role, Permission, AuditLog } from '@/lib/types';
+import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser, SmtpSettings, Role, Permission, WorkspaceVersion } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { redirect } from 'next/navigation';
 
@@ -292,6 +293,23 @@ async function initializeDatabaseSchema(): Promise<void> {
         chatwoot_instance_id UUID
       );
     `);
+
+     // --- VERSION HISTORY TABLE ---
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS workspace_versions (
+            id SERIAL PRIMARY KEY,
+            workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            version INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            nodes JSONB,
+            connections JSONB,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            created_by_id UUID REFERENCES users(id) ON DELETE SET NULL,
+            UNIQUE(workspace_id, version)
+        );
+    `);
+
 
     const orgIdColExistsInWorkspaces = await client.query(`
         SELECT 1 FROM information_schema.columns 
@@ -755,7 +773,7 @@ export async function createWorkspaceAction(
             chatwoot_enabled: false,
         };
 
-        const saveResult = await saveWorkspaceToDB(newWorkspace);
+        const saveResult = await saveWorkspaceToDB(newWorkspace, ownerId, 'Fluxo inicial criado.');
 
         if (!saveResult.success) {
             return { success: false, error: saveResult.error };
@@ -770,13 +788,23 @@ export async function createWorkspaceAction(
 }
 
 
-export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{ success: boolean; error?: string }> {
+export async function saveWorkspaceToDB(
+    workspaceData: WorkspaceData, 
+    userId: string, 
+    versionDescription?: string | null
+): Promise<{ success: boolean; error?: string }> {
+  let client;
   try {
     if (!workspaceData.owner_id || !workspaceData.name || !workspaceData.id || !workspaceData.organization_id) {
         return { success: false, error: "Dados do workspace incompletos (requer id, nome, proprietário e organização)." };
     }
     
-    const query = `
+    const pool = getDbPool();
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    // Upsert the main workspace table
+    const upsertWorkspaceQuery = `
       INSERT INTO workspaces (id, name, nodes, connections, owner_id, organization_id, evolution_instance_id, chatwoot_enabled, chatwoot_instance_id, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
       ON CONFLICT (id) DO UPDATE
@@ -788,8 +816,7 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
           chatwoot_enabled = EXCLUDED.chatwoot_enabled,
           chatwoot_instance_id = EXCLUDED.chatwoot_instance_id;
     `;
-    
-    await runQuery(query, [
+    await client.query(upsertWorkspaceQuery, [
       workspaceData.id,
       workspaceData.name,
       JSON.stringify(workspaceData.nodes || []), 
@@ -800,16 +827,36 @@ export async function saveWorkspaceToDB(workspaceData: WorkspaceData): Promise<{
       workspaceData.chatwoot_enabled || false,
       workspaceData.chatwoot_instance_id || null,
     ]);
+
+    // Create a new version in the history table
+    const insertVersionQuery = `
+      INSERT INTO workspace_versions (workspace_id, version, name, description, nodes, connections, created_by_id)
+      SELECT $1, COALESCE(MAX(version), 0) + 1, $2, $3, $4, $5, $6
+      FROM workspace_versions
+      WHERE workspace_id = $1;
+    `;
+    await client.query(insertVersionQuery, [
+        workspaceData.id,
+        workspaceData.name,
+        versionDescription,
+        JSON.stringify(workspaceData.nodes || []),
+        JSON.stringify(workspaceData.connections || []),
+        userId
+    ]);
     
+    await client.query('COMMIT');
     return { success: true };
-  } catch (error: any)
-{
+
+  } catch (error: any) {
+    if (client) await client.query('ROLLBACK');
     console.error(`[DB Actions] saveWorkspaceToDB Error:`, error);
     if (error.code === '23505' && error.constraint === 'workspaces_organization_id_name_key') {
         return { success: false, error: `Erro: O nome do fluxo '${workspaceData.name}' já existe nesta organização. Por favor, escolha um nome único.` };
     }
     let errorMessage = `Erro de banco de dados: ${error.message || 'Erro desconhecido'}. (Código: ${error.code || 'N/A'})`;
     return { success: false, error: errorMessage };
+  } finally {
+    if (client) client.release();
   }
 }
 
@@ -876,6 +923,94 @@ export async function deleteWorkspaceAction(workspaceId: string): Promise<{ succ
   return deleteWorkspaceFromDB(workspaceId);
 }
 
+// --- Version History Actions ---
+
+export async function getWorkspaceVersions(workspaceId: string): Promise<{ data?: WorkspaceVersion[]; error?: string }> {
+    try {
+        const query = `
+            SELECT 
+                wv.id, wv.workspace_id, wv.version, wv.name, wv.description, wv.created_at, wv.created_by_id,
+                u.username as created_by_username
+            FROM workspace_versions wv
+            LEFT JOIN users u ON wv.created_by_id = u.id
+            WHERE wv.workspace_id = $1
+            ORDER BY wv.version DESC;
+        `;
+        const result = await runQuery<any>(query, [workspaceId]);
+        return { data: result.rows };
+    } catch (error: any) {
+        console.error(`[DB Actions] Error getting versions for workspace ${workspaceId}:`, error);
+        return { error: `Erro de banco de dados: ${error.message}` };
+    }
+}
+
+export async function restoreWorkspaceVersion(
+    versionId: number, 
+    restoredByUserId: string
+): Promise<{ success: boolean; error?: string; workspace?: WorkspaceData }> {
+    let client;
+    try {
+        const pool = getDbPool();
+        client = await pool.connect();
+        await client.query('BEGIN');
+
+        // 1. Get the version data
+        const versionResult = await client.query<WorkspaceVersion>(
+            'SELECT * FROM workspace_versions WHERE id = $1',
+            [versionId]
+        );
+        const versionToRestore = versionResult.rows[0];
+        if (!versionToRestore) {
+            throw new Error(`Versão com ID ${versionId} não encontrada.`);
+        }
+
+        // 2. Update the main workspace table with the version data
+        const workspaceUpdateQuery = `
+            UPDATE workspaces
+            SET name = $1, nodes = $2, connections = $3, updated_at = NOW()
+            WHERE id = $4
+            RETURNING *;
+        `;
+        const updatedWorkspaceResult = await client.query<WorkspaceData>(workspaceUpdateQuery, [
+            versionToRestore.name,
+            versionToRestore.nodes,
+            versionToRestore.connections,
+            versionToRestore.workspace_id
+        ]);
+        const updatedWorkspace = updatedWorkspaceResult.rows[0];
+        if (!updatedWorkspace) {
+            throw new Error("Falha ao atualizar o fluxo principal com os dados da versão.");
+        }
+
+        // 3. Create a new version entry for this restore action
+        const restoreDescription = `Restaurado a partir da versão ${versionToRestore.version}.`;
+        const newVersionQuery = `
+            INSERT INTO workspace_versions (workspace_id, version, name, description, nodes, connections, created_by_id)
+            SELECT $1, COALESCE(MAX(version), 0) + 1, $2, $3, $4, $5, $6
+            FROM workspace_versions
+            WHERE workspace_id = $1;
+        `;
+        await client.query(newVersionQuery, [
+            updatedWorkspace.id,
+            updatedWorkspace.name,
+            restoreDescription,
+            updatedWorkspace.nodes,
+            updatedWorkspace.connections,
+            restoredByUserId
+        ]);
+
+        await client.query('COMMIT');
+        return { success: true, workspace: updatedWorkspace };
+
+    } catch (error: any) {
+        if (client) await client.query('ROLLBACK');
+        console.error(`[DB Actions] Erro ao restaurar versão ${versionId}:`, error);
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    } finally {
+        if (client) client.release();
+    }
+}
+
 
 // --- Flow Session Actions ---
 export async function saveSessionToDB(sessionData: FlowSession): Promise<{ success: boolean; error?: string }> {
@@ -933,7 +1068,7 @@ export async function loadSessionFromDB(sessionId: string): Promise<FlowSession 
 
 export async function deleteSessionFromDB(sessionId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const result = await runQuery('DELETE FROM flow_sessions WHERE id = $1', [sessionId]);
+    const result = await runQuery('DELETE FROM flow_sessions WHERE session_id = $1', [sessionId]);
      if (result.rowCount > 0) {
         return { success: true };
     } else {

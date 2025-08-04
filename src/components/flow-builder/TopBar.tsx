@@ -3,12 +3,12 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { WorkspaceData, FlowSession, EvolutionInstance, ChatwootInstance } from '@/lib/types';
+import type { WorkspaceData, FlowSession, EvolutionInstance, ChatwootInstance, WorkspaceVersion } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import {
   Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard,
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy, FileJson2,
-  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut, Trash2, Home, ChevronsLeft, CircleDot, Circle, Cloud, CloudOff, Loader2, PlusCircle, Shield, MessageCircle
+  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut, Trash2, Home, ChevronsLeft, CircleDot, Circle, Cloud, CloudOff, Loader2, PlusCircle, Shield, MessageCircle, History, GitCommit, Revert
 } from 'lucide-react';
 import {
   Dialog,
@@ -56,11 +56,15 @@ import { checkChatwootInstanceStatus } from '@/app/actions/chatwootApiActions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { saveEvolutionInstanceAction, deleteEvolutionInstanceAction, getChatwootInstancesForUserAction, saveChatwootInstanceAction, deleteChatwootInstanceAction } from '@/app/actions/instanceActions';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { getWorkspaceVersions, restoreWorkspaceVersion } from '@/app/actions/databaseActions';
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Textarea } from '@/components/ui/textarea';
 
 
 interface TopBarProps {
   workspaceName: string;
-  onSaveWorkspaces: () => void;
+  onSaveWorkspaces: (description?: string | null) => void;
   onDiscardChanges: () => void;
   onUpdateWorkspace: (newSettings: Partial<WorkspaceData>) => void;
   isChatPanelOpen: boolean;
@@ -111,6 +115,48 @@ const TopBar: React.FC<TopBarProps> = ({
   const [chatwootInstances, setChatwootInstances] = useState<ChatwootInstance[]>([]);
   const [isLoadingChatwootInstances, setIsLoadingChatwootInstances] = useState(false);
   const [editingChatwootInstance, setEditingChatwootInstance] = useState<ChatwootInstance | null>(null);
+
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [saveDescription, setSaveDescription] = useState('');
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
+  const [history, setHistory] = useState<WorkspaceVersion[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  const fetchWorkspaceHistory = useCallback(async () => {
+    if (!activeWorkspace?.id) return;
+    setIsLoadingHistory(true);
+    const result = await getWorkspaceVersions(activeWorkspace.id);
+    if (result.data) {
+        setHistory(result.data);
+    } else {
+        toast({ title: "Erro ao buscar histórico", description: result.error, variant: "destructive" });
+    }
+    setIsLoadingHistory(false);
+  }, [activeWorkspace?.id, toast]);
+
+  const handleOpenHistoryDialog = () => {
+    fetchWorkspaceHistory();
+    setIsHistoryDialogOpen(true);
+  };
+  
+  const handleRestoreVersion = async (versionId: number) => {
+    if (!user) return;
+    const result = await restoreWorkspaceVersion(versionId, user.id);
+    if (result.success) {
+      toast({ title: "Fluxo Restaurado", description: "O fluxo foi restaurado para a versão selecionada."});
+      onDiscardChanges(); // This reloads the workspace from DB
+      setIsHistoryDialogOpen(false);
+    } else {
+      toast({ title: "Erro ao Restaurar", description: result.error, variant: "destructive" });
+    }
+  };
+
+
+  const handleSaveWithDescription = () => {
+    onSaveWorkspaces(saveDescription);
+    setIsSaveDialogOpen(false);
+    setSaveDescription('');
+  };
 
   const fetchEvolutionInstances = useCallback(async () => {
     setIsLoadingEvolutionInstances(true);
@@ -358,6 +404,16 @@ const TopBar: React.FC<TopBarProps> = ({
               <span className="sr-only">Aumentar Zoom</span>
             </Button>
           </div>
+          
+           <Button
+            onClick={handleOpenHistoryDialog}
+            variant="outline"
+            size="icon"
+            className="h-9 w-9"
+            aria-label="Histórico de Versões"
+            >
+             <History className="h-4 w-4" />
+           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -385,7 +441,7 @@ const TopBar: React.FC<TopBarProps> = ({
           </DropdownMenu>
 
           <Button
-            onClick={onSaveWorkspaces}
+            onClick={() => setIsSaveDialogOpen(true)}
             variant="secondary"
             size="sm"
             disabled={!activeWorkspace}
@@ -458,6 +514,99 @@ const TopBar: React.FC<TopBarProps> = ({
           </DropdownMenu>
         </div>
       </header>
+      
+      {/* Save Dialog */}
+      <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
+        <DialogContent>
+            <DialogHeader>
+            <DialogTitle>Salvar Versão do Fluxo</DialogTitle>
+            <DialogDescription>
+                Adicione uma breve descrição para esta versão. Isso ajudará você a identificar esta alteração no futuro.
+            </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+            <Label htmlFor="save-description">Descrição (Opcional)</Label>
+            <Textarea
+                id="save-description"
+                value={saveDescription}
+                onChange={(e) => setSaveDescription(e.target.value)}
+                placeholder="Ex: Adicionado nó de boas-vindas"
+            />
+            </div>
+            <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onSaveWorkspaces(null)}>Salvar sem Descrição</Button>
+            <Button type="button" onClick={handleSaveWithDescription}>Salvar Versão</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* History Dialog */}
+        <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
+            <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col">
+                <DialogHeader>
+                    <DialogTitle>Histórico de Versões: {workspaceName}</DialogTitle>
+                    <DialogDescription>
+                        Visualize e restaure versões anteriores do seu fluxo de trabalho.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="flex-1 overflow-hidden">
+                    {isLoadingHistory ? (
+                         <div className="flex justify-center items-center h-full"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
+                    ) : history.length === 0 ? (
+                        <div className="text-center text-muted-foreground py-10">Nenhuma versão anterior encontrada.</div>
+                    ) : (
+                        <ScrollArea className="h-full">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Versão</TableHead>
+                                        <TableHead>Descrição</TableHead>
+                                        <TableHead>Salvo Por</TableHead>
+                                        <TableHead>Data</TableHead>
+                                        <TableHead className="text-right">Ações</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {history.map(v => (
+                                        <TableRow key={v.id}>
+                                            <TableCell className="font-bold">v{v.version}</TableCell>
+                                            <TableCell className="text-muted-foreground italic">{v.description || 'Nenhuma descrição'}</TableCell>
+                                            <TableCell>{v.created_by_username || 'Usuário desconhecido'}</TableCell>
+                                            <TableCell title={new Date(v.created_at).toLocaleString()}>{formatDistanceToNow(new Date(v.created_at), { addSuffix: true, locale: ptBR })}</TableCell>
+                                            <TableCell className="text-right">
+                                                 <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                         <Button variant="outline" size="sm" disabled={v.version === history[0].version}>
+                                                            <Revert className="mr-2 h-3.5 w-3.5" /> Restaurar
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Restaurar para a Versão {v.version}?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                Suas alterações atuais não salvas serão perdidas. O fluxo será revertido para o estado da versão {v.version}. Uma nova versão "Restaurado da v{v.version}" será criada.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={() => handleRestoreVersion(v.id)}>Sim, Restaurar</AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </ScrollArea>
+                    )}
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsHistoryDialogOpen(false)}>Fechar</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
 
       {/* Workspace Settings Dialog */}
       <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>

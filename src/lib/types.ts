@@ -255,6 +255,20 @@ export interface WorkspaceData {
   chatwoot_instance_id?: string | null;
 }
 
+// Version History Type
+export interface WorkspaceVersion {
+  id: number;
+  workspace_id: string;
+  version: number;
+  name: string;
+  description: string | null;
+  nodes: NodeData[];
+  connections: Connection[];
+  created_at: string | Date;
+  created_by_id: string;
+  created_by_username?: string; // To be joined in queries
+}
+
 export type AwaitingInputNode = 'input' | 'option' | 'date-input' | 'file-upload' | 'rating-input';
 export type FlowSessionAwaitingInputType = AwaitingInputNode | null;
 export type FlowContextType = 'evolution' | 'chatwoot' | 'test';

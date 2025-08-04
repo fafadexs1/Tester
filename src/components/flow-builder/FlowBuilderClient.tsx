@@ -305,14 +305,14 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     }
   }, [workspaceId, hasMounted, loadWorkspace, activeWorkspace]);
 
-  const handleSaveWorkspace = useCallback(async () => {
-    if (!activeWorkspace) {
-      console.warn("[FlowBuilderClient] No active workspace to save.");
-      toast({ title: "Aviso", description: "Nenhum fluxo ativo para salvar.", variant: "default" });
+  const handleSaveWorkspace = useCallback(async (versionDescription?: string | null) => {
+    if (!activeWorkspace || !user) {
+      console.warn("[FlowBuilderClient] No active workspace or user to save.");
+      toast({ title: "Aviso", description: "Nenhum fluxo ativo ou usuário para salvar.", variant: "default" });
       return;
     }
     console.log(`[FlowBuilderClient] Saving workspace ${activeWorkspace.id} to DB...`);
-    const result = await saveWorkspaceToDB(activeWorkspace);
+    const result = await saveWorkspaceToDB(activeWorkspace, user.id, versionDescription);
     if (result.success) {
       toast({
         title: "Fluxo Salvo!",
@@ -325,7 +325,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
         variant: "destructive",
       });
     }
-  }, [activeWorkspace, toast]);
+  }, [activeWorkspace, user, toast]);
 
 
   const handleDiscardChanges = useCallback(async () => {
