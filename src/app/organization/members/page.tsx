@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MoreHorizontal, PlusCircle, Trash2, Loader2, Crown } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Trash2, Loader2, Crown, ShieldCheck } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -45,6 +45,7 @@ export default function MembersPage() {
     
     const [openInviteDialog, setOpenInviteDialog] = useState(false);
     const [openCreateTeamDialog, setOpenCreateTeamDialog] = useState(false);
+    const [openCreateRoleDialog, setOpenCreateRoleDialog] = useState(false);
 
 
     const fetchData = useCallback(async () => {
@@ -137,7 +138,7 @@ export default function MembersPage() {
     return (
         <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
             <div className="flex items-center justify-between space-y-2">
-                <h2 className="text-3xl font-bold tracking-tight">Membros e Times</h2>
+                <h2 className="text-3xl font-bold tracking-tight">Gerenciamento de Acesso</h2>
                  <Dialog open={openInviteDialog} onOpenChange={setOpenInviteDialog}>
                     <DialogTrigger asChild>
                         <Button>
@@ -183,12 +184,13 @@ export default function MembersPage() {
                 </Dialog>
             </div>
             
-            <Tabs defaultValue="members">
+            <Tabs defaultValue="members" className="mt-4">
                 <TabsList>
                     <TabsTrigger value="members">Membros ({members.length})</TabsTrigger>
                     <TabsTrigger value="teams">Times ({teams.length})</TabsTrigger>
+                    <TabsTrigger value="roles">Cargos ({roles.length})</TabsTrigger>
                 </TabsList>
-                <TabsContent value="members">
+                <TabsContent value="members" className="mt-4">
                     <Card>
                         <Table>
                             <TableHeader>
@@ -247,7 +249,7 @@ export default function MembersPage() {
                         </Table>
                     </Card>
                 </TabsContent>
-                 <TabsContent value="teams">
+                 <TabsContent value="teams" className="mt-4">
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {teams.map(team => (
                             <Card key={team.id}>
@@ -318,7 +320,55 @@ export default function MembersPage() {
                         </Dialog>
                     </div>
                 </TabsContent>
+                <TabsContent value="roles" className="mt-4">
+                    <Card>
+                        <CardHeader>
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <CardTitle>Cargos e Permissões</CardTitle>
+                                    <CardDescription>Crie e gerencie cargos para controlar o acesso na sua organização.</CardDescription>
+                                </div>
+                                 <Button onClick={() => setOpenCreateRoleDialog(true)} disabled>
+                                    <PlusCircle className="mr-2 h-4 w-4" /> Novo Cargo
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                           <Table>
+                               <TableHeader>
+                                   <TableRow>
+                                       <TableHead>Cargo</TableHead>
+                                       <TableHead>Descrição</TableHead>
+                                       <TableHead>Permissões</TableHead>
+                                       <TableHead><span className="sr-only">Ações</span></TableHead>
+                                   </TableRow>
+                               </TableHeader>
+                               <TableBody>
+                                   {roles.map(role => (
+                                       <TableRow key={role.id}>
+                                           <TableCell className="font-medium flex items-center gap-2">
+                                                {role.name}
+                                                {role.is_system_role && <Badge variant="outline">Sistema</Badge>}
+                                            </TableCell>
+                                           <TableCell className="text-muted-foreground">{role.description}</TableCell>
+                                           <TableCell>
+                                               <Badge variant="secondary">{role.permissions.length} permissões</Badge>
+                                           </TableCell>
+                                           <TableCell className="text-right">
+                                                <Button variant="ghost" size="icon" disabled>
+                                                    <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                           </TableCell>
+                                       </TableRow>
+                                   ))}
+                               </TableBody>
+                           </Table>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
             </Tabs>
         </div>
     );
 }
+
+    

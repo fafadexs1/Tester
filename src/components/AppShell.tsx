@@ -14,6 +14,9 @@ import {
   SidebarTrigger,
   SidebarInset,
   SidebarProvider,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem
 } from '@/components/ui/sidebar';
 import {
   DropdownMenu,
@@ -76,20 +79,26 @@ const OrgNav = () => {
                     </Link>
                 </SidebarMenuItem>
                  <SidebarMenuItem>
-                    <Link href="/organization/members" passHref>
-                        <SidebarMenuButton isActive={isActive('/organization/members')} tooltip="Membros e Times">
-                           <Users />
-                           <span>Membros e Times</span>
-                        </SidebarMenuButton>
-                    </Link>
-                </SidebarMenuItem>
-                 <SidebarMenuItem>
-                    <Link href="/organization/roles" passHref>
-                        <SidebarMenuButton isActive={isActive('/organization/roles')} tooltip="Cargos e Permissões">
-                           <ShieldCheck />
-                           <span>Cargos e Permissões</span>
-                        </SidebarMenuButton>
-                    </Link>
+                    <SidebarMenuButton>
+                       <Users />
+                       <span>Gerenciar Acesso</span>
+                    </SidebarMenuButton>
+                    <SidebarMenuSub>
+                        <SidebarMenuSubItem>
+                             <Link href="/organization/members" passHref>
+                                <SidebarMenuSubButton isActive={isActive('/organization/members')}>
+                                    Membros e Times
+                                </SidebarMenuSubButton>
+                            </Link>
+                        </SidebarMenuSubItem>
+                         <SidebarMenuSubItem>
+                             <Link href="/organization/members?tab=roles" passHref>
+                                <SidebarMenuSubButton isActive={isActive('/organization/roles')}>
+                                    Cargos e Permissões
+                                </SidebarMenuSubButton>
+                            </Link>
+                        </SidebarMenuSubItem>
+                    </SidebarMenuSub>
                 </SidebarMenuItem>
                  <SidebarMenuItem>
                     <Link href="/organization/billing" passHref>
@@ -265,3 +274,5 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
+
+    
