@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import {
   Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard,
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy, FileJson2,
-  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut, Trash2, Home, ChevronsLeft, CircleDot, Circle, Cloud, CloudOff, Loader2, PlusCircle, Shield, MessageCircle, History, GitCommit, Revert
+  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut, Trash2, Home, ChevronsLeft, CircleDot, Circle, Cloud, CloudOff, Loader2, PlusCircle, Shield, MessageCircle, History, GitCommit
 } from 'lucide-react';
 import {
   Dialog,
@@ -56,7 +56,7 @@ import { checkChatwootInstanceStatus } from '@/app/actions/chatwootApiActions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { saveEvolutionInstanceAction, deleteEvolutionInstanceAction, getChatwootInstancesForUserAction, saveChatwootInstanceAction, deleteChatwootInstanceAction } from '@/app/actions/instanceActions';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { getWorkspaceVersions, restoreWorkspaceVersion } from '@/app/actions/databaseActions';
+import { getWorkspaceVersions, restoreWorkspaceVersion } from '@/app/actions/versionActions';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Textarea } from '@/components/ui/textarea';
@@ -125,7 +125,7 @@ const TopBar: React.FC<TopBarProps> = ({
   const fetchWorkspaceHistory = useCallback(async () => {
     if (!activeWorkspace?.id) return;
     setIsLoadingHistory(true);
-    const result = await getWorkspaceVersions(activeWorkspace.id);
+    const result = await getWorkspaceVersionsAction(activeWorkspace.id);
     if (result.data) {
         setHistory(result.data);
     } else {
@@ -141,9 +141,9 @@ const TopBar: React.FC<TopBarProps> = ({
   
   const handleRestoreVersion = async (versionId: number) => {
     if (!user) return;
-    const result = await restoreWorkspaceVersion(versionId, user.id);
+    const result = await restoreWorkspaceVersionAction(versionId);
     if (result.success) {
-      toast({ title: "Fluxo Restaurado", description: "O fluxo foi restaurado para a versão selecionada."});
+      toast({ title: "Fluxo Restaurado", description: "O fluxo será recarregado para a versão selecionada."});
       onDiscardChanges(); // This reloads the workspace from DB
       setIsHistoryDialogOpen(false);
     } else {
@@ -577,7 +577,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                                  <AlertDialog>
                                                     <AlertDialogTrigger asChild>
                                                          <Button variant="outline" size="sm" disabled={v.version === history[0].version}>
-                                                            <Revert className="mr-2 h-3.5 w-3.5" /> Restaurar
+                                                            <Undo2 className="mr-2 h-3.5 w-3.5" /> Restaurar
                                                         </Button>
                                                     </AlertDialogTrigger>
                                                     <AlertDialogContent>
