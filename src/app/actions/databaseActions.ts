@@ -84,6 +84,7 @@ async function initializeDatabaseSchema(): Promise<void> {
     console.log('[DB Actions] Initializing database schema if needed...');
     await client.query('BEGIN');
     
+    // Garante que a extensão para gerar UUIDs esteja habilitada ANTES de criar tabelas que a usam.
     await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
     
     // Tabela de Usuários - Criada antes de organizations para a foreign key
@@ -573,17 +574,20 @@ export async function createOrganization(name: string, ownerId: string): Promise
         );
         const newOrg = orgResult.rows[0];
         if (!newOrg) {
-            throw new Error("Failed to create organization row.");
+            throw new Error("Falha ao criar a linha da organização.");
         }
 
-        // Cria o role de Admin para a nova organização
+        // Cria o cargo de Admin para a nova organização e obtém o ID
         const adminRoleResult = await client.query<{ id: string }>(
             `INSERT INTO roles (organization_id, name, description, is_system_role) VALUES ($1, 'Admin', 'Acesso total a todas as configurações e fluxos.', TRUE) RETURNING id`,
             [newOrg.id]
         );
-        const adminRoleId = adminRoleResult.rows[0].id;
+        const adminRoleId = adminRoleResult.rows[0]?.id;
+        if (!adminRoleId) {
+            throw new Error("Falha ao criar o cargo de Admin para a nova organização.");
+        }
 
-        // Associa o owner à organização com o role de Admin
+        // Associa o proprietário à organização com o cargo de Admin
         await client.query(
             'INSERT INTO organization_users (user_id, organization_id, role_id) VALUES ($1, $2, $3)',
             [ownerId, newOrg.id, adminRoleId]
@@ -595,8 +599,8 @@ export async function createOrganization(name: string, ownerId: string): Promise
         
     } catch (error: any) {
         if (client) await client.query('ROLLBACK');
-        console.error('[DB Actions] Error creating organization:', error);
-        return { success: false, error: `Database error: ${error.message}` };
+        console.error('[DB Actions] Erro ao criar organização:', error);
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
     } finally {
         if (client) client.release();
     }
