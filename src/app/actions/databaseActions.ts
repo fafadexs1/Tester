@@ -1,6 +1,4 @@
 
-
-
 'use server';
 
 import { Pool, type QueryResult } from 'pg';
@@ -18,7 +16,6 @@ function getDbPool(): Pool {
         return pool;
     }
     
-    console.log('[DB Actions] Creating new PostgreSQL connection pool...');
     const useSSL = process.env.POSTGRES_SSL === 'true';
     pool = new Pool({
         host: process.env.POSTGRES_HOST,
@@ -1215,9 +1212,7 @@ export async function loadChatwootInstanceFromDB(instanceId: string): Promise<Ch
 
 (async () => {
     try {
-        console.log('[DB Actions] Performing initial connection check and schema initialization...');
         await initializeDatabaseSchema();
-        console.log('[DB Actions] Database connection and schema are ready.');
     } catch (error: any) {
         console.error('[DB Actions] FATAL: Initial database setup failed.', {
             message: error.message,
@@ -1494,3 +1489,5 @@ export async function getListingDetails(listingId: string): Promise<{ data?: Mar
         return { error: `Erro de banco de dados: ${error.message}` };
     }
 }
+
+    
