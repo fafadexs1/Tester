@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -166,11 +165,10 @@ const TopBar: React.FC<TopBarProps> = ({
   const fetchEvolutionInstances = useCallback(async () => {
     setIsLoadingEvolutionInstances(true);
     try {
-      const response = await fetch('/api/instances/evolution');
-      if (!response.ok) throw new Error('Falha ao buscar instâncias.');
-      const data = await response.json();
-      setEvolutionInstances(data);
-      return data;
+      const result = await getEvolutionInstancesForUser();
+      if (result.error) throw new Error(result.error);
+      setEvolutionInstances(result.data || []);
+      return result.data || [];
     } catch (error: any) {
       toast({ title: "Erro ao Carregar Instâncias Evolution", description: error.message, variant: "destructive" });
       setEvolutionInstances([]);
@@ -183,11 +181,10 @@ const TopBar: React.FC<TopBarProps> = ({
   const fetchChatwootInstances = useCallback(async () => {
     setIsLoadingChatwootInstances(true);
     try {
-      const response = await fetch('/api/instances/chatwoot');
-      if (!response.ok) throw new Error('Falha ao buscar instâncias Chatwoot.');
-      const data = await response.json();
-      setChatwootInstances(data || []);
-      return data || [];
+      const result = await getChatwootInstancesForUserAction();
+      if (result.error) throw new Error(result.error);
+      setChatwootInstances(result.data || []);
+      return result.data || [];
     } catch (error: any) {
       toast({ title: "Erro ao Carregar Instâncias Chatwoot", description: error.message, variant: "destructive" });
       setChatwootInstances([]);
@@ -200,11 +197,10 @@ const TopBar: React.FC<TopBarProps> = ({
   const fetchDialogyInstances = useCallback(async () => {
     setIsLoadingDialogyInstances(true);
     try {
-      const response = await fetch('/api/instances/dialogy');
-      if (!response.ok) throw new Error('Falha ao buscar instâncias Dialogy.');
-      const data = await response.json();
-      setDialogyInstances(data || []);
-      return data || [];
+      const result = await getDialogyInstancesForUserAction();
+      if (result.error) throw new Error(result.error);
+      setDialogyInstances(result.data || []);
+      return result.data || [];
     } catch (error: any) {
       toast({ title: "Erro ao Carregar Instâncias Dialogy", description: error.message, variant: "destructive" });
       setDialogyInstances([]);
@@ -214,14 +210,24 @@ const TopBar: React.FC<TopBarProps> = ({
     }
   }, [toast]);
 
-  const handleOpenSettings = async () => {
+  const handleOpenSettings = useCallback(async () => {
     setIsSettingsDialogOpen(true);
     await Promise.all([
       fetchEvolutionInstances(),
       fetchChatwootInstances(),
       fetchDialogyInstances()
     ]);
-  };
+  }, [fetchEvolutionInstances, fetchChatwootInstances, fetchDialogyInstances]);
+
+  const handleOpenInstanceManager = useCallback(async () => {
+    setIsInstanceManagerOpen(true);
+    await Promise.all([
+      fetchEvolutionInstances(),
+      fetchChatwootInstances(),
+      fetchDialogyInstances()
+    ]);
+  }, [fetchEvolutionInstances, fetchChatwootInstances, fetchDialogyInstances]);
+
 
   const handleSaveEvolutionInstance = async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -547,7 +553,7 @@ const TopBar: React.FC<TopBarProps> = ({
                     </DropdownMenuItem>
                 </Link>
               )}
-              <DropdownMenuItem onSelect={() => setIsInstanceManagerOpen(true)}>
+              <DropdownMenuItem onSelect={handleOpenInstanceManager}>
                 <PlugZap className="mr-2 h-4 w-4" />
                 <span>Gerenciar Instâncias</span>
               </DropdownMenuItem>
@@ -696,7 +702,7 @@ const TopBar: React.FC<TopBarProps> = ({
                         </Select>
                          <p className="text-xs text-muted-foreground mt-1.5">
                           Precisa adicionar ou alterar uma instância?
-                          <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => { setIsSettingsDialogOpen(false); setIsInstanceManagerOpen(true); }}>
+                          <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => { setIsSettingsDialogOpen(false); handleOpenInstanceManager(); }}>
                             Gerenciar Instâncias
                           </Button>
                         </p>
@@ -779,7 +785,7 @@ const TopBar: React.FC<TopBarProps> = ({
                     </Select>
                     <p className="text-xs text-muted-foreground mt-1.5">
                       Selecione uma instância para usar o nó "Enviar Mensagem (Dialogy)".
-                      <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => { setIsSettingsDialogOpen(false); setIsInstanceManagerOpen(true); setInstanceManagerTab('dialogy'); }}>
+                      <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => { setIsSettingsDialogOpen(false); handleOpenInstanceManager(); setInstanceManagerTab('dialogy'); }}>
                         Gerenciar Instâncias
                       </Button>
                     </p>

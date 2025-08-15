@@ -35,14 +35,14 @@ export async function getEvolutionInstancesForUser(): Promise<{ data?: Evolution
     }
 
     try {
-        const result = await runQuery<EvolutionInstance>(
+        const result = await runQuery<any>(
             'SELECT id, name, base_url, api_key FROM evolution_instances WHERE user_id = $1 ORDER BY name',
             [user.id]
         );
         const instances = result.rows.map(row => ({
             id: row.id,
             name: row.name,
-            baseUrl: (row as any).base_url,
+            baseUrl: row.base_url,
             apiKey: row.api_key,
             status: 'unconfigured' as const
         }));
@@ -80,7 +80,7 @@ export async function saveEvolutionInstanceAction(
         let result;
 
         if (id) {
-            result = await runQuery<EvolutionInstance>(
+            result = await runQuery<any>(
                 `UPDATE evolution_instances 
                  SET name = $1, base_url = $2, api_key = $3, updated_at = NOW() 
                  WHERE id = $4 AND user_id = $5 
@@ -88,7 +88,7 @@ export async function saveEvolutionInstanceAction(
                 [name, baseUrl, apiKey || '', id, user.id]
             );
         } else {
-            result = await runQuery<EvolutionInstance>(
+            result = await runQuery<any>(
                 `INSERT INTO evolution_instances (user_id, name, base_url, api_key) 
                  VALUES ($1, $2, $3, $4) 
                  RETURNING id, name, base_url, api_key`,
@@ -101,7 +101,7 @@ export async function saveEvolutionInstanceAction(
             const instance: EvolutionInstance = {
                  id: dbRow.id,
                  name: dbRow.name,
-                 baseUrl: (dbRow as any).base_url,
+                 baseUrl: dbRow.base_url,
                  apiKey: dbRow.api_key,
                  status: 'unconfigured'
             };
@@ -153,15 +153,15 @@ export async function getChatwootInstancesForUserAction(): Promise<{ data?: Chat
     }
 
     try {
-        const result = await runQuery<ChatwootInstance>(
+        const result = await runQuery<any>(
             'SELECT id, name, base_url, api_access_token FROM chatwoot_instances WHERE user_id = $1 ORDER BY name',
             [user.id]
         );
         const instances = result.rows.map(row => ({
             id: row.id,
             name: row.name,
-            baseUrl: (row as any).base_url,
-            apiAccessToken: (row as any).api_access_token,
+            baseUrl: row.base_url,
+            apiAccessToken: row.api_access_token,
             status: 'unconfigured' as const
         }));
         return { data: instances };
@@ -198,7 +198,7 @@ export async function saveChatwootInstanceAction(
         let result;
 
         if (id) {
-            result = await runQuery<ChatwootInstance>(
+            result = await runQuery<any>(
                 `UPDATE chatwoot_instances 
                  SET name = $1, base_url = $2, api_access_token = $3, updated_at = NOW() 
                  WHERE id = $4 AND user_id = $5 
@@ -206,7 +206,7 @@ export async function saveChatwootInstanceAction(
                 [name, baseUrl, apiAccessToken, id, user.id]
             );
         } else {
-            result = await runQuery<ChatwootInstance>(
+            result = await runQuery<any>(
                 `INSERT INTO chatwoot_instances (user_id, name, base_url, api_access_token) 
                  VALUES ($1, $2, $3, $4) 
                  RETURNING id, name, base_url, api_access_token`,
@@ -219,8 +219,8 @@ export async function saveChatwootInstanceAction(
             const instance: ChatwootInstance = {
                  id: dbRow.id,
                  name: dbRow.name,
-                 baseUrl: (dbRow as any).base_url,
-                 apiAccessToken: (dbRow as any).api_access_token,
+                 baseUrl: dbRow.base_url,
+                 apiAccessToken: dbRow.api_access_token,
                  status: 'unconfigured'
             };
             return { success: true, instance: instance };
@@ -270,15 +270,15 @@ export async function getDialogyInstancesForUserAction(): Promise<{ data?: Dialo
     }
 
     try {
-        const result = await runQuery<DialogyInstance>(
+        const result = await runQuery<any>(
             'SELECT id, name, base_url, api_key FROM dialogy_instances WHERE user_id = $1 ORDER BY name',
             [user.id]
         );
         const instances = result.rows.map(row => ({
             id: row.id,
             name: row.name,
-            baseUrl: (row as any).base_url,
-            apiKey: (row as any).api_key,
+            baseUrl: row.base_url,
+            apiKey: row.api_key,
             status: 'unconfigured' as const
         }));
         return { data: instances };
@@ -315,7 +315,7 @@ export async function saveDialogyInstanceAction(
         let result;
 
         if (id) {
-            result = await runQuery<DialogyInstance>(
+            result = await runQuery<any>(
                 `UPDATE dialogy_instances 
                  SET name = $1, base_url = $2, api_key = $3, updated_at = NOW() 
                  WHERE id = $4 AND user_id = $5 
@@ -323,7 +323,7 @@ export async function saveDialogyInstanceAction(
                 [name, baseUrl, apiKey, id, user.id]
             );
         } else {
-            result = await runQuery<DialogyInstance>(
+            result = await runQuery<any>(
                 `INSERT INTO dialogy_instances (user_id, name, base_url, api_key) 
                  VALUES ($1, $2, $3, $4) 
                  RETURNING id, name, base_url, api_key`,
@@ -336,7 +336,7 @@ export async function saveDialogyInstanceAction(
             const instance: DialogyInstance = {
                  id: dbRow.id,
                  name: dbRow.name,
-                 baseUrl: (dbRow as any).base_url,
+                 baseUrl: dbRow.base_url,
                  apiKey: dbRow.api_key,
                  status: 'unconfigured'
             };
