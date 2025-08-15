@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -822,7 +821,7 @@ const TopBar: React.FC<TopBarProps> = ({
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 {editingEvolutionInstance ? (
-                                    <form onSubmit={handleSaveEvolutionInstance} className="p-4 border rounded-lg space-y-3">
+                                    <form onSubmit={handleSaveEvolutionInstance} key={editingEvolutionInstance.id || 'new'} className="p-4 border rounded-lg space-y-3">
                                         <h3 className="font-semibold">{editingEvolutionInstance.id ? 'Editando Instância' : 'Nova Instância'}</h3>
                                         <input type="hidden" name="id" value={editingEvolutionInstance.id || ''} />
                                         <div>
@@ -875,7 +874,7 @@ const TopBar: React.FC<TopBarProps> = ({
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 {editingChatwootInstance ? (
-                                    <form onSubmit={handleSaveChatwootInstance} className="p-4 border rounded-lg space-y-3">
+                                    <form onSubmit={handleSaveChatwootInstance} key={editingChatwootInstance.id || 'new'} className="p-4 border rounded-lg space-y-3">
                                         <h3 className="font-semibold">{editingChatwootInstance.id ? 'Editando Instância' : 'Nova Instância'}</h3>
                                         <input type="hidden" name="id" value={editingChatwootInstance.id || ''} />
                                         <div>
@@ -931,7 +930,7 @@ const TopBar: React.FC<TopBarProps> = ({
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 {editingDialogyInstance ? (
-                                    <form onSubmit={handleSaveDialogyInstance} className="p-4 border rounded-lg space-y-3">
+                                    <form onSubmit={handleSaveDialogyInstance} key={editingDialogyInstance.id || 'new'} className="p-4 border rounded-lg space-y-3">
                                         <h3 className="font-semibold">{editingDialogyInstance.id ? 'Editando Instância' : 'Nova Instância'}</h3>
                                         <input type="hidden" name="id" value={editingDialogyInstance.id || ''} />
                                         <div>
@@ -1124,5 +1123,3 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
-
-    
