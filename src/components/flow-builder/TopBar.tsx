@@ -53,12 +53,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { checkEvolutionInstanceStatus } from '@/app/actions/evolutionApiActions';
 import { checkChatwootInstanceStatus } from '@/app/actions/chatwootApiActions';
 import { checkDialogyInstanceStatus } from '@/app/actions/dialogyApiActions';
-import { saveEvolutionInstanceAction, deleteEvolutionInstanceAction, getEvolutionInstancesForUser, getChatwootInstancesForUserAction, saveChatwootInstanceAction, deleteChatwootInstanceAction, getDialogyInstancesForUserAction, saveDialogyInstanceAction, deleteDialogyInstanceAction } from '@/app/actions/instanceActions';
+import { saveEvolutionInstanceAction, deleteEvolutionInstanceAction, getEvolutionInstancesForUser, saveChatwootInstanceAction, deleteChatwootInstanceAction, getChatwootInstancesForUserAction, getDialogyInstancesForUserAction, saveDialogyInstanceAction, deleteDialogyInstanceAction } from '@/app/actions/instanceActions';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { getWorkspaceVersionsAction, restoreWorkspaceVersionAction } from '@/app/actions/versionActions';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 interface TopBarProps {
@@ -1129,5 +1130,3 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
-
-    
