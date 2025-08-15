@@ -10,7 +10,7 @@ import {
   deleteSessionFromDB,
   loadWorkspaceFromDB,
   loadChatwootInstanceFromDB,
-  loadWorkspacesForOwnerFromDB,
+  loadWorkspacesForOrganizationFromDB,
 } from '@/app/actions/databaseActions';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData, FlowContextType, User } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
@@ -468,7 +468,7 @@ async function storeRequestDetails(
   let actualPayloadToExtractFrom = parsedPayload;
   
   // Handle Chatwoot array payload structure
-  if (Array.isArray(parsedPayload) && parsedPayload.length > 0 && typeof parsedPayload[0] === 'object' && parsedPayload[0].event === 'message_created') {
+  if (Array.isArray(parsedPayload) && parsedPayload.length > 0 && typeof parsedPayload[0] === 'object') {
     actualPayloadToExtractFrom = parsedPayload[0];
   }
   
@@ -477,16 +477,23 @@ async function storeRequestDetails(
       const chatwootContent = getProperty(actualPayloadToExtractFrom, 'content');
       const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id');
       const chatwootMessageType = getProperty(actualPayloadToExtractFrom, 'message_type');
-      const chatwootSenderType = getProperty(actualPayloadToExtractFrom, 'sender_type');
       
       const evolutionSenderJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid');
       
+      const dialogyEvent = getProperty(actualPayloadToExtractFrom, 'event');
+      const dialogyConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id');
+
       // Prioritize Chatwoot detection for incoming messages
       if (chatwootEvent === 'message_created' && chatwootConversationId && chatwootMessageType === 'incoming') {
           flowContext = 'chatwoot';
           sessionKeyIdentifier = `chatwoot_conv_${chatwootConversationId}`;
           extractedMessage = String(chatwootContent || '').trim();
           console.log(`[storeRequestDetails] Detected Chatwoot payload. Session Identifier: "${sessionKeyIdentifier}"`);
+      } else if (dialogyEvent === 'message.created' && dialogyConversationId) {
+          flowContext = 'dialogy';
+          sessionKeyIdentifier = `dialogy_conv_${dialogyConversationId}`;
+          extractedMessage = getProperty(actualPayloadToExtractFrom, 'message.content', '').trim();
+          console.log(`[storeRequestDetails] Detected Dialogy payload. Session Identifier: "${sessionKeyIdentifier}"`);
       } else if (evolutionSenderJid) { // Fallback to Evolution
           flowContext = 'evolution';
           sessionKeyIdentifier = `evolution_jid_${evolutionSenderJid}`;
@@ -549,15 +556,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const receivedMessageText = loggedEntry.extractedMessage;
     const flowContext = loggedEntry.flow_context;
     
-    // Check for human agent intervention in Chatwoot
+    // Check for human agent intervention
     if (flowContext === 'chatwoot') {
         let payloadToCheck = parsedBody;
         if (Array.isArray(payloadToCheck) && payloadToCheck.length > 0) {
             payloadToCheck = payloadToCheck[0];
         }
         if (getProperty(payloadToCheck, 'sender_type') === 'User') {
-            console.log(`[API Evolution Trigger] Human agent message detected in conversation ${sessionKeyIdentifier}. Pausing automation. No further action will be taken.`);
+            console.log(`[API Trigger] Human agent (Chatwoot User) message detected in conversation ${sessionKeyIdentifier}. Pausing automation.`);
             return NextResponse.json({ message: "Automation paused due to human intervention." }, { status: 200 });
+        }
+    }
+     if (flowContext === 'dialogy') {
+        const fromMe = getProperty(parsedBody, 'message.from_me');
+        const status = getProperty(parsedBody, 'conversation.status');
+        if (fromMe === true) {
+             console.log(`[API Trigger] Dialogy message from agent (from_me=true) in conversation ${sessionKeyIdentifier}. Ignoring.`);
+             return NextResponse.json({ message: "Message from agent, automation ignored." }, { status: 200 });
+        }
+        if (status === 'atendimento') {
+             console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status 'atendimento'. Ignoring.`);
+             return NextResponse.json({ message: "Conversation in 'atendimento', automation ignored." }, { status: 200 });
         }
     }
     
@@ -758,9 +777,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       
       const defaultWorkspace = await loadWorkspaceFromDB(webhookId);
 
-      if (defaultWorkspace?.owner_id) {
-          const ownerId = defaultWorkspace.owner_id;
-          const allWorkspaces = await loadWorkspacesForOwnerFromDB(ownerId);
+      if (defaultWorkspace?.organization_id) {
+          const organizationId = defaultWorkspace.organization_id;
+          const allWorkspaces = await loadWorkspacesForOrganizationFromDB(organizationId);
 
           for (const ws of allWorkspaces) {
               const startNode = ws.nodes.find(n => n.type === 'start');
@@ -805,13 +824,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
 
       const initialVars: Record<string, any> = {
-        whatsapp_sender_jid: getProperty(payloadToUse, 'data.key.remoteJid') || getProperty(payloadToUse, 'sender.identifier'),
         mensagem_whatsapp: receivedMessageText || '',
         webhook_payload: payloadToUse,
         session_id: sessionKeyIdentifier,
       };
 
-      if (flowContext === 'chatwoot') {
+      if (flowContext === 'evolution') {
+        setProperty(initialVars, 'whatsapp_sender_jid', getProperty(payloadToUse, 'data.key.remoteJid') || getProperty(payloadToUse, 'sender.identifier'));
+      } else if (flowContext === 'chatwoot') {
         const chatwootMappings = {
              chatwoot_conversation_id: 'conversation.id',
              chatwoot_contact_id: 'sender.id',
@@ -828,6 +848,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             }
         }
          console.log(`[API Evolution Trigger] Auto-injected Chatwoot variables:`, initialVars);
+      } else if (flowContext === 'dialogy') {
+          const dialogyMappings = {
+              dialogy_conversation_id: 'conversation.id',
+              dialogy_contact_id: 'contact.id',
+              dialogy_account_id: 'account.id',
+              contact_name: 'contact.name',
+              contact_phone: 'contact.phone_number',
+          };
+          for (const [varName, path] of Object.entries(dialogyMappings)) {
+              const value = getProperty(payloadToUse, path);
+              if (value !== undefined) {
+                  setProperty(initialVars, varName, value);
+              }
+          }
+          console.log(`[API Evolution Trigger] Auto-injected Dialogy variables:`, initialVars);
       }
       
       if (matchingTrigger.variableMappings) {
