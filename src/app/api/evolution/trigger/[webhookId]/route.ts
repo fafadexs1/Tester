@@ -1,15 +1,18 @@
+
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getProperty, setProperty } from 'dot-prop';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
 import { sendChatwootMessageAction } from '@/app/actions/chatwootApiActions';
+import { sendDialogyMessageAction } from '@/app/actions/dialogyApiActions';
 import {
   loadSessionFromDB,
   saveSessionToDB,
   deleteSessionFromDB,
   loadWorkspaceFromDB,
   loadChatwootInstanceFromDB,
+  loadDialogyInstanceFromDB,
   loadWorkspacesForOrganizationFromDB,
 } from '@/app/actions/databaseActions';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData, FlowContextType, User } from '@/lib/types';
@@ -89,8 +92,22 @@ async function executeFlow(
             console.warn(`[Flow Engine - ${session.session_id}] sendOmniChannelMessage called with empty content.`);
             return;
         }
-
-        if (session.flow_context === 'chatwoot' && workspace.chatwoot_instance_id) {
+        
+        if (session.flow_context === 'dialogy' && workspace.dialogy_instance_id) {
+            const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
+            const chatId = getProperty(session.flow_variables, 'dialogy_conversation_id');
+            if (dialogyInstance && chatId) {
+                console.log(`[Flow Engine - ${session.session_id}] Sending message via Dialogy...`);
+                 await sendDialogyMessageAction({
+                    baseUrl: dialogyInstance.baseUrl,
+                    apiKey: dialogyInstance.apiKey,
+                    chatId: chatId,
+                    content: content,
+                });
+            } else {
+                console.error(`[Flow Engine - ${session.session_id}] Dialogy instance or chatId missing. Cannot send message via Dialogy.`);
+            }
+        } else if (session.flow_context === 'chatwoot' && workspace.chatwoot_instance_id) {
             const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
             if (chatwootInstance && session.flow_variables.chatwoot_account_id && session.flow_variables.chatwoot_conversation_id) {
                 console.log(`[Flow Engine - ${session.session_id}] Sending message via Chatwoot...`);

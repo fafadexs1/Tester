@@ -1229,7 +1229,7 @@ export async function getChatwootInstancesForUser(userId: string): Promise<{ dat
 }
 
 export async function loadChatwootInstanceFromDB(instanceId: string): Promise<ChatwootInstance | null> {
-    const result = await runQuery<ChatwootInstance>(
+    const result = await runQuery<any>(
         'SELECT id, name, base_url, api_access_token FROM chatwoot_instances WHERE id = $1',
         [instanceId]
     );
@@ -1238,8 +1238,27 @@ export async function loadChatwootInstanceFromDB(instanceId: string): Promise<Ch
         return {
             id: row.id,
             name: row.name,
-            baseUrl: (row as any).base_url,
-            apiAccessToken: (row as any).api_access_token,
+            baseUrl: row.base_url,
+            apiAccessToken: row.api_access_token,
+            status: 'unconfigured'
+        };
+    }
+    return null;
+}
+
+// --- Dialogy Instance Actions ---
+export async function loadDialogyInstanceFromDB(instanceId: string): Promise<DialogyInstance | null> {
+    const result = await runQuery<any>(
+        'SELECT id, name, base_url, api_key FROM dialogy_instances WHERE id = $1',
+        [instanceId]
+    );
+    if (result.rows.length > 0) {
+        const row = result.rows[0];
+        return {
+            id: row.id,
+            name: row.name,
+            baseUrl: row.base_url,
+            apiKey: row.api_key,
             status: 'unconfigured'
         };
     }
