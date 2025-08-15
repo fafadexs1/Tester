@@ -3,7 +3,7 @@
 
 import { Pool, type QueryResult } from 'pg';
 import dotenv from 'dotenv';
-import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, Organization, Team, OrganizationUser, SmtpSettings, Role, Permission, WorkspaceVersion, AuditLog, MarketplaceListing, UserPurchase } from '@/lib/types';
+import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, DialogyInstance, Organization, Team, OrganizationUser, SmtpSettings, Role, Permission, WorkspaceVersion, AuditLog, MarketplaceListing, UserPurchase } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { redirect } from 'next/navigation';
 
@@ -290,6 +290,7 @@ async function initializeDatabaseSchema(): Promise<void> {
         evolution_instance_id UUID,
         chatwoot_enabled BOOLEAN DEFAULT false,
         chatwoot_instance_id UUID,
+        dialogy_instance_id UUID,
         UNIQUE (organization_id, name)
       );
     `);
@@ -340,6 +341,19 @@ async function initializeDatabaseSchema(): Promise<void> {
         name TEXT NOT NULL,
         base_url TEXT NOT NULL,
         api_access_token TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, name)
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS dialogy_instances (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        base_url TEXT NOT NULL,
+        api_key TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(user_id, name)
@@ -400,6 +414,12 @@ async function initializeDatabaseSchema(): Promise<void> {
       await client.query('ALTER TABLE workspaces ADD COLUMN chatwoot_instance_id UUID;');
     }
     
+    const dialogyInstanceIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='dialogy_instance_id'`);
+    if (dialogyInstanceIdColInfo.rowCount === 0) {
+      console.log("[DB Actions] 'dialogy_instance_id' column not found in 'workspaces'. Adding column...");
+      await client.query('ALTER TABLE workspaces ADD COLUMN dialogy_instance_id UUID;');
+    }
+    
     const fkConstraintExistsEvo = await client.query(`
         SELECT 1 FROM pg_constraint 
         WHERE conname = 'workspaces_evolution_instance_id_fkey' AND conrelid = 'workspaces'::regclass;
@@ -428,6 +448,21 @@ async function initializeDatabaseSchema(): Promise<void> {
         FOREIGN KEY (chatwoot_instance_id) REFERENCES chatwoot_instances(id) ON DELETE SET NULL;
       `);
       console.log("[DB Actions] Foreign key 'workspaces_chatwoot_instance_id_fkey' added.");
+    }
+
+    const fkConstraintExistsDialogy = await client.query(`
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'workspaces_dialogy_instance_id_fkey' AND conrelid = 'workspaces'::regclass;
+    `);
+
+    if (fkConstraintExistsDialogy.rowCount === 0) {
+      console.log("[DB Actions] Foreign key for 'dialogy_instance_id' not found. Adding constraint...");
+      await client.query(`
+        ALTER TABLE workspaces 
+        ADD CONSTRAINT workspaces_dialogy_instance_id_fkey 
+        FOREIGN KEY (dialogy_instance_id) REFERENCES dialogy_instances(id) ON DELETE SET NULL;
+      `);
+      console.log("[DB Actions] Foreign key 'workspaces_dialogy_instance_id_fkey' added.");
     }
 
 
@@ -835,8 +870,8 @@ export async function saveWorkspaceToDB(
 
     // Upsert the main workspace table
     const upsertWorkspaceQuery = `
-      INSERT INTO workspaces (id, name, nodes, connections, owner_id, organization_id, evolution_instance_id, chatwoot_enabled, chatwoot_instance_id, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+      INSERT INTO workspaces (id, name, nodes, connections, owner_id, organization_id, evolution_instance_id, chatwoot_enabled, chatwoot_instance_id, dialogy_instance_id, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
       ON CONFLICT (id) DO UPDATE
       SET name = EXCLUDED.name,
           nodes = EXCLUDED.nodes,
@@ -844,7 +879,8 @@ export async function saveWorkspaceToDB(
           updated_at = NOW(),
           evolution_instance_id = EXCLUDED.evolution_instance_id,
           chatwoot_enabled = EXCLUDED.chatwoot_enabled,
-          chatwoot_instance_id = EXCLUDED.chatwoot_instance_id;
+          chatwoot_instance_id = EXCLUDED.chatwoot_instance_id,
+          dialogy_instance_id = EXCLUDED.dialogy_instance_id;
     `;
     await client.query(upsertWorkspaceQuery, [
       workspaceData.id,
@@ -856,6 +892,7 @@ export async function saveWorkspaceToDB(
       workspaceData.evolution_instance_id || null,
       workspaceData.chatwoot_enabled || false,
       workspaceData.chatwoot_instance_id || null,
+      workspaceData.dialogy_instance_id || null,
     ]);
 
     // Create a new version in the history table
@@ -894,7 +931,7 @@ export async function loadWorkspaceFromDB(workspaceId: string): Promise<Workspac
   try {
     const result = await runQuery<WorkspaceData>(`
         SELECT 
-            id, name, nodes, connections, owner_id, organization_id, created_at, updated_at, evolution_instance_id, chatwoot_enabled, chatwoot_instance_id
+            id, name, nodes, connections, owner_id, organization_id, created_at, updated_at, evolution_instance_id, chatwoot_enabled, chatwoot_instance_id, dialogy_instance_id
         FROM workspaces 
         WHERE id = $1
     `, [workspaceId]);
@@ -921,7 +958,7 @@ export async function loadWorkspacesForOrganizationFromDB(organizationId: string
     }
     const result = await runQuery<WorkspaceData>(
       `SELECT 
-        id, name, nodes, connections, owner_id, organization_id, created_at, updated_at, evolution_instance_id, chatwoot_enabled, chatwoot_instance_id
+        id, name, nodes, connections, owner_id, organization_id, created_at, updated_at, evolution_instance_id, chatwoot_enabled, chatwoot_instance_id, dialogy_instance_id
        FROM workspaces 
        WHERE organization_id = $1 
        ORDER BY updated_at DESC`,
