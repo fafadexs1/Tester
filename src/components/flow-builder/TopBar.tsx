@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { WorkspaceData, FlowSession, EvolutionInstance, ChatwootInstance, WorkspaceVersion } from '@/lib/types';
+import type { WorkspaceData, FlowSession, EvolutionInstance, ChatwootInstance, WorkspaceVersion, DialogyInstance } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import {
   Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard,
@@ -53,8 +53,9 @@ import Link from 'next/link';
 import { v4 as uuidv4 } from 'uuid';
 import { checkEvolutionInstanceStatus } from '@/app/actions/evolutionApiActions';
 import { checkChatwootInstanceStatus } from '@/app/actions/chatwootApiActions';
+import { checkDialogyInstanceStatus } from '@/app/actions/dialogyApiActions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { saveEvolutionInstanceAction, deleteEvolutionInstanceAction, getChatwootInstancesForUserAction, saveChatwootInstanceAction, deleteChatwootInstanceAction } from '@/app/actions/instanceActions';
+import { saveEvolutionInstanceAction, deleteEvolutionInstanceAction, getChatwootInstancesForUserAction, saveChatwootInstanceAction, deleteChatwootInstanceAction, getDialogyInstancesForUserAction, saveDialogyInstanceAction, deleteDialogyInstanceAction } from '@/app/actions/instanceActions';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { getWorkspaceVersionsAction, restoreWorkspaceVersionAction } from '@/app/actions/versionActions';
 import { formatDistanceToNow } from 'date-fns';
@@ -115,6 +116,10 @@ const TopBar: React.FC<TopBarProps> = ({
   const [chatwootInstances, setChatwootInstances] = useState<ChatwootInstance[]>([]);
   const [isLoadingChatwootInstances, setIsLoadingChatwootInstances] = useState(false);
   const [editingChatwootInstance, setEditingChatwootInstance] = useState<ChatwootInstance | null>(null);
+
+  const [dialogyInstances, setDialogyInstances] = useState<DialogyInstance[]>([]);
+  const [isLoadingDialogyInstances, setIsLoadingDialogyInstances] = useState(false);
+  const [editingDialogyInstance, setEditingDialogyInstance] = useState<DialogyInstance | null>(null);
 
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
   const [saveDescription, setSaveDescription] = useState('');
@@ -192,12 +197,29 @@ const TopBar: React.FC<TopBarProps> = ({
     }
   }, [toast]);
 
+  const fetchDialogyInstances = useCallback(async () => {
+    setIsLoadingDialogyInstances(true);
+    try {
+      const response = await fetch('/api/instances/dialogy');
+      if (!response.ok) throw new Error('Falha ao buscar instâncias Dialogy.');
+      const data = await response.json();
+      setDialogyInstances(data || []);
+      return data || [];
+    } catch (error: any) {
+      toast({ title: "Erro ao Carregar Instâncias Dialogy", description: error.message, variant: "destructive" });
+      setDialogyInstances([]);
+      return [];
+    } finally {
+      setIsLoadingDialogyInstances(false);
+    }
+  }, [toast]);
+
   const handleOpenSettings = async () => {
     setIsSettingsDialogOpen(true);
-    // Pré-carrega ambas as listas de instâncias para o dropdown
     await Promise.all([
       fetchEvolutionInstances(),
-      fetchChatwootInstances()
+      fetchChatwootInstances(),
+      fetchDialogyInstances()
     ]);
   };
 
@@ -244,6 +266,30 @@ const TopBar: React.FC<TopBarProps> = ({
       if (result.success) {
           toast({ title: "Sucesso!", description: "Instância do Chatwoot excluída." });
           await fetchChatwootInstances();
+      } else {
+          toast({ title: "Erro", description: result.error || "Falha ao excluir instância.", variant: "destructive" });
+      }
+  };
+
+  const handleSaveDialogyInstance = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const result = await saveDialogyInstanceAction(formData);
+
+    if (result.success) {
+        toast({ title: "Sucesso!", description: "Instância da Dialogy salva." });
+        setEditingDialogyInstance(null);
+        await fetchDialogyInstances();
+    } else {
+        toast({ title: "Erro", description: result.error || "Falha ao salvar instância.", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteDialogyInstance = async (instanceId: string) => {
+      const result = await deleteDialogyInstanceAction(instanceId);
+      if (result.success) {
+          toast({ title: "Sucesso!", description: "Instância da Dialogy excluída." });
+          await fetchDialogyInstances();
       } else {
           toast({ title: "Erro", description: result.error || "Falha ao excluir instância.", variant: "destructive" });
       }
@@ -703,6 +749,43 @@ const TopBar: React.FC<TopBarProps> = ({
                     </div>
                   </AccordionContent>
               </AccordionItem>
+              <AccordionItem value="dialogy">
+                <AccordionTrigger className="font-semibold text-base py-3">
+                  <div className="flex items-center gap-3">
+                    <Rocket className="w-6 h-6 text-orange-500" />
+                    Dialogy
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pt-4 space-y-4">
+                  <div className="space-y-3">
+                    <Label htmlFor="dialogy_instance_id">Instância da Dialogy</Label>
+                    <Select
+                      value={activeWorkspace?.dialogy_instance_id || 'none'}
+                      onValueChange={(value) => onUpdateWorkspace({ dialogy_instance_id: value === 'none' ? undefined : value })}
+                    >
+                      <SelectTrigger id="dialogy_instance_id">
+                        <SelectValue placeholder="Nenhuma instância selecionada" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="none">
+                            <em>Nenhuma</em>
+                          </SelectItem>
+                        {dialogyInstances.map(instance => (
+                          <SelectItem key={instance.id} value={instance.id}>
+                            {instance.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      Selecione uma instância para usar o nó "Enviar Mensagem (Dialogy)".
+                      <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => { setIsSettingsDialogOpen(false); setIsInstanceManagerOpen(true); setInstanceManagerTab('dialogy'); }}>
+                        Gerenciar Instâncias
+                      </Button>
+                    </p>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
             </Accordion>
           </div>
           <DialogFooter>
@@ -721,7 +804,7 @@ const TopBar: React.FC<TopBarProps> = ({
             <DialogHeader>
               <DialogTitle>Gerenciar Instâncias de Integração</DialogTitle>
               <DialogDescription>
-                Adicione e configure suas conexões com a API Evolution e Chatwoot.
+                Adicione e configure suas conexões com a API Evolution, Chatwoot e Dialogy.
               </DialogDescription>
             </DialogHeader>
             <div className="flex-1 overflow-hidden mt-2">
@@ -729,6 +812,7 @@ const TopBar: React.FC<TopBarProps> = ({
                     <TabsList className="self-start">
                         <TabsTrigger value="evolution">API Evolution</TabsTrigger>
                         <TabsTrigger value="chatwoot">Chatwoot</TabsTrigger>
+                        <TabsTrigger value="dialogy">Dialogy</TabsTrigger>
                     </TabsList>
                     <TabsContent value="evolution" className="flex-1 overflow-y-auto pr-2 -mr-2 mt-2">
                         <Card>
@@ -839,6 +923,62 @@ const TopBar: React.FC<TopBarProps> = ({
                             </CardFooter>
                         </Card>
                     </TabsContent>
+                    <TabsContent value="dialogy" className="flex-1 overflow-y-auto pr-2 -mr-2 mt-2">
+                        <Card>
+                             <CardHeader>
+                                <CardTitle>Instâncias da Dialogy</CardTitle>
+                                <CardDescription>Gerencie suas conexões com a API da Dialogy.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {editingDialogyInstance ? (
+                                    <form onSubmit={handleSaveDialogyInstance} className="p-4 border rounded-lg space-y-3">
+                                        <h3 className="font-semibold">{editingDialogyInstance.id ? 'Editando Instância' : 'Nova Instância'}</h3>
+                                        <input type="hidden" name="id" value={editingDialogyInstance.id || ''} />
+                                        <div>
+                                            <Label htmlFor="dgy-name">Nome</Label>
+                                            <Input id="dgy-name" name="name" defaultValue={editingDialogyInstance.name} required />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="dgy-baseUrl">URL da Instância Dialogy</Label>
+                                            <Input id="dgy-baseUrl" name="baseUrl" defaultValue={editingDialogyInstance.baseUrl} placeholder="https://api.dialogy.com.br" required />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="dgy-apiKey">API Key (Authorization Token)</Label>
+                                            <Input id="dgy-apiKey" name="apiKey" defaultValue={editingDialogyInstance.apiKey} required />
+                                        </div>
+                                        <div className="flex justify-end gap-2">
+                                            <Button type="button" variant="ghost" onClick={() => setEditingDialogyInstance(null)}>Cancelar</Button>
+                                            <Button type="submit">Salvar</Button>
+                                        </div>
+                                    </form>
+                                ) : (
+                                    <Button onClick={() => setEditingDialogyInstance({ id: '', name: '', baseUrl: '', apiKey: '', status: 'unconfigured' })}>
+                                        <PlusCircle className="mr-2" /> Adicionar Instância Dialogy
+                                    </Button>
+                                )}
+                                 <ScrollArea className="h-64">
+                                    <Table>
+                                        <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>URL</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                                        <TableBody>
+                                            {dialogyInstances.map(instance => (
+                                                <TableRow key={instance.id}>
+                                                    <TableCell>{instance.name}</TableCell>
+                                                    <TableCell>{instance.baseUrl}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button variant="ghost" size="sm" onClick={() => setEditingDialogyInstance(instance)}>Editar</Button>
+                                                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteDialogyInstance(instance.id)}>Excluir</Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </ScrollArea>
+                            </CardContent>
+                             <CardFooter>
+                                <p className="text-xs text-muted-foreground">O token de autorização é fornecido no painel da sua conta Dialogy.</p>
+                            </CardFooter>
+                        </Card>
+                    </TabsContent>
                 </Tabs>
             </div>
             <DialogFooter>
@@ -888,7 +1028,7 @@ const TopBar: React.FC<TopBarProps> = ({
              </div>
           </DialogHeader>
           <div className="flex-1 overflow-hidden flex flex-col py-4">
-            {isLoadingSessions && <div className="flex justify-center items-center h-full"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>}
+            {isLoadingSessions && <div className="flex justify-center items-center h-full"><Loader2 className="w-8 w-8 animate-spin text-muted-foreground" /></div>}
             {sessionsError && (<div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm"><div className="flex items-center gap-2 font-medium"><AlertCircle className="h-5 w-5" /> Erro ao carregar sessões:</div><p className="mt-1 text-xs">{sessionsError}</p></div>)}
             {!isLoadingSessions && !sessionsError && activeSessions.length === 0 && (
               <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4"><Users className="w-12 h-12 mb-3" /><p className="text-sm">Nenhuma sessão ativa encontrada.</p><p className="text-xs mt-1">Interaja com um fluxo para criar uma sessão.</p></div>
@@ -984,3 +1124,5 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
+
+    
