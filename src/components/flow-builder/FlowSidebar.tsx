@@ -74,10 +74,11 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
       title: "Integrações",
       blocks: [
         { type: "api-call", label: "Chamada API", icon: <Webhook {...iconProps} className="text-red-500" />, description: "Conecta-se a serviços externos.", defaultData: { apiUrl: 'https://', apiMethod: 'GET', apiOutputVariable: 'resposta_api' }},
+        { type: "dialogy-send-message", label: "Enviar Mensagem (Dialogy)", icon: <MessageSquareText {...iconProps} className="text-orange-500" />, description: "Envia uma mensagem via Dialogy.", defaultData: { dialogyChatId: '{{dialogy_conversation_id}}', dialogyMessageContent: 'Olá, vindo do NexusFlow!' }},
         { type: "redirect", label: "Redirecionar URL", icon: <ExternalLink {...iconProps} className="text-lime-500" />, description: "Envia o usuário para uma URL.", defaultData: { redirectUrl: 'https://google.com' } },
         { type: "date-input", label: "Entrada de Data", icon: <CalendarDays {...iconProps} className="text-teal-500" />, description: "Coleta uma data do usuário.", defaultData: { dateInputLabel: 'Qual sua data de nascimento?', variableToSaveDate: 'data_nascimento', apiResponseAsInput: false, apiResponsePathForValue: '' } },
         { type: "send-email", label: "Enviar E-mail", icon: <Mail {...iconProps} className="text-blue-500" />, description: "Dispara um e-mail (requer config).", defaultData: { emailTo: 'destinatario@exemplo.com', emailSubject: 'Assunto do E-mail', emailBody: 'Olá, {{input.nome}}!' } },
-        { type: "google-sheets-append", label: "Adicionar Linha Planilha Google", icon: <Sheet {...iconProps} className="text-emerald-500" />, description: "Escreve dados em uma planilha.", defaultData: { googleSheetId: 'SEU_SPREADSHEET_ID', googleSheetName: 'Página1', googleSheetRowData: '["{{input.campo1}}", "{{input.campo2}}"]' } },
+        { type: "google-sheets-append", label: "Adicionar Linha Planilha Google", icon: <Sheet {...iconProps} className="text-emerald-500" />, description: "Escreve dados em uma planilha.", defaultData: { googleSheetId: 'SEU_SPREADSHEET_ID', googleSheetName: 'Página1', googleSheetRowData: '["{{input.valor1}}", "{{input.valor2}}", "texto fixo"]' } },
       ]
     },
     {

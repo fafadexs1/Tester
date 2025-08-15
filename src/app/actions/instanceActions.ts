@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import type { EvolutionInstance, ChatwootInstance } from '@/lib/types';
+import type { EvolutionInstance, ChatwootInstance, DialogyInstance } from '@/lib/types';
 import { getCurrentUser } from '@/lib/auth';
 import { runQuery } from './databaseActions'; // Import the robust runQuery
 
@@ -18,6 +18,13 @@ const ChatwootInstanceSchema = z.object({
     name: z.string().min(1, "O nome não pode estar vazio."),
     baseUrl: z.string().url("URL da instância Chatwoot é inválida."),
     apiAccessToken: z.string().min(1, "O token de acesso da API é obrigatório."),
+});
+
+const DialogyInstanceSchema = z.object({
+    id: z.string().uuid().optional().or(z.literal('')),
+    name: z.string().min(1, "O nome não pode estar vazio."),
+    baseUrl: z.string().url("URL da instância Dialogy é inválida."),
+    apiKey: z.string().min(1, "A API Key (Authorization Token) é obrigatória."),
 });
 
 
@@ -250,6 +257,123 @@ export async function deleteChatwootInstanceAction(instanceId: string): Promise<
         }
     } catch (error: any) {
         console.error('[InstanceActions] Error deleting chatwoot instance:', error);
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    }
+}
+
+// --- Dialogy Actions ---
+
+export async function getDialogyInstancesForUserAction(): Promise<{ data?: DialogyInstance[]; error?: string }> {
+    const user = await getCurrentUser();
+    if (!user || !user.id) {
+        return { error: 'Usuário não autenticado.' };
+    }
+
+    try {
+        const result = await runQuery<DialogyInstance>(
+            'SELECT id, name, base_url, api_key FROM dialogy_instances WHERE user_id = $1 ORDER BY name',
+            [user.id]
+        );
+        const instances = result.rows.map(row => ({
+            id: row.id,
+            name: row.name,
+            baseUrl: (row as any).base_url,
+            apiKey: (row as any).api_key,
+            status: 'unconfigured' as const
+        }));
+        return { data: instances };
+    } catch (error: any) {
+        console.error('[InstanceActions] Error fetching dialogy instances:', error);
+        return { error: `Erro de banco de dados: ${error.message}` };
+    }
+}
+
+export async function saveDialogyInstanceAction(
+    formData: FormData
+): Promise<{ success: boolean; instance?: DialogyInstance; error?: string; issues?: z.ZodIssue[] }> {
+    const user = await getCurrentUser();
+    if (!user || !user.id) {
+        return { success: false, error: 'Usuário não autenticado.' };
+    }
+
+    const rawData = {
+        id: formData.get('id') as string | undefined,
+        name: formData.get('name') as string,
+        baseUrl: formData.get('baseUrl') as string,
+        apiKey: formData.get('apiKey') as string,
+    };
+    
+    const validation = DialogyInstanceSchema.safeParse(rawData);
+
+    if (!validation.success) {
+        return { success: false, error: 'Dados inválidos.', issues: validation.error.errors };
+    }
+
+    const { id, name, baseUrl, apiKey } = validation.data;
+
+    try {
+        let result;
+
+        if (id) {
+            result = await runQuery<DialogyInstance>(
+                `UPDATE dialogy_instances 
+                 SET name = $1, base_url = $2, api_key = $3, updated_at = NOW() 
+                 WHERE id = $4 AND user_id = $5 
+                 RETURNING id, name, base_url, api_key`,
+                [name, baseUrl, apiKey, id, user.id]
+            );
+        } else {
+            result = await runQuery<DialogyInstance>(
+                `INSERT INTO dialogy_instances (user_id, name, base_url, api_key) 
+                 VALUES ($1, $2, $3, $4) 
+                 RETURNING id, name, base_url, api_key`,
+                [user.id, name, baseUrl, apiKey]
+            );
+        }
+        
+        if (result.rows.length > 0) {
+            const dbRow = result.rows[0];
+            const instance: DialogyInstance = {
+                 id: dbRow.id,
+                 name: dbRow.name,
+                 baseUrl: (dbRow as any).base_url,
+                 apiKey: dbRow.api_key,
+                 status: 'unconfigured'
+            };
+            return { success: true, instance: instance };
+        } else {
+            return { success: false, error: 'Falha ao salvar a instância Dialogy. Verifique se você tem permissão.' };
+        }
+    } catch (error: any) {
+        if (error.code === '23505') { // unique_violation
+            return { success: false, error: `O nome da instância Dialogy '${name}' já está em uso.` };
+        }
+        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    }
+}
+
+export async function deleteDialogyInstanceAction(instanceId: string): Promise<{ success: boolean; error?: string }> {
+    const user = await getCurrentUser();
+    if (!user || !user.id) {
+        return { success: false, error: 'Usuário não autenticado.' };
+    }
+     if (!instanceId) {
+        return { success: false, error: 'ID da instância Dialogy não fornecido.' };
+    }
+
+    try {
+        const result = await runQuery(
+            'DELETE FROM dialogy_instances WHERE id = $1 AND user_id = $2',
+            [instanceId, user.id]
+        );
+
+        if (result.rowCount > 0) {
+            return { success: true };
+        } else {
+            return { success: false, error: 'Instância Dialogy não encontrada ou você não tem permissão para excluí-la.' };
+        }
+    } catch (error: any) {
+        console.error('[InstanceActions] Error deleting dialogy instance:', error);
         return { success: false, error: `Erro de banco de dados: ${error.message}` };
     }
 }

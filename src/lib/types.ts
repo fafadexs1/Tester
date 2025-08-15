@@ -1,5 +1,6 @@
 
 
+
 export interface DraggableBlockItemData {
   type: string;
   label: string;
@@ -36,6 +37,7 @@ export type NodeType =
   | 'supabase-read-row'
   | 'supabase-update-row'
   | 'supabase-delete-row'
+  | 'dialogy-send-message'
   | 'end-flow';
   
 
@@ -215,6 +217,11 @@ export interface NodeData {
   supabaseColumnsToSelect?: string; 
   supabaseResultVariable?: string; 
   
+  // Dialogy Node
+  dialogyInstanceId?: string;
+  dialogyChatId?: string;
+  dialogyMessageContent?: string;
+  
   // Start Node
   triggers?: StartNodeTrigger[];
 
@@ -253,6 +260,7 @@ export interface WorkspaceData {
   evolution_instance_id?: string | null;
   chatwoot_enabled?: boolean;
   chatwoot_instance_id?: string | null;
+  dialogy_instance_id?: string | null;
 }
 
 // Version History Type
@@ -271,7 +279,7 @@ export interface WorkspaceVersion {
 
 export type AwaitingInputNode = 'input' | 'option' | 'date-input' | 'file-upload' | 'rating-input';
 export type FlowSessionAwaitingInputType = AwaitingInputNode | null;
-export type FlowContextType = 'evolution' | 'chatwoot' | 'test';
+export type FlowContextType = 'evolution' | 'chatwoot' | 'dialogy' | 'test';
 
 export interface FlowSession {
   session_id: string; 
@@ -358,6 +366,14 @@ export interface ChatwootInstance {
   name: string;
   baseUrl: string;
   apiAccessToken: string;
+  status: 'online' | 'offline' | 'unconfigured' | 'connecting';
+}
+
+export interface DialogyInstance {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
   status: 'online' | 'offline' | 'unconfigured' | 'connecting';
 }
 
