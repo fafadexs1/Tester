@@ -1,6 +1,5 @@
 
 
-
 export interface DraggableBlockItemData {
   type: string;
   label: string;
@@ -70,7 +69,7 @@ export interface StartNodeTrigger {
   name: string; 
   type: 'manual' | 'webhook';
   enabled: boolean;
-  keyword?: string; // Palavra-chave para roteamento
+  keyword?: string; // Comma-separated keywords
   variableMappings?: WebhookVariableMapping[];
   sessionTimeoutSeconds?: number;
 }

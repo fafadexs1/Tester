@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target, Hourglass, GitCommitHorizontal, MessageCircle, Rocket
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, Hourglass, GitCommitHorizontal, MessageCircle, Rocket
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -775,30 +775,60 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     }
     if (node.type === 'start') {
         const allTriggers = node.triggers || [];
-        return allTriggers.filter(t => t.enabled).map(trigger => {
-        const originalIndex = allTriggers.findIndex(t => t.id === trigger.id);
-        if (originalIndex === -1) return null;
+        const handles = [];
+        let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
 
-        return (
-          <div
-            key={trigger.id}
-            className="absolute -right-2.5 z-10 flex items-center"
-            style={{ top: `${START_NODE_TRIGGER_INITIAL_Y_OFFSET + originalIndex * START_NODE_TRIGGER_SPACING_Y - 10}px` }}
-            title={`Gatilho: ${trigger.name}`}
-          >
-            <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
-            <div
-              className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-              onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
-              data-connector="true"
-              data-handle-type="source"
-              data-handle-id={trigger.name}
-            >
-              <Hash className="w-3 h-3 text-accent-foreground" />
-            </div>
-          </div>
-        );
-      });
+        allTriggers.filter(t => t.enabled).forEach(trigger => {
+            // Main trigger handle
+            handles.push(
+                <div
+                    key={trigger.id}
+                    className="absolute -right-2.5 z-10 flex items-center"
+                    style={{ top: `${yOffset - 10}px` }}
+                    title={`Gatilho: ${trigger.name}`}
+                >
+                    <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
+                    <div
+                        className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+                        onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
+                        data-connector="true"
+                        data-handle-type="source"
+                        data-handle-id={trigger.name}
+                    >
+                        <Hash className="w-3 h-3 text-accent-foreground" />
+                    </div>
+                </div>
+            );
+            yOffset += START_NODE_TRIGGER_SPACING_Y;
+
+            // Keyword handles
+            if (trigger.keyword) {
+                const keywords = trigger.keyword.split(',').map(k => k.trim()).filter(Boolean);
+                keywords.forEach(kw => {
+                    handles.push(
+                        <div
+                            key={`${trigger.id}-${kw}`}
+                            className="absolute -right-2.5 z-10 flex items-center"
+                            style={{ top: `${yOffset - 10}px` }}
+                            title={`Palavra-chave: ${kw}`}
+                        >
+                            <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{kw}</span>
+                            <div
+                                className="w-5 h-5 bg-purple-500 hover:bg-purple-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+                                onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, kw); }}
+                                data-connector="true"
+                                data-handle-type="source"
+                                data-handle-id={kw}
+                            >
+                                <KeyRound className="w-3 h-3 text-white" />
+                            </div>
+                        </div>
+                    );
+                    yOffset += START_NODE_TRIGGER_SPACING_Y;
+                });
+            }
+        });
+        return handles;
     }
     if (node.type === 'option') {
       const options = (node.optionsList || '').split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
@@ -946,15 +976,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
                 <div className={cn("space-y-3", !trigger.enabled && "opacity-50 pointer-events-none")}>
                    <div>
-                    <Label htmlFor={`trigger-keyword-${trigger.id}`} className="text-xs font-medium">Palavra-chave de Ativação (opcional)</Label>
+                    <Label htmlFor={`trigger-keyword-${trigger.id}`} className="text-xs font-medium">Palavras-chave de Ativação (separadas por vírgula)</Label>
                     <Input
                       id={`trigger-keyword-${trigger.id}`}
                       value={trigger.keyword || ''}
                       onChange={(e) => handleStartTriggerChange(trigger.id, 'keyword', e.target.value)}
-                      placeholder="Ex: 'ajuda', 'cardapio'"
+                      placeholder="Ex: ajuda, cardapio, saldo"
                       className="h-8 text-xs mt-1"
                     />
-                     <p className="text-xs text-muted-foreground mt-1">Se preenchido, este caminho só será ativado se a mensagem do usuário corresponder exatamente.</p>
+                     <p className="text-xs text-muted-foreground mt-1">Se preenchido, cria saídas separadas para cada palavra-chave.</p>
                    </div>
 
                   {trigger.type === 'webhook' && (

@@ -99,6 +99,7 @@ async function executeFlow(
         getProperty(session.flow_variables, 'dialogy_conversation_id') ||
         getProperty(session.flow_variables, 'webhook_payload.conversation.id');
 
+      // Tenta carregar instância configurada no workspace
       let dialogyInstance = null;
       if (workspace.dialogy_instance_id) {
         dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
@@ -175,8 +176,9 @@ async function executeFlow(
 
     switch (currentNode.type) {
       case 'start': {
-        const firstTrigger = currentNode.triggers?.[0]?.name;
-        nextNodeId = findNextNodeId(currentNode.id, firstTrigger || 'default', connections);
+        const triggerHandle = getProperty(session.flow_variables, '_triggerHandle') || 'default';
+        delete session.flow_variables['_triggerHandle'];
+        nextNodeId = findNextNodeId(currentNode.id, triggerHandle, connections);
         break;
       }
 
@@ -852,6 +854,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       let workspaceToStart: WorkspaceData | null = null;
       let matchingTrigger: StartNodeTrigger | null = null;
       let startNodeForFlow: NodeData | null = null;
+      let matchingKeyword: string | null = null;
 
       const defaultWorkspace = await loadWorkspaceFromDB(webhookId);
 
@@ -863,11 +866,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           const startNode = ws.nodes.find(n => n.type === 'start');
           if (startNode?.triggers) {
             for (const trigger of startNode.triggers) {
-              if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword && receivedMessageText && trigger.keyword.toLowerCase() === receivedMessageText.toLowerCase()) {
-                workspaceToStart = ws;
-                matchingTrigger = trigger;
-                startNodeForFlow = startNode;
-                break;
+              if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword && receivedMessageText) {
+                const keywords = trigger.keyword.split(',').map(k => k.trim().toLowerCase());
+                const foundKeyword = keywords.find(kw => kw === receivedMessageText.toLowerCase());
+                if (foundKeyword) {
+                    workspaceToStart = ws;
+                    matchingTrigger = trigger;
+                    startNodeForFlow = startNode;
+                    matchingKeyword = foundKeyword;
+                    break;
+                }
               }
             }
           }
@@ -879,7 +887,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         console.log(`[API Evolution Trigger] No keyword match found. Falling back to default flow from URL: ${webhookId}`);
         workspaceToStart = defaultWorkspace;
         startNodeForFlow = workspaceToStart.nodes.find(n => n.type === 'start');
-        matchingTrigger = startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled && !t.keyword) || startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled) || null;
+        matchingTrigger = startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled) || null;
       }
 
       if (!workspaceToStart || !startNodeForFlow || !matchingTrigger) {
@@ -887,12 +895,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({ error: `Workspace with ID "${webhookId}" not found or has no enabled webhook trigger.` }, { status: 404 });
       }
 
-      console.log(`[API Evolution Trigger] Determined to start flow: ${workspaceToStart.name} (ID: ${workspaceToStart.id}) with trigger: ${matchingTrigger.name}`);
+      const triggerHandle = matchingKeyword || matchingTrigger.name;
+      console.log(`[API Evolution Trigger] Determined to start flow: ${workspaceToStart.name} (ID: ${workspaceToStart.id}) with trigger handle: ${triggerHandle}`);
 
-      const initialNodeId = findNextNodeId(startNodeForFlow.id, matchingTrigger.name, workspaceToStart.connections || []);
+      const initialNodeId = findNextNodeId(startNodeForFlow.id, triggerHandle, workspaceToStart.connections || []);
       if (!initialNodeId) {
-        console.error(`[API Evolution Trigger] Start node trigger '${matchingTrigger.name}' is not connected in flow ${workspaceToStart.name}.`);
-        return NextResponse.json({ error: `Start node trigger '${matchingTrigger.name}' is not connected.` }, { status: 500 });
+        console.error(`[API Evolution Trigger] Start node trigger handle '${triggerHandle}' is not connected in flow ${workspaceToStart.name}.`);
+        return NextResponse.json({ error: `Start node trigger handle '${triggerHandle}' is not connected.` }, { status: 500 });
       }
 
       let payloadToUse = parsedBody;
@@ -904,6 +913,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         mensagem_whatsapp: receivedMessageText || '',
         webhook_payload: payloadToUse,
         session_id: sessionKeyIdentifier,
+        _triggerHandle: triggerHandle,
       };
 
       if (flowContext === 'evolution') {
