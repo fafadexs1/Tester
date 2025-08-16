@@ -1,3 +1,4 @@
+
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -98,7 +99,6 @@ async function executeFlow(
         getProperty(session.flow_variables, 'dialogy_conversation_id') ||
         getProperty(session.flow_variables, 'webhook_payload.conversation.id');
 
-      // Tenta carregar instância configurada no workspace
       let dialogyInstance = null;
       if (workspace.dialogy_instance_id) {
         dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);

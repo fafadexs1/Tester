@@ -1,3 +1,4 @@
+
 'use server';
 
 import { Pool, type QueryResult } from 'pg';
@@ -331,7 +332,7 @@ async function initializeDatabaseSchema(): Promise<void> {
       );
     `);
 
-    // Workspaces
+    // Workspaces - CRIAÇÃO DA TABELA PRINCIPAL ANTES DAS DEPENDENTES
     await client.query(`
       CREATE TABLE IF NOT EXISTS workspaces (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -350,6 +351,7 @@ async function initializeDatabaseSchema(): Promise<void> {
       );
     `);
 
+    // Workspace Versions - CRIAÇÃO APÓS WORKSPACES
     await client.query(`
       CREATE TABLE IF NOT EXISTS workspace_versions (
         id SERIAL PRIMARY KEY,
@@ -364,6 +366,7 @@ async function initializeDatabaseSchema(): Promise<void> {
         UNIQUE(workspace_id, version)
       );
     `);
+
 
     // Garantias de colunas em workspaces
     const orgIdColExistsInWorkspaces = await client.query(`
@@ -1192,7 +1195,7 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
         fs.created_at, 
         fs.last_interaction_at
       FROM flow_sessions fs
-      JOIN workspaces ws ON fs.workspace_id = ws.id::uuid
+      JOIN workspaces ws ON fs.workspace_id = ws.id
       WHERE ws.owner_id = $1::uuid
       ORDER BY fs.last_interaction_at DESC;
     `;
