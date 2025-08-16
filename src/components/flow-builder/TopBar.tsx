@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -197,18 +198,20 @@ const TopBar: React.FC<TopBarProps> = ({
   const fetchDialogyInstances = useCallback(async () => {
     setIsLoadingDialogyInstances(true);
     try {
-      const result = await getDialogyInstancesForUserAction();
-      if (result.error) throw new Error(result.error);
-      setDialogyInstances(result.data || []);
-      return result.data || [];
+        const result = await getDialogyInstancesForUserAction();
+        if (result && result.error) { // Adicionada verificação para result
+            throw new Error(result.error);
+        }
+        setDialogyInstances(result?.data || []);
+        return result?.data || [];
     } catch (error: any) {
-      toast({ title: "Erro ao Carregar Instâncias Dialogy", description: error.message, variant: "destructive" });
-      setDialogyInstances([]);
-      return [];
+        toast({ title: "Erro ao Carregar Instâncias Dialogy", description: error.message, variant: "destructive" });
+        setDialogyInstances([]);
+        return [];
     } finally {
-      setIsLoadingDialogyInstances(false);
+        setIsLoadingDialogyInstances(false);
     }
-  }, [toast]);
+}, [toast]);
 
   const handleOpenSettings = useCallback(async () => {
     setIsSettingsDialogOpen(true);
@@ -1130,3 +1133,5 @@ const TopBar: React.FC<TopBarProps> = ({
 };
 
 export default TopBar;
+
+    
