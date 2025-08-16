@@ -746,6 +746,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                                              content: content
                                          });
                                      }
+                                 } else if (session!.flow_context === 'dialogy' && workspace!.dialogy_instance_id) {
+                                    const dialogyInstance = await loadDialogyInstanceFromDB(workspace!.dialogy_instance_id);
+                                    if (dialogyInstance && session!.flow_variables.dialogy_conversation_id) {
+                                        await sendDialogyMessageAction({
+                                            baseUrl: dialogyInstance.baseUrl,
+                                            apiKey: dialogyInstance.apiKey,
+                                            chatId: session!.flow_variables.dialogy_conversation_id,
+                                            content: content
+                                        });
+                                    }
                                  } else {
                                      const recipientPhoneNumber = session!.flow_variables.whatsapp_sender_jid || session!.session_id.split('@@')[0].replace('evolution_jid_','');
                                      await sendWhatsAppMessageAction({
