@@ -1,10 +1,27 @@
-
-
 'use server';
 
 import { Pool, type QueryResult } from 'pg';
 import dotenv from 'dotenv';
-import type { WorkspaceData, FlowSession, NodeData, Connection, User, EvolutionInstance, ChatwootInstance, DialogyInstance, Organization, Team, OrganizationUser, SmtpSettings, Role, Permission, WorkspaceVersion, AuditLog, MarketplaceListing, UserPurchase } from '@/lib/types';
+import type {
+  WorkspaceData,
+  FlowSession,
+  NodeData,
+  Connection,
+  User,
+  EvolutionInstance,
+  ChatwootInstance,
+  DialogyInstance,
+  Organization,
+  Team,
+  OrganizationUser,
+  SmtpSettings,
+  Role,
+  Permission,
+  WorkspaceVersion,
+  AuditLog,
+  MarketplaceListing,
+  UserPurchase
+} from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { redirect } from 'next/navigation';
 
@@ -13,80 +30,119 @@ dotenv.config();
 let pool: Pool | null = null;
 
 function getDbPool(): Pool {
-    if (pool) {
-        return pool;
-    }
-    
-    const useSSL = process.env.POSTGRES_SSL === 'true';
-    pool = new Pool({
-        host: process.env.POSTGRES_HOST,
-        port: process.env.POSTGRES_PORT ? parseInt(process.env.POSTGRES_PORT, 10) : 5432,
-        user: process.env.POSTGRES_USER,
-        password: process.env.POSTGRES_PASSWORD,
-        database: process.env.POSTGRES_DATABASE,
-        ssl: useSSL ? { rejectUnauthorized: false } : false,
-        idleTimeoutMillis: 60000,
-        connectionTimeoutMillis: 10000,
-    });
-
-    pool.on('error', (err, client) => {
-        console.error('[DB Actions] PostgreSQL Pool Error:', err);
-        pool = null;
-    });
-
+  if (pool) {
     return pool;
+  }
+
+  const useSSL = process.env.POSTGRES_SSL === 'true';
+  pool = new Pool({
+    host: process.env.POSTGRES_HOST,
+    port: process.env.POSTGRES_PORT ? parseInt(process.env.POSTGRES_PORT, 10) : 5432,
+    user: process.env.POSTGRES_USER,
+    password: process.env.POSTGRES_PASSWORD,
+    database: process.env.POSTGRES_DATABASE,
+    ssl: useSSL ? { rejectUnauthorized: false } : false,
+    idleTimeoutMillis: 60000,
+    connectionTimeoutMillis: 10000,
+  });
+
+  pool.on('error', (err, client) => {
+    console.error('[DB Actions] PostgreSQL Pool Error:', err);
+    pool = null;
+  });
+
+  return pool;
 }
 
 export async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResult<T>> {
-    const poolInstance = getDbPool();
-    const client = await poolInstance.connect();
-    try {
+  const poolInstance = getDbPool();
+  const client = await poolInstance.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query<T>(query, params);
+    await client.query('COMMIT');
+    return result;
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error(
+      `[DB Actions] Query failed and rolled back: ${query.substring(0, 100)}...`,
+      { error: error.message, code: error.code }
+    );
+
+    if (['ECONNRESET', 'ECONNREFUSED'].includes(error.code) || error.message.includes('timeout')) {
+      if (pool) await pool.end();
+      pool = null;
+    }
+
+    if (error.code === '42P01') {
+      console.warn('[DB Actions] Table not found. Attempting to initialize schema and retry...');
+      try {
+        await initializeDatabaseSchema();
+        console.log('[DB Actions] Schema initialized. Retrying query...');
         await client.query('BEGIN');
         const result = await client.query<T>(query, params);
         await client.query('COMMIT');
         return result;
-    } catch (error: any) {
+      } catch (initError: any) {
         await client.query('ROLLBACK');
-        console.error(`[DB Actions] Query failed and rolled back: ${query.substring(0, 100)}...`, { error: error.message, code: error.code });
-        
-        if (['ECONNRESET', 'ECONNREFUSED'].includes(error.code) || error.message.includes('timeout')) {
-            if (pool) await pool.end();
-            pool = null;
-        }
-        
-        if (error.code === '42P01') { 
-            console.warn('[DB Actions] Table not found. Attempting to initialize schema and retry...');
-            try {
-                await initializeDatabaseSchema();
-                console.log('[DB Actions] Schema initialized. Retrying query...');
-                await client.query('BEGIN');
-                const result = await client.query<T>(query, params);
-                await client.query('COMMIT');
-                return result;
-            } catch (initError: any) {
-                 await client.query('ROLLBACK');
-                 console.error('[DB Actions] Fatal: Failed to initialize schema after table not found. Rolled back.', initError);
-                 throw initError;
-            }
-        }
-        throw error;
-    } finally {
-        client.release();
+        console.error(
+          '[DB Actions] Fatal: Failed to initialize schema after table not found. Rolled back.',
+          initError
+        );
+        throw initError;
+      }
     }
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
+/** ---------- helpers de migração de tipos ---------- */
+async function getColumnType(
+  client: any,
+  table: string,
+  column: string
+): Promise<string | null> {
+  const res = await client.query(
+    `
+      SELECT data_type
+      FROM information_schema.columns
+      WHERE table_name = $1 AND column_name = $2
+    `,
+    [table, column]
+  );
+  if (res.rowCount === 0) return null;
+  return res.rows[0].data_type;
+}
 
+async function ensureUuidColumn(
+  client: any,
+  table: string,
+  column: string
+) {
+  const colType = await getColumnType(client, table, column);
+  // data_type para UUID em information_schema costuma ser 'uuid'
+  if (colType && colType.toLowerCase() !== 'uuid') {
+    console.log(`[DB Migration] Ajustando tipo de ${table}.${column} de ${colType} para UUID...`);
+    // Tenta converter valores existentes assumindo que são strings no formato UUID
+    await client.query(`ALTER TABLE ${table} ALTER COLUMN ${column} TYPE UUID USING ${column}::uuid;`);
+    console.log(`[DB Migration] ${table}.${column} agora é UUID.`);
+  }
+}
+
+/** ---------- schema & migrações ---------- */
 async function initializeDatabaseSchema(): Promise<void> {
- const client = await getDbPool().connect();
- try {
+  const client = await getDbPool().connect();
+  try {
     console.log('[DB Actions] Initializing database schema if needed...');
-    
-    // Ensure the extension for generating UUIDs is enabled BEFORE any transaction.
+
+    // Extensão para UUIDs
     await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
 
     await client.query('BEGIN');
-    
-    // Users Table - Created before organizations for the foreign key
+
+    // Users
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -96,188 +152,186 @@ async function initializeDatabaseSchema(): Promise<void> {
         password_hash TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'user',
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        current_organization_id UUID -- Will be referenced later
+        current_organization_id UUID
       );
     `);
 
-    // **START OF FIX FOR NULL ID ERROR**
-    // Ensures the 'id' column has the default value to generate UUIDs,
-    // even if the table already existed from an older schema version.
+    // Garante default em users.id
     const idDefaultCheck = await client.query(`
-        SELECT column_default
-        FROM information_schema.columns
-        WHERE table_name = 'users' AND column_name = 'id';
+      SELECT column_default
+      FROM information_schema.columns
+      WHERE table_name = 'users' AND column_name = 'id';
     `);
-
     if (idDefaultCheck.rowCount > 0 && !idDefaultCheck.rows[0].column_default) {
-        console.log("[DB Migration] Default value for 'users.id' is missing. Applying fix...");
-        await client.query('ALTER TABLE users ALTER COLUMN id SET DEFAULT gen_random_uuid();');
-        console.log("[DB Migration] Default value for 'users.id' has been set.");
+      console.log("[DB Migration] Default value for 'users.id' is missing. Applying fix...");
+      await client.query('ALTER TABLE users ALTER COLUMN id SET DEFAULT gen_random_uuid();');
+      console.log("[DB Migration] Default value for 'users.id' has been set.");
     }
-    // **END OF FIX FOR NULL ID ERROR**
 
-    // Migration block for the 'email' column
+    // Migração de colunas opcionais users.*
     const emailColExists = await client.query(`
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name='users' AND column_name='email';
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name='users' AND column_name='email';
     `);
     if (emailColExists.rowCount === 0) {
-        console.log("[DB Actions] 'email' column not found in 'users' table. Adding column...");
-        await client.query('ALTER TABLE users ADD COLUMN email TEXT UNIQUE;');
+      console.log("[DB Actions] 'email' column not found in 'users' table. Adding column...");
+      await client.query('ALTER TABLE users ADD COLUMN email TEXT UNIQUE;');
     }
-    
-    // Migration block for the 'full_name' column
     const fullNameColExists = await client.query(`
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name='users' AND column_name='full_name';
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name='users' AND column_name='full_name';
     `);
     if (fullNameColExists.rowCount === 0) {
-        console.log("[DB Actions] 'full_name' column not found in 'users' table. Adding column...");
-        await client.query('ALTER TABLE users ADD COLUMN full_name TEXT;');
+      console.log("[DB Actions] 'full_name' column not found in 'users' table. Adding column...");
+      await client.query('ALTER TABLE users ADD COLUMN full_name TEXT;');
     }
 
-    // Organizations Table
+    // Organizations
     await client.query(`
-        CREATE TABLE IF NOT EXISTS organizations (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            name TEXT NOT NULL,
-            owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            created_at TIMESTAMPTZ DEFAULT NOW()
-        );
+      CREATE TABLE IF NOT EXISTS organizations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
     `);
 
-    // Now that 'organizations' exists, we can add the foreign key in 'users'
+    // FK users.current_organization_id -> organizations.id
     const fkExists = await client.query(`
-        SELECT 1 FROM pg_constraint 
-        WHERE conname = 'users_current_organization_id_fkey' AND conrelid = 'users'::regclass
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'users_current_organization_id_fkey' AND conrelid = 'users'::regclass
     `);
-
     if (fkExists.rowCount === 0) {
-        await client.query(`
-            ALTER TABLE users 
-            ADD CONSTRAINT users_current_organization_id_fkey 
-            FOREIGN KEY (current_organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
-        `);
+      await client.query(`
+        ALTER TABLE users
+        ADD CONSTRAINT users_current_organization_id_fkey
+        FOREIGN KEY (current_organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
+      `);
     }
 
-    // --- RBAC TABLES ---
+    // RBAC
     await client.query(`
-        CREATE TABLE IF NOT EXISTS roles (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-            name TEXT NOT NULL,
-            description TEXT,
-            is_system_role BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            UNIQUE(organization_id, name)
-        );
+      CREATE TABLE IF NOT EXISTS roles (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT,
+        is_system_role BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(organization_id, name)
+      );
     `);
 
     await client.query(`
-        CREATE TABLE IF NOT EXISTS permissions (
-            id TEXT PRIMARY KEY,
-            description TEXT NOT NULL,
-            subject TEXT NOT NULL
-        );
+      CREATE TABLE IF NOT EXISTS permissions (
+        id TEXT PRIMARY KEY,
+        description TEXT NOT NULL,
+        subject TEXT NOT NULL
+      );
     `);
 
     await client.query(`
-        CREATE TABLE IF NOT EXISTS role_permissions (
-            role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-            permission_id TEXT NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
-            PRIMARY KEY (role_id, permission_id)
-        );
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+        permission_id TEXT NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+        PRIMARY KEY (role_id, permission_id)
+      );
     `);
 
-    // User-Organization association table (many-to-many) - now with role_id
     await client.query(`
-        CREATE TABLE IF NOT EXISTS organization_users (
-            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-            role_id UUID REFERENCES roles(id) ON DELETE SET NULL -- Changed from 'role TEXT'
-        );
+      CREATE TABLE IF NOT EXISTS organization_users (
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        role_id UUID REFERENCES roles(id) ON DELETE SET NULL
+      );
     `);
 
-    // Migration block for the `role_id` column in organization_users
-    const oldRoleColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='organization_users' AND column_name='role'`);
-    if(oldRoleColInfo.rowCount > 0) {
-        console.log(`[DB Migration] Old 'role' column found in 'organization_users'. Migrating to 'role_id'...`);
-        
-        const newRoleIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='organization_users' AND column_name='role_id'`);
-        if (newRoleIdColInfo.rowCount === 0) {
-            await client.query(`ALTER TABLE organization_users ADD COLUMN role_id UUID;`);
-        }
-        
-        await client.query(`
-            INSERT INTO roles (organization_id, name, description, is_system_role)
-            SELECT id, 'Admin', 'Acesso total a todas as configurações e fluxos.', TRUE FROM organizations
-            ON CONFLICT (organization_id, name) DO NOTHING;
-        `);
-        await client.query(`
-            INSERT INTO roles (organization_id, name, description, is_system_role)
-            SELECT id, 'Membro', 'Acesso para visualizar e editar fluxos.', TRUE FROM organizations
-            ON CONFLICT (organization_id, name) DO NOTHING;
-        `);
-        
-        await client.query(`
-            UPDATE organization_users ou SET role_id = (
-                SELECT r.id FROM roles r
-                WHERE r.organization_id = ou.organization_id
-                  AND r.name = (CASE 
-                                  WHEN ou.role = 'admin' THEN 'Admin' 
-                                  ELSE 'Membro' 
-                                END)
-                LIMIT 1
-            )
-            WHERE ou.role_id IS NULL AND ou.role IS NOT NULL;
-        `);
-        
-        await client.query(`ALTER TABLE organization_users DROP COLUMN role;`);
-        
-        await client.query(`ALTER TABLE organization_users ADD CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;`);
-        
-        console.log(`[DB Migration] Migration from 'role' to 'role_id' in 'organization_users' completed.`);
+    // Migração role -> role_id
+    const oldRoleColInfo = await client.query(`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name='organization_users' AND column_name='role'
+    `);
+    if (oldRoleColInfo.rowCount > 0) {
+      console.log(`[DB Migration] Old 'role' column found in 'organization_users'. Migrating to 'role_id'...`);
+      const newRoleIdColInfo = await client.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='organization_users' AND column_name='role_id'
+      `);
+      if (newRoleIdColInfo.rowCount === 0) {
+        await client.query(`ALTER TABLE organization_users ADD COLUMN role_id UUID;`);
+      }
+
+      await client.query(`
+        INSERT INTO roles (organization_id, name, description, is_system_role)
+        SELECT id, 'Admin', 'Acesso total a todas as configurações e fluxos.', TRUE FROM organizations
+        ON CONFLICT (organization_id, name) DO NOTHING;
+      `);
+      await client.query(`
+        INSERT INTO roles (organization_id, name, description, is_system_role)
+        SELECT id, 'Membro', 'Acesso para visualizar e editar fluxos.', TRUE FROM organizations
+        ON CONFLICT (organization_id, name) DO NOTHING;
+      `);
+
+      await client.query(`
+        UPDATE organization_users ou SET role_id = (
+          SELECT r.id FROM roles r
+          WHERE r.organization_id = ou.organization_id
+            AND r.name = (CASE WHEN ou.role = 'admin' THEN 'Admin' ELSE 'Membro' END)
+          LIMIT 1
+        )
+        WHERE ou.role_id IS NULL AND ou.role IS NOT NULL;
+      `);
+
+      await client.query(`ALTER TABLE organization_users DROP COLUMN role;`);
+      await client.query(`
+        ALTER TABLE organization_users
+        ADD CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;
+      `);
+
+      console.log(`[DB Migration] Migration from 'role' to 'role_id' in 'organization_users' completed.`);
     }
 
-    const pkConstraintInfo = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = 'organization_users_pkey'`);
+    const pkConstraintInfo = await client.query(`
+      SELECT 1 FROM pg_constraint WHERE conname = 'organization_users_pkey'
+    `);
     if (pkConstraintInfo.rowCount === 0) {
-        await client.query(`ALTER TABLE organization_users ADD PRIMARY KEY (user_id, organization_id);`);
+      await client.query(`ALTER TABLE organization_users ADD PRIMARY KEY (user_id, organization_id);`);
     }
 
-    
-    // Teams Table
+    // Teams & team_members
     await client.query(`
-        CREATE TABLE IF NOT EXISTS teams (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-            name TEXT NOT NULL,
-            description TEXT,
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            UNIQUE(organization_id, name)
-        );
-    `);
-
-    // Member-Team association table
-    await client.query(`
-        CREATE TABLE IF NOT EXISTS team_members (
-            team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, -- For integrity and easier queries
-            PRIMARY KEY (team_id, user_id)
-        );
+      CREATE TABLE IF NOT EXISTS teams (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(organization_id, name)
+      );
     `);
 
     await client.query(`
-        CREATE TABLE IF NOT EXISTS audit_logs (
-            id BIGSERIAL PRIMARY KEY,
-            user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-            organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-            action TEXT NOT NULL, -- Ex: 'user_login', 'create_workspace', 'update_node'
-            details JSONB,
-            created_at TIMESTAMPTZ DEFAULT NOW()
-        );
+      CREATE TABLE IF NOT EXISTS team_members (
+        team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        PRIMARY KEY (team_id, user_id)
+      );
     `);
-    
+
+    // Audit logs
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id BIGSERIAL PRIMARY KEY,
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+        action TEXT NOT NULL,
+        details JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Workspaces
     await client.query(`
       CREATE TABLE IF NOT EXISTS workspaces (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -296,188 +350,148 @@ async function initializeDatabaseSchema(): Promise<void> {
       );
     `);
 
-     // --- VERSION HISTORY TABLE ---
     await client.query(`
-        CREATE TABLE IF NOT EXISTS workspace_versions (
-            id SERIAL PRIMARY KEY,
-            workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-            version INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            description TEXT,
-            nodes JSONB,
-            connections JSONB,
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            created_by_id UUID REFERENCES users(id) ON DELETE SET NULL,
-            UNIQUE(workspace_id, version)
-        );
+      CREATE TABLE IF NOT EXISTS workspace_versions (
+        id SERIAL PRIMARY KEY,
+        workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        nodes JSONB,
+        connections JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        created_by_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        UNIQUE(workspace_id, version)
+      );
     `);
 
-
+    // Garantias de colunas em workspaces
     const orgIdColExistsInWorkspaces = await client.query(`
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name='workspaces' AND column_name='organization_id';
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name='workspaces' AND column_name='organization_id';
     `);
     if (orgIdColExistsInWorkspaces.rowCount === 0) {
-        console.log(`[DB Actions] 'organization_id' column not found in 'workspaces' table. Adding column...`);
-        await client.query('ALTER TABLE workspaces ADD COLUMN organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;');
-    }
-    
-     await client.query(`
-      CREATE TABLE IF NOT EXISTS evolution_instances (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        name TEXT NOT NULL,
-        base_url TEXT,
-        api_key TEXT,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(user_id, name)
-      );
-    `);
-    
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS chatwoot_instances (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        name TEXT NOT NULL,
-        base_url TEXT NOT NULL,
-        api_access_token TEXT NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(user_id, name)
-      );
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS dialogy_instances (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        name TEXT NOT NULL,
-        base_url TEXT NOT NULL,
-        api_key TEXT NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(user_id, name)
-      );
-    `);
-
-    await client.query(`
-        CREATE TABLE IF NOT EXISTS smtp_settings (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            organization_id UUID NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
-            host TEXT NOT NULL,
-            port INTEGER NOT NULL,
-            secure BOOLEAN NOT NULL DEFAULT true,
-            username TEXT,
-            password TEXT,
-            from_name TEXT,
-            from_email TEXT,
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-    `);
-    
-    const ownerIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='owner_id'`);
-    if(ownerIdColInfo.rowCount === 0) {
-        console.log(`[DB Actions] Column 'owner_id' not found in 'workspaces'. Starting migration...`);
-        const oldOwnerColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='owner'`);
-        if(oldOwnerColInfo.rowCount > 0) {
-             console.log(`[DB Actions] Found old 'owner' column. Attempting to rename to 'owner_id'...`);
-             await client.query(`ALTER TABLE workspaces RENAME COLUMN owner TO owner_id;`);
-             console.log(`[DB Actions] Renamed 'owner' to 'owner_id'.`);
-        } else {
-            console.log(`[DB Actions] Old 'owner' column not found. Adding 'owner_id' column.`);
-            await client.query(`ALTER TABLE workspaces ADD COLUMN owner_id UUID;`);
-        }
-        
-        const fkConstraintExists = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_owner_id_fkey' AND conrelid = 'workspaces'::regclass`);
-        if(fkConstraintExists.rowCount === 0) {
-            console.log(`[DB Actions] Adding foreign key constraint 'workspaces_owner_id_fkey'.`);
-            await client.query(`ALTER TABLE workspaces ADD CONSTRAINT workspaces_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE;`);
-        }
+      console.log(`[DB Actions] 'organization_id' column not found in 'workspaces' table. Adding column...`);
+      await client.query('ALTER TABLE workspaces ADD COLUMN organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;');
     }
 
-    const evoInstanceIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='evolution_instance_id'`);
+    const ownerIdColInfo = await client.query(`
+      SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='owner_id'
+    `);
+    if (ownerIdColInfo.rowCount === 0) {
+      console.log(`[DB Actions] Column 'owner_id' not found in 'workspaces'. Starting migration...`);
+      const oldOwnerColInfo = await client.query(`
+        SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='owner'
+      `);
+      if (oldOwnerColInfo.rowCount > 0) {
+        console.log(`[DB Actions] Found old 'owner' column. Attempting to rename to 'owner_id'...`);
+        await client.query(`ALTER TABLE workspaces RENAME COLUMN owner TO owner_id;`);
+        console.log(`[DB Actions] Renamed 'owner' to 'owner_id'.`);
+      } else {
+        console.log(`[DB Actions] Old 'owner' column not found. Adding 'owner_id' column.`);
+        await client.query(`ALTER TABLE workspaces ADD COLUMN owner_id UUID;`);
+      }
+      const fkConstraintExists = await client.query(`
+        SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_owner_id_fkey' AND conrelid = 'workspaces'::regclass
+      `);
+      if (fkConstraintExists.rowCount === 0) {
+        console.log(`[DB Actions] Adding foreign key constraint 'workspaces_owner_id_fkey'.`);
+        await client.query(`
+          ALTER TABLE workspaces
+          ADD CONSTRAINT workspaces_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE;
+        `);
+      }
+    }
+
+    const evoInstanceIdColInfo = await client.query(`
+      SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='evolution_instance_id'
+    `);
     if (evoInstanceIdColInfo.rowCount === 0) {
       console.log("[DB Actions] 'evolution_instance_id' column not found in 'workspaces'. Adding column...");
       await client.query('ALTER TABLE workspaces ADD COLUMN evolution_instance_id UUID;');
     }
-    
-    const chatwootEnabledColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='chatwoot_enabled'`);
+
+    const chatwootEnabledColInfo = await client.query(`
+      SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='chatwoot_enabled'
+    `);
     if (chatwootEnabledColInfo.rowCount === 0) {
       console.log("[DB Actions] 'chatwoot_enabled' column not found in 'workspaces'. Adding column...");
       await client.query('ALTER TABLE workspaces ADD COLUMN chatwoot_enabled BOOLEAN DEFAULT false;');
     }
-    
-    const chatwootInstanceIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='chatwoot_instance_id'`);
+
+    const chatwootInstanceIdColInfo = await client.query(`
+      SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='chatwoot_instance_id'
+    `);
     if (chatwootInstanceIdColInfo.rowCount === 0) {
       console.log("[DB Actions] 'chatwoot_instance_id' column not found in 'workspaces'. Adding column...");
       await client.query('ALTER TABLE workspaces ADD COLUMN chatwoot_instance_id UUID;');
     }
-    
-    const dialogyInstanceIdColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='dialogy_instance_id'`);
+
+    const dialogyInstanceIdColInfo = await client.query(`
+      SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='dialogy_instance_id'
+    `);
     if (dialogyInstanceIdColInfo.rowCount === 0) {
       console.log("[DB Actions] 'dialogy_instance_id' column not found in 'workspaces'. Adding column...");
       await client.query('ALTER TABLE workspaces ADD COLUMN dialogy_instance_id UUID;');
     }
-    
-    const fkConstraintExistsEvo = await client.query(`
-        SELECT 1 FROM pg_constraint 
-        WHERE conname = 'workspaces_evolution_instance_id_fkey' AND conrelid = 'workspaces'::regclass;
-    `);
 
+    const fkConstraintExistsEvo = await client.query(`
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'workspaces_evolution_instance_id_fkey' AND conrelid = 'workspaces'::regclass;
+    `);
     if (fkConstraintExistsEvo.rowCount === 0) {
       console.log("[DB Actions] Foreign key for 'evolution_instance_id' not found. Adding constraint...");
       await client.query(`
-        ALTER TABLE workspaces 
-        ADD CONSTRAINT workspaces_evolution_instance_id_fkey 
+        ALTER TABLE workspaces
+        ADD CONSTRAINT workspaces_evolution_instance_id_fkey
         FOREIGN KEY (evolution_instance_id) REFERENCES evolution_instances(id) ON DELETE SET NULL;
       `);
       console.log("[DB Actions] Foreign key 'workspaces_evolution_instance_id_fkey' added.");
     }
-    
-    const fkConstraintExistsChatwoot = await client.query(`
-        SELECT 1 FROM pg_constraint 
-        WHERE conname = 'workspaces_chatwoot_instance_id_fkey' AND conrelid = 'workspaces'::regclass;
-    `);
 
+    const fkConstraintExistsChatwoot = await client.query(`
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'workspaces_chatwoot_instance_id_fkey' AND conrelid = 'workspaces'::regclass;
+    `);
     if (fkConstraintExistsChatwoot.rowCount === 0) {
       console.log("[DB Actions] Foreign key for 'chatwoot_instance_id' not found. Adding constraint...");
       await client.query(`
-        ALTER TABLE workspaces 
-        ADD CONSTRAINT workspaces_chatwoot_instance_id_fkey 
+        ALTER TABLE workspaces
+        ADD CONSTRAINT workspaces_chatwoot_instance_id_fkey
         FOREIGN KEY (chatwoot_instance_id) REFERENCES chatwoot_instances(id) ON DELETE SET NULL;
       `);
       console.log("[DB Actions] Foreign key 'workspaces_chatwoot_instance_id_fkey' added.");
     }
 
     const fkConstraintExistsDialogy = await client.query(`
-        SELECT 1 FROM pg_constraint 
-        WHERE conname = 'workspaces_dialogy_instance_id_fkey' AND conrelid = 'workspaces'::regclass;
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'workspaces_dialogy_instance_id_fkey' AND conrelid = 'workspaces'::regclass;
     `);
-
     if (fkConstraintExistsDialogy.rowCount === 0) {
       console.log("[DB Actions] Foreign key for 'dialogy_instance_id' not found. Adding constraint...");
       await client.query(`
-        ALTER TABLE workspaces 
-        ADD CONSTRAINT workspaces_dialogy_instance_id_fkey 
+        ALTER TABLE workspaces
+        ADD CONSTRAINT workspaces_dialogy_instance_id_fkey
         FOREIGN KEY (dialogy_instance_id) REFERENCES dialogy_instances(id) ON DELETE SET NULL;
       `);
       console.log("[DB Actions] Foreign key 'workspaces_dialogy_instance_id_fkey' added.");
     }
 
-
-    const correctUniqueConstraintExists = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_organization_id_name_key'`);
-    if(correctUniqueConstraintExists.rowCount === 0) {
-        // Drop old constraint if it exists
-        const oldUniqueConstraint = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_owner_id_name_key'`);
-        if(oldUniqueConstraint.rowCount > 0) {
-            await client.query(`ALTER TABLE workspaces DROP CONSTRAINT workspaces_owner_id_name_key;`);
-        }
-        await client.query(`ALTER TABLE workspaces ADD CONSTRAINT workspaces_organization_id_name_key UNIQUE (organization_id, name);`);
-        console.log(`[DB Actions] Added correct unique constraint: workspaces_organization_id_name_key`);
+    const correctUniqueConstraintExists = await client.query(`
+      SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_organization_id_name_key'
+    `);
+    if (correctUniqueConstraintExists.rowCount === 0) {
+      const oldUniqueConstraint = await client.query(`
+        SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_owner_id_name_key'
+      `);
+      if (oldUniqueConstraint.rowCount > 0) {
+        await client.query(`ALTER TABLE workspaces DROP CONSTRAINT workspaces_owner_id_name_key;`);
+      }
+      await client.query(`ALTER TABLE workspaces ADD CONSTRAINT workspaces_organization_id_name_key UNIQUE (organization_id, name);`);
+      console.log(`[DB Actions] Added correct unique constraint: workspaces_organization_id_name_key`);
     }
-    
+
+    // Flow sessions
     await client.query(`
       CREATE TABLE IF NOT EXISTS flow_sessions (
         session_id TEXT PRIMARY KEY,
@@ -492,43 +506,47 @@ async function initializeDatabaseSchema(): Promise<void> {
         flow_context TEXT
       );
     `);
-     const flowContextColInfo = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='flow_sessions' AND column_name='flow_context'`);
+
+    const flowContextColInfo = await client.query(`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name='flow_sessions' AND column_name='flow_context'
+    `);
     if (flowContextColInfo.rowCount === 0) {
-        console.log("[DB Actions] 'flow_context' column not found in 'flow_sessions'. Adding column...");
-        await client.query(`ALTER TABLE flow_sessions ADD COLUMN flow_context TEXT;`);
+      console.log("[DB Actions] 'flow_context' column not found in 'flow_sessions'. Adding column...");
+      await client.query(`ALTER TABLE flow_sessions ADD COLUMN flow_context TEXT;`);
     }
 
-    // --- Marketplace Tables ---
+    // Marketplace
     await client.query(`
-        CREATE TABLE IF NOT EXISTS marketplace_listings (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            name TEXT NOT NULL,
-            description TEXT,
-            price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-            creator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-            preview_data JSONB, -- Snapshot of nodes/connections
-            tags TEXT[],
-            downloads INTEGER DEFAULT 0,
-            rating NUMERIC(3, 2) DEFAULT 0.00,
-            created_at TIMESTAMPTZ DEFAULT NOW(),
-            updated_at TIMESTAMPTZ DEFAULT NOW(),
-            UNIQUE(workspace_id) -- A workspace can only be listed once
-        );
+      CREATE TABLE IF NOT EXISTS marketplace_listings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        description TEXT,
+        price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+        creator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        preview_data JSONB,
+        tags TEXT[],
+        downloads INTEGER DEFAULT 0,
+        rating NUMERIC(3, 2) DEFAULT 0.00,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(workspace_id)
+      );
     `);
 
     await client.query(`
-        CREATE TABLE IF NOT EXISTS user_purchases (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            listing_id UUID NOT NULL REFERENCES marketplace_listings(id) ON DELETE CASCADE,
-            price_paid NUMERIC(10, 2) NOT NULL,
-            purchased_at TIMESTAMPTZ DEFAULT NOW(),
-            UNIQUE(user_id, listing_id) -- A user can only buy a listing once
-        );
+      CREATE TABLE IF NOT EXISTS user_purchases (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        listing_id UUID NOT NULL REFERENCES marketplace_listings(id) ON DELETE CASCADE,
+        price_paid NUMERIC(10, 2) NOT NULL,
+        purchased_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, listing_id)
+      );
     `);
 
-    // --- Seed Permissions ---
+    // ---- SEEDS ----
     const permissionsToSeed: Permission[] = [
       { id: 'workspace:create', subject: 'Workspace', description: 'Pode criar novos fluxos.' },
       { id: 'workspace:read', subject: 'Workspace', description: 'Pode visualizar fluxos.' },
@@ -553,20 +571,44 @@ async function initializeDatabaseSchema(): Promise<void> {
       await client.query(insertPermissionQuery, [p.id, p.subject, p.description]);
     }
 
-    // Associate all permissions with the 'Admin' role for each organization that has it
     const adminRoles = await client.query<{ id: string }>(`SELECT id FROM roles WHERE name = 'Admin'`);
     if (adminRoles.rowCount > 0) {
-        const allPermissionIds = permissionsToSeed.map(p => p.id);
-        for (const role of adminRoles.rows) {
-            for (const permId of allPermissionIds) {
-                await client.query(
-                    `INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-                    [role.id, permId]
-                );
-            }
+      const allPermissionIds = permissionsToSeed.map(p => p.id);
+      for (const role of adminRoles.rows) {
+        for (const permId of allPermissionIds) {
+          await client.query(
+            `INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [role.id, permId]
+          );
         }
+      }
     }
-    
+
+    /** ---------- MIGRAÇÕES DE TIPO (conserto do erro text=uuid) ---------- */
+    // Garanta que IDs e FKs críticos sejam UUID mesmo se algum ambiente antigo tiver TEXT
+    await ensureUuidColumn(client, 'users', 'id');
+    await ensureUuidColumn(client, 'organizations', 'id');
+    await ensureUuidColumn(client, 'workspaces', 'id');
+    await ensureUuidColumn(client, 'workspaces', 'owner_id');
+    await ensureUuidColumn(client, 'workspaces', 'organization_id');
+    await ensureUuidColumn(client, 'flow_sessions', 'workspace_id');
+    await ensureUuidColumn(client, 'marketplace_listings', 'id');
+    await ensureUuidColumn(client, 'marketplace_listings', 'creator_id');
+    await ensureUuidColumn(client, 'marketplace_listings', 'workspace_id');
+    await ensureUuidColumn(client, 'user_purchases', 'id');
+    await ensureUuidColumn(client, 'user_purchases', 'user_id');
+    await ensureUuidColumn(client, 'user_purchases', 'listing_id');
+    await ensureUuidColumn(client, 'roles', 'id');
+    await ensureUuidColumn(client, 'roles', 'organization_id');
+    await ensureUuidColumn(client, 'organization_users', 'user_id');
+    await ensureUuidColumn(client, 'organization_users', 'organization_id');
+    await ensureUuidColumn(client, 'organization_users', 'role_id');
+    await ensureUuidColumn(client, 'teams', 'id');
+    await ensureUuidColumn(client, 'teams', 'organization_id');
+    await ensureUuidColumn(client, 'team_members', 'team_id');
+    await ensureUuidColumn(client, 'team_members', 'user_id');
+    await ensureUuidColumn(client, 'team_members', 'organization_id');
+
     await client.query('COMMIT');
     console.log('[DB Actions] Schema initialization and migration check complete.');
   } catch (error) {
@@ -580,35 +622,35 @@ async function initializeDatabaseSchema(): Promise<void> {
 
 // --- Audit Log Actions ---
 export async function createAuditLog(
-    userId: string | null,
-    organizationId: string | null,
-    action: string,
-    details: object = {}
+  userId: string | null,
+  organizationId: string | null,
+  action: string,
+  details: object = {}
 ): Promise<void> {
-    try {
-        await runQuery(
-            'INSERT INTO audit_logs (user_id, organization_id, action, details) VALUES ($1, $2, $3, $4)',
-            [userId, organizationId, action, JSON.stringify(details)]
-        );
-    } catch (error) {
-        console.error('[DB Actions] Failed to create audit log:', { userId, action, error });
-    }
+  try {
+    await runQuery(
+      'INSERT INTO audit_logs (user_id, organization_id, action, details) VALUES ($1, $2, $3, $4)',
+      [userId, organizationId, action, JSON.stringify(details)]
+    );
+  } catch (error) {
+    console.error('[DB Actions] Failed to create audit log:', { userId, action, error });
+  }
 }
 
 export async function getAuditLogsForOrganization(
-    organizationId: string,
-    filters: {
-        userId?: string;
-        actionType?: string;
-        workspaceId?: string;
-        startDate?: string;
-        endDate?: string;
-        limit?: number;
-        offset?: number;
-    } = {}
+  organizationId: string,
+  filters: {
+    userId?: string;
+    actionType?: string;
+    workspaceId?: string;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+    offset?: number;
+  } = {}
 ): Promise<AuditLog[]> {
-    const { userId, actionType, workspaceId, startDate, endDate, limit = 50, offset = 0 } = filters;
-    let query = `
+  const { userId, actionType, workspaceId, startDate, endDate, limit = 50, offset = 0 } = filters;
+  let query = `
         SELECT 
             al.id,
             al.user_id,
@@ -622,254 +664,243 @@ export async function getAuditLogsForOrganization(
         LEFT JOIN users u ON al.user_id = u.id
         WHERE al.organization_id = $1
     `;
-    const params: any[] = [organizationId];
-    let paramIndex = 2;
+  const params: any[] = [organizationId];
+  let paramIndex = 2;
 
-    if (userId) {
-        query += ` AND al.user_id = $${paramIndex++}`;
-        params.push(userId);
-    }
-    if (actionType) {
-        query += ` AND al.action = $${paramIndex++}`;
-        params.push(actionType);
-    }
-     if (workspaceId) {
-        query += ` AND al.details->>'workspaceId' = $${paramIndex++}`;
-        params.push(workspaceId);
-    }
-    if (startDate) {
-        query += ` AND al.created_at >= $${paramIndex++}`;
-        params.push(startDate);
-    }
-    if (endDate) {
-        // Adiciona 1 dia para incluir todo o dia selecionado
-        const inclusiveEndDate = new Date(endDate);
-        inclusiveEndDate.setDate(inclusiveEndDate.getDate() + 1);
-        query += ` AND al.created_at < $${paramIndex++}`;
-        params.push(inclusiveEndDate.toISOString());
-    }
+  if (userId) {
+    query += ` AND al.user_id = $${paramIndex++}`;
+    params.push(userId);
+  }
+  if (actionType) {
+    query += ` AND al.action = $${paramIndex++}`;
+    params.push(actionType);
+  }
+  if (workspaceId) {
+    query += ` AND al.details->>'workspaceId' = $${paramIndex++}`;
+    params.push(workspaceId);
+  }
+  if (startDate) {
+    query += ` AND al.created_at >= $${paramIndex++}`;
+    params.push(startDate);
+  }
+  if (endDate) {
+    const inclusiveEndDate = new Date(endDate);
+    inclusiveEndDate.setDate(inclusiveEndDate.getDate() + 1);
+    query += ` AND al.created_at < $${paramIndex++}`;
+    params.push(inclusiveEndDate.toISOString());
+  }
 
-    query += ` ORDER BY al.created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-    params.push(limit, offset);
+  query += ` ORDER BY al.created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+  params.push(limit, offset);
 
-    const result = await runQuery<AuditLog>(query, params);
-    return result.rows.map(row => ({
-        ...row,
-        user: {
-            id: row.user_id,
-            username: row.username,
-            full_name: row.full_name
-        }
-    }));
+  const result = await runQuery<AuditLog>(query, params);
+  return result.rows.map(row => ({
+    ...row,
+    user: {
+      id: row.user_id,
+      username: row.username,
+      full_name: row.full_name
+    }
+  }));
 }
-
 
 // --- User Actions ---
 export async function findUserByUsername(username: string): Promise<User | null> {
-    const result = await runQuery<User>(
-        'SELECT id, username, email, full_name, role, password_hash, current_organization_id FROM users WHERE username = $1',
-        [username]
-    );
-    if (result.rows.length > 0) {
-        return result.rows[0];
-    }
-    return null;
+  const result = await runQuery<User>(
+    'SELECT id, username, email, full_name, role, password_hash, current_organization_id FROM users WHERE username = $1',
+    [username]
+  );
+  if (result.rows.length > 0) {
+    return result.rows[0];
+  }
+  return null;
 }
 
 export async function getUserById(userId: string): Promise<User | null> {
-    const result = await runQuery<User>(
-        'SELECT id, username, email, full_name, role, password_hash, current_organization_id FROM users WHERE id = $1',
-        [userId]
-    );
-    return result.rows.length > 0 ? result.rows[0] : null;
+  const result = await runQuery<User>(
+    'SELECT id, username, email, full_name, role, password_hash, current_organization_id FROM users WHERE id = $1',
+    [userId]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
 }
 
 export async function createUser(
-    username: string, 
-    passwordHash: string, 
-    fullName: string, 
-    email: string, 
-    role: 'user' | 'desenvolvedor' = 'user'
+  username: string,
+  passwordHash: string,
+  fullName: string,
+  email: string,
+  role: 'user' | 'desenvolvedor' = 'user'
 ): Promise<{ success: boolean; user?: User; error?: string }> {
-    try {
-        const result = await runQuery<User>(
-            'INSERT INTO users (username, password_hash, full_name, email, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, full_name, email, role',
-            [username, passwordHash, fullName, email, role]
-        );
-        if (result.rows.length > 0) {
-            return { success: true, user: result.rows[0] };
-        }
-        return { success: false, error: 'Falha ao criar usuário.' };
-
-    } catch (error: any) {
-        if (error.code === '23505') { 
-            const constraint = error.constraint || '';
-            if (constraint.includes('username')) {
-                return { success: false, error: 'Este nome de usuário já está em uso.' };
-            }
-            if (constraint.includes('email')) {
-                return { success: false, error: 'Este endereço de e-mail já está em uso.' };
-            }
-        }
-        console.error("[DB Actions] Error creating user:", error);
-        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  try {
+    const result = await runQuery<User>(
+      'INSERT INTO users (username, password_hash, full_name, email, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, full_name, email, role',
+      [username, passwordHash, fullName, email, role]
+    );
+    if (result.rows.length > 0) {
+      return { success: true, user: result.rows[0] };
     }
+    return { success: false, error: 'Falha ao criar usuário.' };
+  } catch (error: any) {
+    if (error.code === '23505') {
+      const constraint = error.constraint || '';
+      if (constraint.includes('username')) {
+        return { success: false, error: 'Este nome de usuário já está em uso.' };
+      }
+      if (constraint.includes('email')) {
+        return { success: false, error: 'Este endereço de e-mail já está em uso.' };
+      }
+    }
+    console.error("[DB Actions] Error creating user:", error);
+    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  }
 }
-
 
 // --- Organization Actions ---
 export async function createOrganization(name: string, ownerId: string): Promise<{ success: boolean; organization?: Organization; error?: string }> {
-    let client;
-    try {
-        const pool = getDbPool();
-        client = await pool.connect();
-        await client.query('BEGIN');
-
-        const orgResult = await client.query<Organization>(
-            'INSERT INTO organizations (name, owner_id) VALUES ($1, $2) RETURNING id, name, owner_id, created_at',
-            [name, ownerId]
-        );
-        const newOrg = orgResult.rows[0];
-        if (!newOrg) {
-            throw new Error("Falha ao criar a linha da organização.");
-        }
-
-        // Create the Admin role for the new organization and get the ID
-        const adminRoleResult = await client.query<{ id: string }>(
-            `INSERT INTO roles (organization_id, name, description, is_system_role) VALUES ($1, 'Admin', 'Acesso total a todas as configurações e fluxos.', TRUE) RETURNING id`,
-            [newOrg.id]
-        );
-        const adminRoleId = adminRoleResult.rows[0]?.id;
-        if (!adminRoleId) {
-            throw new Error("Falha ao criar o cargo de Admin para a nova organização.");
-        }
-
-        // Associate the owner with the organization with the Admin role
-        await client.query(
-            'INSERT INTO organization_users (user_id, organization_id, role_id) VALUES ($1, $2, $3)',
-            [ownerId, newOrg.id, adminRoleId]
-        );
-        
-        await client.query('COMMIT');
-        
-        return { success: true, organization: newOrg };
-        
-    } catch (error: any) {
-        if (client) await client.query('ROLLBACK');
-        console.error('[DB Actions] Erro ao criar organização:', error);
-        return { success: false, error: `Erro de banco de dados: ${error.message}` };
-    } finally {
-        if (client) client.release();
-    }
-}
-
-export async function updateOrganizationInDB(id: string, name: string): Promise<{ success: boolean; error?: string }> {
-    try {
-        const result = await runQuery('UPDATE organizations SET name = $1 WHERE id = $2', [name, id]);
-        if (result.rowCount === 0) {
-            return { success: false, error: "Organização não encontrada para atualização." };
-        }
-        return { success: true };
-    } catch (error: any) {
-        console.error('[DB Actions] Error updating organization:', error);
-        return { success: false, error: `Erro de banco de dados: ${error.message}` };
-    }
-}
-
-export async function getOrganizationsForUser(userId: string): Promise<Organization[]> {
-    const result = await runQuery<Organization>(
-        `SELECT o.id, o.name, o.owner_id, o.created_at 
-         FROM organizations o
-         JOIN organization_users ou ON o.id = ou.organization_id
-         WHERE ou.user_id = $1`,
-        [userId]
-    );
-    return result.rows;
-}
-
-export async function setCurrentOrganizationForUser(userId: string, organizationId: string): Promise<void> {
-    await runQuery('UPDATE users SET current_organization_id = $1 WHERE id = $2', [organizationId, userId]);
-}
-
-export async function deleteOrganizationFromDB(organizationId: string): Promise<{ success: boolean; error?: string }> {
-    try {
-        const result = await runQuery('DELETE FROM organizations WHERE id = $1', [organizationId]);
-        if (result.rowCount === 0) {
-            return { success: false, error: "Organização não encontrada para exclusão." };
-        }
-        return { success: true };
-    } catch (error: any) {
-        console.error('[DB Actions] Error deleting organization:', error);
-        return { success: false, error: `Erro de banco de dados: ${error.message}` };
-    }
-}
-
-
-// --- Workspace Actions ---
-export async function createWorkspaceAction(
-    name: string,
-    ownerId: string,
-    organizationId: string
-): Promise<{ success: boolean; workspaceId?: string; error?: string }> {
-    try {
-        if (!name || !ownerId || !organizationId) {
-            return { success: false, error: 'Nome do fluxo, ID do proprietário e ID da organização são obrigatórios.' };
-        }
-
-        const newId = uuidv4();
-        const defaultStartNode: NodeData = {
-          id: uuidv4(),
-          type: 'start',
-          title: 'Início do Fluxo',
-          x: 100,
-          y: 150,
-          triggers: [
-              { id: uuidv4(), name: 'Manual', type: 'manual', enabled: true },
-              { id: uuidv4(), name: 'Webhook', type: 'webhook', enabled: false, variableMappings: [], sessionTimeoutSeconds: 0 }
-          ]
-        };
-
-        const newWorkspace: WorkspaceData = {
-            id: newId,
-            name: name,
-            nodes: [defaultStartNode],
-            connections: [],
-            owner_id: ownerId,
-            organization_id: organizationId,
-            chatwoot_enabled: false,
-        };
-
-        const saveResult = await saveWorkspaceToDB(newWorkspace, ownerId, 'Fluxo inicial criado.');
-
-        if (!saveResult.success) {
-            return { success: false, error: saveResult.error };
-        }
-        
-        await createAuditLog(ownerId, organizationId, 'create_workspace', { workspaceId: newId, workspaceName: name });
-        return { success: true, workspaceId: newId };
-    } catch (error: any) {
-        console.error('[DB Actions] createWorkspaceAction Error:', error);
-        return { success: false, error: `Erro do servidor: ${error.message}` };
-    }
-}
-
-
-export async function saveWorkspaceToDB(
-    workspaceData: WorkspaceData, 
-    userId: string, 
-    versionDescription?: string | null
-): Promise<{ success: boolean; error?: string }> {
   let client;
   try {
-    if (!workspaceData.owner_id || !workspaceData.name || !workspaceData.id || !workspaceData.organization_id) {
-        return { success: false, error: "Dados do workspace incompletos (requer id, nome, proprietário e organização)." };
-    }
-    
     const pool = getDbPool();
     client = await pool.connect();
     await client.query('BEGIN');
 
-    // Upsert the main workspace table
+    const orgResult = await client.query<Organization>(
+      'INSERT INTO organizations (name, owner_id) VALUES ($1, $2) RETURNING id, name, owner_id, created_at',
+      [name, ownerId]
+    );
+    const newOrg = orgResult.rows[0];
+    if (!newOrg) {
+      throw new Error("Falha ao criar a linha da organização.");
+    }
+
+    const adminRoleResult = await client.query<{ id: string }>(
+      `INSERT INTO roles (organization_id, name, description, is_system_role) VALUES ($1, 'Admin', 'Acesso total a todas as configurações e fluxos.', TRUE) RETURNING id`,
+      [newOrg.id]
+    );
+    const adminRoleId = adminRoleResult.rows[0]?.id;
+    if (!adminRoleId) {
+      throw new Error("Falha ao criar o cargo de Admin para a nova organização.");
+    }
+
+    await client.query(
+      'INSERT INTO organization_users (user_id, organization_id, role_id) VALUES ($1, $2, $3)',
+      [ownerId, newOrg.id, adminRoleId]
+    );
+
+    await client.query('COMMIT');
+    return { success: true, organization: newOrg };
+  } catch (error: any) {
+    if (client) await client.query('ROLLBACK');
+    console.error('[DB Actions] Erro ao criar organização:', error);
+    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  } finally {
+    if (client) client.release();
+  }
+}
+
+export async function updateOrganizationInDB(id: string, name: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const result = await runQuery('UPDATE organizations SET name = $1 WHERE id = $2', [name, id]);
+    if (result.rowCount === 0) {
+      return { success: false, error: "Organização não encontrada para atualização." };
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error('[DB Actions] Error updating organization:', error);
+    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  }
+}
+
+export async function getOrganizationsForUser(userId: string): Promise<Organization[]> {
+  const result = await runQuery<Organization>(
+    `SELECT o.id, o.name, o.owner_id, o.created_at 
+       FROM organizations o
+       JOIN organization_users ou ON o.id = ou.organization_id
+       WHERE ou.user_id = $1`,
+    [userId]
+  );
+  return result.rows;
+}
+
+export async function setCurrentOrganizationForUser(userId: string, organizationId: string): Promise<void> {
+  await runQuery('UPDATE users SET current_organization_id = $1 WHERE id = $2', [organizationId, userId]);
+}
+
+export async function deleteOrganizationFromDB(organizationId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const result = await runQuery('DELETE FROM organizations WHERE id = $1', [organizationId]);
+    if (result.rowCount === 0) {
+      return { success: false, error: "Organização não encontrada para exclusão." };
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error('[DB Actions] Error deleting organization:', error);
+    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  }
+}
+
+// --- Workspace Actions ---
+export async function createWorkspaceAction(
+  name: string,
+  ownerId: string,
+  organizationId: string
+): Promise<{ success: boolean; workspaceId?: string; error?: string }> {
+  try {
+    if (!name || !ownerId || !organizationId) {
+      return { success: false, error: 'Nome do fluxo, ID do proprietário e ID da organização são obrigatórios.' };
+    }
+
+    const newId = uuidv4();
+    const defaultStartNode: NodeData = {
+      id: uuidv4(),
+      type: 'start',
+      title: 'Início do Fluxo',
+      x: 100,
+      y: 150,
+      triggers: [
+        { id: uuidv4(), name: 'Manual', type: 'manual', enabled: true },
+        { id: uuidv4(), name: 'Webhook', type: 'webhook', enabled: false, variableMappings: [], sessionTimeoutSeconds: 0 }
+      ]
+    };
+
+    const newWorkspace: WorkspaceData = {
+      id: newId,
+      name: name,
+      nodes: [defaultStartNode],
+      connections: [],
+      owner_id: ownerId,
+      organization_id: organizationId,
+      chatwoot_enabled: false,
+    };
+
+    const saveResult = await saveWorkspaceToDB(newWorkspace, ownerId, 'Fluxo inicial criado.');
+
+    if (!saveResult.success) {
+      return { success: false, error: saveResult.error };
+    }
+
+    await createAuditLog(ownerId, organizationId, 'create_workspace', { workspaceId: newId, workspaceName: name });
+    return { success: true, workspaceId: newId };
+  } catch (error: any) {
+    console.error('[DB Actions] createWorkspaceAction Error:', error);
+    return { success: false, error: `Erro do servidor: ${error.message}` };
+  }
+}
+
+export async function saveWorkspaceToDB(
+  workspaceData: WorkspaceData,
+  userId: string,
+  versionDescription?: string | null
+): Promise<{ success: boolean; error?: string }> {
+  let client;
+  try {
+    if (!workspaceData.owner_id || !workspaceData.name || !workspaceData.id || !workspaceData.organization_id) {
+      return { success: false, error: "Dados do workspace incompletos (requer id, nome, proprietário e organização)." };
+    }
+
+    const pool = getDbPool();
+    client = await pool.connect();
+    await client.query('BEGIN');
+
     const upsertWorkspaceQuery = `
       INSERT INTO workspaces (id, name, nodes, connections, owner_id, organization_id, evolution_instance_id, chatwoot_enabled, chatwoot_instance_id, dialogy_instance_id, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
@@ -886,7 +917,7 @@ export async function saveWorkspaceToDB(
     await client.query(upsertWorkspaceQuery, [
       workspaceData.id,
       workspaceData.name,
-      JSON.stringify(workspaceData.nodes || []), 
+      JSON.stringify(workspaceData.nodes || []),
       JSON.stringify(workspaceData.connections || []),
       workspaceData.owner_id,
       workspaceData.organization_id,
@@ -896,7 +927,6 @@ export async function saveWorkspaceToDB(
       workspaceData.dialogy_instance_id || null,
     ]);
 
-    // Create a new version in the history table
     const insertVersionQuery = `
       INSERT INTO workspace_versions (workspace_id, version, name, description, nodes, connections, created_by_id)
       SELECT $1, COALESCE(MAX(version), 0) + 1, $2, $3, $4, $5, $6
@@ -904,22 +934,21 @@ export async function saveWorkspaceToDB(
       WHERE workspace_id = $1;
     `;
     await client.query(insertVersionQuery, [
-        workspaceData.id,
-        workspaceData.name,
-        versionDescription,
-        JSON.stringify(workspaceData.nodes || []),
-        JSON.stringify(workspaceData.connections || []),
-        userId
+      workspaceData.id,
+      workspaceData.name,
+      versionDescription,
+      JSON.stringify(workspaceData.nodes || []),
+      JSON.stringify(workspaceData.connections || []),
+      userId
     ]);
-    
+
     await client.query('COMMIT');
     return { success: true };
-
   } catch (error: any) {
     if (client) await client.query('ROLLBACK');
     console.error(`[DB Actions] saveWorkspaceToDB Error:`, error);
     if (error.code === '23505' && error.constraint === 'workspaces_organization_id_name_key') {
-        return { success: false, error: `Erro: O nome do fluxo '${workspaceData.name}' já existe nesta organização. Por favor, escolha um nome único.` };
+      return { success: false, error: `Erro: O nome do fluxo '${workspaceData.name}' já existe nesta organização. Por favor, escolha um nome único.` };
     }
     let errorMessage = `Erro de banco de dados: ${error.message || 'Erro desconhecido'}. (Código: ${error.code || 'N/A'})`;
     return { success: false, error: errorMessage };
@@ -938,9 +967,9 @@ export async function loadWorkspaceFromDB(workspaceId: string): Promise<Workspac
     `, [workspaceId]);
     if (result.rows.length > 0) {
       const row = result.rows[0];
-      return { 
-        ...row, 
-        nodes: row.nodes || [], 
+      return {
+        ...row,
+        nodes: row.nodes || [],
         connections: row.connections || []
       };
     }
@@ -954,8 +983,8 @@ export async function loadWorkspaceFromDB(workspaceId: string): Promise<Workspac
 export async function loadWorkspacesForOrganizationFromDB(organizationId: string): Promise<WorkspaceData[]> {
   try {
     if (!organizationId) {
-        console.warn("[DB Actions] loadWorkspacesForOrganizationFromDB called without an organization ID.");
-        return [];
+      console.warn("[DB Actions] loadWorkspacesForOrganizationFromDB called without an organization ID.");
+      return [];
     }
     const result = await runQuery<WorkspaceData>(
       `SELECT 
@@ -965,11 +994,11 @@ export async function loadWorkspacesForOrganizationFromDB(organizationId: string
        ORDER BY updated_at DESC`,
       [organizationId]
     );
-     return result.rows.map(row => ({
-        ...row,
-        nodes: row.nodes || [],
-        connections: row.connections || [],
-      }));
+    return result.rows.map(row => ({
+      ...row,
+      nodes: row.nodes || [],
+      connections: row.connections || [],
+    }));
   } catch (error: any) {
     console.error(`[DB Actions] loadWorkspacesForOrganizationFromDB Error for organization ID ${organizationId}:`, error);
     return [];
@@ -992,10 +1021,9 @@ export async function deleteWorkspaceAction(workspaceId: string): Promise<{ succ
 }
 
 // --- Version History Actions ---
-
 export async function getWorkspaceVersions(workspaceId: string): Promise<{ data?: WorkspaceVersion[]; error?: string }> {
-    try {
-        const query = `
+  try {
+    const query = `
             SELECT 
                 wv.id, wv.workspace_id, wv.version, wv.name, wv.description, wv.created_at, wv.created_by_id,
                 u.username as created_by_username
@@ -1004,81 +1032,76 @@ export async function getWorkspaceVersions(workspaceId: string): Promise<{ data?
             WHERE wv.workspace_id = $1
             ORDER BY wv.version DESC;
         `;
-        const result = await runQuery<any>(query, [workspaceId]);
-        return { data: result.rows };
-    } catch (error: any) {
-        console.error(`[DB Actions] Error getting versions for workspace ${workspaceId}:`, error);
-        return { error: `Erro de banco de dados: ${error.message}` };
-    }
+    const result = await runQuery<any>(query, [workspaceId]);
+    return { data: result.rows };
+  } catch (error: any) {
+    console.error(`[DB Actions] Error getting versions for workspace ${workspaceId}:`, error);
+    return { error: `Erro de banco de dados: ${error.message}` };
+  }
 }
 
 export async function restoreWorkspaceVersion(
-    versionId: number, 
-    restoredByUserId: string
+  versionId: number,
+  restoredByUserId: string
 ): Promise<{ success: boolean; error?: string; workspace?: WorkspaceData }> {
-    let client;
-    try {
-        const pool = getDbPool();
-        client = await pool.connect();
-        await client.query('BEGIN');
+  let client;
+  try {
+    const pool = getDbPool();
+    client = await pool.connect();
+    await client.query('BEGIN');
 
-        // 1. Get the version data
-        const versionResult = await client.query<WorkspaceVersion>(
-            'SELECT * FROM workspace_versions WHERE id = $1',
-            [versionId]
-        );
-        const versionToRestore = versionResult.rows[0];
-        if (!versionToRestore) {
-            throw new Error(`Versão com ID ${versionId} não encontrada.`);
-        }
+    const versionResult = await client.query<WorkspaceVersion>(
+      'SELECT * FROM workspace_versions WHERE id = $1',
+      [versionId]
+    );
+    const versionToRestore = versionResult.rows[0];
+    if (!versionToRestore) {
+      throw new Error(`Versão com ID ${versionId} não encontrada.`);
+    }
 
-        // 2. Update the main workspace table with the version data
-        const workspaceUpdateQuery = `
+    const workspaceUpdateQuery = `
             UPDATE workspaces
             SET name = $1, nodes = $2, connections = $3, updated_at = NOW()
             WHERE id = $4
             RETURNING *;
         `;
-        const updatedWorkspaceResult = await client.query<WorkspaceData>(workspaceUpdateQuery, [
-            versionToRestore.name,
-            versionToRestore.nodes,
-            versionToRestore.connections,
-            versionToRestore.workspace_id
-        ]);
-        const updatedWorkspace = updatedWorkspaceResult.rows[0];
-        if (!updatedWorkspace) {
-            throw new Error("Falha ao atualizar o fluxo principal com os dados da versão.");
-        }
+    const updatedWorkspaceResult = await client.query<WorkspaceData>(workspaceUpdateQuery, [
+      versionToRestore.name,
+      versionToRestore.nodes,
+      versionToRestore.connections,
+      versionToRestore.workspace_id
+    ]);
+    const updatedWorkspace = updatedWorkspaceResult.rows[0];
+    if (!updatedWorkspace) {
+      throw new Error("Falha ao atualizar o fluxo principal com os dados da versão.");
+    }
 
-        // 3. Create a new version entry for this restore action
-        const restoreDescription = `Restaurado a partir da versão ${versionToRestore.version}.`;
-        const newVersionQuery = `
+    const restoreDescription = `Restaurado a partir da versão ${versionToRestore.version}.`;
+    const newVersionQuery = `
             INSERT INTO workspace_versions (workspace_id, version, name, description, nodes, connections, created_by_id)
             SELECT $1, COALESCE(MAX(version), 0) + 1, $2, $3, $4, $5, $6
             FROM workspace_versions
             WHERE workspace_id = $1;
         `;
-        await client.query(newVersionQuery, [
-            updatedWorkspace.id,
-            updatedWorkspace.name,
-            restoreDescription,
-            updatedWorkspace.nodes,
-            updatedWorkspace.connections,
-            restoredByUserId
-        ]);
+    await client.query(newVersionQuery, [
+      updatedWorkspace.id,
+      updatedWorkspace.name,
+      restoreDescription,
+      updatedWorkspace.nodes,
+      updatedWorkspace.connections,
+      restoredByUserId
+    ]);
 
-        await client.query('COMMIT');
-        return { success: true, workspace: updatedWorkspace };
-
-    } catch (error: any) {
-        if (client) await client.query('ROLLBACK');
-        console.error(`[DB Actions] Erro ao restaurar versão ${versionId}:`, error);
-        return { success: false, error: `Erro de banco de dados: ${error.message}` };
-    } finally {
-        if (client) client.release();
-    }
+    await client.query('COMMIT');
+    return { success: true, workspace: updatedWorkspace };
+  } catch (error: any) {
+    if (client) await client.query('ROLLBACK');
+    console.error(`[DB Actions] Erro ao restaurar versão ${versionId}:`, error);
+    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  } finally {
+    if (client) client.release();
+  }
 }
-
 
 // --- Flow Session Actions ---
 export async function saveSessionToDB(sessionData: FlowSession): Promise<{ success: boolean; error?: string }> {
@@ -1121,8 +1144,8 @@ export async function loadSessionFromDB(sessionId: string): Promise<FlowSession 
     );
     if (result.rows.length > 0) {
       const row = result.rows[0];
-      return { 
-        ...row, 
+      return {
+        ...row,
         flow_variables: row.flow_variables || {},
         awaiting_input_details: row.awaiting_input_details || null
       };
@@ -1137,18 +1160,17 @@ export async function loadSessionFromDB(sessionId: string): Promise<FlowSession 
 export async function deleteSessionFromDB(sessionId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const result = await runQuery('DELETE FROM flow_sessions WHERE session_id = $1', [sessionId]);
-     if (result.rowCount > 0) {
-        return { success: true };
+    if (result.rowCount > 0) {
+      return { success: true };
     } else {
-        console.warn(`[DB Actions] deleteSessionFromDB: Session ID ${sessionId} not found for deletion.`);
-        return { success: true };
+      console.warn(`[DB Actions] deleteSessionFromDB: Session ID ${sessionId} not found for deletion.`);
+      return { success: true };
     }
   } catch (error: any) {
     console.error(`[DB Actions] deleteSessionFromDB Error for ID ${sessionId}:`, error);
     return { success: false, error: error.message };
   }
 }
-
 
 export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<FlowSession[]> {
   try {
@@ -1170,7 +1192,7 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
         fs.created_at, 
         fs.last_interaction_at
       FROM flow_sessions fs
-      JOIN workspaces ws ON fs.workspace_id = ws.id
+      JOIN workspaces ws ON fs.workspace_id = ws.id::uuid
       WHERE ws.owner_id = $1::uuid
       ORDER BY fs.last_interaction_at DESC;
     `;
@@ -1190,7 +1212,7 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
 export async function deleteAllSessionsForOwnerFromDB(ownerId: string): Promise<{ success: boolean; error?: string; count: number }> {
   try {
     if (!ownerId) {
-        return { success: false, error: "ID do proprietário não fornecido.", count: 0 };
+      return { success: false, error: "ID do proprietário não fornecido.", count: 0 };
     }
 
     const query = `
@@ -1209,77 +1231,77 @@ export async function deleteAllSessionsForOwnerFromDB(ownerId: string): Promise<
 
 // --- Chatwoot Instance Actions ---
 export async function getChatwootInstancesForUser(userId: string): Promise<{ data?: ChatwootInstance[]; error?: string }> {
-    try {
-        const result = await runQuery<ChatwootInstance>(
-            'SELECT id, name, base_url, api_access_token FROM chatwoot_instances WHERE user_id = $1 ORDER BY name',
-            [userId]
-        );
-        return {
-            data: result.rows.map(row => ({
-                id: row.id,
-                name: row.name,
-                baseUrl: (row as any).base_url,
-                apiAccessToken: (row as any).api_access_token,
-                status: 'unconfigured'
-            }))
-        };
-    } catch (error: any) {
-        console.error('[DB Actions] Error fetching Chatwoot instances:', error);
-        return { error: `Erro de banco de dados: ${error.message}` };
-    }
+  try {
+    const result = await runQuery<ChatwootInstance>(
+      'SELECT id, name, base_url, api_access_token FROM chatwoot_instances WHERE user_id = $1 ORDER BY name',
+      [userId]
+    );
+    return {
+      data: result.rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        baseUrl: (row as any).base_url,
+        apiAccessToken: (row as any).api_access_token,
+        status: 'unconfigured'
+      }))
+    };
+  } catch (error: any) {
+    console.error('[DB Actions] Error fetching Chatwoot instances:', error);
+    return { error: `Erro de banco de dados: ${error.message}` };
+  }
 }
 
 export async function loadChatwootInstanceFromDB(instanceId: string): Promise<ChatwootInstance | null> {
-    const result = await runQuery<any>(
-        'SELECT id, name, base_url, api_access_token FROM chatwoot_instances WHERE id = $1',
-        [instanceId]
-    );
-    if (result.rows.length > 0) {
-        const row = result.rows[0];
-        return {
-            id: row.id,
-            name: row.name,
-            baseUrl: row.base_url,
-            apiAccessToken: row.api_access_token,
-            status: 'unconfigured'
-        };
-    }
-    return null;
+  const result = await runQuery<any>(
+    'SELECT id, name, base_url, api_access_token FROM chatwoot_instances WHERE id = $1',
+    [instanceId]
+  );
+  if (result.rows.length > 0) {
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      name: row.name,
+      baseUrl: row.base_url,
+      apiAccessToken: row.api_access_token,
+      status: 'unconfigured'
+    };
+  }
+  return null;
 }
 
 // --- Dialogy Instance Actions ---
 export async function loadDialogyInstanceFromDB(instanceId: string): Promise<DialogyInstance | null> {
-    const result = await runQuery<any>(
-        'SELECT id, name, base_url, api_key FROM dialogy_instances WHERE id = $1',
-        [instanceId]
-    );
-    if (result.rows.length > 0) {
-        const row = result.rows[0];
-        return {
-            id: row.id,
-            name: row.name,
-            baseUrl: row.base_url,
-            apiKey: row.api_key,
-            status: 'unconfigured'
-        };
-    }
-    return null;
+  const result = await runQuery<any>(
+    'SELECT id, name, base_url, api_key FROM dialogy_instances WHERE id = $1',
+    [instanceId]
+  );
+  if (result.rows.length > 0) {
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      name: row.name,
+      baseUrl: row.base_url,
+      apiKey: row.api_key,
+      status: 'unconfigured'
+    };
+  }
+  return null;
 }
 
-
+// Inicialização imediata do schema
 (async () => {
-    try {
-        await initializeDatabaseSchema();
-    } catch (error: any) {
-        console.error('[DB Actions] FATAL: Initial database setup failed.', {
-            message: error.message,
-            code: error.code,
-            hint: "Please check your .env file and ensure the PostgreSQL server is running and accessible."
-        });
-    }
+  try {
+    await initializeDatabaseSchema();
+  } catch (error: any) {
+    console.error('[DB Actions] FATAL: Initial database setup failed.', {
+      message: error.message,
+      code: error.code,
+      hint: "Please check your .env file and ensure the PostgreSQL server is running and accessible."
+    });
+  }
 })();
 
-// Deprecated function, will be removed later.
+// Deprecated
 export async function loadWorkspaceByNameFromDB(name: string, ownerId: string): Promise<WorkspaceData | null> {
   try {
     const result = await runQuery<WorkspaceData>(
@@ -1298,7 +1320,7 @@ export async function loadWorkspaceByNameFromDB(name: string, ownerId: string): 
 
 // --- Team & Member Actions ---
 export async function getUsersForOrganization(organizationId: string): Promise<OrganizationUser[]> {
-    const query = `
+  const query = `
         SELECT 
             u.id, 
             u.username, 
@@ -1313,45 +1335,42 @@ export async function getUsersForOrganization(organizationId: string): Promise<O
         WHERE ou.organization_id = $1
         ORDER BY u.username;
     `;
-    const result = await runQuery<OrganizationUser>(query, [organizationId]);
-    return result.rows;
+  const result = await runQuery<OrganizationUser>(query, [organizationId]);
+  return result.rows;
 }
 
 export async function getTeamsForOrganization(organizationId: string): Promise<Team[]> {
-    const query = `
+  const query = `
         SELECT t.id, t.name, t.description,
-               (SELECT json_agg(u.*)
+               (SELECT json_agg(json_build_object('id', u.id, 'username', u.username, 'email', u.email, 'full_name', u.full_name))
                 FROM users u
                 JOIN team_members tm ON u.id = tm.user_id
                 WHERE tm.team_id = t.id) as members
         FROM teams t
         WHERE t.organization_id = $1
     `;
-    const result = await runQuery<any>(query, [organizationId]);
-    
-    // Process rows to ensure members is an array, even if null from DB
-    return result.rows.map(row => ({
-        ...row,
-        members: row.members || [],
-    }));
+  const result = await runQuery<any>(query, [organizationId]);
+
+  return result.rows.map(row => ({
+    ...row,
+    members: row.members || [],
+  }));
 }
 
-
 // --- SMTP Settings Actions ---
-
 export async function getSmtpSettings(organizationId: string): Promise<SmtpSettings | null> {
-    if (!organizationId) return null;
-    const result = await runQuery<SmtpSettings>(
-        'SELECT * FROM smtp_settings WHERE organization_id = $1',
-        [organizationId]
-    );
-    return result.rows.length > 0 ? result.rows[0] : null;
+  if (!organizationId) return null;
+  const result = await runQuery<SmtpSettings>(
+    'SELECT * FROM smtp_settings WHERE organization_id = $1',
+    [organizationId]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
 }
 
 export async function saveSmtpSettings(settings: Omit<SmtpSettings, 'id' | 'created_at' | 'updated_at'>): Promise<{ success: boolean, error?: string }> {
-    const { organization_id, host, port, secure, username, password, from_name, from_email } = settings;
+  const { organization_id, host, port, secure, username, password, from_name, from_email } = settings;
 
-    const query = `
+  const query = `
         INSERT INTO smtp_settings (organization_id, host, port, secure, username, password, from_name, from_email, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
         ON CONFLICT (organization_id) DO UPDATE
@@ -1364,187 +1383,182 @@ export async function saveSmtpSettings(settings: Omit<SmtpSettings, 'id' | 'crea
             from_email = EXCLUDED.from_email,
             updated_at = NOW();
     `;
-    try {
-        await runQuery(query, [organization_id, host, port, secure, username, password, from_name, from_email]);
-        return { success: true };
-    } catch (error: any) {
-        console.error('[DB Actions] Error saving SMTP settings:', error);
-        return { success: false, error: `Erro de banco de dados: ${error.message}` };
-    }
+  try {
+    await runQuery(query, [organization_id, host, port, secure, username, password, from_name, from_email]);
+    return { success: true };
+  } catch (error: any) {
+    console.error('[DB Actions] Error saving SMTP settings:', error);
+    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  }
 }
-
 
 // --- RBAC Actions ---
 export async function getRolesForOrganization(organizationId: string): Promise<Role[]> {
-    const query = `
+  const query = `
         SELECT 
-            r.id, 
-            r.name, 
-            r.description,
-            r.is_system_role,
-            COALESCE(
-                (SELECT json_agg(rp.permission_id) 
-                 FROM role_permissions rp 
-                 WHERE rp.role_id = r.id),
-                '[]'::json
-            ) as permissions
+          r.id, 
+          r.name, 
+          r.description,
+          r.is_system_role,
+          COALESCE(
+              (SELECT json_agg(rp.permission_id) 
+               FROM role_permissions rp 
+               WHERE rp.role_id = r.id),
+              '[]'::json
+          ) as permissions
         FROM roles r
         WHERE r.organization_id = $1
         ORDER BY r.is_system_role DESC, r.name ASC;
     `;
-    const result = await runQuery<any>(query, [organizationId]);
-    return result.rows.map(row => ({
-        ...row,
-        permissions: Array.isArray(row.permissions) ? row.permissions : [],
-    }));
+  const result = await runQuery<any>(query, [organizationId]);
+  return result.rows.map(row => ({
+    ...row,
+    permissions: Array.isArray(row.permissions) ? row.permissions : [],
+  }));
 }
 
 export async function getPermissions(): Promise<Permission[]> {
-    const result = await runQuery<Permission>('SELECT id, subject, description FROM permissions ORDER BY subject, id');
-    return result.rows;
+  const result = await runQuery<Permission>('SELECT id, subject, description FROM permissions ORDER BY subject, id');
+  return result.rows;
 }
 
 export async function createRole(
-    organizationId: string,
-    name: string,
-    description: string,
-    permissionIds: string[]
+  organizationId: string,
+  name: string,
+  description: string,
+  permissionIds: string[]
 ): Promise<{ success: boolean; role?: Role; error?: string }> {
-    let client;
-    try {
-        const pool = getDbPool();
-        client = await pool.connect();
-        await client.query('BEGIN');
+  let client;
+  try {
+    const pool = getDbPool();
+    client = await pool.connect();
+    await client.query('BEGIN');
 
-        const roleResult = await client.query<Role>(
-            'INSERT INTO roles (organization_id, name, description, is_system_role) VALUES ($1, $2, $3, FALSE) RETURNING *',
-            [organizationId, name, description]
-        );
-        const newRole = roleResult.rows[0];
-        if (!newRole) throw new Error("Falha ao criar o cargo.");
+    const roleResult = await client.query<Role>(
+      'INSERT INTO roles (organization_id, name, description, is_system_role) VALUES ($1, $2, $3, FALSE) RETURNING *',
+      [organizationId, name, description]
+    );
+    const newRole = roleResult.rows[0];
+    if (!newRole) throw new Error("Falha ao criar o cargo.");
 
-        if (permissionIds.length > 0) {
-            const values = permissionIds.map(permId => `('${newRole.id}', '${permId}')`).join(',');
-            await client.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ${values}`);
-        }
-
-        await client.query('COMMIT');
-        
-        newRole.permissions = permissionIds;
-        return { success: true, role: newRole };
-    } catch (error: any) {
-        if (client) await client.query('ROLLBACK');
-        if (error.code === '23505') { // unique_violation
-            return { success: false, error: `Um cargo com o nome "${name}" já existe.` };
-        }
-        console.error('[DB Actions] Erro ao criar cargo:', error);
-        return { success: false, error: `Erro de banco de dados: ${error.message}` };
-    } finally {
-        if (client) client.release();
+    if (permissionIds.length > 0) {
+      const values = permissionIds.map(permId => `('${newRole.id}', '${permId}')`).join(',');
+      await client.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ${values}`);
     }
+
+    await client.query('COMMIT');
+
+    newRole.permissions = permissionIds;
+    return { success: true, role: newRole };
+  } catch (error: any) {
+    if (client) await client.query('ROLLBACK');
+    if (error.code === '23505') { // unique_violation
+      return { success: false, error: `Um cargo com o nome "${name}" já existe.` };
+    }
+    console.error('[DB Actions] Erro ao criar cargo:', error);
+    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  } finally {
+    if (client) client.release();
+  }
 }
 
 export async function updateRole(
-    roleId: string,
-    name: string,
-    description: string,
-    permissionIds: string[]
+  roleId: string,
+  name: string,
+  description: string,
+  permissionIds: string[]
 ): Promise<{ success: boolean; role?: Role; error?: string }> {
-     let client;
-    try {
-        const pool = getDbPool();
-        client = await pool.connect();
-        await client.query('BEGIN');
+  let client;
+  try {
+    const pool = getDbPool();
+    client = await pool.connect();
+    await client.query('BEGIN');
 
-        const roleResult = await client.query<Role>(
-            'UPDATE roles SET name = $1, description = $2 WHERE id = $3 RETURNING *',
-            [name, description, roleId]
-        );
-        const updatedRole = roleResult.rows[0];
-        if (!updatedRole) throw new Error("Cargo não encontrado para atualização.");
+    const roleResult = await client.query<Role>(
+      'UPDATE roles SET name = $1, description = $2 WHERE id = $3 RETURNING *',
+      [name, description, roleId]
+    );
+    const updatedRole = roleResult.rows[0];
+    if (!updatedRole) throw new Error("Cargo não encontrado para atualização.");
 
-        await client.query('DELETE FROM role_permissions WHERE role_id = $1', [roleId]);
+    await client.query('DELETE FROM role_permissions WHERE role_id = $1', [roleId]);
 
-        if (permissionIds.length > 0) {
-            const values = permissionIds.map(permId => `('${roleId}', '${permId}')`).join(',');
-            await client.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ${values}`);
-        }
-
-        await client.query('COMMIT');
-        
-        updatedRole.permissions = permissionIds;
-        return { success: true, role: updatedRole };
-    } catch (error: any) {
-        if (client) await client.query('ROLLBACK');
-        if (error.code === '23505') { // unique_violation
-            return { success: false, error: `Um cargo com o nome "${name}" já existe.` };
-        }
-        console.error('[DB Actions] Erro ao atualizar cargo:', error);
-        return { success: false, error: `Erro de banco de dados: ${error.message}` };
-    } finally {
-        if (client) client.release();
+    if (permissionIds.length > 0) {
+      const values = permissionIds.map(permId => `('${roleId}', '${permId}')`).join(',');
+      await client.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ${values}`);
     }
+
+    await client.query('COMMIT');
+
+    updatedRole.permissions = permissionIds;
+    return { success: true, role: updatedRole };
+  } catch (error: any) {
+    if (client) await client.query('ROLLBACK');
+    if (error.code === '23505') { // unique_violation
+      return { success: false, error: `Um cargo com o nome "${name}" já existe.` };
+    }
+    console.error('[DB Actions] Erro ao atualizar cargo:', error);
+    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  } finally {
+    if (client) client.release();
+  }
 }
 
 export async function deleteRole(roleId: string): Promise<{ success: boolean; error?: string }> {
-    try {
-        const result = await runQuery('DELETE FROM roles WHERE id = $1 AND is_system_role = FALSE', [roleId]);
-        if (result.rowCount === 0) {
-            return { success: false, error: "Cargo não encontrado ou é um cargo do sistema que não pode ser excluído." };
-        }
-        return { success: true };
-    } catch (error: any) {
-        console.error('[DB Actions] Erro ao excluir cargo:', error);
-        return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  try {
+    const result = await runQuery('DELETE FROM roles WHERE id = $1 AND is_system_role = FALSE', [roleId]);
+    if (result.rowCount === 0) {
+      return { success: false, error: "Cargo não encontrado ou é um cargo do sistema que não pode ser excluído." };
     }
+    return { success: true };
+  } catch (error: any) {
+    console.error('[DB Actions] Erro ao excluir cargo:', error);
+    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  }
 }
-
 
 // --- Marketplace Actions ---
 export async function getListings(): Promise<{ data?: MarketplaceListing[]; error?: string }> {
-    try {
-        const query = `
+  try {
+    const query = `
             SELECT ml.*, u.username as creator_username
             FROM marketplace_listings ml
             JOIN users u ON ml.creator_id = u.id
             ORDER BY ml.created_at DESC;
         `;
-        const result = await runQuery<any>(query);
-        // Convert numeric fields from string to number
-        const listings = result.rows.map(row => ({
-            ...row,
-            price: parseFloat(row.price),
-            rating: parseFloat(row.rating)
-        }));
-        return { data: listings };
-    } catch (error: any) {
-        console.error('[DB Actions] Error fetching marketplace listings:', error);
-        return { error: `Erro de banco de dados: ${error.message}` };
-    }
+    const result = await runQuery<any>(query);
+    const listings = result.rows.map(row => ({
+      ...row,
+      price: parseFloat(row.price),
+      rating: parseFloat(row.rating)
+    }));
+    return { data: listings };
+  } catch (error: any) {
+    console.error('[DB Actions] Error fetching marketplace listings:', error);
+    return { error: `Erro de banco de dados: ${error.message}` };
+  }
 }
 
 export async function getListingDetails(listingId: string): Promise<{ data?: MarketplaceListing; error?: string }> {
-    try {
-        const query = `
+  try {
+    const query = `
             SELECT ml.*, u.username as creator_username
             FROM marketplace_listings ml
             JOIN users u ON ml.creator_id = u.id
             WHERE ml.id = $1;
         `;
-        const result = await runQuery<any>(query, [listingId]);
-        if (result.rows.length === 0) {
-            return { error: "Fluxo não encontrado no marketplace." };
-        }
-         const listing = {
-            ...result.rows[0],
-            price: parseFloat(result.rows[0].price),
-            rating: parseFloat(result.rows[0].rating)
-        };
-        return { data: listing };
-    } catch (error: any) {
-        console.error(`[DB Actions] Error fetching listing details for ID ${listingId}:`, error);
-        return { error: `Erro de banco de dados: ${error.message}` };
+    const result = await runQuery<any>(query, [listingId]);
+    if (result.rows.length === 0) {
+      return { error: "Fluxo não encontrado no marketplace." };
     }
+    const listing = {
+      ...result.rows[0],
+      price: parseFloat(result.rows[0].price),
+      rating: parseFloat(result.rows[0].rating)
+    };
+    return { data: listing };
+  } catch (error: any) {
+    console.error(`[DB Actions] Error fetching listing details for ID ${listingId}:`, error);
+    return { error: `Erro de banco de dados: ${error.message}` };
+  }
 }
-
-    
