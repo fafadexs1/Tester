@@ -1170,7 +1170,7 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
         fs.last_interaction_at
       FROM flow_sessions fs
       JOIN workspaces ws ON fs.workspace_id = ws.id
-      WHERE ws.owner_id = $1
+      WHERE ws.owner_id = $1::uuid
       ORDER BY fs.last_interaction_at DESC;
     `;
     const result = await runQuery<FlowSession>(query, [ownerId]);
@@ -1194,7 +1194,7 @@ export async function deleteAllSessionsForOwnerFromDB(ownerId: string): Promise<
 
     const query = `
         DELETE FROM flow_sessions
-        WHERE workspace_id IN (SELECT id FROM workspaces WHERE owner_id = $1);
+        WHERE workspace_id IN (SELECT id FROM workspaces WHERE owner_id = $1::uuid);
     `;
     const result = await runQuery(query, [ownerId]);
 

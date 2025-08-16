@@ -668,8 +668,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         console.log(`[API Evolution Trigger - ${session.session_id}] Existing session is active. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
       
         if (session.current_node_id === null && session.awaiting_input_type === null) {
-          console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Ignoring new message.`);
-          return NextResponse.json({ message: "Session is paused at a dead-end. Message ignored." }, { status: 200 });
+          console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Restarting flow due to new message.`);
+          await deleteSessionFromDB(session.session_id);
+          session = null;
         } else {
             const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
             session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
