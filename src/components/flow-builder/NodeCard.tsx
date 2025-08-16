@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger, WebhookVariableMapping, WorkspaceData, EvolutionInstance, SwitchCase, ChatwootInstance } from '@/lib/types';
+import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger, WebhookVariableMapping, WorkspaceData, EvolutionInstance, SwitchCase, ChatwootInstance, DialogyInstance } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target, Hourglass, GitCommitHorizontal, MessageCircle
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, History, AlertCircle, FileText, Target, Hourglass, GitCommitHorizontal, MessageCircle, Rocket
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -762,6 +762,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       'supabase-read-row': <Search {...iconProps} className="text-blue-500" />,
       'supabase-update-row': <Edit3 {...iconProps} className="text-yellow-500" />,
       'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />,
+      'dialogy-send-message': <Rocket {...iconProps} className="text-orange-500" />,
       'end-flow': <StopCircle {...iconProps} className="text-destructive" />,
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
@@ -2071,5 +2072,3 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
-    
