@@ -1,4 +1,3 @@
-
 'use server';
 
 interface SendDialogyMessageParams {
@@ -37,7 +36,7 @@ export async function sendDialogyMessageAction(
     'Authorization': `Bearer ${apiKey}`,
   };
 
-  console.log(`[Dialogy API Action] Sending message to chat ${chatId}. Endpoint: ${endpoint}`);
+  console.log(`[Dialogy API Action] Sending message to chat ${chatId}. Endpoint: ${endpoint}, Payload:`, JSON.stringify(body));
 
   try {
     const response = await fetch(endpoint, {
