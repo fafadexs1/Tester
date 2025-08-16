@@ -24,13 +24,16 @@ export async function sendDialogyMessageAction(
     return { success: false, error: `Parâmetros ausentes para enviar mensagem ao Dialogy: ${missingParams}` };
   }
 
+  // 1. Monta o endpoint da API
   const endpoint = `${baseUrl.replace(/\/$/, '')}/api/agent/messages`;
 
+  // 2. Cria o corpo (payload) da requisição em JSON
   const body = {
     chatId: chatId,
     content: content,
   };
 
+  // 3. Define os cabeçalhos, incluindo o 'Authorization' com o Bearer Token
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${apiKey}`,
@@ -39,6 +42,7 @@ export async function sendDialogyMessageAction(
   console.log(`[Dialogy API Action] Sending message to chat ${chatId}. Endpoint: ${endpoint}, Payload:`, JSON.stringify(body));
 
   try {
+    // 4. Executa a chamada `fetch` com o método POST e os dados definidos
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: headers,
@@ -47,6 +51,7 @@ export async function sendDialogyMessageAction(
 
     const responseData: DialogyApiResponse = await response.json();
 
+    // 5. Trata a resposta da API
     if (!response.ok) {
       console.error('[Dialogy API Action] Error response:', responseData);
       const errorMessage = responseData.message || JSON.stringify(responseData);
