@@ -591,9 +591,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
              console.log(`[API Trigger] Dialogy message from agent (from_me=true) in conversation ${sessionKeyIdentifier}. Ignoring.`);
              return NextResponse.json({ message: "Message from agent, automation ignored." }, { status: 200 });
         }
-        if (status === 'atendimento') {
-             console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status 'atendimento'. Ignoring.`);
-             return NextResponse.json({ message: "Conversation in 'atendimento', automation ignored." }, { status: 200 });
+        if (status === 'atendimentos') {
+             console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status 'atendimentos'. Ignoring.`);
+             return NextResponse.json({ message: "Conversation in 'atendimentos', automation ignored." }, { status: 200 });
         }
     }
     
