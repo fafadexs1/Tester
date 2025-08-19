@@ -1,8 +1,20 @@
-
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import type { NodeData, ApiHeader, ApiQueryParam, ApiFormDataEntry, StartNodeTrigger, WebhookVariableMapping, WorkspaceData, EvolutionInstance, SwitchCase, ChatwootInstance, DialogyInstance } from '@/lib/types';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import type {
+  NodeData,
+  ApiHeader,
+  ApiQueryParam,
+  ApiFormDataEntry,
+  StartNodeTrigger,
+  WebhookVariableMapping,
+  WorkspaceData,
+  EvolutionInstance,
+  SwitchCase,
+  ChatwootInstance,
+  DialogyInstance,
+  NodeType, // ✅ ADICIONADO
+} from '@/lib/types';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -37,7 +49,6 @@ import { checkEvolutionInstanceStatus } from '@/app/actions/evolutionApiActions'
 import { checkChatwootInstanceStatus } from '@/app/actions/chatwootApiActions';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
-
 interface NodeCardProps {
   node: NodeData;
   onUpdate: (id: string, changes: Partial<NodeData>) => void;
@@ -61,43 +72,46 @@ interface WebhookLogEntry {
 }
 
 const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onSelectPath: (path: string) => void, currentPath?: string[] }) => {
-    if (typeof data !== 'object' || data === null) {
-        return <span className="text-blue-500">{JSON.stringify(data)}</span>;
-    }
+  if (typeof data !== 'object' || data === null) {
+    return <span className="text-blue-500">{JSON.stringify(data)}</span>;
+  }
 
-    return (
-        <div className="pl-4">
-            {Array.isArray(data) ? (
-                data.map((item, index) => (
-                    <div key={index}>
-                        <span className="text-gray-500">{index}: </span>
-                        <JsonTreeView data={item} onSelectPath={onSelectPath} currentPath={[...currentPath, String(index)]} />
-                    </div>
-                ))
-            ) : (
-                Object.entries(data).map(([key, value]) => (
-                    <div key={key}>
-                        <button
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                onSelectPath([...currentPath, key].join('.'));
-                            }}
-                            className="text-red-500 hover:underline cursor-pointer focus:outline-none text-left"
-                            title={`Clique para selecionar o caminho: ${[...currentPath, key].join('.')}`}
-                        >
-                           "{key}":
-                        </button>
-                        <span className="ml-1">
-                            {typeof value === 'object' && value !== null ? <JsonTreeView data={value} onSelectPath={onSelectPath} currentPath={[...currentPath, key]} /> : <span className="text-green-600">{JSON.stringify(value)}</span>}
-                        </span>
-                    </div>
-                ))
-            )}
-        </div>
-    );
+  return (
+    <div className="pl-4">
+      {Array.isArray(data) ? (
+        data.map((item, index) => (
+          <div key={index}>
+            <span className="text-gray-500">{index}: </span>
+            <JsonTreeView data={item} onSelectPath={onSelectPath} currentPath={[...currentPath, String(index)]} />
+          </div>
+        ))
+      ) : (
+        Object.entries(data).map(([key, value]) => (
+          <div key={key}>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onSelectPath([...currentPath, key].join('.'));
+              }}
+              className="text-red-500 hover:underline cursor-pointer focus:outline-none text-left"
+              title={`Clique para selecionar o caminho: ${[...currentPath, key].join('.')}`}
+            >
+              "{key}":
+            </button>
+            <span className="ml-1">
+              {typeof value === 'object' && value !== null ? (
+                <JsonTreeView data={value} onSelectPath={onSelectPath} currentPath={[...currentPath, key]} />
+              ) : (
+                <span className="text-green-600">{JSON.stringify(value)}</span>
+              )}
+            </span>
+          </div>
+        ))
+      )}
+    </div>
+  );
 };
-
 
 const WebhookPathPicker = ({ onPathSelect, workspaceId }: { onPathSelect: (path: string) => void, workspaceId: string }) => {
   const [logs, setLogs] = useState<WebhookLogEntry[]>([]);
@@ -134,7 +148,6 @@ const WebhookPathPicker = ({ onPathSelect, workspaceId }: { onPathSelect: (path:
           {!isLoading && !error && logs.length > 0 && (
             <div className="p-1">
               {!selectedLog ? (
-                // Log List View
                 logs.map((log, index) => (
                   <button key={index} onClick={() => setSelectedLog(log)} className="w-full text-left p-1.5 text-xs rounded hover:bg-muted">
                     <div className="font-mono text-primary/80">{new Date(log.timestamp).toLocaleString()}</div>
@@ -142,14 +155,14 @@ const WebhookPathPicker = ({ onPathSelect, workspaceId }: { onPathSelect: (path:
                   </button>
                 ))
               ) : (
-                // JSON Tree View
                 <div>
-                   <Button variant="ghost" size="sm" className="h-auto p-1 mb-1 text-xs" onClick={() => setSelectedLog(null)}>
-                      &larr; Voltar para a lista
-                   </Button>
-                   <div className="p-1 bg-background/50 rounded">
-                      <JsonTreeView data={log.payload} onSelectPath={onPathSelect} />
-                   </div>
+                  <Button variant="ghost" size="sm" className="h-auto p-1 mb-1 text-xs" onClick={() => setSelectedLog(null)}>
+                    &larr; Voltar para a lista
+                  </Button>
+                  <div className="p-1 bg-background/50 rounded">
+                    {/* ✅ usado selectedLog em vez de variável inexistente */}
+                    <JsonTreeView data={selectedLog.payload} onSelectPath={onPathSelect} />
+                  </div>
                 </div>
               )}
             </div>
@@ -159,7 +172,6 @@ const WebhookPathPicker = ({ onPathSelect, workspaceId }: { onPathSelect: (path:
     </PopoverContent>
   );
 };
-
 
 const NodeCard: React.FC<NodeCardProps> = React.memo(({
   node,
@@ -183,8 +195,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const [isLoadingWebhookLogs, setIsLoadingWebhookLogs] = useState(false);
   const [webhookLogsError, setWebhookLogsError] = useState<string | null>(null);
 
-  const [supabaseTables, setSupabaseTables] = useState<{name: string}[]>([]);
-  const [supabaseColumns, setSupabaseColumns] = useState<{name: string}[]>([]);
+  const [supabaseTables, setSupabaseTables] = useState<{ name: string }[]>([]);
+  const [supabaseColumns, setSupabaseColumns] = useState<{ name: string }[]>([]);
   const [isLoadingSupabaseTables, setIsLoadingSupabaseTables] = useState(false);
   const [isLoadingSupabaseColumns, setIsLoadingSupabaseColumns] = useState(false);
   const [supabaseSchemaError, setSupabaseSchemaError] = useState<string | null>(null);
@@ -197,36 +209,35 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
   useEffect(() => {
     if (node.type === 'start') {
-        const hasManual = (node.triggers || []).some(t => t.type === 'manual');
-        const hasWebhook = (node.triggers || []).some(t => t.type === 'webhook');
+      const hasManual = (node.triggers || []).some(t => t.type === 'manual');
+      const hasWebhook = (node.triggers || []).some(t => t.type === 'webhook');
 
-        if (!hasManual || !hasWebhook) {
-            const defaultTriggers: StartNodeTrigger[] = [
-                { id: uuidv4(), name: 'Manual', type: 'manual', enabled: true, keyword: '' },
-                {
-                    id: uuidv4(),
-                    name: 'Webhook',
-                    type: 'webhook',
-                    enabled: false,
-                    keyword: '',
-                    variableMappings: [],
-                    sessionTimeoutSeconds: 0
-                },
-            ];
+      if (!hasManual || !hasWebhook) {
+        const defaultTriggers: StartNodeTrigger[] = [
+          { id: uuidv4(), name: 'Manual', type: 'manual', enabled: true, keyword: '' },
+          {
+            id: uuidv4(),
+            name: 'Webhook',
+            type: 'webhook',
+            enabled: false,
+            keyword: '',
+            variableMappings: [],
+            sessionTimeoutSeconds: 0
+          },
+        ];
 
-            let finalTriggers = [...(node.triggers || [])];
-            if (!hasManual) {
-                finalTriggers.push(defaultTriggers.find(t => t.type === 'manual')!);
-            }
-            if (!hasWebhook) {
-                finalTriggers.push(defaultTriggers.find(t => t.type === 'webhook')!);
-            }
-
-            onUpdate(node.id, { triggers: finalTriggers });
+        let finalTriggers = [...(node.triggers || [])];
+        if (!hasManual) {
+          finalTriggers.push(defaultTriggers.find(t => t.type === 'manual')!);
         }
+        if (!hasWebhook) {
+          finalTriggers.push(defaultTriggers.find(t => t.type === 'webhook')!);
+        }
+
+        onUpdate(node.id, { triggers: finalTriggers });
+      }
     }
   }, [node.id, node.type, node.triggers, onUpdate]);
-
 
   useEffect(() => {
     if (node.type.startsWith('supabase-')) {
@@ -254,7 +265,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               setSupabaseTables([]);
             }
           })
-            .catch(err => {
+          .catch(() => {
             setSupabaseSchemaError('Falha ao comunicar com o servidor para buscar tabelas.');
             setSupabaseTables([]);
           })
@@ -267,7 +278,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         setSupabaseColumns([]);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.type, node.id]);
 
   useEffect(() => {
@@ -295,7 +306,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               setSupabaseColumns([]);
             }
           })
-            .catch(err => {
+          .catch(() => {
             setSupabaseSchemaError(`Falha ao comunicar com o servidor para buscar colunas da tabela ${node.supabaseTableName}.`);
             setSupabaseColumns([]);
           })
@@ -304,13 +315,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           });
 
       } else {
-         setSupabaseColumns([]);
-         setSupabaseSchemaError('Supabase não configurado para buscar colunas.');
+        setSupabaseColumns([]);
+        setSupabaseSchemaError('Supabase não configurado para buscar colunas.');
       }
     } else if (node.type.startsWith('supabase-')) {
       setSupabaseColumns([]);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id, node.supabaseTableName]);
 
   const handleCheckEvolutionInstanceStatus = useCallback(async (instance: EvolutionInstance) => {
@@ -328,7 +339,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const loadInstancesAndCheckStatus = useCallback(async () => {
     setIsLoadingEvolutionInstances(true);
     setIsLoadingChatwootInstances(true);
-    
+
     try {
       const evoResponse = await fetch('/api/instances/evolution');
       if (!evoResponse.ok) throw new Error('Falha ao buscar instâncias Evolution.');
@@ -342,7 +353,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     } finally {
       setIsLoadingEvolutionInstances(false);
     }
-    
+
     try {
       const cwResponse = await fetch('/api/instances/chatwoot');
       if (!cwResponse.ok) throw new Error('Falha ao buscar instâncias Chatwoot.');
@@ -360,22 +371,22 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   }, [toast, handleCheckEvolutionInstanceStatus, handleCheckChatwootInstanceStatus]);
 
   const handleIntegrationsPopoverOpen = (open: boolean) => {
-    if(open) {
+    if (open) {
       loadInstancesAndCheckStatus();
     }
     setIsIntegrationsPopoverOpen(open);
-  }
+  };
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (
-        target.dataset.connector === 'true' ||
-        target.closest('[data-action="delete-node"]') ||
-        target.closest('[data-no-drag="true"]') ||
-        target.closest('[role="dialog"]') ||
-        target.closest('[data-radix-popover-content]') ||
-        target.closest('[data-radix-scroll-area-viewport]') ||
-        (target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target))
+      target.dataset.connector === 'true' ||
+      target.closest('[data-action="delete-node"]') ||
+      target.closest('[data-no-drag="true"]') ||
+      target.closest('[role="dialog"]') ||
+      target.closest('[data-radix-popover-content]') ||
+      target.closest('[data-radix-scroll-area-viewport]') ||
+      (target.closest('input, textarea, select, button:not([data-drag-handle="true"])') && !target.closest('div[data-drag-handle="true"]')?.contains(target))
     ) {
       return;
     }
@@ -541,8 +552,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
   const fetchWebhookLogs = useCallback(async () => {
     if (!activeWorkspace?.id) {
-        setWebhookLogsError("ID do fluxo ativo não encontrado.");
-        return;
+      setWebhookLogsError("ID do fluxo ativo não encontrado.");
+      return;
     }
     setIsLoadingWebhookLogs(true);
     setWebhookLogsError(null);
@@ -567,28 +578,27 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   };
 
   const handleAddSwitchCase = () => {
-      const newCase: SwitchCase = { id: uuidv4(), value: '' };
-      const updatedCases = [...(node.switchCases || []), newCase];
-      onUpdate(node.id, { switchCases: updatedCases });
+    const newCase: SwitchCase = { id: uuidv4(), value: '' };
+    const updatedCases = [...(node.switchCases || []), newCase];
+    onUpdate(node.id, { switchCases: updatedCases });
   };
 
   const handleRemoveSwitchCase = (caseId: string) => {
-      const updatedCases = (node.switchCases || []).filter(c => c.id !== caseId);
-      onUpdate(node.id, { switchCases: updatedCases });
+    const updatedCases = (node.switchCases || []).filter(c => c.id !== caseId);
+    onUpdate(node.id, { switchCases: updatedCases });
   };
 
   const handleSwitchCaseChange = (caseId: string, value: string) => {
-      const updatedCases = (node.switchCases || []).map(c =>
-          c.id === caseId ? { ...c, value } : c
-      );
-      onUpdate(node.id, { switchCases: updatedCases });
+    const updatedCases = (node.switchCases || []).map(c =>
+      c.id === caseId ? { ...c, value } : c
+    );
+    onUpdate(node.id, { switchCases: updatedCases });
   };
-
 
   const handleVariableInsert = (
     fieldName: keyof NodeData,
     variableName: string,
-    isTextarea: boolean = false,
+    _isTextarea: boolean = false,
     isListItem: boolean = false,
     itemId?: string,
     itemKeyOrValue?: 'key' | 'value'
@@ -607,7 +617,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       onUpdate(node.id, { [fieldName]: currentValue + `{{${variableName}}}` } as Partial<NodeData>);
     }
   };
-
 
   const renderVariableInserter = (
     fieldName: keyof NodeData,
@@ -686,7 +695,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               size="icon"
               onClick={() => handleRemoveListItem(listName, item.id)}
               className="text-destructive hover:text-destructive/80 w-7 h-7"
-              aria-label={`Remover ${listName.replace('List','')} item`}
+              aria-label={`Remover ${listName.replace('List', '')} item`}
             >
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
@@ -700,39 +709,38 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   };
 
   const renderApiResponseSettings = () => (
-      <div className="space-y-3 pt-3 border-t">
-        <div className="flex items-center space-x-2">
-          <Switch
-            id={`${node.id}-apiResponseAsInput`}
-            checked={node.apiResponseAsInput || false}
-            onCheckedChange={(checked) => onUpdate(node.id, { apiResponseAsInput: checked })}
-          />
-          <Label htmlFor={`${node.id}-apiResponseAsInput`}>Aceitar Resposta via API</Label>
-        </div>
-        {node.apiResponseAsInput && (
-          <div>
-            <Label htmlFor={`${node.id}-apiResponsePathForValue`}>Caminho do Valor no JSON da API</Label>
-              <div className="relative">
-                <Input
-                  id={`${node.id}-apiResponsePathForValue`}
-                  placeholder="Ex: data.choice"
-                  value={node.apiResponsePathForValue || ''}
-                  onChange={(e) => onUpdate(node.id, { apiResponsePathForValue: e.target.value })}
-                  className="pr-8"
-                />
-                  <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground"/></Button>
-                  </PopoverTrigger>
-                  <WebhookPathPicker onPathSelect={(path) => onUpdate(node.id, { apiResponsePathForValue: path })} workspaceId={activeWorkspace?.id || ''}/>
-                </Popover>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">O fluxo usará o valor deste caminho como se fosse a resposta do usuário.</p>
-          </div>
-        )}
+    <div className="space-y-3 pt-3 border-t">
+      <div className="flex items-center space-x-2">
+        <Switch
+          id={`${node.id}-apiResponseAsInput`}
+          checked={node.apiResponseAsInput || false}
+          onCheckedChange={(checked) => onUpdate(node.id, { apiResponseAsInput: checked })}
+        />
+        <Label htmlFor={`${node.id}-apiResponseAsInput`}>Aceitar Resposta via API</Label>
       </div>
+      {node.apiResponseAsInput && (
+        <div>
+          <Label htmlFor={`${node.id}-apiResponsePathForValue`}>Caminho do Valor no JSON da API</Label>
+          <div className="relative">
+            <Input
+              id={`${node.id}-apiResponsePathForValue`}
+              placeholder="Ex: data.choice"
+              value={node.apiResponsePathForValue || ''}
+              onChange={(e) => onUpdate(node.id, { apiResponsePathForValue: e.target.value })}
+              className="pr-8"
+            />
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
+              </PopoverTrigger>
+              <WebhookPathPicker onPathSelect={(path) => onUpdate(node.id, { apiResponsePathForValue: path })} workspaceId={activeWorkspace?.id || ''} />
+            </Popover>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">O fluxo usará o valor deste caminho como se fosse a resposta do usuário.</p>
+        </div>
+      )}
+    </div>
   );
-
 
   const renderNodeIcon = (): React.ReactNode => {
     const iconProps = { className: "w-5 h-5" };
@@ -774,80 +782,64 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   };
 
   const renderOutputConnectors = (): React.ReactNode => {
-    if (node.type === 'end-flow') {
-      return null;
-    }
+    if (node.type === 'end-flow') return null;
+
     if (node.type === 'start') {
-        const allTriggers = node.triggers || [];
-        const handles = [];
-        let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
-        
-        // Use a ref to get dynamic height of trigger containers
-        const triggerRefs = useRef<(HTMLDivElement | null)[]>([]);
-        triggerRefs.current = [];
+      const allTriggers = node.triggers || [];
+      let yPosition = 50; // base interna do card
 
-        useEffect(() => {
-            // This effect runs after render so refs are populated
-            let currentY = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
-            triggerRefs.current.forEach(ref => {
-                if (ref) {
-                    // Update yOffset based on actual rendered height
-                    // This logic would need to be more complex to actually force a re-render
-                    // A simpler approach is to use fixed heights or a more declarative layout
-                }
-            });
-        }, [allTriggers]);
+      // ❗️Sem hooks aqui. Posições calculadas de forma determinística.
+      return allTriggers
+        .filter(t => t.enabled)
+        .map((trigger) => {
+          const currentY = yPosition;
+          const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
 
-        let yPosition = 50; // Starting Y position inside the card content
+          // altura aproximada do bloco + cada palavra-chave
+          const triggerHeight = 60 + (keywords.length * 35);
+          yPosition += triggerHeight;
 
-        return allTriggers.filter(t => t.enabled).map((trigger, triggerIndex) => {
-            const currentY = yPosition;
-            const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
-            
-            // Adjust yPosition for the next trigger
-            // This is an approximation of the height. A real DOM measurement would be better but more complex.
-            const triggerHeight = 60 + (keywords.length * 35); 
-            yPosition += triggerHeight;
+          return (
+            <React.Fragment key={trigger.id}>
+              {/* Handle principal do gatilho */}
+              <div
+                className="absolute -right-2.5 z-10 flex items-center"
+                style={{ top: `${currentY - 10}px` }}
+                title={`Gatilho: ${trigger.name}`}
+              >
+                <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
+                <div
+                  className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+                  onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
+                  data-connector="true" data-handle-type="source" data-handle-id={trigger.name}
+                >
+                  <Hash className="w-3 h-3 text-accent-foreground" />
+                </div>
+              </div>
 
-            return (
-                <React.Fragment key={trigger.id}>
-                    {/* Main trigger handle */}
-                    <div
-                        className="absolute -right-2.5 z-10 flex items-center"
-                        style={{ top: `${currentY - 10}px` }}
-                        title={`Gatilho: ${trigger.name}`}
-                    >
-                        <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
-                        <div
-                            className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-                            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
-                            data-connector="true" data-handle-type="source" data-handle-id={trigger.name}
-                        >
-                            <Hash className="w-3 h-3 text-accent-foreground" />
-                        </div>
-                    </div>
-                    {/* Keyword handles */}
-                    {keywords.map((kw, kwIndex) => (
-                         <div
-                            key={`${trigger.id}-${kw}`}
-                            className="absolute -right-2.5 z-10 flex items-center"
-                            style={{ top: `${currentY + 35 + (kwIndex * START_NODE_TRIGGER_SPACING_Y) - 10}px` }}
-                            title={`Palavra-chave: ${kw}`}
-                        >
-                            <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{kw}</span>
-                            <div
-                                className="w-5 h-5 bg-purple-500 hover:bg-purple-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-                                onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, kw); }}
-                                data-connector="true" data-handle-type="source" data-handle-id={kw}
-                            >
-                                <KeyRound className="w-3 h-3 text-white" />
-                            </div>
-                        </div>
-                    ))}
-                </React.Fragment>
-            );
+              {/* Handles por palavra-chave */}
+              {keywords.map((kw, kwIndex) => (
+                <div
+                  key={`${trigger.id}-${kw}`}
+                  className="absolute -right-2.5 z-10 flex items-center"
+                  style={{ top: `${currentY + 35 + (kwIndex * START_NODE_TRIGGER_SPACING_Y) - 10}px` }}
+                  title={`Palavra-chave: ${kw}`}
+                >
+                  <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{kw}</span>
+                  <div
+                    className="w-5 h-5 bg-purple-500 hover:bg-purple-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+                    onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, kw); }}
+                    data-connector="true" data-handle-type="source" data-handle-id={kw}
+                  >
+                    <KeyRound className="w-3 h-3 text-white" />
+                  </div>
+                </div>
+              ))}
+            </React.Fragment>
+          );
         });
     }
+
     if (node.type === 'option') {
       const options = (node.optionsList || '').split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
       return options.map((optionText, index) => {
@@ -873,11 +865,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         );
       });
     }
+
     if (node.type === 'condition') {
       return (
         <>
-          <div className="absolute -right-2.5 z-10 flex items-center" style={{ top: `${NODE_HEADER_HEIGHT_APPROX * (1/3) + 6 -10}px` }}>
-             <span className="text-xs text-muted-foreground mr-2">Verdadeiro</span>
+          <div className="absolute -right-2.5 z-10 flex items-center" style={{ top: `${NODE_HEADER_HEIGHT_APPROX * (1 / 3) + 6 - 10}px` }}>
+            <span className="text-xs text-muted-foreground mr-2">Verdadeiro</span>
             <div
               title="Saída Verdadeiro"
               className="w-5 h-5 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
@@ -887,84 +880,84 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               <Hash className="w-3 h-3 text-white" />
             </div>
           </div>
-          <div className="absolute -right-2.5 z-10 flex items-center" style={{ top: `${NODE_HEADER_HEIGHT_APPROX * (2/3) + 6 -10}px` }}>
-             <span className="text-xs text-muted-foreground mr-2">Falso</span>
+          <div className="absolute -right-2.5 z-10 flex items-center" style={{ top: `${NODE_HEADER_HEIGHT_APPROX * (2 / 3) + 6 - 10}px` }}>
+            <span className="text-xs text-muted-foreground mr-2">Falso</span>
             <div
               title="Saída Falso"
               className="w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
               onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'false'); }}
               data-connector="true" data-handle-type="source" data-handle-id="false"
             >
-               <Hash className="w-3 h-3 text-white" />
+              <Hash className="w-3 h-3 text-white" />
             </div>
           </div>
         </>
       );
     }
-     if (node.type === 'switch') {
-        const switchCases = node.switchCases || [];
-        const initialY = 65;
-        const spacingY = 30;
 
-        return (
-            <>
-                {switchCases.map((caseItem, index) => (
-                    <div
-                        key={caseItem.id}
-                        className="absolute -right-2.5 z-10 flex items-center"
-                        style={{ top: `${initialY + index * spacingY - 10}px` }}
-                        title={`Caso: ${caseItem.value}`}
-                    >
-                        <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">
-                            {caseItem.value || 'vazio'}
-                        </span>
-                        <div
-                            className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-                            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, caseItem.id); }}
-                            data-connector="true" data-handle-type="source" data-handle-id={caseItem.id}
-                        >
-                            <Hash className="w-3 h-3 text-accent-foreground" />
-                        </div>
-                    </div>
-                ))}
-                <div
-                    className="absolute -right-2.5 z-10 flex items-center"
-                    style={{ top: `${initialY + switchCases.length * spacingY - 10}px` }}
-                    title="Caso Contrário"
-                >
-                    <span className="text-xs text-muted-foreground mr-2">Caso Contrário</span>
-                    <div
-                        className="w-5 h-5 bg-gray-500 hover:bg-gray-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-                        onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'otherwise'); }}
-                        data-connector="true" data-handle-type="source" data-handle-id="otherwise"
-                    >
-                        <Hash className="w-3 h-3 text-white" />
-                    </div>
-                </div>
-            </>
-        );
-    }
+    if (node.type === 'switch') {
+      const switchCases = node.switchCases || [];
+      const initialY = 65;
+      const spacingY = 30;
 
-
-    if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow' && node.type !== 'switch') {
-        return (
-          <div
-            className="absolute -right-2.5 z-10 flex items-center justify-center"
-            style={{
-              top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`,
-              transform: 'translateY(-50%)',
-            }}
-          >
+      return (
+        <>
+          {switchCases.map((caseItem, index) => (
             <div
-              className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-              onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}
-              data-connector="true" data-handle-type="source" data-handle-id="default"
-              title="Arraste para conectar"
+              key={caseItem.id}
+              className="absolute -right-2.5 z-10 flex items-center"
+              style={{ top: `${initialY + index * spacingY - 10}px` }}
+              title={`Caso: ${caseItem.value}`}
             >
-              <Hash className="w-3 h-3 text-accent-foreground" />
+              <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">
+                {caseItem.value || 'vazio'}
+              </span>
+              <div
+                className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+                onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, caseItem.id); }}
+                data-connector="true" data-handle-type="source" data-handle-id={caseItem.id}
+              >
+                <Hash className="w-3 h-3 text-accent-foreground" />
+              </div>
+            </div>
+          ))}
+          <div
+            className="absolute -right-2.5 z-10 flex items-center"
+            style={{ top: `${initialY + switchCases.length * spacingY - 10}px` }}
+            title="Caso Contrário"
+          >
+            <span className="text-xs text-muted-foreground mr-2">Caso Contrário</span>
+            <div
+              className="w-5 h-5 bg-gray-500 hover:bg-gray-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+              onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'otherwise'); }}
+              data-connector="true" data-handle-type="source" data-handle-id="otherwise"
+            >
+              <Hash className="w-3 h-3 text-white" />
             </div>
           </div>
-        );
+        </>
+      );
+    }
+
+    if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow' && node.type !== 'switch') {
+      return (
+        <div
+          className="absolute -right-2.5 z-10 flex items-center justify-center"
+          style={{
+            top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`,
+            transform: 'translateY(-50%)',
+          }}
+        >
+          <div
+            className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}
+            data-connector="true" data-handle-type="source" data-handle-id="default"
+            title="Arraste para conectar"
+          >
+            <Hash className="w-3 h-3 text-accent-foreground" />
+          </div>
+        </div>
+      );
     }
     return null;
   };
@@ -993,7 +986,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 </div>
 
                 <div className={cn("space-y-3", !trigger.enabled && "opacity-50 pointer-events-none")}>
-                   <div>
+                  <div>
                     <Label htmlFor={`trigger-keyword-${trigger.id}`} className="text-xs font-medium">Palavras-chave de Ativação (separadas por vírgula)</Label>
                     <Input
                       id={`trigger-keyword-${trigger.id}`}
@@ -1002,8 +995,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                       placeholder="Ex: ajuda, cardapio, saldo"
                       className="h-8 text-xs mt-1"
                     />
-                     <p className="text-xs text-muted-foreground mt-1">Se preenchido, cria saídas separadas para cada palavra-chave.</p>
-                   </div>
+                    <p className="text-xs text-muted-foreground mt-1">Se preenchido, cria saídas separadas para cada palavra-chave.</p>
+                  </div>
 
                   {trigger.type === 'webhook' && (
                     <div className="space-y-3 pt-2 border-t">
@@ -1023,20 +1016,20 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                       <div>
                         <Label htmlFor="webhook-url" className="text-xs font-medium">URL do Webhook (POST)</Label>
                         <div className="flex items-center space-x-1.5 mt-1">
-                          <Input id="webhook-url" type="text" readOnly value={webhookUrl} className="bg-input/50 h-7 text-xs"/>
+                          <Input id="webhook-url" type="text" readOnly value={webhookUrl} className="bg-input/50 h-7 text-xs" />
                           <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => {
-                              if (navigator.clipboard && navigator.clipboard.writeText) {
-                                navigator.clipboard.writeText(webhookUrl).then(() => toast({ title: "URL Copiada!" })).catch(() => toast({ title: "Erro ao copiar", variant:"destructive"}));
-                              } else {
-                                toast({ title: "Não foi possível copiar", description: "Seu navegador não suporta esta ação ou a página não é segura (HTTPS).", variant: "destructive" });
-                              }
-                            }} title="Copiar URL">
-                            <Copy className="w-3 h-3"/>
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                              navigator.clipboard.writeText(webhookUrl).then(() => toast({ title: "URL Copiada!" })).catch(() => toast({ title: "Erro ao copiar", variant: "destructive" }));
+                            } else {
+                              toast({ title: "Não foi possível copiar", description: "Seu navegador não suporta esta ação ou a página não é segura (HTTPS).", variant: "destructive" });
+                            }
+                          }} title="Copiar URL">
+                            <Copy className="w-3 h-3" />
                           </Button>
                         </div>
-                         <Button variant="link" size="sm" className="text-xs h-auto p-0 mt-1.5 text-accent" onClick={handleOpenWebhookHistory}>
-                            <History className="w-3.5 h-3.5 mr-1" /> Ver Histórico de Webhooks
-                          </Button>
+                        <Button variant="link" size="sm" className="text-xs h-auto p-0 mt-1.5 text-accent" onClick={handleOpenWebhookHistory}>
+                          <History className="w-3.5 h-3.5 mr-1" /> Ver Histórico de Webhooks
+                        </Button>
                       </div>
 
                       <div className="pt-2">
@@ -1044,26 +1037,26 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                         <div className="space-y-2 mt-1">
                           {(trigger.variableMappings || []).map(mapping => (
                             <div key={mapping.id} className="flex items-center space-x-1.5">
-                               <div className="relative flex-1">
-                                  <Input
-                                      placeholder="Caminho (ex: data.message.text)"
-                                      value={mapping.jsonPath}
-                                      onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', e.target.value)}
-                                      className="h-7 text-xs pl-2 pr-7"/>
-                                  <Popover>
-                                    <PopoverTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground"/></Button>
-                                    </PopoverTrigger>
-                                    <WebhookPathPicker onPathSelect={(path) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', path)} workspaceId={activeWorkspace?.id || ''}/>
-                                  </Popover>
-                               </div>
-                              <Input placeholder="Variável (ex: mensagem_usuario)" value={mapping.flowVariable} onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs flex-1"/>
+                              <div className="relative flex-1">
+                                <Input
+                                  placeholder="Caminho (ex: data.message.text)"
+                                  value={mapping.jsonPath}
+                                  onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', e.target.value)}
+                                  className="h-7 text-xs pl-2 pr-7" />
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
+                                  </PopoverTrigger>
+                                  <WebhookPathPicker onPathSelect={(path) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', path)} workspaceId={activeWorkspace?.id || ''} />
+                                </Popover>
+                              </div>
+                              <Input placeholder="Variável (ex: mensagem_usuario)" value={mapping.flowVariable} onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs flex-1" />
                               <Button variant="ghost" size="icon" onClick={() => handleRemoveVariableMapping(trigger.id, mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6"><Trash2 className="w-3.5 h-3.5" /></Button>
                             </div>
                           ))}
                         </div>
                         <Button onClick={() => handleAddVariableMapping(trigger.id)} variant="outline" size="sm" className="mt-2 text-xs h-7">
-                           <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Mapeamento
+                          <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Mapeamento
                         </Button>
                       </div>
 
@@ -1093,7 +1086,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <div>
               <Label htmlFor={`${node.id}-prompttext`}>{isOptionNode ? 'Texto da Pergunta' : 'Texto da Pergunta'}</Label>
               <div className="relative">
-                <Textarea id={`${node.id}-prompttext`} placeholder="Digite sua pergunta aqui..." value={node.promptText || node.questionText || ''} onChange={(e) => onUpdate(node.id, isOptionNode ? { questionText: e.target.value } : { promptText: e.target.value })} rows={2} className="pr-8"/>
+                <Textarea id={`${node.id}-prompttext`} placeholder="Digite sua pergunta aqui..." value={node.promptText || node.questionText || ''} onChange={(e) => onUpdate(node.id, isOptionNode ? { questionText: e.target.value } : { promptText: e.target.value })} rows={2} className="pr-8" />
                 {renderVariableInserter(isOptionNode ? 'questionText' : 'promptText', true)}
               </div>
             </div>
@@ -1112,15 +1105,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             )}
 
             {isOptionNode && (
-               <div>
+              <div>
                 <Label htmlFor={`${node.id}-optionslist`}>Opções (uma por linha)</Label>
-                <Textarea id={`${node.id}-optionslist`} placeholder="Opção 1\nOpção 2" value={node.optionsList || ''} onChange={(e) => onUpdate(node.id, { optionsList: e.target.value })} rows={3}/>
-               </div>
+                <Textarea id={`${node.id}-optionslist`} placeholder="Opção 1\nOpção 2" value={node.optionsList || ''} onChange={(e) => onUpdate(node.id, { optionsList: e.target.value })} rows={3} />
+              </div>
             )}
 
             <div>
-                <Label htmlFor={`${node.id}-varsave`}>Salvar Resposta na Variável</Label>
-                <Input id={`${node.id}-varsave`} placeholder="nome_da_variavel" value={node.variableToSaveResponse || node.variableToSaveChoice || ''} onChange={(e) => onUpdate(node.id, isOptionNode ? { variableToSaveChoice: e.target.value } : { variableToSaveResponse: e.target.value })} />
+              <Label htmlFor={`${node.id}-varsave`}>Salvar Resposta na Variável</Label>
+              <Input id={`${node.id}-varsave`} placeholder="nome_da_variavel" value={node.variableToSaveResponse || node.variableToSaveChoice || ''} onChange={(e) => onUpdate(node.id, isOptionNode ? { variableToSaveChoice: e.target.value } : { variableToSaveResponse: e.target.value })} />
             </div>
 
             {renderApiResponseSettings()}
@@ -1137,7 +1130,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <div>
               <Label htmlFor={`${node.id}-instance`}>Instância</Label>
               {isLoadingEvolutionInstances ? (
-                <div className="flex items-center text-sm text-muted-foreground h-10"><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Carregando...</div>
+                <div className="flex items-center text-sm text-muted-foreground h-10"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Carregando...</div>
               ) : (
                 <Select onValueChange={(value) => onUpdate(node.id, { instanceName: value })} value={node.instanceName || ''}>
                   <SelectTrigger id={`${node.id}-instance`}>
@@ -1156,30 +1149,30 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             </div>
             {node.type !== 'whatsapp-group' && (
               <div>
-                  <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
-                  <div className="relative">
-                      <Input id={`${node.id}-phone`} placeholder="55119... ou {{whatsapp_sender_jid}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8"/>
-                        {renderVariableInserter('phoneNumber')}
-                  </div>
+                <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
+                <div className="relative">
+                  <Input id={`${node.id}-phone`} placeholder="55119... ou {{whatsapp_sender_jid}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8" />
+                  {renderVariableInserter('phoneNumber')}
+                </div>
               </div>
             )}
             {node.type === 'whatsapp-text' && (
               <div>
-                  <Label htmlFor={`${node.id}-watext`}>Mensagem</Label>
-                  <div className="relative">
-                      <Textarea id={`${node.id}-watext`} value={node.textMessage || ''} onChange={(e) => onUpdate(node.id, { textMessage: e.target.value })} rows={2} className="pr-8"/>
-                      {renderVariableInserter('textMessage', true)}
-                  </div>
+                <Label htmlFor={`${node.id}-watext`}>Mensagem</Label>
+                <div className="relative">
+                  <Textarea id={`${node.id}-watext`} value={node.textMessage || ''} onChange={(e) => onUpdate(node.id, { textMessage: e.target.value })} rows={2} className="pr-8" />
+                  {renderVariableInserter('textMessage', true)}
+                </div>
               </div>
             )}
             {node.type === 'whatsapp-media' && (
               <>
                 <div>
-                    <Label htmlFor={`${node.id}-mediaurl`}>URL da Mídia (Ex: https://... ou {"{{url_midia}}"})</Label>
-                    <div className="relative">
-                        <Input id={`${node.id}-mediaurl`} placeholder="https://... ou {{url_midia}}" value={node.mediaUrl || ''} onChange={(e) => onUpdate(node.id, { mediaUrl: e.target.value })} className="pr-8"/>
-                        {renderVariableInserter('mediaUrl')}
-                    </div>
+                  <Label htmlFor={`${node.id}-mediaurl`}>URL da Mídia (Ex: https://... ou {"{{url_midia}}"})</Label>
+                  <div className="relative">
+                    <Input id={`${node.id}-mediaurl`} placeholder="https://... ou {{url_midia}}" value={node.mediaUrl || ''} onChange={(e) => onUpdate(node.id, { mediaUrl: e.target.value })} className="pr-8" />
+                    {renderVariableInserter('mediaUrl')}
+                  </div>
                 </div>
                 <div><Label htmlFor={`${node.id}-mediatype`}>Tipo</Label>
                   <Select value={node.mediaType || 'image'} onValueChange={(value) => onUpdate(node.id, { mediaType: value as NodeData['mediaType'] })}>
@@ -1191,29 +1184,29 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   </Select>
                 </div>
                 <div>
-                    <Label htmlFor={`${node.id}-caption`}>Legenda/Nome do Arquivo (Opcional)</Label>
-                    <div className="relative">
-                        <Input id={`${node.id}-caption`} value={node.caption || ''} onChange={(e) => onUpdate(node.id, { caption: e.target.value })} className="pr-8"/>
-                        {renderVariableInserter('caption')}
-                    </div>
+                  <Label htmlFor={`${node.id}-caption`}>Legenda/Nome do Arquivo (Opcional)</Label>
+                  <div className="relative">
+                    <Input id={`${node.id}-caption`} value={node.caption || ''} onChange={(e) => onUpdate(node.id, { caption: e.target.value })} className="pr-8" />
+                    {renderVariableInserter('caption')}
+                  </div>
                 </div>
               </>
             )}
             {node.type === 'whatsapp-group' && (
               <>
                 <div>
-                    <Label htmlFor={`${node.id}-groupname`}>Nome do Grupo</Label>
-                    <div className="relative">
-                        <Input id={`${node.id}-groupname`} value={node.groupName || ''} onChange={(e) => onUpdate(node.id, { groupName: e.target.value })} className="pr-8"/>
-                        {renderVariableInserter('groupName')}
-                    </div>
+                  <Label htmlFor={`${node.id}-groupname`}>Nome do Grupo</Label>
+                  <div className="relative">
+                    <Input id={`${node.id}-groupname`} value={node.groupName || ''} onChange={(e) => onUpdate(node.id, { groupName: e.target.value })} className="pr-8" />
+                    {renderVariableInserter('groupName')}
+                  </div>
                 </div>
                 <div>
-                    <Label htmlFor={`${node.id}-participants`}>Participantes (IDs separados por vírgula, ex: 5511...,5521...)</Label>
-                    <div className="relative">
-                        <Textarea id={`${node.id}-participants`} value={node.participants || ''} onChange={(e) => onUpdate(node.id, { participants: e.target.value })} rows={2} className="pr-8"/>
-                        {renderVariableInserter('participants', true)}
-                    </div>
+                  <Label htmlFor={`${node.id}-participants`}>Participantes (IDs separados por vírgula, ex: 5511...,5521...)</Label>
+                  <div className="relative">
+                    <Textarea id={`${node.id}-participants`} value={node.participants || ''} onChange={(e) => onUpdate(node.id, { participants: e.target.value })} rows={2} className="pr-8" />
+                    {renderVariableInserter('participants', true)}
+                  </div>
                 </div>
               </>
             )}
@@ -1223,14 +1216,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-                <Label htmlFor={`${node.id}-condvar`}>Variável (ex: {"{{variavel}}"})</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-condvar`} placeholder="{{variavel}}" value={node.conditionVariable || ''} onChange={(e) => onUpdate(node.id, { conditionVariable: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('conditionVariable')}
-                </div>
+              <Label htmlFor={`${node.id}-condvar`}>Variável (ex: {"{{variavel}}"})</Label>
+              <div className="relative">
+                <Input id={`${node.id}-condvar`} placeholder="{{variavel}}" value={node.conditionVariable || ''} onChange={(e) => onUpdate(node.id, { conditionVariable: e.target.value })} className="pr-8" />
+                {renderVariableInserter('conditionVariable')}
+              </div>
             </div>
             <div><Label htmlFor={`${node.id}-condop`}>Operador</Label>
-              <Select value={node.conditionOperator || '=='} onValueChange={(value) => onUpdate(node.id, { conditionOperator: value as NodeData['conditionOperator']})}>
+              <Select value={node.conditionOperator || '=='} onValueChange={(value) => onUpdate(node.id, { conditionOperator: value as NodeData['conditionOperator'] })}>
                 <SelectTrigger id={`${node.id}-condop`}><SelectValue placeholder="Selecione o operador" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="==">Igual a</SelectItem><SelectItem value="!=">Diferente de</SelectItem>
@@ -1244,72 +1237,72 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </Select>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-condval`}>Valor para Comparar (se aplicável)</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-condval`} placeholder="Valor ou {{outra_var}}" value={node.conditionValue || ''} onChange={(e) => onUpdate(node.id, { conditionValue: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('conditionValue')}
-                </div>
+              <Label htmlFor={`${node.id}-condval`}>Valor para Comparar (se aplicável)</Label>
+              <div className="relative">
+                <Input id={`${node.id}-condval`} placeholder="Valor ou {{outra_var}}" value={node.conditionValue || ''} onChange={(e) => onUpdate(node.id, { conditionValue: e.target.value })} className="pr-8" />
+                {renderVariableInserter('conditionValue')}
+              </div>
             </div>
           </div>
         );
       case 'switch':
         return (
-            <div className="space-y-3" data-no-drag="true">
-                <div>
-                    <Label htmlFor={`${node.id}-switchvar`}>Variável de Entrada (ex: {"{{status}}"})</Label>
-                    <div className="relative">
-                        <Input
-                            id={`${node.id}-switchvar`}
-                            placeholder="{{status_pagamento}}"
-                            value={node.switchVariable || ''}
-                            onChange={(e) => onUpdate(node.id, { switchVariable: e.target.value })}
-                            className="pr-8"
-                        />
-                        {renderVariableInserter('switchVariable')}
-                    </div>
-                </div>
-                <div>
-                    <Label>Casos de Saída</Label>
-                    <div className="space-y-2">
-                        {(node.switchCases || []).map((caseItem, index) => (
-                            <div key={caseItem.id} className="flex items-center space-x-2">
-                                <Input
-                                    placeholder={`Valor do Caso ${index + 1}`}
-                                    value={caseItem.value}
-                                    onChange={(e) => handleSwitchCaseChange(caseItem.id, e.target.value)}
-                                />
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleRemoveSwitchCase(caseItem.id)}
-                                    className="text-destructive hover:text-destructive/80 w-8 h-8"
-                                    aria-label="Remover caso"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </Button>
-                            </div>
-                        ))}
-                    </div>
-                    <Button onClick={handleAddSwitchCase} variant="outline" size="sm" className="mt-2 text-xs h-8">
-                        <PlusCircle className="w-3.5 h-3.5 mr-1" /> Adicionar Caso
-                    </Button>
-                </div>
-                <p className="text-xs text-muted-foreground italic pt-1">Cada caso terá um conector de saída. O fluxo seguirá para "Caso Contrário" se nenhum valor corresponder.</p>
+          <div className="space-y-3" data-no-drag="true">
+            <div>
+              <Label htmlFor={`${node.id}-switchvar`}>Variável de Entrada (ex: {"{{status}}"})</Label>
+              <div className="relative">
+                <Input
+                  id={`${node.id}-switchvar`}
+                  placeholder="{{status_pagamento}}"
+                  value={node.switchVariable || ''}
+                  onChange={(e) => onUpdate(node.id, { switchVariable: e.target.value })}
+                  className="pr-8"
+                />
+                {renderVariableInserter('switchVariable')}
+              </div>
             </div>
+            <div>
+              <Label>Casos de Saída</Label>
+              <div className="space-y-2">
+                {(node.switchCases || []).map((caseItem, index) => (
+                  <div key={caseItem.id} className="flex items-center space-x-2">
+                    <Input
+                      placeholder={`Valor do Caso ${index + 1}`}
+                      value={caseItem.value}
+                      onChange={(e) => handleSwitchCaseChange(caseItem.id, e.target.value)}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemoveSwitchCase(caseItem.id)}
+                      className="text-destructive hover:text-destructive/80 w-8 h-8"
+                      aria-label="Remover caso"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Button onClick={handleAddSwitchCase} variant="outline" size="sm" className="mt-2 text-xs h-8">
+                <PlusCircle className="w-3.5 h-3.5 mr-1" /> Adicionar Caso
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground italic pt-1">Cada caso terá um conector de saída. O fluxo seguirá para "Caso Contrário" se nenhum valor corresponder.</p>
+          </div>
         );
       case 'set-variable':
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-                <Label htmlFor={`${node.id}-varname`}>Nome da Variável</Label>
-                <Input id={`${node.id}-varname`} placeholder="minhaVariavel" value={node.variableName || ''} onChange={(e) => onUpdate(node.id, { variableName: e.target.value })} />
+              <Label htmlFor={`${node.id}-varname`}>Nome da Variável</Label>
+              <Input id={`${node.id}-varname`} placeholder="minhaVariavel" value={node.variableName || ''} onChange={(e) => onUpdate(node.id, { variableName: e.target.value })} />
             </div>
             <div>
-                <Label htmlFor={`${node.id}-varval`}>Valor (pode usar {"{{outra_var}}"})</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-varval`} placeholder="Valor ou {{outra_var}}" value={node.variableValue || ''} onChange={(e) => onUpdate(node.id, { variableValue: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('variableValue')}
-                </div>
+              <Label htmlFor={`${node.id}-varval`}>Valor (pode usar {"{{outra_var}}"})</Label>
+              <div className="relative">
+                <Input id={`${node.id}-varval`} placeholder="Valor ou {{outra_var}}" value={node.variableValue || ''} onChange={(e) => onUpdate(node.id, { variableValue: e.target.value })} className="pr-8" />
+                {renderVariableInserter('variableValue')}
+              </div>
             </div>
           </div>
         );
@@ -1319,13 +1312,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <div>
               <Label htmlFor={`${node.id}-apiurl`}>URL da Requisição</Label>
               <div className="relative">
-                <Input id={`${node.id}-apiurl`} placeholder="https://api.example.com/data" value={node.apiUrl || ''} onChange={(e) => onUpdate(node.id, { apiUrl: e.target.value })} className="pr-8"/>
+                <Input id={`${node.id}-apiurl`} placeholder="https://api.example.com/data" value={node.apiUrl || ''} onChange={(e) => onUpdate(node.id, { apiUrl: e.target.value })} className="pr-8" />
                 {renderVariableInserter('apiUrl')}
               </div>
             </div>
             <div>
               <Label htmlFor={`${node.id}-apimethod`}>Método HTTP</Label>
-              <Select value={node.apiMethod || 'GET'} onValueChange={(value) => onUpdate(node.id, { apiMethod: value as NodeData['apiMethod']})}>
+              <Select value={node.apiMethod || 'GET'} onValueChange={(value) => onUpdate(node.id, { apiMethod: value as NodeData['apiMethod'] })}>
                 <SelectTrigger id={`${node.id}-apimethod`}><SelectValue placeholder="Selecione o método" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="GET">GET</SelectItem><SelectItem value="POST">POST</SelectItem>
@@ -1345,7 +1338,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               <TabsContent value="auth" className="mt-4 space-y-3">
                 <div>
                   <Label htmlFor={`${node.id}-apiauthtype`}>Tipo de Autenticação</Label>
-                  <Select value={node.apiAuthType || 'none'} onValueChange={(value) => onUpdate(node.id, { apiAuthType: value as NodeData['apiAuthType']})}>
+                  <Select value={node.apiAuthType || 'none'} onValueChange={(value) => onUpdate(node.id, { apiAuthType: value as NodeData['apiAuthType'] })}>
                     <SelectTrigger id={`${node.id}-apiauthtype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhuma</SelectItem>
@@ -1357,27 +1350,27 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 {node.apiAuthType === 'bearer' && (
                   <div>
                     <Label htmlFor={`${node.id}-apiauthbearertoken`}>Bearer Token</Label>
-                     <div className="relative">
-                        <Input id={`${node.id}-apiauthbearertoken`} placeholder="Seu token aqui..." value={node.apiAuthBearerToken || ''} onChange={(e) => onUpdate(node.id, { apiAuthBearerToken: e.target.value })} className="pr-8"/>
-                        {renderVariableInserter('apiAuthBearerToken')}
-                     </div>
+                    <div className="relative">
+                      <Input id={`${node.id}-apiauthbearertoken`} placeholder="Seu token aqui..." value={node.apiAuthBearerToken || ''} onChange={(e) => onUpdate(node.id, { apiAuthBearerToken: e.target.value })} className="pr-8" />
+                      {renderVariableInserter('apiAuthBearerToken')}
+                    </div>
                   </div>
                 )}
                 {node.apiAuthType === 'basic' && (
                   <>
                     <div>
                       <Label htmlFor={`${node.id}-apiauthbasicuser`}>Usuário</Label>
-                       <div className="relative">
-                            <Input id={`${node.id}-apiauthbasicuser`} placeholder="Nome de usuário" value={node.apiAuthBasicUser || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicUser: e.target.value })} className="pr-8"/>
-                            {renderVariableInserter('apiAuthBasicUser')}
-                       </div>
+                      <div className="relative">
+                        <Input id={`${node.id}-apiauthbasicuser`} placeholder="Nome de usuário" value={node.apiAuthBasicUser || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicUser: e.target.value })} className="pr-8" />
+                        {renderVariableInserter('apiAuthBasicUser')}
+                      </div>
                     </div>
                     <div>
                       <Label htmlFor={`${node.id}-apiauthbasicpassword`}>Senha</Label>
-                       <div className="relative">
-                            <Input id={`${node.id}-apiauthbasicpassword`} type="password" placeholder="Senha" value={node.apiAuthBasicPassword || ''} onChange={e => onUpdate(node.id, { apiAuthBasicPassword: e.target.value })} className="pr-8"/>
-                            {renderVariableInserter('apiAuthBasicPassword')}
-                       </div>
+                      <div className="relative">
+                        <Input id={`${node.id}-apiauthbasicpassword`} type="password" placeholder="Senha" value={node.apiAuthBasicPassword || ''} onChange={e => onUpdate(node.id, { apiAuthBasicPassword: e.target.value })} className="pr-8" />
+                        {renderVariableInserter('apiAuthBasicPassword')}
+                      </div>
                     </div>
                   </>
                 )}
@@ -1388,13 +1381,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </TabsContent>
               <TabsContent value="params" className="mt-4">
                 <Label>Parâmetros de Query (URL)</Label>
-                 {renderKeyValueList('apiQueryParamsList', node.apiQueryParamsList, 'Nome do Parâmetro', 'Valor do Parâmetro', 'Adicionar Parâmetro')}
+                {renderKeyValueList('apiQueryParamsList', node.apiQueryParamsList, 'Nome do Parâmetro', 'Valor do Parâmetro', 'Adicionar Parâmetro')}
               </TabsContent>
               <TabsContent value="body" className="mt-4 space-y-3">
                 <div>
                   <Label htmlFor={`${node.id}-apibodytype`}>Tipo de Corpo da Requisição</Label>
-                  <Select value={node.apiBodyType || 'none'} onValueChange={(value) => onUpdate(node.id, { apiBodyType: value as NodeData['apiBodyType']})}>
-                    <SelectTrigger id={`${node.id}-apibodytype`}><SelectValue placeholder="Selecione o tipo de corpo" /></SelectTrigger>
+                  <Select value={node.apiBodyType || 'none'} onValueChange={(value) => onUpdate(node.id, { apiBodyType: value as NodeData['apiBodyType'] })}>
+                    <SelectTrigger id={`${node.id}-apibodytype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhum</SelectItem>
                       <SelectItem value="json">JSON</SelectItem>
@@ -1407,8 +1400,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   <div>
                     <Label htmlFor={`${node.id}-apibodyjson`}>Corpo JSON</Label>
                     <div className="relative">
-                        <Textarea id={`${node.id}-apibodyjson`} placeholder='{ "chave": "valor" }' value={node.apiBodyJson || ''} onChange={(e) => onUpdate(node.id, { apiBodyJson: e.target.value })} rows={4} className="pr-8"/>
-                        {renderVariableInserter('apiBodyJson', true)}
+                      <Textarea id={`${node.id}-apibodyjson`} placeholder='{ "chave": "valor" }' value={node.apiBodyJson || ''} onChange={(e) => onUpdate(node.id, { apiBodyJson: e.target.value })} rows={4} className="pr-8" />
+                      {renderVariableInserter('apiBodyJson', true)}
                     </div>
                   </div>
                 )}
@@ -1422,8 +1415,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   <div>
                     <Label htmlFor={`${node.id}-apibodyraw`}>Corpo Raw (Texto)</Label>
                     <div className="relative">
-                        <Textarea id={`${node.id}-apibodyraw`} placeholder="Conteúdo do corpo em texto puro..." value={node.apiBodyRaw || ''} onChange={(e) => onUpdate(node.id, { apiBodyRaw: e.target.value })} rows={4} className="pr-8"/>
-                        {renderVariableInserter('apiBodyRaw', true)}
+                      <Textarea id={`${node.id}-apibodyraw`} placeholder="Conteúdo do corpo em texto puro..." value={node.apiBodyRaw || ''} onChange={(e) => onUpdate(node.id, { apiBodyRaw: e.target.value })} rows={4} className="pr-8" />
+                      {renderVariableInserter('apiBodyRaw', true)}
                     </div>
                   </div>
                 )}
@@ -1443,7 +1436,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             </div>
 
             <Button variant="outline" className="w-full mt-3" onClick={handleTestApiCall} disabled={isTestingApi}>
-                <TestTube2 className="mr-2 h-4 w-4" /> {isTestingApi ? "Testando..." : "Testar Requisição"}
+              <TestTube2 className="mr-2 h-4 w-4" /> {isTestingApi ? "Testando..." : "Testar Requisição"}
             </Button>
           </div>
         );
@@ -1458,15 +1451,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-                <Label htmlFor={`${node.id}-datelabel`}>Texto da Pergunta</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-datelabel`} placeholder="Ex: Qual sua data de nascimento?" value={node.dateInputLabel || ''} onChange={(e) => onUpdate(node.id, {dateInputLabel: e.target.value})} className="pr-8"/>
-                    {renderVariableInserter('dateInputLabel')}
-                </div>
+              <Label htmlFor={`${node.id}-datelabel`}>Texto da Pergunta</Label>
+              <div className="relative">
+                <Input id={`${node.id}-datelabel`} placeholder="Ex: Qual sua data de nascimento?" value={node.dateInputLabel || ''} onChange={(e) => onUpdate(node.id, { dateInputLabel: e.target.value })} className="pr-8" />
+                {renderVariableInserter('dateInputLabel')}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-varsavedate`}>Salvar Data na Variável</Label>
-                <Input id={`${node.id}-varsavedate`} placeholder="data_nascimento" value={node.variableToSaveDate || ''} onChange={(e) => onUpdate(node.id, { variableToSaveDate: e.target.value })} />
+              <Label htmlFor={`${node.id}-varsavedate`}>Salvar Data na Variável</Label>
+              <Input id={`${node.id}-varsavedate`} placeholder="data_nascimento" value={node.variableToSaveDate || ''} onChange={(e) => onUpdate(node.id, { variableToSaveDate: e.target.value })} />
             </div>
             {renderApiResponseSettings()}
           </div>
@@ -1476,8 +1469,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           <div data-no-drag="true">
             <Label htmlFor={`${node.id}-redirecturl`}>URL para Redirecionamento</Label>
             <div className="relative">
-                <Input id={`${node.id}-redirecturl`} placeholder="https://exemplo.com/{{id_usuario}}" value={node.redirectUrl || ''} onChange={(e) => onUpdate(node.id, { redirectUrl: e.target.value })} className="pr-8"/>
-                {renderVariableInserter('redirectUrl')}
+              <Input id={`${node.id}-redirecturl`} placeholder="https://exemplo.com/{{id_usuario}}" value={node.redirectUrl || ''} onChange={(e) => onUpdate(node.id, { redirectUrl: e.target.value })} className="pr-8" />
+              {renderVariableInserter('redirectUrl')}
             </div>
           </div>
         );
@@ -1503,15 +1496,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               <div>
                 <Label htmlFor={`${node.id}-mediadisplayurl`}>URL da Mídia</Label>
                 <div className="relative">
-                    <Input id={`${node.id}-mediadisplayurl`} placeholder="https://... ou {{url_da_imagem}}" value={node.mediaDisplayUrl || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayUrl: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('mediaDisplayUrl')}
+                  <Input id={`${node.id}-mediadisplayurl`} placeholder="https://... ou {{url_da_imagem}}" value={node.mediaDisplayUrl || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayUrl: e.target.value })} className="pr-8" />
+                  {renderVariableInserter('mediaDisplayUrl')}
                 </div>
               </div>
               <div>
                 <Label htmlFor={`${node.id}-mediadisplaytext`}>Texto Alternativo/Legenda</Label>
                 <div className="relative">
-                    <Input id={`${node.id}-mediadisplaytext`} placeholder="Descrição da mídia" value={node.mediaDisplayText || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayText: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('mediaDisplayText')}
+                  <Input id={`${node.id}-mediadisplaytext`} placeholder="Descrição da mídia" value={node.mediaDisplayText || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayText: e.target.value })} className="pr-8" />
+                  {renderVariableInserter('mediaDisplayText')}
                 </div>
               </div>
             </div>
@@ -1522,8 +1515,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           <div data-no-drag="true">
             <Label htmlFor={`${node.id}-logmsg`}>Mensagem para Log</Label>
             <div className="relative">
-                <Textarea id={`${node.id}-logmsg`} placeholder="Ex: Status: {{input.status}}, Usuário: {{user.id}}" value={node.logMessage || ''} onChange={(e) => onUpdate(node.id, { logMessage: e.target.value })} rows={2} className="pr-8"/>
-                {renderVariableInserter('logMessage', true)}
+              <Textarea id={`${node.id}-logmsg`} placeholder="Ex: Status: {{input.status}}, Usuário: {{user.id}}" value={node.logMessage || ''} onChange={(e) => onUpdate(node.id, { logMessage: e.target.value })} rows={2} className="pr-8" />
+              {renderVariableInserter('logMessage', true)}
             </div>
           </div>
         );
@@ -1533,13 +1526,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <div>
               <Label htmlFor={`${node.id}-codesnippet`}>Trecho de Código (JavaScript)</Label>
               <div className="relative">
-                <Textarea id={`${node.id}-codesnippet`} placeholder="async (input, variables) => {\n  // input é o valor do nó anterior, se conectado\n  // variables é um objeto com as variáveis do fluxo\n  // Ex: const nome = variables.nome_usuario;\n  // return { resultado: 1 + 1, nome_modificado: nome.toUpperCase() };\n}" value={node.codeSnippet || ''} onChange={(e) => onUpdate(node.id, { codeSnippet: e.target.value })} rows={6} className="pr-8"/>
+                <Textarea id={`${node.id}-codesnippet`} placeholder="async (input, variables) => {\n  // input é o valor do nó anterior, se conectado\n  // variables é um objeto com as variáveis do fluxo\n  // Ex: const nome = variables.nome_usuario;\n  // return { resultado: 1 + 1, nome_modificado: nome.toUpperCase() };\n}" value={node.codeSnippet || ''} onChange={(e) => onUpdate(node.id, { codeSnippet: e.target.value })} rows={6} className="pr-8" />
                 {renderVariableInserter('codeSnippet', true)}
               </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-codeoutputvar`}>Salvar Saída (objeto) na Variável</Label>
-                <Input id={`${node.id}-codeoutputvar`} placeholder="resultado_codigo (ex: resultado_codigo.resultado)" value={node.codeOutputVariable || ''} onChange={(e) => onUpdate(node.id, { codeOutputVariable: e.target.value })} />
+              <Label htmlFor={`${node.id}-codeoutputvar`}>Salvar Saída (objeto) na Variável</Label>
+              <Input id={`${node.id}-codeoutputvar`} placeholder="resultado_codigo (ex: resultado_codigo.resultado)" value={node.codeOutputVariable || ''} onChange={(e) => onUpdate(node.id, { codeOutputVariable: e.target.value })} />
             </div>
             <p className="text-xs text-muted-foreground">Nota: O código é executado em um ambiente sandbox no servidor.</p>
           </div>
@@ -1548,22 +1541,22 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-                <Label htmlFor={`${node.id}-inputjson`}>JSON de Entrada (objeto ou {"{{variavel}}"})</Label>
-                <div className="relative">
-                    <Textarea id={`${node.id}-inputjson`} placeholder='{ "chave": "valor" } ou {{dados_api}}' value={node.inputJson || ''} onChange={(e) => onUpdate(node.id, { inputJson: e.target.value })} rows={3} className="pr-8"/>
-                    {renderVariableInserter('inputJson', true)}
-                </div>
+              <Label htmlFor={`${node.id}-inputjson`}>JSON de Entrada (objeto ou {"{{variavel}}"})</Label>
+              <div className="relative">
+                <Textarea id={`${node.id}-inputjson`} placeholder='{ "chave": "valor" } ou {{dados_api}}' value={node.inputJson || ''} onChange={(e) => onUpdate(node.id, { inputJson: e.target.value })} rows={3} className="pr-8" />
+                {renderVariableInserter('inputJson', true)}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-jsonata`}>Expressão JSONata</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-jsonata`} placeholder="$.chave.outraChave[0]" value={node.jsonataExpression || ''} onChange={(e) => onUpdate(node.id, { jsonataExpression: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('jsonataExpression')}
-                </div>
+              <Label htmlFor={`${node.id}-jsonata`}>Expressão JSONata</Label>
+              <div className="relative">
+                <Input id={`${node.id}-jsonata`} placeholder="$.chave.outraChave[0]" value={node.jsonataExpression || ''} onChange={(e) => onUpdate(node.id, { jsonataExpression: e.target.value })} className="pr-8" />
+                {renderVariableInserter('jsonataExpression')}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-jsonoutputvar`}>Salvar JSON Transformado na Variável</Label>
-                <Input id={`${node.id}-jsonoutputvar`} placeholder="json_transformado" value={node.jsonOutputVariable || ''} onChange={(e) => onUpdate(node.id, { jsonOutputVariable: e.target.value })} />
+              <Label htmlFor={`${node.id}-jsonoutputvar`}>Salvar JSON Transformado na Variável</Label>
+              <Input id={`${node.id}-jsonoutputvar`} placeholder="json_transformado" value={node.jsonOutputVariable || ''} onChange={(e) => onUpdate(node.id, { jsonOutputVariable: e.target.value })} />
             </div>
           </div>
         );
@@ -1571,23 +1564,23 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-                <Label htmlFor={`${node.id}-uploadprompt`}>Texto do Prompt de Upload</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-uploadprompt`} placeholder="Por favor, envie seu documento." value={node.uploadPromptText || ''} onChange={(e) => onUpdate(node.id, { uploadPromptText: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('uploadPromptText')}
-                </div>
+              <Label htmlFor={`${node.id}-uploadprompt`}>Texto do Prompt de Upload</Label>
+              <div className="relative">
+                <Input id={`${node.id}-uploadprompt`} placeholder="Por favor, envie seu documento." value={node.uploadPromptText || ''} onChange={(e) => onUpdate(node.id, { uploadPromptText: e.target.value })} className="pr-8" />
+                {renderVariableInserter('uploadPromptText')}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-filefilter`}>Filtro de Tipo de Arquivo (ex: image/*, .pdf)</Label>
-                <Input id={`${node.id}-filefilter`} placeholder="image/*, .pdf, .docx" value={node.fileTypeFilter || ''} onChange={(e) => onUpdate(node.id, { fileTypeFilter: e.target.value })} />
+              <Label htmlFor={`${node.id}-filefilter`}>Filtro de Tipo de Arquivo (ex: image/*, .pdf)</Label>
+              <Input id={`${node.id}-filefilter`} placeholder="image/*, .pdf, .docx" value={node.fileTypeFilter || ''} onChange={(e) => onUpdate(node.id, { fileTypeFilter: e.target.value })} />
             </div>
             <div>
-                <Label htmlFor={`${node.id}-maxsize`}>Tam. Máx. Arquivo (MB)</Label>
-                <Input id={`${node.id}-maxsize`} type="number" placeholder="5" value={node.maxFileSizeMB ?? ''} onChange={(e) => onUpdate(node.id, { maxFileSizeMB: e.target.value ? parseInt(e.target.value, 10) : undefined })} />
+              <Label htmlFor={`${node.id}-maxsize`}>Tam. Máx. Arquivo (MB)</Label>
+              <Input id={`${node.id}-maxsize`} type="number" placeholder="5" value={node.maxFileSizeMB ?? ''} onChange={(e) => onUpdate(node.id, { maxFileSizeMB: e.target.value ? parseInt(e.target.value, 10) : undefined })} />
             </div>
             <div>
-                <Label htmlFor={`${node.id}-fileurlvar`}>Salvar URL do Arquivo na Variável</Label>
-                <Input id={`${node.id}-fileurlvar`} placeholder="url_do_arquivo" value={node.fileUrlVariable || ''} onChange={(e) => onUpdate(node.id, { fileUrlVariable: e.target.value })} />
+              <Label htmlFor={`${node.id}-fileurlvar`}>Salvar URL do Arquivo na Variável</Label>
+              <Input id={`${node.id}-fileurlvar`} placeholder="url_do_arquivo" value={node.fileUrlVariable || ''} onChange={(e) => onUpdate(node.id, { fileUrlVariable: e.target.value })} />
             </div>
             {renderApiResponseSettings()}
           </div>
@@ -1596,15 +1589,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-                <Label htmlFor={`${node.id}-ratingq`}>Pergunta da Avaliação</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-ratingq`} placeholder="Como você nos avalia?" value={node.ratingQuestionText || ''} onChange={(e) => onUpdate(node.id, { ratingQuestionText: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('ratingQuestionText')}
-                </div>
+              <Label htmlFor={`${node.id}-ratingq`}>Pergunta da Avaliação</Label>
+              <div className="relative">
+                <Input id={`${node.id}-ratingq`} placeholder="Como você nos avalia?" value={node.ratingQuestionText || ''} onChange={(e) => onUpdate(node.id, { ratingQuestionText: e.target.value })} className="pr-8" />
+                {renderVariableInserter('ratingQuestionText')}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-maxrating`}>Avaliação Máxima</Label>
-                <Input id={`${node.id}-maxrating`} type="number" placeholder="5" value={node.maxRatingValue ?? ''} onChange={(e) => onUpdate(node.id, { maxRatingValue: parseInt(e.target.value, 10) || 5 })} />
+              <Label htmlFor={`${node.id}-maxrating`}>Avaliação Máxima</Label>
+              <Input id={`${node.id}-maxrating`} type="number" placeholder="5" value={node.maxRatingValue ?? ''} onChange={(e) => onUpdate(node.id, { maxRatingValue: parseInt(e.target.value, 10) || 5 })} />
             </div>
             <div><Label htmlFor={`${node.id}-ratingicon`}>Ícone de Avaliação</Label>
               <Select value={node.ratingIconType || 'star'} onValueChange={(value) => onUpdate(node.id, { ratingIconType: value as NodeData['ratingIconType'] })}>
@@ -1615,8 +1608,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </Select>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-ratingoutputvar`}>Salvar Avaliação na Variável</Label>
-                <Input id={`${node.id}-ratingoutputvar`} placeholder="avaliacao_usuario" value={node.ratingOutputVariable || ''} onChange={(e) => onUpdate(node.id, { ratingOutputVariable: e.target.value })} />
+              <Label htmlFor={`${node.id}-ratingoutputvar`}>Salvar Avaliação na Variável</Label>
+              <Input id={`${node.id}-ratingoutputvar`} placeholder="avaliacao_usuario" value={node.ratingOutputVariable || ''} onChange={(e) => onUpdate(node.id, { ratingOutputVariable: e.target.value })} />
             </div>
             {renderApiResponseSettings()}
           </div>
@@ -1625,56 +1618,56 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-                <Label htmlFor={`${node.id}-aiprompt`}>Prompt para IA</Label>
-                <div className="relative">
-                    <Textarea id={`${node.id}-aiprompt`} placeholder="Gere uma descrição para um produto chamado {{input.nome_produto}}." value={node.aiPromptText || ''} onChange={(e) => onUpdate(node.id, { aiPromptText: e.target.value })} rows={4} className="pr-8"/>
-                    {renderVariableInserter('aiPromptText', true)}
-                </div>
+              <Label htmlFor={`${node.id}-aiprompt`}>Prompt para IA</Label>
+              <div className="relative">
+                <Textarea id={`${node.id}-aiprompt`} placeholder="Gere uma descrição para um produto chamado {{input.nome_produto}}." value={node.aiPromptText || ''} onChange={(e) => onUpdate(node.id, { aiPromptText: e.target.value })} rows={4} className="pr-8" />
+                {renderVariableInserter('aiPromptText', true)}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional)</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-aimodel`} placeholder="gemini-1.5-flash (padrão)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('aiModelName')}
-                </div>
+              <Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional)</Label>
+              <div className="relative">
+                <Input id={`${node.id}-aimodel`} placeholder="gemini-1.5-flash (padrão)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="pr-8" />
+                {renderVariableInserter('aiModelName')}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-aioutputvar`}>Salvar Resposta da IA na Variável</Label>
-                <Input id={`${node.id}-aioutputvar`} placeholder="resposta_ia" value={node.aiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { aiOutputVariable: e.target.value })} />
+              <Label htmlFor={`${node.id}-aioutputvar`}>Salvar Resposta da IA na Variável</Label>
+              <Input id={`${node.id}-aioutputvar`} placeholder="resposta_ia" value={node.aiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { aiOutputVariable: e.target.value })} />
             </div>
-               <p className="text-xs text-muted-foreground">Esta integração usa Genkit. Configure seu modelo em `src/ai/genkit.ts`.</p>
+            <p className="text-xs text-muted-foreground">Esta integração usa Genkit. Configure seu modelo em `src/ai/genkit.ts`.</p>
           </div>
         );
       case 'send-email':
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-                <Label htmlFor={`${node.id}-emailto`}>Para (E-mail ou {"{{variavel}}"})</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-emailto`} type="email" placeholder="destinatario@exemplo.com ou {{email_cliente}}" value={node.emailTo || ''} onChange={(e) => onUpdate(node.id, { emailTo: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('emailTo')}
-                </div>
+              <Label htmlFor={`${node.id}-emailto`}>Para (E-mail ou {"{{variavel}}"})</Label>
+              <div className="relative">
+                <Input id={`${node.id}-emailto`} type="email" placeholder="destinatario@exemplo.com ou {{email_cliente}}" value={node.emailTo || ''} onChange={(e) => onUpdate(node.id, { emailTo: e.target.value })} className="pr-8" />
+                {renderVariableInserter('emailTo')}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-emailsubject`}>Assunto</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-emailsubject`} placeholder="Assunto do seu e-mail" value={node.emailSubject || ''} onChange={(e) => onUpdate(node.id, { emailSubject: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('emailSubject')}
-                </div>
+              <Label htmlFor={`${node.id}-emailsubject`}>Assunto</Label>
+              <div className="relative">
+                <Input id={`${node.id}-emailsubject`} placeholder="Assunto do seu e-mail" value={node.emailSubject || ''} onChange={(e) => onUpdate(node.id, { emailSubject: e.target.value })} className="pr-8" />
+                {renderVariableInserter('emailSubject')}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-emailbody`}>Corpo do E-mail (HTML ou Texto)</Label>
-                <div className="relative">
-                    <Textarea id={`${node.id}-emailbody`} placeholder="Olá {{input.nome_cliente}},\n\nSua mensagem aqui." value={node.emailBody || ''} onChange={(e) => onUpdate(node.id, { emailBody: e.target.value })} rows={4} className="pr-8"/>
-                    {renderVariableInserter('emailBody', true)}
-                </div>
+              <Label htmlFor={`${node.id}-emailbody`}>Corpo do E-mail (HTML ou Texto)</Label>
+              <div className="relative">
+                <Textarea id={`${node.id}-emailbody`} placeholder="Olá {{input.nome_cliente}},\n\nSua mensagem aqui." value={node.emailBody || ''} onChange={(e) => onUpdate(node.id, { emailBody: e.target.value })} rows={4} className="pr-8" />
+                {renderVariableInserter('emailBody', true)}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-emailfrom`}>De (E-mail - opcional)</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-emailfrom`} type="email" placeholder="remetente@exemplo.com" value={node.emailFrom || ''} onChange={(e) => onUpdate(node.id, { emailFrom: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('emailFrom')}
-                </div>
+              <Label htmlFor={`${node.id}-emailfrom`}>De (E-mail - opcional)</Label>
+              <div className="relative">
+                <Input id={`${node.id}-emailfrom`} type="email" placeholder="remetente@exemplo.com" value={node.emailFrom || ''} onChange={(e) => onUpdate(node.id, { emailFrom: e.target.value })} className="pr-8" />
+                {renderVariableInserter('emailFrom')}
+              </div>
             </div>
           </div>
         );
@@ -1682,25 +1675,25 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-                <Label htmlFor={`${node.id}-gsheetid`}>ID da Planilha Google</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-gsheetid`} placeholder="abc123xyz789" value={node.googleSheetId || ''} onChange={(e) => onUpdate(node.id, { googleSheetId: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('googleSheetId')}
-                </div>
+              <Label htmlFor={`${node.id}-gsheetid`}>ID da Planilha Google</Label>
+              <div className="relative">
+                <Input id={`${node.id}-gsheetid`} placeholder="abc123xyz789" value={node.googleSheetId || ''} onChange={(e) => onUpdate(node.id, { googleSheetId: e.target.value })} className="pr-8" />
+                {renderVariableInserter('googleSheetId')}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-gsheetname`}>Nome da Aba (Planilha)</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-gsheetname`} placeholder="Página1" value={node.googleSheetName || ''} onChange={(e) => onUpdate(node.id, { googleSheetName: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('googleSheetName')}
-                </div>
+              <Label htmlFor={`${node.id}-gsheetname`}>Nome da Aba (Planilha)</Label>
+              <div className="relative">
+                <Input id={`${node.id}-gsheetname`} placeholder="Página1" value={node.googleSheetName || ''} onChange={(e) => onUpdate(node.id, { googleSheetName: e.target.value })} className="pr-8" />
+                {renderVariableInserter('googleSheetName')}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-gsheetdata`}>Dados da Linha (JSON array de strings)</Label>
-                <div className="relative">
-                    <Textarea id={`${node.id}-gsheetdata`} placeholder='["{{input.valor1}}", "{{input.valor2}}", "texto fixo"]' value={node.googleSheetRowData || ''} onChange={(e) => onUpdate(node.id, { googleSheetRowData: e.target.value })} rows={2} className="pr-8"/>
-                    {renderVariableInserter('googleSheetRowData', true)}
-                </div>
+              <Label htmlFor={`${node.id}-gsheetdata`}>Dados da Linha (JSON array de strings)</Label>
+              <div className="relative">
+                <Textarea id={`${node.id}-gsheetdata`} placeholder='["{{input.valor1}}", "{{input.valor2}}", "texto fixo"]' value={node.googleSheetRowData || ''} onChange={(e) => onUpdate(node.id, { googleSheetRowData: e.target.value })} rows={2} className="pr-8" />
+                {renderVariableInserter('googleSheetRowData', true)}
+              </div>
             </div>
             <p className="text-xs text-muted-foreground">Certifique-se que a API do Google Sheets está habilitada e as credenciais configuradas no servidor.</p>
           </div>
@@ -1709,40 +1702,40 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-                <Label htmlFor={`${node.id}-agentname`}>Nome do Agente</Label>
-                 <div className="relative">
-                    <Input id={`${node.id}-agentname`} placeholder="Agente de Suporte N1" value={node.agentName || ''} onChange={(e) => onUpdate(node.id, { agentName: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('agentName')}
-                 </div>
+              <Label htmlFor={`${node.id}-agentname`}>Nome do Agente</Label>
+              <div className="relative">
+                <Input id={`${node.id}-agentname`} placeholder="Agente de Suporte N1" value={node.agentName || ''} onChange={(e) => onUpdate(node.id, { agentName: e.target.value })} className="pr-8" />
+                {renderVariableInserter('agentName')}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-agentsystemprompt`}>Prompt do Sistema / Instruções</Label>
-                <div className="relative">
-                    <Textarea id={`${node.id}-agentsystemprompt`} placeholder="Você é um assistente virtual especializado em {{area_especializacao}}." value={node.agentSystemPrompt || ''} onChange={(e) => onUpdate(node.id, { agentSystemPrompt: e.target.value })} rows={4} className="pr-8"/>
-                    {renderVariableInserter('agentSystemPrompt', true)}
-                </div>
+              <Label htmlFor={`${node.id}-agentsystemprompt`}>Prompt do Sistema / Instruções</Label>
+              <div className="relative">
+                <Textarea id={`${node.id}-agentsystemprompt`} placeholder="Você é um assistente virtual especializado em {{area_especializacao}}." value={node.agentSystemPrompt || ''} onChange={(e) => onUpdate(node.id, { agentSystemPrompt: e.target.value })} rows={4} className="pr-8" />
+                {renderVariableInserter('agentSystemPrompt', true)}
+              </div>
             </div>
             <div>
               <Label htmlFor={`${node.id}-userinputvar`}>Variável com Entrada do Usuário (ex: {"{{pergunta_usuario}}"})</Label>
               <div className="relative">
-                <Input id={`${node.id}-userinputvar`} placeholder="{{pergunta_usuario}}" value={node.userInputVariable || ''} onChange={(e) => onUpdate(node.id, { userInputVariable: e.target.value })} className="pr-8"/>
+                <Input id={`${node.id}-userinputvar`} placeholder="{{pergunta_usuario}}" value={node.userInputVariable || ''} onChange={(e) => onUpdate(node.id, { userInputVariable: e.target.value })} className="pr-8" />
                 {renderVariableInserter('userInputVariable')}
               </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-agentresponsevar`}>Salvar Resposta na Variável</Label>
-                <Input id={`${node.id}-agentresponsevar`} placeholder="resposta_agente" value={node.agentResponseVariable || ''} onChange={(e) => onUpdate(node.id, { agentResponseVariable: e.target.value })} />
+              <Label htmlFor={`${node.id}-agentresponsevar`}>Salvar Resposta na Variável</Label>
+              <Input id={`${node.id}-agentresponsevar`} placeholder="resposta_agente" value={node.agentResponseVariable || ''} onChange={(e) => onUpdate(node.id, { agentResponseVariable: e.target.value })} />
             </div>
             <div>
-                <Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional, ex: gemini-1.5-flash)</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-aimodel`} placeholder="gemini-1.5-flash (padrão Genkit)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="pr-8"/>
-                    {renderVariableInserter('aiModelName')}
-                </div>
+              <Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional, ex: gemini-1.5-flash)</Label>
+              <div className="relative">
+                <Input id={`${node.id}-aimodel`} placeholder="gemini-1.5-flash (padrão Genkit)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="pr-8" />
+                {renderVariableInserter('aiModelName')}
+              </div>
             </div>
             <div>
-                <Label htmlFor={`${node.id}-maxturns`}>Máx. Turnos de Conversa (opcional)</Label>
-                <Input id={`${node.id}-maxturns`} type="number" placeholder="5" value={node.maxConversationTurns ?? ''} onChange={(e) => onUpdate(node.id, { maxConversationTurns: e.target.value ? parseInt(e.target.value, 10) : undefined })} />
+              <Label htmlFor={`${node.id}-maxturns`}>Máx. Turnos de Conversa (opcional)</Label>
+              <Input id={`${node.id}-maxturns`} type="number" placeholder="5" value={node.maxConversationTurns ?? ''} onChange={(e) => onUpdate(node.id, { maxConversationTurns: e.target.value ? parseInt(e.target.value, 10) : undefined })} />
             </div>
             <div>
               <Label htmlFor={`${node.id}-temperature`}>Temperatura (0-1, opcional)</Label>
@@ -1783,14 +1776,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tabela encontrada ou Supabase não configurado/habilitado.</p>}
               {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length > 0 && (
                 <Select
-                    value={node.supabaseTableName || ''}
-                    onValueChange={(value) => {
-                      onUpdate(node.id, {
-                        supabaseTableName: value,
-                        supabaseIdentifierColumn: '',
-                        supabaseColumnsToSelect: '*'
-                      });
-                    }}
+                  value={node.supabaseTableName || ''}
+                  onValueChange={(value) => {
+                    onUpdate(node.id, {
+                      supabaseTableName: value,
+                      supabaseIdentifierColumn: '',
+                      supabaseColumnsToSelect: '*'
+                    });
+                  }}
                 >
                   <SelectTrigger id={`${node.id}-tableName`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
                   <SelectContent>
@@ -1808,48 +1801,48 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   {!isLoadingSupabaseColumns && !node.supabaseTableName && <p className="text-xs text-muted-foreground">Selecione uma tabela para ver as colunas.</p>}
                   {!isLoadingSupabaseColumns && node.supabaseTableName && supabaseColumns.length === 0 && !supabaseSchemaError && <p className="text-xs text-muted-foreground">Nenhuma coluna encontrada para a tabela selecionada.</p>}
                   {!isLoadingSupabaseColumns && supabaseColumns.length > 0 && (
-                     <Select
-                        value={node.supabaseIdentifierColumn || ''}
-                        onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}
-                        disabled={!node.supabaseTableName || supabaseColumns.length === 0}
+                    <Select
+                      value={node.supabaseIdentifierColumn || ''}
+                      onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}
+                      disabled={!node.supabaseTableName || supabaseColumns.length === 0}
                     >
-                        <SelectTrigger id={`${node.id}-identifierCol`}>
-                            <SelectValue placeholder="Selecione a Coluna para filtrar" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {supabaseColumns.map(col => <SelectItem key={col.name} value={col.name}>{col.name}</SelectItem>)}
-                        </SelectContent>
+                      <SelectTrigger id={`${node.id}-identifierCol`}>
+                        <SelectValue placeholder="Selecione a Coluna para filtrar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {supabaseColumns.map(col => <SelectItem key={col.name} value={col.name}>{col.name}</SelectItem>)}
+                      </SelectContent>
                     </Select>
                   )}
-                   {!isLoadingSupabaseColumns && supabaseSchemaError && node.supabaseTableName && <p className="text-xs text-destructive">{supabaseSchemaError}</p>}
+                  {!isLoadingSupabaseColumns && supabaseSchemaError && node.supabaseTableName && <p className="text-xs text-destructive">{supabaseSchemaError}</p>}
                 </div>
                 <div>
-                    <Label htmlFor={`${node.id}-identifierVal`}>Valor do Identificador (Filtro)</Label>
-                    <div className="relative">
-                        <Input id={`${node.id}-identifierVal`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} className="pr-8"/>
-                        {renderVariableInserter('supabaseIdentifierValue')}
-                    </div>
+                  <Label htmlFor={`${node.id}-identifierVal`}>Valor do Identificador (Filtro)</Label>
+                  <div className="relative">
+                    <Input id={`${node.id}-identifierVal`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} className="pr-8" />
+                    {renderVariableInserter('supabaseIdentifierValue')}
+                  </div>
                 </div>
               </>
             )}
 
             {isReadOp && (
-                 <div>
-                    <Label htmlFor={`${node.id}-columnsToSelectRead`}>Colunas a Selecionar (ex: *, nome, email)</Label>
-                    <div className="relative">
-                        <Input id={`${node.id}-columnsToSelectRead`} placeholder="*, nome, email_principal" value={node.supabaseColumnsToSelect || '*'} onChange={(e) => onUpdate(node.id, { supabaseColumnsToSelect: e.target.value })} className="pr-8"/>
-                        {renderVariableInserter('supabaseColumnsToSelect')}
-                    </div>
+              <div>
+                <Label htmlFor={`${node.id}-columnsToSelectRead`}>Colunas a Selecionar (ex: *, nome, email)</Label>
+                <div className="relative">
+                  <Input id={`${node.id}-columnsToSelectRead`} placeholder="*, nome, email_principal" value={node.supabaseColumnsToSelect || '*'} onChange={(e) => onUpdate(node.id, { supabaseColumnsToSelect: e.target.value })} className="pr-8" />
+                  {renderVariableInserter('supabaseColumnsToSelect')}
                 </div>
+              </div>
             )}
 
             {needsDataJson && (
               <div>
-                  <Label htmlFor={`${node.id}-dataJson`}>{isCreateOp ? 'Dados da Nova Linha (JSON)' : 'Dados para Atualizar (JSON)'}</Label>
-                  <div className="relative">
-                      <Textarea id={`${node.id}-dataJson`} placeholder='{ "coluna1": "valor1", "coluna2": "{{variavel_col2}}" }' value={node.supabaseDataJson || ''} onChange={(e) => onUpdate(node.id, { supabaseDataJson: e.target.value })} rows={3} className="pr-8"/>
-                      {renderVariableInserter('supabaseDataJson', true)}
-                  </div>
+                <Label htmlFor={`${node.id}-dataJson`}>{isCreateOp ? 'Dados da Nova Linha (JSON)' : 'Dados para Atualizar (JSON)'}</Label>
+                <div className="relative">
+                  <Textarea id={`${node.id}-dataJson`} placeholder='{ "coluna1": "valor1", "coluna2": "{{variavel_col2}}" }' value={node.supabaseDataJson || ''} onChange={(e) => onUpdate(node.id, { supabaseDataJson: e.target.value })} rows={3} className="pr-8" />
+                  {renderVariableInserter('supabaseDataJson', true)}
+                </div>
               </div>
             )}
 
@@ -1857,10 +1850,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               <div>
                 <Label htmlFor={`${node.id}-resultVar`}>Salvar Resultado na Variável</Label>
                 <Input
-                    id={`${node.id}-resultVar`}
-                    placeholder={isReadOp ? (node.supabaseResultVariable || "dados_supabase") : (node.supabaseResultVariable || "id_linha_criada_supabase")}
-                    value={node.supabaseResultVariable || ''}
-                    onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })}
+                  id={`${node.id}-resultVar`}
+                  placeholder={isReadOp ? (node.supabaseResultVariable || "dados_supabase") : (node.supabaseResultVariable || "id_linha_criada_supabase")}
+                  value={node.supabaseResultVariable || ''}
+                  onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })}
                 />
               </div>
             )}
@@ -1912,18 +1905,18 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
   return (
     <>
-    <motion.div
-      className={cn(
-        "w-full cursor-default bg-card rounded-lg shadow-xl border border-border relative",
-        isSessionHighlighted && "ring-2 ring-accent ring-offset-2 ring-offset-background"
+      <motion.div
+        className={cn(
+          "w-full cursor-default bg-card rounded-lg shadow-xl border border-border relative",
+          isSessionHighlighted && "ring-2 ring-accent ring-offset-2 ring-offset-background"
         )}
-      whileHover={{ scale: 1.01, boxShadow: "0px 5px 25px rgba(0,0,0,0.1)" }}
-      transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-      data-node-id={node.id}
-      aria-labelledby={`${node.id}-title`}
-      onMouseDown={(e) => {
-        const target = e.target as HTMLElement;
-         if (target.dataset.connector === 'true' ||
+        whileHover={{ scale: 1.01, boxShadow: "0px 5px 25px rgba(0,0,0,0.1)" }}
+        transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+        data-node-id={node.id}
+        aria-labelledby={`${node.id}-title`}
+        onMouseDown={(e) => {
+          const target = e.target as HTMLElement;
+          if (target.dataset.connector === 'true' ||
             target.closest('[data-action="delete-node"]') ||
             target.closest('[data-no-drag="true"]') ||
             target.closest('[role="dialog"]') ||
@@ -1933,104 +1926,104 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             target.closest('[role="tablist"]') ||
             target.closest('[role="tabpanel"]') ||
             target.closest('.rc-select-dropdown')
-        ) {
-          return;
-        }
-        handleNodeMouseDown(e);
-      }}
-    >
-      <Card className="shadow-none border-none bg-transparent">
-        <CardHeader
-          onMouseDown={handleNodeMouseDown}
-          data-drag-handle="true"
-          className="py-2.5 px-3.5 bg-secondary/50 rounded-t-lg flex items-center justify-between cursor-grab active:cursor-grabbing"
-        >
-          <div className="flex items-center min-w-0 pointer-events-none">
-            {renderNodeIcon()}
-            <CardTitle id={`${node.id}-title`} className="ml-2 text-sm font-medium text-secondary-foreground truncate" title={node.title}>
-              {node.title}
-            </CardTitle>
-          </div>
-          <div className="flex items-center gap-1">
-             {node.type === 'start' && (
-               <Popover open={isIntegrationsPopoverOpen} onOpenChange={handleIntegrationsPopoverOpen}>
-                 <PopoverTrigger asChild>
-                   <Button variant="ghost" size="icon" className="p-0.5 text-muted-foreground hover:text-foreground w-6 h-6" aria-label="Status das Integrações">
-                     <BotMessageSquare className="w-4 h-4" />
-                   </Button>
-                 </PopoverTrigger>
-                 <PopoverContent className="w-80" align="end" data-no-drag="true">
-                   <div className="grid gap-4">
-                     <div className="space-y-2">
-                       <h4 className="font-medium leading-none">Status das Integrações</h4>
-                       <p className="text-sm text-muted-foreground">
-                         Status das suas instâncias configuradas.
-                       </p>
-                     </div>
+          ) {
+            return;
+          }
+          handleNodeMouseDown(e);
+        }}
+      >
+        <Card className="shadow-none border-none bg-transparent">
+          <CardHeader
+            onMouseDown={handleNodeMouseDown}
+            data-drag-handle="true"
+            className="py-2.5 px-3.5 bg-secondary/50 rounded-t-lg flex items-center justify-between cursor-grab active:cursor-grabbing"
+          >
+            <div className="flex items-center min-w-0 pointer-events-none">
+              {renderNodeIcon()}
+              <CardTitle id={`${node.id}-title`} className="ml-2 text-sm font-medium text-secondary-foreground truncate" title={node.title}>
+                {node.title}
+              </CardTitle>
+            </div>
+            <div className="flex items-center gap-1">
+              {node.type === 'start' && (
+                <Popover open={isIntegrationsPopoverOpen} onOpenChange={handleIntegrationsPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon" className="p-0.5 text-muted-foreground hover:text-foreground w-6 h-6" aria-label="Status das Integrações">
+                      <BotMessageSquare className="w-4 h-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80" align="end" data-no-drag="true">
+                    <div className="grid gap-4">
+                      <div className="space-y-2">
+                        <h4 className="font-medium leading-none">Status das Integrações</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Status das suas instâncias configuradas.
+                        </p>
+                      </div>
                       <ScrollArea className="h-auto max-h-[200px]">
                         <div className="grid gap-4">
                           <div>
                             <h5 className="text-sm font-semibold mb-2 flex items-center gap-2"><BotMessageSquare className="w-4 h-4 text-teal-500" /> API Evolution</h5>
-                             {isLoadingEvolutionInstances ? (
-                                 <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
-                                     <Loader2 className="mr-2 h-4 w-4 animate-spin"/> Carregando...
-                                 </div>
-                             ) : evolutionInstances.length > 0 ? evolutionInstances.map((instance) => (
-                               <div key={instance.id} className="grid grid-cols-[auto,1fr,auto] items-center gap-x-2 text-sm p-2 rounded-md border bg-muted/50">
-                                 <div
-                                     className={cn("w-2.5 h-2.5 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
-                                     title={instance.status}
-                                 />
-                                 <div className="font-medium truncate" title={instance.name}>{instance.name}</div>
-                                 <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
-                               </div>
-                             )) : (
-                               <p className="text-xs text-muted-foreground text-center py-2">Nenhuma instância configurada.</p>
-                             )}
+                            {isLoadingEvolutionInstances ? (
+                              <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando...
+                              </div>
+                            ) : evolutionInstances.length > 0 ? evolutionInstances.map((instance) => (
+                              <div key={instance.id} className="grid grid-cols-[auto,1fr,auto] items-center gap-x-2 text-sm p-2 rounded-md border bg-muted/50">
+                                <div
+                                  className={cn("w-2.5 h-2.5 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
+                                  title={instance.status}
+                                />
+                                <div className="font-medium truncate" title={instance.name}>{instance.name}</div>
+                                <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
+                              </div>
+                            )) : (
+                              <p className="text-xs text-muted-foreground text-center py-2">Nenhuma instância configurada.</p>
+                            )}
                           </div>
                           <div>
-                            <h5 className="text-sm font-semibold mb-2 flex items-center gap-2"><MessageCircle className="w-4 h-4 text-blue-500"/> Chatwoot</h5>
-                             {isLoadingChatwootInstances ? (
-                                 <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
-                                     <Loader2 className="mr-2 h-4 w-4 animate-spin"/> Carregando...
-                                 </div>
-                             ) : chatwootInstances.length > 0 ? chatwootInstances.map((instance) => (
-                               <div key={instance.id} className="grid grid-cols-[auto,1fr,auto] items-center gap-x-2 text-sm p-2 rounded-md border bg-muted/50">
-                                 <div
-                                     className={cn("w-2.5 h-2.5 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
-                                     title={instance.status}
-                                 />
-                                 <div className="font-medium truncate" title={instance.name}>{instance.name}</div>
-                                 <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
-                               </div>
-                             )) : (
-                               <p className="text-xs text-muted-foreground text-center py-2">Nenhuma instância configurada.</p>
-                             )}
+                            <h5 className="text-sm font-semibold mb-2 flex items-center gap-2"><MessageCircle className="w-4 h-4 text-blue-500" /> Chatwoot</h5>
+                            {isLoadingChatwootInstances ? (
+                              <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando...
+                              </div>
+                            ) : chatwootInstances.length > 0 ? chatwootInstances.map((instance) => (
+                              <div key={instance.id} className="grid grid-cols-[auto,1fr,auto] items-center gap-x-2 text-sm p-2 rounded-md border bg-muted/50">
+                                <div
+                                  className={cn("w-2.5 h-2.5 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
+                                  title={instance.status}
+                                />
+                                <div className="font-medium truncate" title={instance.name}>{instance.name}</div>
+                                <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
+                              </div>
+                            )) : (
+                              <p className="text-xs text-muted-foreground text-center py-2">Nenhuma instância configurada.</p>
+                            )}
                           </div>
                         </div>
                       </ScrollArea>
-                   </div>
-                 </PopoverContent>
-               </Popover>
-             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleDeleteClick}
-              className="p-0.5 text-muted-foreground hover:text-destructive w-6 h-6"
-              aria-label="Excluir nó" data-action="delete-node"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-3.5 text-sm">
-          {renderNodeContent()}
-        </CardContent>
-      </Card>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleDeleteClick}
+                className="p-0.5 text-muted-foreground hover:text-destructive w-6 h-6"
+                aria-label="Excluir nó" data-action="delete-node"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-3.5 text-sm">
+            {renderNodeContent()}
+          </CardContent>
+        </Card>
 
-      {node.type !== 'start' && node.type !== 'end-flow' && (
-         <div
+        {node.type !== 'start' && node.type !== 'end-flow' && (
+          <div
             className="absolute -left-2.5 z-10 flex items-center justify-center"
             style={{
               top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`,
@@ -2039,120 +2032,118 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               width: '20px'
             }}
           >
-          <div
+            <div
               title="Conecte aqui"
               className="w-5 h-5 bg-muted hover:bg-muted-foreground/50 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
               data-connector="true" data-handle-type="target"
-          />
-        </div>
-      )}
+            />
+          </div>
+        )}
 
-      {renderOutputConnectors()}
-    </motion.div>
+        {renderOutputConnectors()}
+      </motion.div>
 
-    {/* Webhook History Dialog */}
-    <Dialog open={isWebhookHistoryDialogOpen} onOpenChange={setIsWebhookHistoryDialogOpen}>
+      {/* Webhook History Dialog */}
+      <Dialog open={isWebhookHistoryDialogOpen} onOpenChange={setIsWebhookHistoryDialogOpen}>
         <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[85vh] flex flex-col" data-no-drag="true">
-            <DialogHeader>
-                <DialogTitle>Histórico de Webhooks Recebidos</DialogTitle>
-                <DialogDescription>
-                    Exibe os últimos 50 eventos de webhook recebidos para este fluxo. Clique em uma chave do JSON para copiar seu caminho para a área de transferência.
-                </DialogDescription>
-            </DialogHeader>
-            <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
-                {isLoadingWebhookLogs && <div className="flex justify-center items-center h-full"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>}
-                {webhookLogsError && (
-                    <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm">
-                        <div className="flex items-center gap-2 font-medium"><AlertCircle className="h-5 w-5" /> Erro ao carregar logs:</div>
-                        <p className="mt-1 text-xs">{webhookLogsError}</p>
-                    </div>
-                )}
-                {!isLoadingWebhookLogs && !webhookLogsError && webhookLogs.length === 0 && (
-                    <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4">
-                        <FileText className="w-12 h-12 mb-3" />
-                        <p className="text-sm">Nenhum log de webhook encontrado para este fluxo.</p>
-                    </div>
-                )}
-                {!isLoadingWebhookLogs && webhookLogs.length > 0 && (
-                    <ScrollArea className="flex-1 border rounded-md bg-muted/30">
-                        <div className="p-3 space-y-3">
-                            {webhookLogs.map((log, index) => (
-                                <details key={index} className="bg-background p-2.5 rounded shadow-sm text-xs">
-                                    <summary className="cursor-pointer font-medium text-foreground/80 hover:text-foreground select-none">
-                                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm text-primary/80 mr-2">{new Date(log.timestamp).toLocaleString()}</span>
-                                        <span className="font-semibold mr-1">{log.method}</span>
-                                        {log.payload?.event && <span className="text-accent font-semibold">{log.payload.event}</span>}
-                                        {log.extractedMessage && <span className="ml-2 text-slate-500 italic">Msg: "{log.extractedMessage.substring(0, 30)}{log.extractedMessage.length > 30 ? '...' : ''}"</span>}
-                                        {log.webhook_remoteJid && <span className="ml-2 text-blue-500 text-xs">De: {log.webhook_remoteJid}</span>}
-                                    </summary>
-                                    <div className="mt-2 p-2 bg-muted/20 rounded-sm overflow-auto text-xs text-foreground/70 space-y-1.5">
-                                        {log.method && log.url && <div><strong>Endpoint:</strong> <span className="break-all">{log.method} {log.url}</span></div>}
-                                        {log.ip && <div><strong>IP Origem:</strong> {log.ip}</div>}
-                                        {log.headers && <div><strong>Headers:</strong><pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-24 overflow-y-auto">{JSON.stringify(log.headers, null, 2)}</pre></div>}
-                                        <div><strong>Payload Completo (clique para copiar caminho):</strong>
-                                          <div className="mt-1 p-2 bg-background/30 rounded text-xs max-h-60 overflow-y-auto">
-                                            <JsonTreeView data={log.payload} onSelectPath={(path) => {
-                                                navigator.clipboard.writeText(path).then(() => {
-                                                    toast({ title: "Caminho copiado!", description: `O caminho "${path}" foi copiado.` });
-                                                });
-                                            }} />
-                                          </div>
-                                        </div>
-                                    </div>
-                                </details>
-                            ))}
-                        </div>
-                    </ScrollArea>
-                )}
-            </div>
-            <DialogFooter>
-                <Button variant="outline" onClick={() => setIsWebhookHistoryDialogOpen(false)}>Fechar</Button>
-            </DialogFooter>
-        </DialogContent>
-    </Dialog>
-
-
-    {/* API Test Response Dialog */}
-    {node.type === 'api-call' && (
-      <Dialog open={isTestResponseModalOpen} onOpenChange={setIsTestResponseModalOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col" data-no-drag="true">
           <DialogHeader>
-              <DialogTitle>Resposta do Teste da API</DialogTitle>
-              <DialogDescription>Clique em uma chave do JSON para preencher o campo "Caminho do Dado".</DialogDescription>
+            <DialogTitle>Histórico de Webhooks Recebidos</DialogTitle>
+            <DialogDescription>
+              Exibe os últimos 50 eventos de webhook recebidos para este fluxo. Clique em uma chave do JSON para copiar seu caminho para a área de transferência.
+            </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 py-4">
-              {testResponseError && (
-                  <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md">
-                      <h4 className="font-semibold mb-1">Erro:</h4>
-                      <pre className="text-xs whitespace-pre-wrap break-all">{testResponseError}</pre>
-                  </div>
-              )}
-              {testResponseData && (
-                  <div>
-                      <Label className="font-semibold">Corpo da Resposta:</Label>
-                      <ScrollArea className="h-64 mt-1 border rounded-md p-2 bg-muted/30">
-                          <pre className="text-xs whitespace-pre-wrap break-all">
-                              <JsonTreeView data={testResponseData} onSelectPath={(path) => {
-                                onUpdate(node.id, { apiResponsePath: path });
-                                toast({ title: "Caminho Preenchido!", description: `O caminho "${path}" foi inserido no campo.`});
-                              }} />
-                          </pre>
-                      </ScrollArea>
-                  </div>
-              )}
+          <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
+            {isLoadingWebhookLogs && <div className="flex justify-center items-center h-full"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>}
+            {webhookLogsError && (
+              <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm">
+                <div className="flex items-center gap-2 font-medium"><AlertCircle className="h-5 w-5" /> Erro ao carregar logs:</div>
+                <p className="mt-1 text-xs">{webhookLogsError}</p>
+              </div>
+            )}
+            {!isLoadingWebhookLogs && !webhookLogsError && webhookLogs.length === 0 && (
+              <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4">
+                <FileText className="w-12 h-12 mb-3" />
+                <p className="text-sm">Nenhum log de webhook encontrado para este fluxo.</p>
+              </div>
+            )}
+            {!isLoadingWebhookLogs && webhookLogs.length > 0 && (
+              <ScrollArea className="flex-1 border rounded-md bg-muted/30">
+                <div className="p-3 space-y-3">
+                  {webhookLogs.map((log, index) => (
+                    <details key={index} className="bg-background p-2.5 rounded shadow-sm text-xs">
+                      <summary className="cursor-pointer font-medium text-foreground/80 hover:text-foreground select-none">
+                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm text-primary/80 mr-2">{new Date(log.timestamp).toLocaleString()}</span>
+                        <span className="font-semibold mr-1">{log.method}</span>
+                        {log.payload?.event && <span className="text-accent font-semibold">{log.payload.event}</span>}
+                        {log.extractedMessage && <span className="ml-2 text-slate-500 italic">Msg: "{log.extractedMessage.substring(0, 30)}{log.extractedMessage.length > 30 ? '...' : ''}"</span>}
+                        {log.webhook_remoteJid && <span className="ml-2 text-blue-500 text-xs">De: {log.webhook_remoteJid}</span>}
+                      </summary>
+                      <div className="mt-2 p-2 bg-muted/20 rounded-sm overflow-auto text-xs text-foreground/70 space-y-1.5">
+                        {log.method && log.url && <div><strong>Endpoint:</strong> <span className="break-all">{log.method} {log.url}</span></div>}
+                        {log.ip && <div><strong>IP Origem:</strong> {log.ip}</div>}
+                        {log.headers && <div><strong>Headers:</strong><pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-24 overflow-y-auto">{JSON.stringify(log.headers, null, 2)}</pre></div>}
+                        <div><strong>Payload Completo (clique para copiar caminho):</strong>
+                          <div className="mt-1 p-2 bg-background/30 rounded text-xs max-h-60 overflow-y-auto">
+                            <JsonTreeView data={log.payload} onSelectPath={(path) => {
+                              navigator.clipboard.writeText(path).then(() => {
+                                toast({ title: "Caminho copiado!", description: `O caminho "${path}" foi copiado.` });
+                              });
+                            }} />
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
           </div>
           <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">Fechar</Button>
-            </DialogClose>
+            <Button variant="outline" onClick={() => setIsWebhookHistoryDialogOpen(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    )}
+
+
+      {/* API Test Response Dialog */}
+      {node.type === 'api-call' && (
+        <Dialog open={isTestResponseModalOpen} onOpenChange={setIsTestResponseModalOpen}>
+          <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col" data-no-drag="true">
+            <DialogHeader>
+              <DialogTitle>Resposta do Teste da API</DialogTitle>
+              <DialogDescription>Clique em uma chave do JSON para preencher o campo "Caminho do Dado".</DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto space-y-4 py-4">
+              {testResponseError && (
+                <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md">
+                  <h4 className="font-semibold mb-1">Erro:</h4>
+                  <pre className="text-xs whitespace-pre-wrap break-all">{testResponseError}</pre>
+                </div>
+              )}
+              {testResponseData && (
+                <div>
+                  <Label className="font-semibold">Corpo da Resposta:</Label>
+                  <ScrollArea className="h-64 mt-1 border rounded-md p-2 bg-muted/30">
+                    <pre className="text-xs whitespace-pre-wrap break-all">
+                      <JsonTreeView data={testResponseData} onSelectPath={(path) => {
+                        onUpdate(node.id, { apiResponsePath: path });
+                        toast({ title: "Caminho Preenchido!", description: `O caminho "${path}" foi inserido no campo.` });
+                      }} />
+                    </pre>
+                  </ScrollArea>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline">Fechar</Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
-    
