@@ -420,36 +420,29 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const handleStartConnection = useCallback(
     (event: React.MouseEvent, fromNodeData: NodeData, sourceHandleId: string) => {
       if (!canvasRef.current) return;
-
-      const currentCanvasOffset = canvasOffsetCbRef.current;
-      const currentZoomLevel = zoomLevelCbRef.current;
+      
+      const connectorElement = event.currentTarget as HTMLElement;
+      const connectorRect = connectorElement.getBoundingClientRect();
       const canvasRect = canvasRef.current.getBoundingClientRect();
 
-      let startYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET;
-      if (fromNodeData.type === 'start' && Array.isArray(fromNodeData.triggers) && sourceHandleId) {
-          const triggerIndex = fromNodeData.triggers.findIndex(t => t.name === sourceHandleId);
-          if (triggerIndex !== -1) {
-              startYOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET + (triggerIndex * START_NODE_TRIGGER_SPACING_Y);
-          }
-      } else if (fromNodeData.type === 'option' && typeof fromNodeData.optionsList === 'string' && sourceHandleId) {
-          const options = (fromNodeData.optionsList || '').split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
-          const optionIndex = options.indexOf(sourceHandleId);
-          if (optionIndex !== -1) {
-              startYOffset = OPTION_NODE_HANDLE_INITIAL_Y_OFFSET + (optionIndex * OPTION_NODE_HANDLE_SPACING_Y);
-          }
-      } else if (fromNodeData.type === 'condition') {
-          if (sourceHandleId === 'true') startYOffset = NODE_HEADER_HEIGHT_APPROX * (1/3) + 6;
-          else if (sourceHandleId === 'false') startYOffset = NODE_HEADER_HEIGHT_APPROX * (2/3) + 6;
-      }
+      const currentZoom = zoomLevelCbRef.current;
+      const currentOffset = canvasOffsetCbRef.current;
 
-      const logicalStartX = fromNodeData.x + NODE_WIDTH;
-      const logicalStartY = fromNodeData.y + startYOffset;
+      // Calculate the connector's center relative to the canvas viewport
+      const startXVisual = connectorRect.left - canvasRect.left + connectorRect.width / 2;
+      const startYVisual = connectorRect.top - canvasRect.top + connectorRect.height / 2;
 
-      const mouseXOnCanvasVisual = event.clientX - canvasRect.left;
-      const mouseYOnCanvasVisual = event.clientY - canvasRect.top;
+      // Convert visual canvas coordinates to logical flow coordinates
+      const logicalStartX = (startXVisual - currentOffset.x) / currentZoom;
+      const logicalStartY = (startYVisual - currentOffset.y) / currentZoom;
+      
+      // The current mouse position is already in visual coordinates relative to the viewport
+      const mouseXVisual = event.clientX - canvasRect.left;
+      const mouseYVisual = event.clientY - canvasRect.top;
 
-      const logicalCurrentX = (mouseXOnCanvasVisual - currentCanvasOffset.x) / currentZoomLevel;
-      const logicalCurrentY = (mouseYOnCanvasVisual - currentCanvasOffset.y) / currentZoomLevel;
+      // Convert mouse position to logical coordinates for the end of the line
+      const logicalCurrentX = (mouseXVisual - currentOffset.x) / currentZoom;
+      const logicalCurrentY = (mouseYVisual - currentOffset.y) / currentZoom;
 
       setDrawingLine({
         fromId: fromNodeData.id,
