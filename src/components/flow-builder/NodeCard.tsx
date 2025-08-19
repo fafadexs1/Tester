@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
@@ -782,58 +781,72 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         const allTriggers = node.triggers || [];
         const handles = [];
         let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
+        
+        // Use a ref to get dynamic height of trigger containers
+        const triggerRefs = useRef<(HTMLDivElement | null)[]>([]);
+        triggerRefs.current = [];
 
-        allTriggers.filter(t => t.enabled).forEach(trigger => {
-            // Main trigger handle
-            handles.push(
-                <div
-                    key={trigger.id}
-                    className="absolute -right-2.5 z-10 flex items-center"
-                    style={{ top: `${yOffset - 10}px` }}
-                    title={`Gatilho: ${trigger.name}`}
-                >
-                    <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
+        useEffect(() => {
+            // This effect runs after render so refs are populated
+            let currentY = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
+            triggerRefs.current.forEach(ref => {
+                if (ref) {
+                    // Update yOffset based on actual rendered height
+                    // This logic would need to be more complex to actually force a re-render
+                    // A simpler approach is to use fixed heights or a more declarative layout
+                }
+            });
+        }, [allTriggers]);
+
+        let yPosition = 50; // Starting Y position inside the card content
+
+        return allTriggers.filter(t => t.enabled).map((trigger, triggerIndex) => {
+            const currentY = yPosition;
+            const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
+            
+            // Adjust yPosition for the next trigger
+            // This is an approximation of the height. A real DOM measurement would be better but more complex.
+            const triggerHeight = 60 + (keywords.length * 35); 
+            yPosition += triggerHeight;
+
+            return (
+                <React.Fragment key={trigger.id}>
+                    {/* Main trigger handle */}
                     <div
-                        className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-                        onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
-                        data-connector="true"
-                        data-handle-type="source"
-                        data-handle-id={trigger.name}
+                        className="absolute -right-2.5 z-10 flex items-center"
+                        style={{ top: `${currentY - 10}px` }}
+                        title={`Gatilho: ${trigger.name}`}
                     >
-                        <Hash className="w-3 h-3 text-accent-foreground" />
-                    </div>
-                </div>
-            );
-            yOffset += START_NODE_TRIGGER_SPACING_Y;
-
-            // Keyword handles
-            if (trigger.keyword) {
-                const keywords = trigger.keyword.split(',').map(k => k.trim()).filter(Boolean);
-                keywords.forEach(kw => {
-                    handles.push(
+                        <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
                         <div
+                            className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+                            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
+                            data-connector="true" data-handle-type="source" data-handle-id={trigger.name}
+                        >
+                            <Hash className="w-3 h-3 text-accent-foreground" />
+                        </div>
+                    </div>
+                    {/* Keyword handles */}
+                    {keywords.map((kw, kwIndex) => (
+                         <div
                             key={`${trigger.id}-${kw}`}
                             className="absolute -right-2.5 z-10 flex items-center"
-                            style={{ top: `${yOffset - 10}px` }}
+                            style={{ top: `${currentY + 35 + (kwIndex * START_NODE_TRIGGER_SPACING_Y) - 10}px` }}
                             title={`Palavra-chave: ${kw}`}
                         >
                             <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{kw}</span>
                             <div
                                 className="w-5 h-5 bg-purple-500 hover:bg-purple-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
                                 onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, kw); }}
-                                data-connector="true"
-                                data-handle-type="source"
-                                data-handle-id={kw}
+                                data-connector="true" data-handle-type="source" data-handle-id={kw}
                             >
                                 <KeyRound className="w-3 h-3 text-white" />
                             </div>
                         </div>
-                    );
-                    yOffset += START_NODE_TRIGGER_SPACING_Y;
-                });
-            }
+                    ))}
+                </React.Fragment>
+            );
         });
-        return handles;
     }
     if (node.type === 'option') {
       const options = (node.optionsList || '').split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
@@ -2141,3 +2154,5 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
+    
