@@ -418,14 +418,14 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   }, [updateActiveWorkspace]);
 
   const handleStartConnection = useCallback(
-    (event: React.MouseEvent, fromNodeData: NodeData, sourceHandleId = 'default') => {
+    (event: React.MouseEvent, fromNodeData: NodeData, sourceHandleId: string) => {
       if (!canvasRef.current) return;
-      
-      const currentCanvasOffset = canvasOffsetCbRef.current; 
-      const currentZoomLevel = zoomLevelCbRef.current;     
+
+      const currentCanvasOffset = canvasOffsetCbRef.current;
+      const currentZoomLevel = zoomLevelCbRef.current;
       const canvasRect = canvasRef.current.getBoundingClientRect();
 
-      let startYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET; 
+      let startYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET;
       if (fromNodeData.type === 'start' && Array.isArray(fromNodeData.triggers) && sourceHandleId) {
           const triggerIndex = fromNodeData.triggers.findIndex(t => t.name === sourceHandleId);
           if (triggerIndex !== -1) {
@@ -442,21 +442,21 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
           else if (sourceHandleId === 'false') startYOffset = NODE_HEADER_HEIGHT_APPROX * (2/3) + 6;
       }
 
-      const logicalStartX = fromNodeData.x + NODE_WIDTH; 
-      const logicalStartY = fromNodeData.y + startYOffset; 
-      
+      const logicalStartX = fromNodeData.x + NODE_WIDTH;
+      const logicalStartY = fromNodeData.y + startYOffset;
+
       const mouseXOnCanvasVisual = event.clientX - canvasRect.left;
       const mouseYOnCanvasVisual = event.clientY - canvasRect.top;
 
       const logicalCurrentX = (mouseXOnCanvasVisual - currentCanvasOffset.x) / currentZoomLevel;
       const logicalCurrentY = (mouseYOnCanvasVisual - currentCanvasOffset.y) / currentZoomLevel;
-      
+
       setDrawingLine({
         fromId: fromNodeData.id,
-        sourceHandleId,
+        sourceHandleId: sourceHandleId,
         startX: logicalStartX,
         startY: logicalStartY,
-        currentX: logicalCurrentX, 
+        currentX: logicalCurrentX,
         currentY: logicalCurrentY,
       });
     },
