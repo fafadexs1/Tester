@@ -1,36 +1,29 @@
 
 import { NextResponse } from 'next/server';
-// Removido NextRequest pois não é usado diretamente aqui
+import type { NextRequest } from 'next/server';
 
 declare global {
   // eslint-disable-next-line no-var
-  var evolutionWebhookLogs: Array<any>; 
+  var webhookLogsByFlow: Map<string, any[]>; 
 }
 
 // Inicialização robusta da variável global de logs
-if (!globalThis.evolutionWebhookLogs || !Array.isArray(globalThis.evolutionWebhookLogs)) {
-  console.log(`[GLOBAL_INIT in webhook-logs/route.ts] Initializing globalThis.evolutionWebhookLogs as new array.`);
-  globalThis.evolutionWebhookLogs = [];
-} else {
-  // Opcional: Logar que já existe para depuração de HMR (Hot Module Replacement)
-  // console.log(`[GLOBAL_INIT in webhook-logs/route.ts] globalThis.evolutionWebhookLogs already exists. Length: ${globalThis.evolutionWebhookLogs.length}`);
+if (!globalThis.webhookLogsByFlow) {
+  console.log(`[GLOBAL_INIT in webhook-logs/route.ts] Initializing globalThis.webhookLogsByFlow as new Map.`);
+  globalThis.webhookLogsByFlow = new Map<string, any[]>();
 }
 
-export async function GET() {
-  // Defensiva extra, embora a inicialização no topo do módulo deva cobrir isso.
-  if (!globalThis.evolutionWebhookLogs || !Array.isArray(globalThis.evolutionWebhookLogs)) {
-     console.warn('[Evolution API Webhook Logs Route - GET] globalThis.evolutionWebhookLogs became invalid before GET. This is unexpected. Resetting.');
-     globalThis.evolutionWebhookLogs = [];
-  }
-  
-  // console.log(`[Evolution API Webhook Logs Route - GET] Current state of globalThis.evolutionWebhookLogs. Length: ${globalThis.evolutionWebhookLogs.length}, IsArray: ${Array.isArray(globalThis.evolutionWebhookLogs)}`);
-  
-  // Para depuração, logar um resumo dos timestamps se houver logs
-  if (globalThis.evolutionWebhookLogs.length > 0) {
-    // console.log(`[Evolution API Webhook Logs Route - GET] Timestamps of stored logs: ${globalThis.evolutionWebhookLogs.map(log => log.timestamp).join(', ')}`);
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const workspaceId = searchParams.get('workspaceId');
+
+  if (!workspaceId) {
+    return NextResponse.json({ error: "O parâmetro 'workspaceId' é obrigatório." }, { status: 400 });
   }
 
-  return NextResponse.json(globalThis.evolutionWebhookLogs, { status: 200 });
+  const logs = globalThis.webhookLogsByFlow.get(workspaceId) || [];
+  
+  return NextResponse.json(logs, { status: 200 });
 }
 
     

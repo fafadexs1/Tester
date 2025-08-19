@@ -10,7 +10,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, Hourglass, GitCommitHorizontal, MessageCircle, Rocket
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, Hourglass, GitCommitHorizontal, MessageCircle, Rocket, AlertCircle, FileText, History, Target
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -99,7 +99,7 @@ const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onS
 };
 
 
-const WebhookPathPicker = ({ onPathSelect }: { onPathSelect: (path: string) => void }) => {
+const WebhookPathPicker = ({ onPathSelect, workspaceId }: { onPathSelect: (path: string) => void, workspaceId: string }) => {
   const [logs, setLogs] = useState<WebhookLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,7 +109,7 @@ const WebhookPathPicker = ({ onPathSelect }: { onPathSelect: (path: string) => v
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/evolution/webhook-logs');
+      const response = await fetch(`/api/evolution/webhook-logs?workspaceId=${workspaceId}`);
       if (!response.ok) throw new Error('Falha ao buscar logs');
       const data = await response.json();
       setLogs(data);
@@ -118,7 +118,7 @@ const WebhookPathPicker = ({ onPathSelect }: { onPathSelect: (path: string) => v
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [workspaceId]);
 
   return (
     <PopoverContent className="w-80" align="end" onOpenAutoFocus={fetchLogs} data-no-drag="true">
@@ -130,7 +130,7 @@ const WebhookPathPicker = ({ onPathSelect }: { onPathSelect: (path: string) => v
         <div className="border rounded-md max-h-60 overflow-y-auto">
           {isLoading && <div className="p-2 text-xs text-muted-foreground">Carregando...</div>}
           {error && <div className="p-2 text-xs text-destructive">{error}</div>}
-          {!isLoading && !error && logs.length === 0 && <div className="p-2 text-xs text-muted-foreground">Nenhum log encontrado.</div>}
+          {!isLoading && !error && logs.length === 0 && <div className="p-2 text-xs text-muted-foreground">Nenhum log encontrado para este fluxo.</div>}
           {!isLoading && !error && logs.length > 0 && (
             <div className="p-1">
               {!selectedLog ? (
@@ -148,7 +148,7 @@ const WebhookPathPicker = ({ onPathSelect }: { onPathSelect: (path: string) => v
                       &larr; Voltar para a lista
                    </Button>
                    <div className="p-1 bg-background/50 rounded">
-                      <JsonTreeView data={selectedLog.payload} onSelectPath={onPathSelect} />
+                      <JsonTreeView data={log.payload} onSelectPath={onPathSelect} />
                    </div>
                 </div>
               )}
@@ -540,10 +540,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   };
 
   const fetchWebhookLogs = useCallback(async () => {
+    if (!activeWorkspace?.id) {
+        setWebhookLogsError("ID do fluxo ativo não encontrado.");
+        return;
+    }
     setIsLoadingWebhookLogs(true);
     setWebhookLogsError(null);
     try {
-      const response = await fetch('/api/evolution/webhook-logs');
+      const response = await fetch(`/api/evolution/webhook-logs?workspaceId=${activeWorkspace.id}`);
       if (!response.ok) {
         throw new Error('Falha ao buscar logs do webhook');
       }
@@ -555,7 +559,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     } finally {
       setIsLoadingWebhookLogs(false);
     }
-  }, []);
+  }, [activeWorkspace?.id]);
 
   const handleOpenWebhookHistory = () => {
     fetchWebhookLogs();
@@ -720,7 +724,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   <PopoverTrigger asChild>
                     <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground"/></Button>
                   </PopoverTrigger>
-                  <WebhookPathPicker onPathSelect={(path) => onUpdate(node.id, { apiResponsePathForValue: path })} />
+                  <WebhookPathPicker onPathSelect={(path) => onUpdate(node.id, { apiResponsePathForValue: path })} workspaceId={activeWorkspace?.id || ''}/>
                 </Popover>
               </div>
               <p className="text-xs text-muted-foreground mt-1">O fluxo usará o valor deste caminho como se fosse a resposta do usuário.</p>
@@ -1036,7 +1040,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                     <PopoverTrigger asChild>
                                       <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground"/></Button>
                                     </PopoverTrigger>
-                                    <WebhookPathPicker onPathSelect={(path) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', path)} />
+                                    <WebhookPathPicker onPathSelect={(path) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', path)} workspaceId={activeWorkspace?.id || ''}/>
                                   </Popover>
                                </div>
                               <Input placeholder="Variável (ex: mensagem_usuario)" value={mapping.flowVariable} onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs flex-1"/>
@@ -2004,7 +2008,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <DialogHeader>
                 <DialogTitle>Histórico de Webhooks Recebidos</DialogTitle>
                 <DialogDescription>
-                    Exibe os últimos 50 eventos de webhook recebidos. Clique em uma chave do JSON para copiar seu caminho para a área de transferência.
+                    Exibe os últimos 50 eventos de webhook recebidos para este fluxo. Clique em uma chave do JSON para copiar seu caminho para a área de transferência.
                 </DialogDescription>
             </DialogHeader>
             <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
@@ -2018,7 +2022,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 {!isLoadingWebhookLogs && !webhookLogsError && webhookLogs.length === 0 && (
                     <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4">
                         <FileText className="w-12 h-12 mb-3" />
-                        <p className="text-sm">Nenhum log de webhook encontrado.</p>
+                        <p className="text-sm">Nenhum log de webhook encontrado para este fluxo.</p>
                     </div>
                 )}
                 {!isLoadingWebhookLogs && webhookLogs.length > 0 && (

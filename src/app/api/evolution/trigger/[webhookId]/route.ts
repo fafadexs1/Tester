@@ -1,4 +1,3 @@
-
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -19,12 +18,13 @@ import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 
-// Variável global para armazenar logs em memória (apenas para depuração)
-if (!globalThis.evolutionWebhookLogs || !Array.isArray(globalThis.evolutionWebhookLogs)) {
-  console.log('[API Evolution Trigger Route INIT] globalThis.evolutionWebhookLogs não existe ou não é um array. Inicializando como novo array.');
-  globalThis.evolutionWebhookLogs = [];
+// **MODIFICADO**: Armazena logs em um Map, com a chave sendo o webhookId (workspaceId)
+if (!globalThis.webhookLogsByFlow) {
+  console.log('[API Evolution Trigger Route INIT] globalThis.webhookLogsByFlow não existe. Inicializando como novo Map.');
+  globalThis.webhookLogsByFlow = new Map<string, any[]>();
 }
-const MAX_LOG_ENTRIES = 50;
+const MAX_LOG_ENTRIES_PER_FLOW = 50;
+
 
 // --- Funções Auxiliares para o Motor de Fluxo ---
 function findNodeById(nodeId: string, nodes: NodeData[]): NodeData | undefined {
@@ -497,25 +497,22 @@ async function executeFlow(
 }
 
 
-// Função para armazenar detalhes da requisição no log global (em memória)
+// **MODIFICADO**: Função de armazenamento agora é específica para o fluxo
 async function storeRequestDetails(
   request: NextRequest,
   parsedPayload: any,
   rawBodyText: string | null,
-  webhookId: string
+  webhookId: string // webhookId (workspaceId) é a chave
 ): Promise<any> {
   const currentTimestamp = new Date().toISOString();
   let extractedMessage: string | null = null;
   const headers = Object.fromEntries(request.headers.entries());
   const ip = request.ip || (headers['x-forwarded-for'] as any) || 'unknown IP';
 
-  // **NOVA LÓGICA DE IDENTIFICAÇÃO**
   let sessionKeyIdentifier: string | null = null;
-  let flowContext: FlowContextType = 'evolution'; // Default to evolution
+  let flowContext: FlowContextType = 'evolution';
 
   let actualPayloadToExtractFrom = parsedPayload;
-
-  // Handle Chatwoot array payload structure
   if (Array.isArray(parsedPayload) && parsedPayload.length > 0 && typeof parsedPayload[0] === 'object') {
     actualPayloadToExtractFrom = parsedPayload[0];
   }
@@ -525,31 +522,22 @@ async function storeRequestDetails(
     const chatwootContent = getProperty(actualPayloadToExtractFrom, 'content');
     const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id');
     const chatwootMessageType = getProperty(actualPayloadToExtractFrom, 'message_type');
-
     const evolutionSenderJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid');
-
     const dialogyEvent = getProperty(actualPayloadToExtractFrom, 'event');
     const dialogyConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id');
 
-    // Prioritize Chatwoot detection for incoming messages
     if (chatwootEvent === 'message_created' && chatwootConversationId && chatwootMessageType === 'incoming') {
       flowContext = 'chatwoot';
       sessionKeyIdentifier = `chatwoot_conv_${chatwootConversationId}`;
       extractedMessage = String(chatwootContent || '').trim();
-      console.log(`[storeRequestDetails] Detected Chatwoot payload. Session Identifier: "${sessionKeyIdentifier}"`);
     } else if (dialogyEvent === 'message.created' && dialogyConversationId) {
       flowContext = 'dialogy';
       sessionKeyIdentifier = `dialogy_conv_${dialogyConversationId}`;
       extractedMessage = getProperty(actualPayloadToExtractFrom, 'message.content', '').trim();
-      console.log(`[storeRequestDetails] Detected Dialogy payload. Session Identifier: "${sessionKeyIdentifier}"`);
-    } else if (evolutionSenderJid) { // Fallback to Evolution
+    } else if (evolutionSenderJid) {
       flowContext = 'evolution';
       sessionKeyIdentifier = `evolution_jid_${evolutionSenderJid}`;
-      const commonMessagePaths = [
-        'data.message.conversation', 'message.conversation',
-        'message.body', 'message.textMessage.text', 'text',
-        'data.message.extendedTextMessage.text',
-      ];
+      const commonMessagePaths = ['data.message.conversation', 'message.conversation', 'message.body', 'message.textMessage.text', 'text', 'data.message.extendedTextMessage.text'];
       for (const path of commonMessagePaths) {
         const msg = getProperty(actualPayloadToExtractFrom, path);
         if (typeof msg === 'string' && msg.trim() !== '') {
@@ -557,13 +545,11 @@ async function storeRequestDetails(
           break;
         }
       }
-      console.log(`[storeRequestDetails] Detected Evolution API payload. Session Identifier: "${sessionKeyIdentifier}"`);
     }
   }
 
   const logEntry: Record<string, any> = {
     timestamp: currentTimestamp,
-    workspaceIdParam: webhookId,
     method: request.method,
     url: request.url,
     headers: headers,
@@ -574,13 +560,17 @@ async function storeRequestDetails(
     payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
   };
 
-  if (!Array.isArray(globalThis.evolutionWebhookLogs)) {
-    globalThis.evolutionWebhookLogs = [];
+  // **MODIFICADO**: Usa o Map para armazenar logs por fluxo
+  if (!globalThis.webhookLogsByFlow.has(webhookId)) {
+    globalThis.webhookLogsByFlow.set(webhookId, []);
   }
-  globalThis.evolutionWebhookLogs.unshift(logEntry);
-  if (globalThis.evolutionWebhookLogs.length > MAX_LOG_ENTRIES) {
-    globalThis.evolutionWebhookLogs.pop();
+  const flowLogs = globalThis.webhookLogsByFlow.get(webhookId)!;
+  flowLogs.unshift(logEntry);
+  if (flowLogs.length > MAX_LOG_ENTRIES_PER_FLOW) {
+    flowLogs.pop();
   }
+  globalThis.webhookLogsByFlow.set(webhookId, flowLogs);
+
   return logEntry;
 }
 
@@ -599,12 +589,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     parsedBody = rawBody ? JSON.parse(rawBody) : { message: "Request body was empty." };
     loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
 
-    // **NOVA LÓGICA DE EXTRAÇÃO DE DADOS**
     const sessionKeyIdentifier = loggedEntry.session_key_identifier;
     const receivedMessageText = loggedEntry.extractedMessage;
     const flowContext = loggedEntry.flow_context;
 
-    // Check for human agent intervention
     if (flowContext === 'chatwoot') {
       let payloadToCheck = parsedBody;
       if (Array.isArray(payloadToCheck) && payloadToCheck.length > 0) {

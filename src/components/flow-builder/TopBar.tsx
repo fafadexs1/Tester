@@ -92,11 +92,6 @@ const TopBar: React.FC<TopBarProps> = ({
   const { user, logout } = useAuth();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   
-  const [isWebhookLogsDialogOpen, setIsWebhookLogsDialogOpen] = useState(false);
-  const [evolutionWebhookLogEntries, setEvolutionWebhookLogEntries] = useState<any[]>([]);
-  const [isLoadingEvolutionLogs, setIsLoadingEvolutionLogs] = useState(false);
-  const [evolutionLogsError, setEvolutionLogsError] = useState<string | null>(null);
-  
   const [isSessionsDialogOpen, setIsSessionsDialogOpen] = useState(false);
   const [activeSessions, setActiveSessions] = useState<FlowSession[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
@@ -199,7 +194,7 @@ const TopBar: React.FC<TopBarProps> = ({
     setIsLoadingDialogyInstances(true);
     try {
         const result = await getDialogyInstancesForUserAction();
-        if (result && result.error) { // Adicionada verificação para result
+        if (result && result.error) { 
             throw new Error(result.error);
         }
         setDialogyInstances(result?.data || []);
