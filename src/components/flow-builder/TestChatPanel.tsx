@@ -36,7 +36,9 @@ const formatChatMessage = (text: string): React.ReactNode => {
     if (typeof text !== 'string') {
         return text;
     }
-    const parts = text.split(/(\*.*?\*|_.*?_|~.*?~|```.*?```)/g).filter(Boolean);
+    // Regex para capturar formatação e variáveis
+    const regex = /(\*.*?\*|_.*?_|~.*?~|```.*?```|\{\{.*?\}\})/g;
+    const parts = text.split(regex).filter(Boolean);
 
     return parts.map((part, index) => {
         if (part.startsWith('*') && part.endsWith('*')) {
@@ -48,8 +50,11 @@ const formatChatMessage = (text: string): React.ReactNode => {
         if (part.startsWith('~') && part.endsWith('~')) {
             return <s key={index}>{part.slice(1, -1)}</s>;
         }
-         if (part.startsWith('```') && part.endsWith('```')) {
+        if (part.startsWith('```') && part.endsWith('```')) {
             return <code key={index} className="font-mono bg-muted text-foreground p-0.5 rounded-sm">{part.slice(3, -3)}</code>;
+        }
+         if (part.startsWith('{{') && part.endsWith('}}')) {
+            return <span key={index} className="font-mono text-xs bg-muted p-1 rounded-sm text-amber-500">{part}</span>
         }
         return <React.Fragment key={index}>{part}</React.Fragment>;
     });
@@ -996,3 +1001,5 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 };
 
 export default TestChatPanel;
+
+    
