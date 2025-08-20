@@ -32,6 +32,30 @@ interface TestChatPanelProps {
   activeWorkspace: WorkspaceData | null | undefined;
 }
 
+const formatChatMessage = (text: string): React.ReactNode => {
+    if (typeof text !== 'string') {
+        return text;
+    }
+    const parts = text.split(/(\*.*?\*|_.*?_|~.*?~|```.*?```)/g).filter(Boolean);
+
+    return parts.map((part, index) => {
+        if (part.startsWith('*') && part.endsWith('*')) {
+            return <b key={index}>{part.slice(1, -1)}</b>;
+        }
+        if (part.startsWith('_') && part.endsWith('_')) {
+            return <i key={index}>{part.slice(1, -1)}</i>;
+        }
+        if (part.startsWith('~') && part.endsWith('~')) {
+            return <s key={index}>{part.slice(1, -1)}</s>;
+        }
+         if (part.startsWith('```') && part.endsWith('```')) {
+            return <code key={index} className="font-mono bg-muted text-foreground p-0.5 rounded-sm">{part.slice(3, -3)}</code>;
+        }
+        return <React.Fragment key={index}>{part}</React.Fragment>;
+    });
+};
+
+
 const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
   const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -898,7 +922,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                         : 'bg-muted text-muted-foreground rounded-bl-none'
                       }`}
                   >
-                    {typeof msg.text === 'string' ? msg.text.split('\n').map((line, i) => <p key={i}>{line}</p>) : msg.text}
+                   {typeof msg.text === 'string' ? formatChatMessage(msg.text) : msg.text}
                   </div>
                    {msg.sender === 'bot' && msg.options && msg.options.length > 0 && awaitingInputType === 'option' && (
                     <div className="mt-2.5 w-full space-y-2">
