@@ -65,6 +65,10 @@ export interface WebhookVariableMapping {
   flowVariable: string;
 }
 
+// Renomeado para ser mais genérico, pois será usado tanto no webhook quanto na API
+export interface ApiResponseMapping extends WebhookVariableMapping {}
+
+
 export interface StartNodeTrigger {
   id: string;
   name: string; 
@@ -142,6 +146,8 @@ export interface NodeData {
   apiBodyRaw?: string; 
   apiOutputVariable?: string;
   apiResponsePath?: string;
+  apiResponseMappings?: ApiResponseMapping[]; // NOVO
+
   
   // Delay Node
   delayDuration?: number; 

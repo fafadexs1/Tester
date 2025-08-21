@@ -11,10 +11,17 @@ import {
   loadChatwootInstanceFromDB,
   loadDialogyInstanceFromDB,
 } from '@/app/actions/databaseActions';
-import type { NodeData, Connection, FlowSession, WorkspaceData } from '@/lib/types';
+import type { NodeData, Connection, FlowSession, WorkspaceData, ApiResponseMapping } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates } from './utils';
+
+// NOVO: Armazenamento de logs para chamadas de API
+if (!globalThis.apiCallLogsByFlow) {
+  globalThis.apiCallLogsByFlow = new Map<string, any[]>();
+}
+const MAX_API_LOG_ENTRIES_PER_FLOW = 50;
+
 
 interface ApiConfig {
   baseUrl: string;
@@ -323,8 +330,12 @@ export async function executeFlow(
 
       case 'api-call': {
         const varName = currentNode.apiOutputVariable;
+        let responseData: any = null;
+        let errorData: any = null;
+
+        let url = '';
         try {
-          let url = substituteVariablesInText(currentNode.apiUrl, session.flow_variables);
+          url = substituteVariablesInText(currentNode.apiUrl, session.flow_variables);
           const method = currentNode.apiMethod || 'GET';
           const headers = new Headers();
           (currentNode.apiHeadersList || []).forEach(h => headers.append(substituteVariablesInText(h.key, session.flow_variables), substituteVariablesInText(h.value, session.flow_variables)));
@@ -354,7 +365,11 @@ export async function executeFlow(
 
           console.log(`[Flow Engine - ${session.session_id}] API Call: ${method} ${url}`);
           const response = await fetch(url, { method, headers, body });
-          const responseData = await response.json().catch(() => response.text());
+          responseData = await response.json().catch(() => response.text());
+
+          if (!response.ok) {
+            throw new Error(`API returned status ${response.status}`);
+          }
 
           if (varName) {
             let valueToSave = responseData;
@@ -366,11 +381,44 @@ export async function executeFlow(
             }
             setProperty(session.flow_variables, varName, valueToSave);
           }
+          
+          // NOVO: Mapeamento de múltiplas variáveis
+          if (currentNode.apiResponseMappings && Array.isArray(currentNode.apiResponseMappings)) {
+              currentNode.apiResponseMappings.forEach((mapping: ApiResponseMapping) => {
+                  if (mapping.jsonPath && mapping.flowVariable) {
+                      const extractedValue = getProperty(responseData, mapping.jsonPath);
+                      if (extractedValue !== undefined) {
+                          setProperty(session.flow_variables, mapping.flowVariable, extractedValue);
+                          console.log(`[Flow Engine] API Mapping: Set '${mapping.flowVariable}' from path '${mapping.jsonPath}'`);
+                      }
+                  }
+              });
+          }
+
         } catch (error: any) {
           console.error(`[Flow Engine - ${session.session_id}] API Call Error:`, error);
+          errorData = { error: error.message };
           if (varName) {
-            setProperty(session.flow_variables, varName, { error: error.message });
+            setProperty(session.flow_variables, varName, errorData);
           }
+        } finally {
+            // NOVO: Logging da chamada de API
+            if (!globalThis.apiCallLogsByFlow.has(workspace.id)) {
+              globalThis.apiCallLogsByFlow.set(workspace.id, []);
+            }
+            const apiLogs = globalThis.apiCallLogsByFlow.get(workspace.id)!;
+            apiLogs.unshift({
+                timestamp: new Date().toISOString(),
+                nodeId: currentNode.id,
+                nodeTitle: currentNode.title,
+                requestUrl: url,
+                response: responseData,
+                error: errorData,
+            });
+            if (apiLogs.length > MAX_API_LOG_ENTRIES_PER_FLOW) {
+                apiLogs.pop();
+            }
+            globalThis.apiCallLogsByFlow.set(workspace.id, apiLogs);
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
