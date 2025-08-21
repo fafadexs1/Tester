@@ -258,17 +258,15 @@ export async function executeFlow(
             const { h: sh, m: sm, s: ss } = parseHM(startTimeStr);
             const { h: eh, m: em, s: es } = parseHM(endTimeStr);
       
-            const startDate = new Date(); // Use server's current date as base
+            const startDate = new Date(); 
             startDate.setHours(sh, sm, ss, 0);
       
-            const endDate = new Date(); // Use server's current date as base
+            const endDate = new Date(); 
             endDate.setHours(eh, em, es, 0);
       
             if (endDate.getTime() <= startDate.getTime()) {
-              // Handles overnight ranges (e.g., 22:00 to 06:00)
               isInTimeRange = now.getTime() >= startDate.getTime() || now.getTime() <= endDate.getTime();
             } else {
-              // Same-day range
               isInTimeRange = now.getTime() >= startDate.getTime() && now.getTime() <= endDate.getTime();
             }
           } else {
