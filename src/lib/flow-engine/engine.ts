@@ -247,6 +247,7 @@ export async function executeFlow(
         let isInTimeRange = false;
         try {
           const now = new Date();
+      
           const startTimeStr = (currentNode.startTime ?? '').toString().trim();
           const endTimeStr = (currentNode.endTime ?? '').toString().trim();
       
