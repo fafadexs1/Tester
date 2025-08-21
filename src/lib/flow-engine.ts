@@ -1,6 +1,6 @@
 
 'use server';
-import { getProperty } from 'dot-prop';
+import { getProperty, setProperty } from 'dot-prop';
 import type { NodeData, Connection, FlowSession, WorkspaceData } from '@/lib/types';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
 import { sendChatwootMessageAction } from '@/app/actions/chatwootApiActions';
@@ -276,15 +276,24 @@ export async function executeFlow(
         const isDateOp = op === 'isdateafter' || op === 'isdatebefore';
         const dataType = (currentNode.conditionDataType || 'string').toString().toLowerCase();
         
-        const asComparable = (v: any) => {
-            if (isDateOp || dataType === 'date') {
-                return coerceToDate(v) ?? v;
-            }
-            return substituteVariablesInText(String(v), session.flow_variables);
+        const parseValue = (v: any) => {
+          if (isDateOp || dataType === 'date') {
+              return coerceToDate(v) ?? v;
+          }
+          if (dataType === 'number') {
+            const num = parseFloat(String(v));
+            return isNaN(num) ? v : num;
+          }
+          if (dataType === 'boolean') {
+              if (String(v).toLowerCase() === 'true') return true;
+              if (String(v).toLowerCase() === 'false') return false;
+              return v;
+          }
+          return v; 
         };
 
-        const valA: any = asComparable(rawValA);
-        const valB: any = asComparable(rawValB);
+        const valA: any = parseValue(rawValA);
+        const valB: any = parseValue(rawValB);
 
         switch (op) {
           case '==':          conditionMet = (valA as any) == (valB as any); break;
