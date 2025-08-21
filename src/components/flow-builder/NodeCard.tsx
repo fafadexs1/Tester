@@ -15,6 +15,7 @@ import type {
   ChatwootInstance,
   DialogyInstance,
   NodeType,
+  ApiResponseMapping,
 } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
@@ -60,6 +61,16 @@ interface NodeCardProps {
   isSessionHighlighted?: boolean;
   activeWorkspace: WorkspaceData | undefined | null;
 }
+
+interface ApiLogEntry {
+    timestamp: string;
+    nodeId: string;
+    nodeTitle: string;
+    requestUrl: string;
+    response: any;
+    error: any;
+}
+
 
 interface WebhookLogEntry {
   timestamp: string;
@@ -239,6 +250,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const [webhookLogs, setWebhookLogs] = useState<WebhookLogEntry[]>([]);
   const [isLoadingWebhookLogs, setIsLoadingWebhookLogs] = useState(false);
   const [webhookLogsError, setWebhookLogsError] = useState<string | null>(null);
+  
+  const [isApiHistoryDialogOpen, setIsApiHistoryDialogOpen] = useState(false);
+  const [apiLogs, setApiLogs] = useState<ApiLogEntry[]>([]);
+  const [isLoadingApiLogs, setIsLoadingApiLogs] = useState(false);
+  const [apiLogsError, setApiLogsError] = useState<string | null>(null);
+
 
   const [supabaseTables, setSupabaseTables] = useState<{ name: string }[]>([]);
   const [supabaseColumns, setSupabaseColumns] = useState<{ name: string }[]>([]);
@@ -530,14 +547,29 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     onUpdate(node.id, { triggers: updatedTriggers });
   };
 
-  const handleAddListItem = (listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList') => {
+  const handleAddListItem = (listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList' | 'apiResponseMappings') => {
     const currentList = (node[listName] as any[] || []);
-    onUpdate(node.id, { [listName]: [...currentList, { id: uuidv4(), key: '', value: '' }] });
+    let newItem;
+    if(listName === 'apiResponseMappings') {
+        newItem = { id: uuidv4(), jsonPath: '', flowVariable: '' };
+    } else {
+        newItem = { id: uuidv4(), key: '', value: '' };
+    }
+    onUpdate(node.id, { [listName]: [...currentList, newItem] });
   };
 
-  const handleRemoveListItem = (listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList', itemId: string) => {
+  const handleRemoveListItem = (listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList' | 'apiResponseMappings', itemId: string) => {
     const currentList = (node[listName] as any[] || []);
     onUpdate(node.id, { [listName]: currentList.filter(item => item.id !== itemId) });
+  };
+  
+  const handleApiResponseMappingChange = (mappingId: string, field: 'jsonPath' | 'flowVariable', value: string) => {
+    const currentMappings = (node.apiResponseMappings || []);
+    onUpdate(node.id, {
+        apiResponseMappings: currentMappings.map(mapping => 
+            mapping.id === mappingId ? { ...mapping, [field]: value } : mapping
+        )
+    });
   };
 
   const handleListItemChange = (
@@ -617,6 +649,33 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       setIsTestingApi(false);
     }
   };
+  
+  const fetchApiLogs = useCallback(async () => {
+    if (!activeWorkspace?.id) {
+        setApiLogsError("ID do fluxo ativo não encontrado.");
+        return;
+    }
+    setIsLoadingApiLogs(true);
+    setApiLogsError(null);
+    try {
+        const response = await fetch(`/api/api-call-logs?workspaceId=${activeWorkspace.id}`);
+        if (!response.ok) throw new Error('Falha ao buscar logs de API');
+        const data: ApiLogEntry[] = await response.json();
+        const filteredLogs = data.filter(log => log.nodeId === node.id);
+        setApiLogs(filteredLogs);
+    } catch (error: any) {
+        setApiLogsError(error.message);
+        setApiLogs([]);
+    } finally {
+        setIsLoadingApiLogs(false);
+    }
+  }, [activeWorkspace?.id, node.id]);
+
+  const handleOpenApiHistory = () => {
+    fetchApiLogs();
+    setIsApiHistoryDialogOpen(true);
+  };
+
 
   const fetchWebhookLogs = useCallback(async () => {
     if (!activeWorkspace?.id) {
@@ -1481,11 +1540,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             </div>
 
             <Tabs defaultValue="auth" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="auth">Autenticação</TabsTrigger>
-                <TabsTrigger value="headers">Headers</TabsTrigger>
-                <TabsTrigger value="params">Query Params</TabsTrigger>
-                <TabsTrigger value="body">Corpo</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-5 text-xs h-auto">
+                  <TabsTrigger value="auth">Auth</TabsTrigger>
+                  <TabsTrigger value="headers">Headers</TabsTrigger>
+                  <TabsTrigger value="params">Query</TabsTrigger>
+                  <TabsTrigger value="body">Corpo</TabsTrigger>
+                  <TabsTrigger value="mapping">Mapeamento</TabsTrigger>
               </TabsList>
               <TabsContent value="auth" className="mt-4 space-y-3">
                 <div>
@@ -1573,23 +1633,47 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   </div>
                 )}
               </TabsContent>
+              <TabsContent value="mapping" className="mt-4 space-y-3">
+                  <div>
+                    <Label htmlFor={`${node.id}-apiResponsePath`}>Caminho do Dado Principal (opcional)</Label>
+                    <Input id={`${node.id}-apiResponsePath`} placeholder="Ex: data.user.name" value={node.apiResponsePath || ''} onChange={(e) => onUpdate(node.id, { apiResponsePath: e.target.value })} />
+                    <p className="text-xs text-muted-foreground mt-1">Se preenchido, extrai este dado para a variável de resultado principal.</p>
+                  </div>
+                  <div>
+                    <Label htmlFor={`${node.id}-apioutputvar`}>Salvar Resultado Principal na Variável</Label>
+                    <Input id={`${node.id}-apioutputvar`} placeholder="resposta_api" value={node.apiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { apiOutputVariable: e.target.value })} />
+                  </div>
+                  <div className="pt-2">
+                    <Label className="text-xs font-medium">Mapeamento de Múltiplas Variáveis (Opcional)</Label>
+                    <div className="space-y-2 mt-1">
+                      {(node.apiResponseMappings || []).map(mapping => (
+                        <div key={mapping.id} className="flex items-center space-x-1.5">
+                          <div className="relative flex-1">
+                            <Input
+                              placeholder="Caminho JSON (ex: data.id)"
+                              value={mapping.jsonPath}
+                              onChange={(e) => handleApiResponseMappingChange(mapping.id, 'jsonPath', e.target.value)}
+                              className="h-7 text-xs pl-2 pr-7" />
+                          </div>
+                          <Input placeholder="Variável (ex: id_usuario)" value={mapping.flowVariable} onChange={(e) => handleApiResponseMappingChange(mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs flex-1" />
+                          <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6"><Trash2 className="w-3.5 h-3.5" /></Button>
+                        </div>
+                      ))}
+                    </div>
+                    <Button onClick={() => handleAddListItem('apiResponseMappings')} variant="outline" size="sm" className="mt-2 text-xs h-7">
+                      <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Mapeamento
+                    </Button>
+                  </div>
+              </TabsContent>
             </Tabs>
-
-            <div className="space-y-3 pt-4 border-t">
-              <div>
-                <Label htmlFor={`${node.id}-apiResponsePath`}>Caminho do Dado de Resposta (opcional)</Label>
-                <Input id={`${node.id}-apiResponsePath`} placeholder="Ex: data.user.name" value={node.apiResponsePath || ''} onChange={(e) => onUpdate(node.id, { apiResponsePath: e.target.value })} />
-                <p className="text-xs text-muted-foreground mt-1">Se preenchido, extrai apenas este dado. Se vazio, salva a resposta inteira.</p>
-              </div>
-              <div>
-                <Label htmlFor={`${node.id}-apioutputvar`}>Salvar Resultado na Variável</Label>
-                <Input id={`${node.id}-apioutputvar`} placeholder="resposta_api" value={node.apiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { apiOutputVariable: e.target.value })} />
-              </div>
+             <div className="flex gap-2 w-full mt-3">
+                <Button variant="outline" className="w-full" onClick={handleTestApiCall} disabled={isTestingApi}>
+                  <TestTube2 className="mr-2 h-4 w-4" /> {isTestingApi ? "Testando..." : "Testar Requisição"}
+                </Button>
+                 <Button variant="outline" className="w-full" onClick={handleOpenApiHistory}>
+                    <History className="mr-2 h-4 w-4" /> Histórico
+                </Button>
             </div>
-
-            <Button variant="outline" className="w-full mt-3" onClick={handleTestApiCall} disabled={isTestingApi}>
-              <TestTube2 className="mr-2 h-4 w-4" /> {isTestingApi ? "Testando..." : "Testar Requisição"}
-            </Button>
           </div>
         );
       case 'delay':
@@ -2306,6 +2390,53 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsWebhookHistoryDialogOpen(false)}>Fechar</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* API Call History Dialog */}
+      <Dialog open={isApiHistoryDialogOpen} onOpenChange={setIsApiHistoryDialogOpen}>
+        <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[85vh] flex flex-col" data-no-drag="true">
+            <DialogHeader>
+                <DialogTitle>Histórico de Chamadas API: {node.title}</DialogTitle>
+                <DialogDescription>
+                  Exibe as últimas 50 chamadas de API feitas por este nó.
+                </DialogDescription>
+            </DialogHeader>
+             <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
+                 {isLoadingApiLogs && <div className="flex justify-center items-center h-full"><Loader2 className="w-8 w-8 animate-spin text-muted-foreground" /></div>}
+                 {apiLogsError && <p className="text-destructive text-sm">{apiLogsError}</p>}
+                 {!isLoadingApiLogs && !apiLogsError && apiLogs.length === 0 && (
+                     <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4">
+                        <Webhook className="w-12 h-12 mb-3" />
+                        <p className="text-sm">Nenhum log de chamada API encontrado para este nó.</p>
+                    </div>
+                )}
+                 {!isLoadingApiLogs && apiLogs.length > 0 && (
+                     <ScrollArea className="flex-1 border rounded-md bg-muted/30">
+                        <div className="p-3 space-y-3">
+                        {apiLogs.map((log, index) => (
+                            <details key={index} className="bg-background p-2.5 rounded shadow-sm text-xs">
+                                <summary className="cursor-pointer font-medium text-foreground/80 hover:text-foreground select-none">
+                                    <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm text-primary/80 mr-2">{new Date(log.timestamp).toLocaleString()}</span>
+                                    <span className={cn("font-semibold", log.error ? 'text-destructive' : 'text-green-500')}>{log.error ? 'FALHA' : 'SUCESSO'}</span>
+                                    <span className="ml-2 text-slate-500 italic truncate" title={log.requestUrl}>{log.requestUrl}</span>
+                                </summary>
+                                 <div className="mt-2 p-2 bg-muted/20 rounded-sm overflow-auto text-xs text-foreground/70 space-y-1.5">
+                                    {log.error ? (
+                                        <div><strong>Erro:</strong><pre className="mt-1 p-1 bg-destructive/10 rounded text-xs max-h-24 overflow-y-auto">{JSON.stringify(log.error, null, 2)}</pre></div>
+                                    ) : (
+                                        <div><strong>Resposta:</strong><pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-60 overflow-y-auto">{JSON.stringify(log.response, null, 2)}</pre></div>
+                                    )}
+                                </div>
+                            </details>
+                        ))}
+                        </div>
+                    </ScrollArea>
+                )}
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsApiHistoryDialogOpen(false)}>Fechar</Button>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
 
