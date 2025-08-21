@@ -29,12 +29,10 @@ function substituteVariablesInText(text: string | undefined, variables: Record<s
     if (text === undefined || text === null) return '';
     let subbedText = String(text);
   
-    // Usa uma única passada com replace + callback (evita problemas de lastIndex e garante substituição correta)
     const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
     subbedText = subbedText.replace(variableRegex, (_full, varNameRaw) => {
       const varName = String(varNameRaw).trim();
       
-      // Tratamento especial para {{now}}
       if (varName === 'now') {
         return new Date().toISOString();
       }
