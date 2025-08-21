@@ -263,25 +263,39 @@ async function executeFlow(
         const dataType = currentNode.conditionDataType || 'string';
         let conditionMet = false;
 
-        const parseValue = (value: any, type: typeof dataType) => {
+        const parseValue = (value: any, type: typeof dataType): any => {
           if (value === undefined || value === null || String(value).trim() === '') return value;
+      
           switch (type) {
-            case 'number': return parseFloat(String(value));
-            case 'boolean': return String(value).toLowerCase() === 'true';
+            case 'number':
+              const num = parseFloat(String(value));
+              return isNaN(num) ? value : num;
+            case 'boolean':
+              return String(value).toLowerCase() === 'true';
             case 'date': {
-              const date = new Date(value);
-              if (isNaN(date.getTime()) || (typeof value === 'number' && value < 100000)) return value;
-              return date;
+              const timeRegex = /^\d{2}:\d{2}$/;
+              const strValue = String(value);
+      
+              if (timeRegex.test(strValue)) {
+                const today = new Date();
+                const [hours, minutes] = strValue.split(':').map(Number);
+                today.setHours(hours, minutes, 0, 0); 
+                return today;
+              }
+      
+              const date = new Date(strValue);
+              return isNaN(date.getTime()) ? value : date;
             }
-            default: return String(value);
+            default:
+              return String(value);
           }
         };
 
         const valA = parseValue(actualValueRaw, dataType);
         const valB = parseValue(compareValueRaw, dataType);
 
-        const isValidA = valA !== undefined && valA !== null && !Number.isNaN(valA);
-        const isValidB = valB !== undefined && valB !== null && !Number.isNaN(valB);
+        const isValidA = valA !== undefined && valA !== null && (typeof valA !== 'number' || !Number.isNaN(valA));
+        const isValidB = valB !== undefined && valB !== null && (typeof valB !== 'number' || !Number.isNaN(valB));
 
         switch (currentNode.conditionOperator) {
           case '==': conditionMet = (valA as any) == (valB as any); break;
