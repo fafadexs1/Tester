@@ -179,8 +179,11 @@ async function executeFlow(
 
     let nextNodeId: string | null = null;
     session.current_node_id = currentNodeId; // Update session with the node we are currently processing
+    
+    // Normaliza o tipo do nó para evitar mismatch por espaços/caixa
+    const nodeType = (currentNode.type ?? '').toString().trim().toLowerCase();
 
-    switch (currentNode.type) {
+    switch (nodeType) {
       case 'start': {
         const triggerHandle = getProperty(session.flow_variables, '_triggerHandle') || 'default';
         delete session.flow_variables['_triggerHandle'];
