@@ -251,6 +251,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const [isLoadingEvolutionInstances, setIsLoadingEvolutionInstances] = useState(false);
   const [chatwootInstances, setChatwootInstances] = useState<ChatwootInstance[]>([]);
   const [isLoadingChatwootInstances, setIsLoadingChatwootInstances] = useState(false);
+  const [dialogyInstances, setDialogyInstances] = useState<DialogyInstance[]>([]);
+  const [isLoadingDialogyInstances, setIsLoadingDialogyInstances] = useState(false);
 
   useEffect(() => {
     if (node.type === 'start') {
@@ -381,9 +383,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     setChatwootInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: result.status } : i));
   }, []);
 
+   const handleCheckDialogyInstanceStatus = useCallback(async (instance: DialogyInstance) => {
+    setDialogyInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: 'connecting' } : i));
+    const result = await checkDialogyInstanceStatus(instance.baseUrl, instance.apiKey);
+    setDialogyInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: result.status } : i));
+  }, []);
+
   const loadInstancesAndCheckStatus = useCallback(async () => {
     setIsLoadingEvolutionInstances(true);
     setIsLoadingChatwootInstances(true);
+    setIsLoadingDialogyInstances(true);
 
     try {
       const evoResponse = await fetch('/api/instances/evolution');
@@ -412,8 +421,22 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     } finally {
       setIsLoadingChatwootInstances(false);
     }
+    
+    try {
+      const dialogyResponse = await fetch('/api/instances/dialogy');
+      if (!dialogyResponse.ok) throw new Error('Falha ao buscar instâncias Dialogy.');
+      const dialogyData: DialogyInstance[] = await dialogyResponse.json();
+      const dialogyInstancesWithStatus = dialogyData.map(d => ({ ...d, status: 'unconfigured' as const }));
+      setDialogyInstances(dialogyInstancesWithStatus);
+      dialogyInstancesWithStatus.forEach(instance => handleCheckDialogyInstanceStatus(instance));
+    } catch (error: any) {
+      toast({ title: "Erro ao Carregar Instâncias Dialogy", description: error.message, variant: "destructive" });
+      setDialogyInstances([]);
+    } finally {
+      setIsLoadingDialogyInstances(false);
+    }
 
-  }, [toast, handleCheckEvolutionInstanceStatus, handleCheckChatwootInstanceStatus]);
+  }, [toast, handleCheckEvolutionInstanceStatus, handleCheckChatwootInstanceStatus, handleCheckDialogyInstanceStatus]);
 
   const handleIntegrationsPopoverOpen = (open: boolean) => {
     if (open) {
@@ -1369,7 +1392,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                         />
                         {renderVariableInserter('conditionValue')}
                     </div>
-                     {node.conditionDataType === 'date' && <p className="text-xs text-muted-foreground mt-1">Use `HH:mm` para horas ou `{{now}}` para a hora atual.</p>}
+                     {node.conditionDataType === 'date' && <p className="text-xs text-muted-foreground mt-1">Use 'HH:mm' para horas ou {'{{now}}'} para a hora atual.</p>}
                 </div>
             )}
           </div>
@@ -2125,6 +2148,25 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando...
                               </div>
                             ) : chatwootInstances.length > 0 ? chatwootInstances.map((instance) => (
+                              <div key={instance.id} className="grid grid-cols-[auto,1fr,auto] items-center gap-x-2 text-sm p-2 rounded-md border bg-muted/50">
+                                <div
+                                  className={cn("w-2.5 h-2.5 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
+                                  title={instance.status}
+                                />
+                                <div className="font-medium truncate" title={instance.name}>{instance.name}</div>
+                                <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
+                              </div>
+                            )) : (
+                              <p className="text-xs text-muted-foreground text-center py-2">Nenhuma instância configurada.</p>
+                            )}
+                          </div>
+                           <div>
+                            <h5 className="text-sm font-semibold mb-2 flex items-center gap-2"><Rocket className="w-4 h-4 text-orange-500" /> Dialogy</h5>
+                            {isLoadingDialogyInstances ? (
+                              <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando...
+                              </div>
+                            ) : dialogyInstances.length > 0 ? dialogyInstances.map((instance) => (
                               <div key={instance.id} className="grid grid-cols-[auto,1fr,auto] items-center gap-x-2 text-sm p-2 rounded-md border bg-muted/50">
                                 <div
                                   className={cn("w-2.5 h-2.5 rounded-full", instance.status === 'online' ? 'bg-green-500' : instance.status === 'offline' ? 'bg-red-500' : instance.status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-400')}
