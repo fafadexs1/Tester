@@ -247,7 +247,6 @@ export async function executeFlow(
         let isInTimeRange = false;
         try {
           const now = new Date();
-      
           const startTimeStr = (currentNode.startTime ?? '').toString().trim();
           const endTimeStr = (currentNode.endTime ?? '').toString().trim();
       
@@ -259,15 +258,18 @@ export async function executeFlow(
             const { h: sh, m: sm, s: ss } = parseHM(startTimeStr);
             const { h: eh, m: em, s: es } = parseHM(endTimeStr);
       
-            const startDate = new Date(); 
+            const startDate = new Date();
             startDate.setHours(sh, sm, ss, 0);
       
-            const endDate = new Date(); 
+            const endDate = new Date();
             endDate.setHours(eh, em, es, 0);
       
+            // Lógica para intervalo que atravessa a meia-noite (ex: 22:00-06:00)
             if (endDate.getTime() <= startDate.getTime()) {
+              // Se a hora atual for DEPOIS do início OU ANTES do fim, está dentro.
               isInTimeRange = now.getTime() >= startDate.getTime() || now.getTime() <= endDate.getTime();
             } else {
+              // Intervalo normal no mesmo dia
               isInTimeRange = now.getTime() >= startDate.getTime() && now.getTime() <= endDate.getTime();
             }
           } else {
@@ -275,7 +277,7 @@ export async function executeFlow(
             isInTimeRange = false;
           }
       
-          console.log(`[Flow Engine - ${session.session_id}] Time of Day Check: ${currentNode.startTime}-${currentNode.endTime}. Server Now: ${now.toLocaleTimeString()}. In range: ${isInTimeRange}`);
+          console.log(`[Flow Engine - ${session.session_id}] Time of Day Check: ${currentNode.startTime}-${currentNode.endTime}. Now: ${now.toLocaleTimeString()}. In range: ${isInTimeRange}`);
         } catch (err: any) {
           console.error(`[Flow Engine - ${session.session_id}] Time of Day Error:`, err);
           isInTimeRange = false;
