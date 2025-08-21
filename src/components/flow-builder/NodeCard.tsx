@@ -854,16 +854,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     if (node.type === 'end-flow') return null;
 
     if (node.type === 'start') {
-        const allTriggers = node.triggers || [];
         let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
-
-        return allTriggers
+        
+        return (node.triggers || [])
             .filter(t => t.enabled)
             .map((trigger) => {
                 const triggerY = yOffset;
                 const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
                 const triggerBlockHeight = 40 + (keywords.length * START_NODE_TRIGGER_SPACING_Y);
-                yOffset += triggerBlockHeight;
+                yOffset += triggerBlockHeight + 10; // Add some padding
 
                 return (
                     <React.Fragment key={trigger.id}>
@@ -1386,7 +1385,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     <div className="relative">
                         <Input
                             id={`${node.id}-condval`}
-                            placeholder="Valor ou {{outra_var}} ou {{now}}"
+                            placeholder="Valor, {{outra_var}} ou {{now}}"
                             value={node.conditionValue || ''}
                             onChange={(e) => onUpdate(node.id, { conditionValue: e.target.value })}
                             className="pr-8"
