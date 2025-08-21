@@ -180,8 +180,12 @@ async function executeFlow(
     let nextNodeId: string | null = null;
     session.current_node_id = currentNodeId; // Update session with the node we are currently processing
     
-    // Normaliza o tipo do nó para evitar mismatch por espaços/caixa
-    const nodeType = (currentNode.type ?? '').toString().trim().toLowerCase();
+    // Normaliza o tipo do nó para evitar mismatch por espaços/caixa e hífens unicode
+    const nodeType = (currentNode.type ?? '')
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/[\u2010-\u2015\u2212]/g, '-'); // normaliza hífens para '-'
 
     switch (nodeType) {
       case 'start': {
@@ -204,7 +208,7 @@ async function executeFlow(
       case 'rating-input':
       case 'option': {
         let promptText: string | undefined = '';
-        if (currentNode.type === 'option') {
+        if (nodeType === 'option') {
           promptText = substituteVariablesInText(currentNode.questionText, session.flow_variables);
           const optionsList = (currentNode.optionsList || '')
             .split('\n')
@@ -235,16 +239,16 @@ async function executeFlow(
           }
         } else {
           const promptFieldName =
-            currentNode.type === 'input' ? 'promptText' :
-              currentNode.type === 'date-input' ? 'dateInputLabel' :
-                currentNode.type === 'file-upload' ? 'uploadPromptText' :
-                  'ratingQuestionText';
+            nodeType === 'input' ? 'promptText' :
+            nodeType === 'date-input' ? 'dateInputLabel' :
+            nodeType === 'file-upload' ? 'uploadPromptText' :
+            'ratingQuestionText';
 
           promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
           if (promptText) {
             await sendOmniChannelMessage(promptText);
           }
-          session.awaiting_input_type = currentNode.type;
+          session.awaiting_input_type = nodeType as any;
           session.awaiting_input_details = {
             variableToSave:
               currentNode.variableToSaveResponse ||
@@ -465,10 +469,10 @@ async function executeFlow(
           ...apiConfig,
           instanceName,
           recipientPhoneNumber: recipientPhoneNumber.split('@')[0], // Garante que apenas o número seja usado
-          messageType: currentNode.type === 'whatsapp-text' ? 'text' : currentNode.mediaType || 'image',
-          textContent: currentNode.type === 'whatsapp-text' ? substituteVariablesInText(currentNode.textMessage, session.flow_variables) : undefined,
-          mediaUrl: currentNode.type === 'whatsapp-media' ? substituteVariablesInText(currentNode.mediaUrl, session.flow_variables) : undefined,
-          caption: currentNode.type === 'whatsapp-media' ? substituteVariablesInText(currentNode.caption, session.flow_variables) : undefined,
+          messageType: nodeType === 'whatsapp-text' ? 'text' : currentNode.mediaType || 'image',
+          textContent: nodeType === 'whatsapp-text' ? substituteVariablesInText(currentNode.textMessage, session.flow_variables) : undefined,
+          mediaUrl: nodeType === 'whatsapp-media' ? substituteVariablesInText(currentNode.mediaUrl, session.flow_variables) : undefined,
+          caption: nodeType === 'whatsapp-media' ? substituteVariablesInText(currentNode.caption, session.flow_variables) : undefined,
         });
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
@@ -535,7 +539,7 @@ async function executeFlow(
         break;
 
       default:
-        console.warn(`[Flow Engine - ${session.session_id}] Node type ${currentNode.type} not fully implemented or does not pause. Trying 'default' exit.`);
+        console.warn(`[Flow Engine - ${session.session_id}] Node type '${currentNode.type}' (normalized='${nodeType}') not fully implemented or does not pause. Trying 'default' exit.`);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
     }
