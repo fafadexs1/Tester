@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -95,7 +94,7 @@ const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onS
       {Array.isArray(data) ? (
         data.map((item, index) => (
           <div key={index}>
-            <span className="text-gray-500">{index}: </span>
+            <span className="text-gray-500">{index}: </span> 
             <JsonTreeView data={item} onSelectPath={onSelectPath} currentPath={[...currentPath, String(index)]} />
           </div>
         ))
@@ -127,64 +126,65 @@ const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onS
   );
 };
 
-const JsonPathPicker = ({ onSelectPath, logSource }: { onSelectPath: (path: string) => void, logSource: () => Promise<any[]> }) => {
+const JsonPathPicker = ({ onSelectPath, logSource, isOpen }: { onSelectPath: (path: string) => void, logSource: () => Promise<any[]>, isOpen: boolean }) => {
     const [logs, setLogs] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
     const [selectedLog, setSelectedLog] = useState<any | null>(null);
 
-    useEffect(() => {
-        setIsLoading(true);
-        logSource().then(data => {
-            setLogs(data);
-            if (data.length > 0) {
-                setSelectedLog(data[0]);
-            }
-        }).catch(err => {
-            console.error("Failed to fetch logs for path picker:", err);
-        }).finally(() => {
-            setIsLoading(false);
-        });
-    }, [logSource]);
+     useEffect(() => {
+        if (isOpen) {
+            setIsLoading(true);
+            logSource().then(data => {
+                setLogs(data);
+                if (data.length > 0) {
+                    setSelectedLog(data[0]);
+                }
+            }).catch(err => {
+                console.error("Failed to fetch logs for path picker:", err);
+            }).finally(() => {
+                setIsLoading(false);
+            });
+        }
+    }, [isOpen, logSource]);
 
     return (
-        <PopoverContent className="w-80" align="end" data-no-drag="true">
-            <div className="space-y-2 p-2">
-                <h4 className="font-medium leading-none text-sm">Seletor de Caminho</h4>
-                <p className="text-xs text-muted-foreground">Selecione uma chamada recente para inspecionar e escolher um caminho.</p>
-                
-                {isLoading ? (
-                    <div className="flex items-center justify-center p-4">
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                    </div>
-                ) : logs.length === 0 ? (
-                    <p className="text-xs text-muted-foreground text-center py-2">Nenhum log encontrado.</p>
-                ) : (
-                    <>
-                        <Select onValueChange={(logTimestamp) => setSelectedLog(logs.find(l => l.timestamp === logTimestamp))}>
-                            <SelectTrigger className="h-8">
-                                <SelectValue placeholder="Selecione um log..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {logs.map(log => (
-                                    <SelectItem key={log.timestamp} value={log.timestamp}>
-                                        {new Date(log.timestamp).toLocaleString()}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        {selectedLog && (
-                            <ScrollArea className="h-48 mt-2 border rounded-md p-2 bg-muted/30">
-                                <pre className="text-xs whitespace-pre-wrap break-all">
-                                    <JsonTreeView data={selectedLog.response || selectedLog.payload} onSelectPath={onSelectPath} />
-                                </pre>
-                            </ScrollArea>
-                        )}
-                    </>
-                )}
-            </div>
-        </PopoverContent>
+        <div className="space-y-2 p-2">
+            <h4 className="font-medium leading-none text-sm">Seletor de Caminho</h4>
+            <p className="text-xs text-muted-foreground">Selecione uma chamada recente para inspecionar e escolher um caminho.</p>
+            
+            {isLoading ? (
+                <div className="flex items-center justify-center p-4">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                </div>
+            ) : logs.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-2">Nenhum log encontrado.</p>
+            ) : (
+                <>
+                    <Select onValueChange={(logTimestamp) => setSelectedLog(logs.find(l => l.timestamp === logTimestamp))} defaultValue={selectedLog?.timestamp}>
+                        <SelectTrigger className="h-8">
+                            <SelectValue placeholder="Selecione um log..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {logs.map(log => (
+                                <SelectItem key={log.timestamp} value={log.timestamp}>
+                                    {new Date(log.timestamp).toLocaleString()}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    {selectedLog && (
+                        <ScrollArea className="h-48 mt-2 border rounded-md p-2 bg-muted/30">
+                            <pre className="text-xs whitespace-pre-wrap break-all">
+                                <JsonTreeView data={selectedLog.response || selectedLog.payload} onSelectPath={onSelectPath} />
+                            </pre>
+                        </ScrollArea>
+                    )}
+                </>
+            )}
+        </div>
     );
 };
+
 
 const TextFormatToolbar = ({ fieldName, textAreaRef, onUpdate, nodeId }: { fieldName: keyof NodeData, textAreaRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement>, onUpdate: Function, nodeId: string }) => {
     const handleFormat = (formatChar: string) => {
@@ -252,6 +252,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const [isApiHistoryDialogOpen, setIsApiHistoryDialogOpen] = useState(false);
   const [apiLogs, setApiLogs] = useState<ApiLogEntry[]>([]);
   const [isLoadingApiLogs, setIsLoadingApiLogs] = useState(false);
+  const [isJsonPathPickerOpen, setIsJsonPathPickerOpen] = useState(false);
 
 
   const [supabaseTables, setSupabaseTables] = useState<{ name: string }[]>([]);
@@ -634,6 +635,25 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         title: "API Testada com Sucesso!",
         description: `Status: ${result.status}`,
       });
+
+      // Log the successful call
+      if (globalThis.apiCallLogsByFlow && activeWorkspace?.id) {
+          if (!globalThis.apiCallLogsByFlow.has(activeWorkspace.id)) {
+              globalThis.apiCallLogsByFlow.set(activeWorkspace.id, []);
+          }
+          const logs = globalThis.apiCallLogsByFlow.get(activeWorkspace.id)!;
+          logs.unshift({
+              timestamp: new Date().toISOString(),
+              nodeId: node.id,
+              nodeTitle: node.title,
+              requestUrl: node.apiUrl,
+              response: result.data,
+              error: null,
+          });
+          if (logs.length > 50) logs.pop();
+          globalThis.apiCallLogsByFlow.set(activeWorkspace.id, logs);
+      }
+
     } catch (error: any) {
       setTestResponseError(error.message);
       setIsTestResponseModalOpen(true);
@@ -841,7 +861,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
               </PopoverTrigger>
-               <JsonPathPicker onSelectPath={(path) => onUpdate(node.id, { apiResponsePathForValue: path })} logSource={fetchApiLogs} />
+                <PopoverContent className="w-80 p-0" align="end" data-no-drag="true">
+                   <JsonPathPicker onSelectPath={(path) => onUpdate(node.id, { apiResponsePathForValue: path })} logSource={fetchApiLogs} isOpen={isJsonPathPickerOpen} />
+                </PopoverContent>
             </Popover>
           </div>
           <p className="text-xs text-muted-foreground mt-1">O fluxo usará o valor deste caminho como se fosse a resposta do usuário.</p>
@@ -1150,7 +1172,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                   <PopoverTrigger asChild>
                                     <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
                                   </PopoverTrigger>
-                                  <JsonPathPicker onSelectPath={(path) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', path)} logSource={fetchWebhookLogs} />
+                                  <PopoverContent className="w-80 p-0" align="end" data-no-drag="true">
+                                    <JsonPathPicker onSelectPath={(path) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', path)} logSource={fetchWebhookLogs} isOpen={isJsonPathPickerOpen} />
+                                  </PopoverContent>
                                 </Popover>
                               </div>
                               <Input placeholder="Variável (ex: mensagem_usuario)" value={mapping.flowVariable} onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs flex-1" />
@@ -1619,11 +1643,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     <Label htmlFor={`${node.id}-apiResponsePath`}>Caminho do Dado Principal (opcional)</Label>
                      <div className="relative">
                         <Input id={`${node.id}-apiResponsePath`} placeholder="Ex: data.user.name" value={node.apiResponsePath || ''} onChange={(e) => onUpdate(node.id, { apiResponsePath: e.target.value })} className="pr-8" />
-                         <Popover>
+                         <Popover onOpenChange={setIsJsonPathPickerOpen}>
                             <PopoverTrigger asChild>
                                 <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
                             </PopoverTrigger>
-                            <JsonPathPicker onSelectPath={(path) => onUpdate(node.id, { apiResponsePath: path })} logSource={fetchApiLogs} />
+                            <PopoverContent className="w-80 p-0" align="end" data-no-drag="true">
+                               <JsonPathPicker onSelectPath={(path) => onUpdate(node.id, { apiResponsePath: path })} logSource={fetchApiLogs} isOpen={isJsonPathPickerOpen} />
+                            </PopoverContent>
                         </Popover>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">Se preenchido, extrai este dado para a variável de resultado principal.</p>
@@ -1643,11 +1669,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                               value={mapping.jsonPath}
                               onChange={(e) => handleApiResponseMappingChange(mapping.id, 'jsonPath', e.target.value)}
                               className="h-7 text-xs pl-2 pr-7" />
-                               <Popover>
+                               <Popover onOpenChange={setIsJsonPathPickerOpen}>
                                   <PopoverTrigger asChild>
                                     <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
                                   </PopoverTrigger>
-                                  <JsonPathPicker onSelectPath={(path) => handleApiResponseMappingChange(mapping.id, 'jsonPath', path)} logSource={fetchApiLogs} />
+                                  <PopoverContent className="w-80 p-0" align="end" data-no-drag="true">
+                                    <JsonPathPicker onSelectPath={(path) => handleApiResponseMappingChange(mapping.id, 'jsonPath', path)} logSource={fetchApiLogs} isOpen={isJsonPathPickerOpen} />
+                                  </PopoverContent>
                                 </Popover>
                           </div>
                           <Input placeholder="Variável (ex: id_usuario)" value={mapping.flowVariable} onChange={(e) => handleApiResponseMappingChange(mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs" />
@@ -2348,7 +2376,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </DialogDescription>
             </DialogHeader>
              <div className="flex-1 overflow-y-auto">
-                {/* O conteúdo do seletor vai aqui, para ser controlado pelo Dialog */}
+                <JsonPathPicker onSelectPath={() => {}} logSource={fetchWebhookLogs} isOpen={isWebhookHistoryDialogOpen} />
             </div>
            <DialogFooter>
             <Button variant="outline" onClick={() => setIsWebhookHistoryDialogOpen(false)}>Fechar</Button>
@@ -2445,3 +2473,5 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
+    
