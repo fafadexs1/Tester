@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -110,6 +111,11 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
   
     const substitutedText = mutableText.replace(variableRegex, (match, variableName) => {
+      
+      if (variableName === 'now') {
+        return new Date().toISOString();
+      }
+
       let value: any = getProperty(currentActiveFlowVariables, variableName);
       
       if (value === undefined) {
@@ -611,6 +617,40 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
 
+      case 'time-of-day': {
+        let isInTimeRange = false;
+        const now = new Date();
+        const startTimeStr = node.startTime;
+        const endTimeStr = node.endTime;
+
+        if (startTimeStr && endTimeStr) {
+          const [startH, startM] = startTimeStr.split(':').map(Number);
+          const [endH, endM] = endTimeStr.split(':').map(Number);
+
+          const startDate = new Date();
+          startDate.setHours(startH, startM, 0, 0);
+
+          const endDate = new Date();
+          endDate.setHours(endH, endM, 0, 0);
+          
+          if (endDate < startDate) {
+            endDate.setDate(endDate.getDate() + 1);
+            if (now < startDate) {
+              const nowAdjusted = new Date(now);
+              nowAdjusted.setDate(nowAdjusted.getDate() + 1);
+              isInTimeRange = nowAdjusted >= startDate && nowAdjusted <= endDate;
+            } else {
+               isInTimeRange = now >= startDate && now <= endDate;
+            }
+          } else {
+            isInTimeRange = now >= startDate && now <= endDate;
+          }
+        }
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Verificando horário: ${startTimeStr}-${endTimeStr}. Agora: ${now.toLocaleTimeString()}. Resultado: ${isInTimeRange ? "Dentro do Horário" : "Fora do Horário"}.`, sender: 'bot' }]);
+        nextNodeId = findNextNodeId(node.id, isInTimeRange ? 'true' : 'false');
+        break;
+      }
+      
       default:
         setMessages(prev => [...prev, { id: uuidv4(), text: `Tipo de nó "${(node as any).type}" (${(node as any).title || 'Sem título'}) não implementado no chat de teste.`, sender: 'bot' }]);
         autoAdvance = false;
@@ -1001,5 +1041,3 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 };
 
 export default TestChatPanel;
-
-    
