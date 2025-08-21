@@ -173,10 +173,27 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
 
       let sourceHandleYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET;
       if (sourceNode.type === 'start' && Array.isArray(sourceNode.triggers) && conn.sourceHandle) {
-        const triggerIndex = sourceNode.triggers.findIndex(t => t.name === conn.sourceHandle);
-        if (triggerIndex !== -1) {
-          sourceHandleYOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET + (triggerIndex * START_NODE_TRIGGER_SPACING_Y);
-        }
+          let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
+          let found = false;
+
+          for (const trigger of sourceNode.triggers.filter(t => t.enabled)) {
+              if (trigger.name === conn.sourceHandle) {
+                  sourceHandleYOffset = yOffset;
+                  found = true;
+                  break;
+              }
+              const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
+              if (keywords.includes(conn.sourceHandle)) {
+                  const kwIndex = keywords.indexOf(conn.sourceHandle);
+                  sourceHandleYOffset = yOffset + 25 + (kwIndex * START_NODE_TRIGGER_SPACING_Y);
+                  found = true;
+                  break;
+              }
+              const triggerBlockHeight = 40 + (keywords.length * START_NODE_TRIGGER_SPACING_Y);
+              yOffset += triggerBlockHeight + 10;
+          }
+          if (!found) sourceHandleYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET; // Fallback
+
       } else if (sourceNode.type === 'option' && typeof sourceNode.optionsList === 'string' && conn.sourceHandle) {
         const options = sourceNode.optionsList.split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
         const optionIndex = options.indexOf(conn.sourceHandle);
