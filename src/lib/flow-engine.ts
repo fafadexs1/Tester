@@ -38,6 +38,9 @@ function substituteVariablesInText(text: string | undefined, variables: Record<s
   const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
   subbedText = subbedText.replace(variableRegex, (_full, varNameRaw) => {
     const varName = String(varNameRaw).trim();
+    if (varName === 'now') {
+      return new Date().toISOString();
+    }
     let value: any = getProperty(variables, varName);
     if (value === undefined && !varName.includes('.')) {
       value = variables[varName];
@@ -53,20 +56,26 @@ function substituteVariablesInText(text: string | undefined, variables: Record<s
   return subbedText;
 }
 
+// 2) Helpers de data robustos
 function coerceToDate(raw: any): Date | null {
   if (raw === undefined || raw === null) return null;
 
+  // Já é Date?
   if (raw instanceof Date && !isNaN(raw.getTime())) return raw;
 
+  // Número (epoch ms ou s)
   if (typeof raw === 'number' && isFinite(raw)) {
+    // Heurística simples: se for muito pequeno, pode ser segundos
     const ms = raw < 1e11 ? raw * 1000 : raw;
     const d = new Date(ms);
     return isNaN(d.getTime()) ? null : d;
   }
 
+  // String
   const str = String(raw).trim();
   if (!str) return null;
 
+  // HH:mm (hora do dia de hoje)
   const timeOnly = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(str);
   if (timeOnly) {
     const [_, hh, mm, ss] = timeOnly;
@@ -76,9 +85,11 @@ function coerceToDate(raw: any): Date | null {
     return d;
   }
 
+  // ISO-8601 ou formatos aceitos pelo Date
   const d = new Date(str);
   if (!isNaN(d.getTime())) return d;
 
+  // dd/mm/yyyy opcionalmente com hora (brasileiro)
   const br = /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(str);
   if (br) {
     const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = br;
@@ -332,47 +343,45 @@ export async function executeFlow(
         let isInTimeRange = false;
         try {
           const now = new Date();
-
           const startTimeStr = (currentNode.startTime ?? '').toString().trim();
-          const endTimeStr   = (currentNode.endTime   ?? '').toString().trim();
-
-          if (startTimeStr && endTimeStr && /^\\d{2}:\\d{2}(:\\d{2})?$/.test(startTimeStr) && /^\\d{2}:\\d{2}(:\\d{2})?$/.test(endTimeStr)) {
+          const endTimeStr = (currentNode.endTime ?? '').toString().trim();
+      
+          if (startTimeStr && endTimeStr && /^\d{2}:\d{2}(:\d{2})?$/.test(startTimeStr) && /^\d{2}:\d{2}(:\d{2})?$/.test(endTimeStr)) {
             const parseHM = (s: string) => {
               const [h, m, s2 = '0'] = s.split(':').map(Number);
               return { h, m, s: s2 };
             };
             const { h: sh, m: sm, s: ss } = parseHM(startTimeStr);
             const { h: eh, m: em, s: es } = parseHM(endTimeStr);
-
-            const startDate = new Date(now);
+      
+            const startDate = new Date();
             startDate.setHours(sh, sm, ss, 0);
-
-            const endDate = new Date(now);
+      
+            const endDate = new Date();
             endDate.setHours(eh, em, es, 0);
-
+      
             if (endDate < startDate) {
-              const endNextDay = new Date(endDate.getTime() + 24 * 60 * 60 * 1000);
-              const nowSameDay = now >= startDate;
-              const nowNextDay = now <= endDate;
-              isInTimeRange = nowSameDay || nowNextDay;
+              // Intervalo que cruza a meia-noite (ex: 22:00 às 06:00)
+              isInTimeRange = (now >= startDate) || (now <= endDate);
             } else {
+              // Intervalo no mesmo dia (ex: 09:00 às 18:00)
               isInTimeRange = now >= startDate && now <= endDate;
             }
           } else {
             console.warn(`[Flow Engine - ${session.session_id}] time-of-day: horários inválidos ou ausentes (start="${startTimeStr}" end="${endTimeStr}"). Considerando fora do intervalo.`);
             isInTimeRange = false;
           }
-
-          console.log(`[Flow Engine - ${session.session_id}] Time of Day Check: ${currentNode.startTime}-${currentNode.endTime}. In range: ${isInTimeRange}`);
-        } catch (err) {
+      
+          console.log(`[Flow Engine - ${session.session_id}] Time of Day Check: ${currentNode.startTime}-${currentNode.endTime}. Now: ${now.toLocaleTimeString()}. In range: ${isInTimeRange}`);
+        } catch (err: any) {
           console.error(`[Flow Engine - ${session.session_id}] Time of Day Error:`, err);
           isInTimeRange = false;
         }
-
+      
         nextNodeId = findNextNodeId(currentNode.id, isInTimeRange ? 'true' : 'false', connections);
         break;
       }
-
+      
       case 'switch': {
         const switchVarName = currentNode.switchVariable?.replace(/\{\{|\}\}/g, '').trim();
         const switchActualValue = switchVarName ? getProperty(session.flow_variables, switchVarName) : undefined;
@@ -567,5 +576,3 @@ export async function executeFlow(
     }
   }
 }
-
-  
