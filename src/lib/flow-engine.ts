@@ -26,30 +26,31 @@ function findNextNodeId(fromNodeId: string, sourceHandle: string | undefined, co
 }
 
 function substituteVariablesInText(text: string | undefined, variables: Record<string, any>): string {
-    if (text === undefined || text === null) return '';
-    let subbedText = String(text);
-  
-    const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
-    subbedText = subbedText.replace(variableRegex, (_full, varNameRaw) => {
-      const varName = String(varNameRaw).trim();
-      
-      if (varName === 'now') {
-        return new Date().toISOString();
-      }
+  if (text === undefined || text === null) return '';
+  let subbedText = String(text);
 
-      let value: any = getProperty(variables, varName);
-      if (value === undefined && !varName.includes('.')) {
-        value = variables[varName];
-      }
-      if (value === undefined || value === null) return '';
-      if (typeof value === 'object') {
-        try { return JSON.stringify(value, null, 2); }
-        catch { return `[Error stringifying ${varName}]`; }
-      }
-      return String(value);
-    });
-  
-    return subbedText;
+  // {{now}} -> ISO
+  if (subbedText.includes('{{now}}')) {
+    subbedText = subbedText.replace(/\{\{now\}\}/g, new Date().toISOString());
+  }
+
+  // Usa uma única passada com replace + callback (evita problemas de lastIndex e garante substituição correta)
+  const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
+  subbedText = subbedText.replace(variableRegex, (_full, varNameRaw) => {
+    const varName = String(varNameRaw).trim();
+    let value: any = getProperty(variables, varName);
+    if (value === undefined && !varName.includes('.')) {
+      value = variables[varName];
+    }
+    if (value === undefined || value === null) return '';
+    if (typeof value === 'object') {
+      try { return JSON.stringify(value, null, 2); }
+      catch { return `[Error stringifying ${varName}]`; }
+    }
+    return String(value);
+  });
+
+  return subbedText;
 }
 
 function coerceToDate(raw: any): Date | null {
@@ -186,7 +187,10 @@ export async function executeFlow(
     let nextNodeId: string | null = null;
     session.current_node_id = currentNodeId;
 
-    switch (currentNode.type) {
+    // 🔧 Normaliza o tipo do nó para evitar mismatch por espaços/caixa
+    const nodeType = (currentNode.type ?? '').toString().trim().toLowerCase();
+
+    switch (nodeType) {
       case 'start': {
         const triggerHandle = getProperty(session.flow_variables, '_triggerHandle') || 'default';
         delete session.flow_variables['_triggerHandle'];
@@ -207,17 +211,16 @@ export async function executeFlow(
       case 'rating-input':
       case 'option': {
         let promptText: string | undefined = '';
-        if (currentNode.type === 'option') {
-          promptText = substituteVariablesInText(currentNode.questionText, session.flow_variables);
+        if (nodeType === 'option') {
+          const q = substituteVariablesInText(currentNode.questionText, session.flow_variables);
           const optionsList = (currentNode.optionsList || '')
             .split('\n')
             .map(opt => substituteVariablesInText(opt.trim(), session.flow_variables))
             .filter(Boolean);
-          if (promptText && optionsList.length > 0) {
-            let messageWithOptions = promptText + '\n\n';
-            optionsList.forEach((opt, index) => {
-              messageWithOptions += `${index + 1}. ${opt}\n`;
-            });
+
+          if (q && optionsList.length > 0) {
+            let messageWithOptions = q + '\n\n';
+            optionsList.forEach((opt, index) => { messageWithOptions += `${index + 1}. ${opt}\n`; });
 
             let finalMessage = messageWithOptions.trim();
             if (session.flow_context !== 'chatwoot') {
@@ -237,16 +240,15 @@ export async function executeFlow(
           }
         } else {
           const promptFieldName =
-            currentNode.type === 'input' ? 'promptText' :
-              currentNode.type === 'date-input' ? 'dateInputLabel' :
-                currentNode.type === 'file-upload' ? 'uploadPromptText' :
-                  'ratingQuestionText';
+            nodeType === 'input' ? 'promptText' :
+            nodeType === 'date-input' ? 'dateInputLabel' :
+            nodeType === 'file-upload' ? 'uploadPromptText' :
+            'ratingQuestionText';
 
           promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
-          if (promptText) {
-            await sendOmniChannelMessage(promptText);
-          }
-          session.awaiting_input_type = currentNode.type;
+          if (promptText) await sendOmniChannelMessage(promptText);
+
+          session.awaiting_input_type = nodeType as any;
           session.awaiting_input_details = {
             variableToSave:
               currentNode.variableToSaveResponse ||
@@ -325,41 +327,51 @@ export async function executeFlow(
         nextNodeId = findNextNodeId(currentNode.id, conditionMet ? 'true' : 'false', connections);
         break;
       }
-      
+
       case 'time-of-day': {
         let isInTimeRange = false;
-        const now = new Date();
-        const startTimeStr = currentNode.startTime;
-        const endTimeStr = currentNode.endTime;
+        try {
+          const now = new Date();
 
-        if (startTimeStr && endTimeStr) {
-          const [startH, startM] = startTimeStr.split(':').map(Number);
-          const [endH, endM] = endTimeStr.split(':').map(Number);
+          const startTimeStr = (currentNode.startTime ?? '').toString().trim();
+          const endTimeStr   = (currentNode.endTime   ?? '').toString().trim();
 
-          const startDate = new Date();
-          startDate.setHours(startH, startM, 0, 0);
+          if (startTimeStr && endTimeStr && /^\\d{2}:\\d{2}(:\\d{2})?$/.test(startTimeStr) && /^\\d{2}:\\d{2}(:\\d{2})?$/.test(endTimeStr)) {
+            const parseHM = (s: string) => {
+              const [h, m, s2 = '0'] = s.split(':').map(Number);
+              return { h, m, s: s2 };
+            };
+            const { h: sh, m: sm, s: ss } = parseHM(startTimeStr);
+            const { h: eh, m: em, s: es } = parseHM(endTimeStr);
 
-          const endDate = new Date();
-          endDate.setHours(endH, endM, 0, 0);
-          
-          if (endDate < startDate) { // Handles overnight ranges (e.g., 22:00 to 06:00)
-            endDate.setDate(endDate.getDate() + 1);
-            if (now < startDate) { // If it's after midnight but before start time, adjust 'now' as well
-              const nowAdjusted = new Date(now);
-              nowAdjusted.setDate(nowAdjusted.getDate() + 1);
-              isInTimeRange = nowAdjusted >= startDate && nowAdjusted <= endDate;
+            const startDate = new Date(now);
+            startDate.setHours(sh, sm, ss, 0);
+
+            const endDate = new Date(now);
+            endDate.setHours(eh, em, es, 0);
+
+            if (endDate < startDate) {
+              const endNextDay = new Date(endDate.getTime() + 24 * 60 * 60 * 1000);
+              const nowSameDay = now >= startDate;
+              const nowNextDay = now <= endDate;
+              isInTimeRange = nowSameDay || nowNextDay;
             } else {
-               isInTimeRange = now >= startDate && now <= endDate;
+              isInTimeRange = now >= startDate && now <= endDate;
             }
           } else {
-            isInTimeRange = now >= startDate && now <= endDate;
+            console.warn(`[Flow Engine - ${session.session_id}] time-of-day: horários inválidos ou ausentes (start="${startTimeStr}" end="${endTimeStr}"). Considerando fora do intervalo.`);
+            isInTimeRange = false;
           }
+
+          console.log(`[Flow Engine - ${session.session_id}] Time of Day Check: ${currentNode.startTime}-${currentNode.endTime}. In range: ${isInTimeRange}`);
+        } catch (err) {
+          console.error(`[Flow Engine - ${session.session_id}] Time of Day Error:`, err);
+          isInTimeRange = false;
         }
-        console.log(`[Flow Engine - ${session.session_id}] Time of Day Check: ${startTimeStr}-${endTimeStr}. Now: ${now.toLocaleTimeString()}. In range: ${isInTimeRange}`);
+
         nextNodeId = findNextNodeId(currentNode.id, isInTimeRange ? 'true' : 'false', connections);
         break;
       }
-
 
       case 'switch': {
         const switchVarName = currentNode.switchVariable?.replace(/\{\{|\}\}/g, '').trim();
@@ -521,17 +533,19 @@ export async function executeFlow(
         break;
       }
 
-      case 'end-flow':
+      case 'end-flow': {
         console.log(`[Flow Engine - ${session.session_id}] Reached End Flow node. Deleting session.`);
         await deleteSessionFromDB(session.session_id);
         shouldContinue = false;
         nextNodeId = null;
         break;
+      }
 
-      default:
+      default: {
         console.warn(`[Flow Engine - ${session.session_id}] Node type ${currentNode.type} not fully implemented or does not pause. Trying 'default' exit.`);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
+      }
     }
 
     if (shouldContinue) {
@@ -553,3 +567,5 @@ export async function executeFlow(
     }
   }
 }
+
+  
