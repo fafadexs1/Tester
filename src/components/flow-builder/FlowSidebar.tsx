@@ -81,25 +81,6 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
         { type: "google-sheets-append", label: "Adicionar Linha Planilha Google", icon: <Sheet {...iconProps} className="text-emerald-500" />, description: "Escreve dados em uma planilha.", defaultData: { googleSheetId: 'SEU_SPREADSHEET_ID', googleSheetName: 'Página1', googleSheetRowData: '["{{input.valor1}}", "{{input.valor2}}", "texto fixo"]' } },
       ]
     },
-    {
-      value: "supabase",
-      title: "Supabase",
-      blocks: [
-        { type: "supabase-create-row", label: "Criar Linha", icon: <PlusCircle {...iconProps} className="text-green-500" />, description: "Adiciona um novo registro.", defaultData: { supabaseTableName: '', supabaseDataJson: '{ "coluna": "valor" }', supabaseResultVariable: 'id_linha_criada_supabase' } },
-        { type: "supabase-read-row", label: "Ler Linha(s)", icon: <Search {...iconProps} className="text-blue-500" />, description: "Busca registros em uma tabela.", defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseColumnsToSelect: '*', supabaseResultVariable: 'dados_supabase'} },
-        { type: "supabase-update-row", label: "Atualizar Linha", icon: <Edit3 {...iconProps} className="text-yellow-500" />, description: "Modifica um registro existente.", defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '', supabaseDataJson: '{ "coluna": "novo_valor" }' } },
-        { type: "supabase-delete-row", label: "Deletar Linha", icon: <Trash2 {...iconProps} className="text-red-500" />, description: "Remove um registro da tabela.", defaultData: { supabaseTableName: '', supabaseIdentifierColumn: '', supabaseIdentifierValue: '' } },
-      ]
-    },
-    {
-      value: "whatsapp",
-      title: "API Evolution (WhatsApp)",
-      blocks: [
-        { type: "whatsapp-text", label: "Enviar Texto (WA)", icon: <BotMessageSquare {...iconProps} className="text-teal-600" />, description: "Envia uma mensagem de texto.", defaultData: { textMessage: 'Olá!', instanceName: 'evolution_instance' } },
-        { type: "whatsapp-media", label: "Enviar Mídia (WA)", icon: <ImageUp {...iconProps} className="text-indigo-600" />, description: "Envia imagem, vídeo, áudio, etc.", defaultData: { mediaType: 'image', instanceName: 'evolution_instance', mediaUrl: 'https://placehold.co/300x200.png', dataAiHint: 'placeholder abstract' } },
-        { type: "whatsapp-group", label: "Criar Grupo (WA)", icon: <UserPlus2 {...iconProps} className="text-pink-600" />, description: "Cria um grupo com participantes.", defaultData: { groupName: 'Novo Grupo', instanceName: 'evolution_instance' } },
-      ]
-    }
   ];
 
   return (
