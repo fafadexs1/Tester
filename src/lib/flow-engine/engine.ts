@@ -1,6 +1,5 @@
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
-import type { NodeData, Connection, FlowSession, WorkspaceData } from '@/lib/types';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
 import { sendChatwootMessageAction } from '@/app/actions/chatwootApiActions';
 import { sendDialogyMessageAction } from '@/app/actions/dialogyApiActions';
@@ -11,103 +10,10 @@ import {
   loadChatwootInstanceFromDB,
   loadDialogyInstanceFromDB,
 } from '@/app/actions/databaseActions';
+import type { NodeData, Connection, FlowSession, WorkspaceData } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
-
-// --- Funções Auxiliares para o Motor de Fluxo ---
-function findNodeById(nodeId: string, nodes: NodeData[]): NodeData | undefined {
-  return nodes.find(n => n.id === nodeId);
-}
-
-function findNextNodeId(fromNodeId: string, sourceHandle: string | undefined, connections: Connection[]): string | null {
-  const connection = connections.find(conn => conn.from === fromNodeId && conn.sourceHandle === sourceHandle);
-  return connection ? connection.to : null;
-}
-
-function substituteVariablesInText(text: string | undefined, variables: Record<string, any>): string {
-  if (text === undefined || text === null) return '';
-  let subbedText = String(text);
-
-  // Usa uma única passada com replace + callback (evita problemas de lastIndex e garante substituição correta)
-  const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
-  subbedText = subbedText.replace(variableRegex, (_full, varNameRaw) => {
-    const varName = String(varNameRaw).trim();
-    if (varName === 'now') {
-      return new Date().toISOString();
-    }
-    let value: any = getProperty(variables, varName);
-    if (value === undefined && !varName.includes('.')) {
-      value = variables[varName];
-    }
-    if (value === undefined || value === null) return '';
-    if (typeof value === 'object') {
-      try { return JSON.stringify(value, null, 2); }
-      catch { return `[Error stringifying ${varName}]`; }
-    }
-    return String(value);
-  });
-
-  return subbedText;
-}
-
-// 2) Helpers de data robustos
-function coerceToDate(raw: any): Date | null {
-  if (raw === undefined || raw === null) return null;
-
-  // Já é Date?
-  if (raw instanceof Date && !isNaN(raw.getTime())) return raw;
-
-  // Número (epoch ms ou s)
-  if (typeof raw === 'number' && isFinite(raw)) {
-    // Heurística simples: se for muito pequeno, pode ser segundos
-    const ms = raw < 1e11 ? raw * 1000 : raw;
-    const d = new Date(ms);
-    return isNaN(d.getTime()) ? null : d;
-  }
-
-  // String
-  const str = String(raw).trim();
-  if (!str) return null;
-
-  // HH:mm (hora do dia de hoje)
-  const timeOnly = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(str);
-  if (timeOnly) {
-    const [_, hh, mm, ss] = timeOnly;
-    const d = new Date();
-    d.setSeconds(0, 0);
-    d.setHours(Number(hh), Number(mm), ss ? Number(ss) : 0, 0);
-    return d;
-  }
-
-  // ISO-8601 ou formatos aceitos pelo Date
-  const d = new Date(str);
-  if (!isNaN(d.getTime())) return d;
-
-  // dd/mm/yyyy opcionalmente com hora (brasileiro)
-  const br = /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(str);
-  if (br) {
-    const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = br;
-    const d2 = new Date(
-      Number(yyyy),
-      Number(mm) - 1,
-      Number(dd),
-      Number(hh),
-      Number(mi),
-      Number(ss),
-      0
-    );
-    return isNaN(d2.getTime()) ? null : d2;
-  }
-
-  return null;
-}
-
-function compareDates(a: any, b: any): {a: Date|null; b: Date|null} {
-  const da = coerceToDate(a);
-  const db = coerceToDate(b);
-  return { a: da, b: db };
-}
-
+import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates } from './utils';
 
 interface ApiConfig {
   baseUrl: string;
@@ -192,8 +98,11 @@ export async function executeFlow(
     let nextNodeId: string | null = null;
     session.current_node_id = currentNodeId;
 
-    // 🔧 Normaliza o tipo do nó para evitar mismatch por espaços/caixa
-    const nodeType = (currentNode.type ?? '').toString().trim().toLowerCase();
+    const nodeType = (currentNode.type ?? '')
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/[\u2010-\u2015\u2212]/g, '-'); 
 
     switch (nodeType) {
       case 'start': {
@@ -337,7 +246,6 @@ export async function executeFlow(
         let isInTimeRange = false;
         try {
           const now = new Date();
-      
           const startTimeStr = (currentNode.startTime ?? '').toString().trim();
           const endTimeStr = (currentNode.endTime ?? '').toString().trim();
       
@@ -374,7 +282,7 @@ export async function executeFlow(
         nextNodeId = findNextNodeId(currentNode.id, isInTimeRange ? 'true' : 'false', connections);
         break;
       }
-      
+
       case 'switch': {
         const switchVarName = currentNode.switchVariable?.replace(/\{\{|\}\}/g, '').trim();
         const switchActualValue = switchVarName ? getProperty(session.flow_variables, switchVarName) : undefined;
@@ -535,19 +443,17 @@ export async function executeFlow(
         break;
       }
 
-      case 'end-flow': {
+      case 'end-flow':
         console.log(`[Flow Engine - ${session.session_id}] Reached End Flow node. Deleting session.`);
         await deleteSessionFromDB(session.session_id);
         shouldContinue = false;
         nextNodeId = null;
         break;
-      }
 
-      default: {
-        console.warn(`[Flow Engine - ${session.session_id}] Node type ${currentNode.type} not fully implemented or does not pause. Trying 'default' exit.`);
+      default:
+        console.warn(`[Flow Engine - ${session.session_id}] Node type '${currentNode.type}' (normalized='${nodeType}') not fully implemented or does not pause. Trying 'default' exit.`);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
-      }
     }
 
     if (shouldContinue) {
