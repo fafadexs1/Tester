@@ -843,6 +843,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       'supabase-update-row': <Edit3 {...iconProps} className="text-yellow-500" />,
       'supabase-delete-row': <Trash2 {...iconProps} className="text-red-500" />,
       'dialogy-send-message': <Rocket {...iconProps} className="text-orange-500" />,
+      'time-of-day': <Hourglass {...iconProps} className="text-teal-500" />,
       'end-flow': <StopCircle {...iconProps} className="text-destructive" />,
       default: <Settings2 {...iconProps} className="text-gray-500" />,
     };
@@ -929,13 +930,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       });
     }
 
-    if (node.type === 'condition') {
+    if (node.type === 'condition' || node.type === 'time-of-day') {
       return (
         <>
           <div className="absolute -right-2.5 z-10 flex items-center" style={{ top: `${NODE_HEADER_HEIGHT_APPROX * (1 / 3) + 6 - 10}px` }}>
-            <span className="text-xs text-muted-foreground mr-2">Verdadeiro</span>
+            <span className="text-xs text-muted-foreground mr-2">{node.type === 'time-of-day' ? 'Dentro do Horário' : 'Verdadeiro'}</span>
             <div
-              title="Saída Verdadeiro"
+              title={node.type === 'time-of-day' ? 'Saída para "Dentro do Horário"' : 'Saída Verdadeiro'}
               className="w-5 h-5 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
               onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'true'); }}
               data-connector="true" data-handle-type="source" data-handle-id="true"
@@ -944,9 +945,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             </div>
           </div>
           <div className="absolute -right-2.5 z-10 flex items-center" style={{ top: `${NODE_HEADER_HEIGHT_APPROX * (2 / 3) + 6 - 10}px` }}>
-            <span className="text-xs text-muted-foreground mr-2">Falso</span>
+            <span className="text-xs text-muted-foreground mr-2">{node.type === 'time-of-day' ? 'Fora do Horário' : 'Falso'}</span>
             <div
-              title="Saída Falso"
+              title={node.type === 'time-of-day' ? 'Saída para "Fora do Horário"' : 'Saída Falso'}
               className="w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
               onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'false'); }}
               data-connector="true" data-handle-type="source" data-handle-id="false"
@@ -1002,7 +1003,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       );
     }
 
-    if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow' && node.type !== 'switch') {
+    if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow' && node.type !== 'switch' && node.type !== 'time-of-day') {
       return (
         <div
           className="absolute -right-2.5 z-10 flex items-center justify-center"
@@ -1385,14 +1386,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     <div className="relative">
                         <Input
                             id={`${node.id}-condval`}
-                            placeholder="Valor ou {{outra_var}}"
+                            placeholder="Valor ou {{outra_var}} ou {{now}}"
                             value={node.conditionValue || ''}
                             onChange={(e) => onUpdate(node.id, { conditionValue: e.target.value })}
                             className="pr-8"
                         />
                         {renderVariableInserter('conditionValue')}
                     </div>
-                     {node.conditionDataType === 'date' && <p className="text-xs text-muted-foreground mt-1">Use 'HH:mm' para horas ou {'{{now}}'} para a hora atual.</p>}
+                     {node.conditionDataType === 'date' && <p className="text-xs text-muted-foreground mt-1">Use `HH:mm` para horas ou `{"{{now}}"}` para a hora atual.</p>}
                 </div>
             )}
           </div>
@@ -2056,6 +2057,32 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             </p>
           </div>
         );
+      case 'time-of-day':
+        return (
+          <div className="space-y-3" data-no-drag="true">
+            <p className="text-xs text-muted-foreground">Verifica se a hora atual está dentro do intervalo definido (inclusive).</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor={`${node.id}-starttime`}>Horário de Início</Label>
+                <Input
+                  id={`${node.id}-starttime`}
+                  type="time"
+                  value={node.startTime || ''}
+                  onChange={(e) => onUpdate(node.id, { startTime: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor={`${node.id}-endtime`}>Horário de Fim</Label>
+                <Input
+                  id={`${node.id}-endtime`}
+                  type="time"
+                  value={node.endTime || ''}
+                  onChange={(e) => onUpdate(node.id, { endTime: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+        );
       case 'end-flow':
         return <p className="text-sm text-muted-foreground italic">Este nó encerra o fluxo.</p>;
       default:
@@ -2326,5 +2353,3 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
-    

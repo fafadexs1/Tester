@@ -52,6 +52,7 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
       title: "Lógica e Controle",
       blocks: [
         { type: "condition", label: "Condição (Se/Então)", icon: <GitFork {...iconProps} className="text-orange-500" />, description: "Desvia o fluxo baseado em regras.", defaultData: { conditionVariable: '{{input.variavel}}', conditionOperator: '==', conditionValue: 'valor_esperado' }},
+        { type: "time-of-day", label: "Verificar Horário do Dia", icon: <Hourglass {...iconProps} className="text-teal-500"/>, description: "Desvia o fluxo com base na hora atual.", defaultData: { startTime: '09:00', endTime: '18:00' } },
         { type: "switch", label: "Escolha de Caminho", icon: <GitCommitHorizontal {...iconProps} className="text-indigo-500" />, description: "Desvia o fluxo para múltiplos caminhos.", defaultData: { switchVariable: '{{status}}', switchCases: [{id: uuidv4(), value: 'aprovado'}, {id: uuidv4(), value: 'recusado'}] }},
         { type: "set-variable", label: "Definir Variável", icon: <Variable {...iconProps} className="text-cyan-500" />, description: "Cria ou atualiza uma variável.", defaultData: { variableName: 'nova_variavel', variableValue: '123' }},
         { type: "delay", label: "Atraso", icon: <Timer {...iconProps} className="text-yellow-500" />, description: "Pausa o fluxo por um tempo.", defaultData: { delayDuration: 1000 }},

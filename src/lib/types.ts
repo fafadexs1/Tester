@@ -37,6 +37,7 @@ export type NodeType =
   | 'supabase-update-row'
   | 'supabase-delete-row'
   | 'dialogy-send-message'
+  | 'time-of-day'
   | 'end-flow';
   
 
@@ -220,6 +221,10 @@ export interface NodeData {
   dialogyInstanceId?: string;
   dialogyChatId?: string;
   dialogyMessageContent?: string;
+
+  // Time of Day Node
+  startTime?: string;
+  endTime?: string;
   
   // Start Node
   triggers?: StartNodeTrigger[];
