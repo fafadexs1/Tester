@@ -1,3 +1,4 @@
+
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -41,6 +42,11 @@ function substituteVariablesInText(text: string | undefined, variables: Record<s
     return '';
   }
   let subbedText = String(text);
+  
+  if (subbedText.includes('{{now}}')) {
+    subbedText = subbedText.replace(/\{\{now\}\}/g, new Date().toISOString());
+  }
+
   const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
   let match;
 

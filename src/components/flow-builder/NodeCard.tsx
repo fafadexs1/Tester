@@ -829,24 +829,33 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     if (node.type === 'end-flow') return null;
 
     if (node.type === 'start') {
-        let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
-        return (node.triggers || [])
+        const triggerElements = (node.triggers || [])
             .filter(t => t.enabled)
-            .map((trigger, triggerIndex) => {
-                const triggerBaseY = yOffset;
+            .map((trigger) => {
                 const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
-                
-                // Increment yOffset for the next trigger's base position.
-                // A rough estimation of a trigger block's height inside the node card.
-                yOffset += 60 + (keywords.length * 35);
+                const triggerHeight = 60 + (keywords.length * 35); // Estimativa de altura do bloco do gatilho
 
-                const connectors = [];
-                // Connector for the main trigger
-                connectors.push(
+                return {
+                    id: trigger.id,
+                    name: trigger.name,
+                    keywords: keywords,
+                    height: triggerHeight
+                };
+            });
+
+        let currentY = 50; // Posição Y inicial dentro do conteúdo do nó
+        return triggerElements.map(trigger => {
+            const yOffsetForTrigger = currentY;
+            
+            // Incrementa a posição para o próximo gatilho
+            currentY += trigger.height;
+
+            return (
+                <React.Fragment key={trigger.id}>
+                    {/* Conector para o gatilho principal */}
                     <div
-                        key={trigger.id}
                         className="absolute -right-2.5 z-10 flex items-center"
-                        style={{ top: `${triggerBaseY - 10}px` }} // Adjust for handle size
+                        style={{ top: `${yOffsetForTrigger - 10}px` }}
                         title={`Gatilho: ${trigger.name}`}
                     >
                         <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
@@ -854,18 +863,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                             className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
                             onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
                             data-connector="true" data-handle-type="source" data-handle-id={trigger.name}
-                        />
+                        >
+                            <Hash className="w-3 h-3 text-accent-foreground" />
+                        </div>
                     </div>
-                );
-
-                // Connectors for keywords
-                keywords.forEach((kw, kwIndex) => {
-                    const keywordY = triggerBaseY + 40 + (kwIndex * START_NODE_TRIGGER_SPACING_Y);
-                     connectors.push(
+                    {/* Conectores para as palavras-chave */}
+                    {trigger.keywords.map((kw, kwIndex) => (
                         <div
                             key={`${trigger.id}-${kw}`}
                             className="absolute -right-2.5 z-10 flex items-center"
-                            style={{ top: `${keywordY - 10}px` }} // Adjust for handle size
+                            style={{ top: `${yOffsetForTrigger + 35 + (kwIndex * START_NODE_TRIGGER_SPACING_Y) - 10}px` }}
                             title={`Palavra-chave: ${kw}`}
                         >
                             <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{kw}</span>
@@ -873,13 +880,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                 className="w-5 h-5 bg-purple-500 hover:bg-purple-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
                                 onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, kw); }}
                                 data-connector="true" data-handle-type="source" data-handle-id={kw}
-                            />
+                            >
+                                <KeyRound className="w-3 h-3 text-white" />
+                            </div>
                         </div>
-                    );
-                });
-
-                return <React.Fragment key={`trigger-group-${trigger.id}`}>{connectors}</React.Fragment>;
-            });
+                    ))}
+                </React.Fragment>
+            );
+        });
     }
 
     if (node.type === 'option') {
@@ -1294,34 +1302,89 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       case 'condition':
         return (
           <div className="space-y-3" data-no-drag="true">
+            <div className="grid grid-cols-2 gap-2">
+                <div>
+                    <Label htmlFor={`${node.id}-condtype`}>Tipo de Dado</Label>
+                    <Select
+                        value={node.conditionDataType || 'string'}
+                        onValueChange={(value) => onUpdate(node.id, { conditionDataType: value as NodeData['conditionDataType'] })}
+                    >
+                        <SelectTrigger id={`${node.id}-condtype`}><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="string">Texto</SelectItem>
+                            <SelectItem value="number">Número</SelectItem>
+                            <SelectItem value="boolean">Booleano</SelectItem>
+                            <SelectItem value="date">Data/Hora</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div>
+                    <Label htmlFor={`${node.id}-condop`}>Operador</Label>
+                    <Select
+                        value={node.conditionOperator || '=='}
+                        onValueChange={(value) => onUpdate(node.id, { conditionOperator: value as NodeData['conditionOperator'] })}
+                    >
+                        <SelectTrigger id={`${node.id}-condop`}><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            {node.conditionDataType === 'date' ? (
+                                <>
+                                    <SelectItem value="isDateAfter">É depois de</SelectItem>
+                                    <SelectItem value="isDateBefore">É antes de</SelectItem>
+                                </>
+                            ) : node.conditionDataType === 'boolean' ? (
+                                <>
+                                    <SelectItem value="isTrue">É verdadeiro</SelectItem>
+                                    <SelectItem value="isFalse">É falso</SelectItem>
+                                </>
+                            ) : (
+                                <>
+                                    <SelectItem value="==">Igual a</SelectItem>
+                                    <SelectItem value="!=">Diferente de</SelectItem>
+                                    {node.conditionDataType === 'number' && <>
+                                        <SelectItem value=">">Maior que</SelectItem>
+                                        <SelectItem value="<">Menor que</SelectItem>
+                                        <SelectItem value=">=">Maior ou igual a</SelectItem>
+                                        <SelectItem value="<=">Menor ou igual a</SelectItem>
+                                    </>}
+                                    {node.conditionDataType === 'string' && <>
+                                        <SelectItem value="contains">Contém</SelectItem>
+                                        <SelectItem value="startsWith">Começa com</SelectItem>
+                                        <SelectItem value="endsWith">Termina com</SelectItem>
+                                    </>}
+                                </>
+                            )}
+                            <SelectItem value="isEmpty">É vazio/nulo</SelectItem>
+                            <SelectItem value="isNotEmpty">Não é vazio/nulo</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
             <div>
               <Label htmlFor={`${node.id}-condvar`}>Variável (ex: {"{{variavel}}"})</Label>
               <div className="relative">
-                <Input id={`${node.id}-condvar`} placeholder="{{variavel}}" value={node.conditionVariable || ''} onChange={(e) => onUpdate(node.id, { conditionVariable: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-condvar`} placeholder="{{variavel_a_verificar}}" value={node.conditionVariable || ''} onChange={(e) => onUpdate(node.id, { conditionVariable: e.target.value })} className="pr-8" />
                 {renderVariableInserter('conditionVariable')}
               </div>
             </div>
-            <div><Label htmlFor={`${node.id}-condop`}>Operador</Label>
-              <Select value={node.conditionOperator || '=='} onValueChange={(value) => onUpdate(node.id, { conditionOperator: value as NodeData['conditionOperator'] })}>
-                <SelectTrigger id={`${node.id}-condop`}><SelectValue placeholder="Selecione o operador" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="==">Igual a</SelectItem><SelectItem value="!=">Diferente de</SelectItem>
-                  <SelectItem value=">">Maior que</SelectItem><SelectItem value="<">Menor que</SelectItem>
-                  <SelectItem value="contains">Contém</SelectItem>
-                  <SelectItem value="startsWith">Começa com</SelectItem>
-                  <SelectItem value="endsWith">Termina com</SelectItem>
-                  <SelectItem value="isEmpty">É vazio</SelectItem>
-                  <SelectItem value="isNotEmpty">Não é vazio</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor={`${node.id}-condval`}>Valor para Comparar (se aplicável)</Label>
-              <div className="relative">
-                <Input id={`${node.id}-condval`} placeholder="Valor ou {{outra_var}}" value={node.conditionValue || ''} onChange={(e) => onUpdate(node.id, { conditionValue: e.target.value })} className="pr-8" />
-                {renderVariableInserter('conditionValue')}
-              </div>
-            </div>
+            {node.conditionOperator !== 'isEmpty' && node.conditionOperator !== 'isNotEmpty' && node.conditionOperator !== 'isTrue' && node.conditionOperator !== 'isFalse' && (
+                <div>
+                    <Label htmlFor={`${node.id}-condval`}>Valor para Comparar</Label>
+                    <div className="relative">
+                        <Input
+                            id={`${node.id}-condval`}
+                            placeholder={
+                                node.conditionDataType === 'date' ? "HH:mm ou {{now}}" :
+                                "Valor ou {{outra_var}}"
+                            }
+                            value={node.conditionValue || ''}
+                            onChange={(e) => onUpdate(node.id, { conditionValue: e.target.value })}
+                            className="pr-8"
+                        />
+                        {renderVariableInserter('conditionValue')}
+                    </div>
+                     {node.conditionDataType === 'date' && <p className="text-xs text-muted-foreground mt-1">Use `HH:mm` para horas ou `{{now}}` para a hora atual.</p>}
+                </div>
+            )}
           </div>
         );
       case 'switch':
