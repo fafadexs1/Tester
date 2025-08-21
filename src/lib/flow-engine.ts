@@ -29,11 +29,6 @@ function substituteVariablesInText(text: string | undefined, variables: Record<s
   if (text === undefined || text === null) return '';
   let subbedText = String(text);
 
-  // {{now}} -> ISO
-  if (subbedText.includes('{{now}}')) {
-    subbedText = subbedText.replace(/\{\{now\}\}/g, new Date().toISOString());
-  }
-
   // Usa uma única passada com replace + callback (evita problemas de lastIndex e garante substituição correta)
   const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
   subbedText = subbedText.replace(variableRegex, (_full, varNameRaw) => {
@@ -338,7 +333,7 @@ export async function executeFlow(
         nextNodeId = findNextNodeId(currentNode.id, conditionMet ? 'true' : 'false', connections);
         break;
       }
-
+      
       case 'time-of-day': {
         let isInTimeRange = false;
         try {
@@ -360,12 +355,13 @@ export async function executeFlow(
             const endDate = new Date();
             endDate.setHours(eh, em, es, 0);
       
-            if (endDate < startDate) {
-              // Intervalo que cruza a meia-noite (ex: 22:00 às 06:00)
-              isInTimeRange = (now >= startDate) || (now <= endDate);
+            if (endDate.getTime() <= startDate.getTime()) {
+              // Intervalo cruza a meia-noite (ex: 22:00 às 06:00)
+              // Está dentro do intervalo se a hora atual for DEPOIS do início OU ANTES do fim.
+              isInTimeRange = (now.getTime() >= startDate.getTime()) || (now.getTime() <= endDate.getTime());
             } else {
               // Intervalo no mesmo dia (ex: 09:00 às 18:00)
-              isInTimeRange = now >= startDate && now <= endDate;
+              isInTimeRange = now.getTime() >= startDate.getTime() && now.getTime() <= endDate.getTime();
             }
           } else {
             console.warn(`[Flow Engine - ${session.session_id}] time-of-day: horários inválidos ou ausentes (start="${startTimeStr}" end="${endTimeStr}"). Considerando fora do intervalo.`);
