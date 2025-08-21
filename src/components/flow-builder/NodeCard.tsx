@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -127,66 +128,10 @@ const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onS
 };
 
 // Componente reutilizado para Webhook e API
-const JsonPathPicker = ({ title, description, fetchLogs, onPathSelect }: {
-  title: string;
-  description: string;
-  fetchLogs: () => Promise<any[]>;
-  onPathSelect: (path: string) => void;
-}) => {
-  const [logs, setLogs] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedLog, setSelectedLog] = useState<any | null>(null);
-  const { toast } = useToast();
-
-  const handleFetch = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await fetchLogs();
-      setLogs(data);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [fetchLogs]);
-
+const JsonPathPicker = ({ children }: { children: React.ReactNode }) => {
   return (
-    <PopoverContent className="w-80" align="end" onOpenAutoFocus={handleFetch} data-no-drag="true">
-      <div className="space-y-2">
-        <h4 className="font-medium leading-none text-sm">{title}</h4>
-        <p className="text-xs text-muted-foreground">{description}</p>
-        <div className="border rounded-md max-h-60 overflow-y-auto">
-          {isLoading && <div className="p-2 text-xs text-muted-foreground">Carregando...</div>}
-          {error && <div className="p-2 text-xs text-destructive">{error}</div>}
-          {!isLoading && !error && logs.length === 0 && <div className="p-2 text-xs text-muted-foreground">Nenhum log encontrado.</div>}
-          {!isLoading && !error && logs.length > 0 && (
-            <div className="p-1">
-              {!selectedLog ? (
-                logs.map((log, index) => (
-                  <button key={index} onClick={() => setSelectedLog(log)} className="w-full text-left p-1.5 text-xs rounded hover:bg-muted">
-                    <div className="font-mono text-primary/80">{new Date(log.timestamp).toLocaleString()}</div>
-                    <div className="text-muted-foreground truncate">{log.extractedMessage || log.requestUrl || 'Log Entry'}</div>
-                  </button>
-                ))
-              ) : (
-                <div>
-                  <Button variant="ghost" size="sm" className="h-auto p-1 mb-1 text-xs" onClick={() => setSelectedLog(null)}>
-                    &larr; Voltar para a lista
-                  </Button>
-                  <div className="p-1 bg-background/50 rounded">
-                    <JsonTreeView data={selectedLog.payload || selectedLog.response} onSelectPath={(path) => {
-                        onPathSelect(path);
-                        toast({ title: "Caminho Copiado!", description: `O caminho "${path}" foi selecionado.` });
-                    }} />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+    <PopoverContent className="w-80" align="end" data-no-drag="true">
+      {children}
     </PopoverContent>
   );
 };
@@ -836,12 +781,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
               </PopoverTrigger>
-              <JsonPathPicker
-                title="Seletor de Caminho da API"
-                description="Selecione uma chamada recente para inspecionar e escolher um caminho."
-                fetchLogs={fetchApiLogs}
-                onPathSelect={(path) => onUpdate(node.id, { apiResponsePathForValue: path })}
-              />
+                <JsonPathPicker>
+                    <div className="space-y-2 p-2">
+                        <h4 className="font-medium leading-none text-sm">Seletor de Caminho da API</h4>
+                        <p className="text-xs text-muted-foreground">Selecione uma chamada recente para inspecionar e escolher um caminho.</p>
+                    </div>
+                </JsonPathPicker>
             </Popover>
           </div>
           <p className="text-xs text-muted-foreground mt-1">O fluxo usará o valor deste caminho como se fosse a resposta do usuário.</p>
@@ -1150,12 +1095,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                   <PopoverTrigger asChild>
                                     <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
                                   </PopoverTrigger>
-                                  <JsonPathPicker 
-                                      title="Seletor de Caminho do Webhook"
-                                      description="Selecione um webhook recente para inspecionar e escolher um caminho."
-                                      fetchLogs={fetchWebhookLogs}
-                                      onPathSelect={(path) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', path)} 
-                                  />
+                                    <JsonPathPicker>
+                                        <div className="space-y-2">
+                                            <h4 className="font-medium leading-none text-sm">Seletor de Caminho do Webhook</h4>
+                                            <p className="text-xs text-muted-foreground">Selecione um webhook recente para inspecionar e escolher um caminho.</p>
+                                        </div>
+                                    </JsonPathPicker>
                                 </Popover>
                               </div>
                               <Input placeholder="Variável (ex: mensagem_usuario)" value={mapping.flowVariable} onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs flex-1" />
@@ -1628,12 +1573,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                             <PopoverTrigger asChild>
                                 <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
                             </PopoverTrigger>
-                            <JsonPathPicker 
-                                title="Seletor de Caminho da API"
-                                description="Selecione uma chamada recente para inspecionar e escolher um caminho."
-                                fetchLogs={fetchApiLogs}
-                                onPathSelect={(path) => onUpdate(node.id, { apiResponsePath: path })} 
-                            />
+                            <JsonPathPicker>
+                                <div className="space-y-2 p-2">
+                                    <h4 className="font-medium leading-none text-sm">Seletor de Caminho da API</h4>
+                                    <p className="text-xs text-muted-foreground">Selecione uma chamada recente para inspecionar e escolher um caminho.</p>
+                                </div>
+                            </JsonPathPicker>
                         </Popover>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">Se preenchido, extrai este dado para a variável de resultado principal.</p>
@@ -1657,12 +1602,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                   <PopoverTrigger asChild>
                                     <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
                                   </PopoverTrigger>
-                                  <JsonPathPicker 
-                                    title="Seletor de Caminho da API"
-                                    description="Selecione uma chamada recente para inspecionar e escolher um caminho."
-                                    fetchLogs={fetchApiLogs}
-                                    onPathSelect={(path) => handleApiResponseMappingChange(mapping.id, 'jsonPath', path)} 
-                                  />
+                                   <JsonPathPicker>
+                                        <div className="space-y-2 p-2">
+                                            <h4 className="font-medium leading-none text-sm">Seletor de Caminho da API</h4>
+                                            <p className="text-xs text-muted-foreground">Selecione uma chamada recente para inspecionar e escolher um caminho.</p>
+                                        </div>
+                                   </JsonPathPicker>
                                 </Popover>
                           </div>
                           <Input placeholder="Variável (ex: id_usuario)" value={mapping.flowVariable} onChange={(e) => handleApiResponseMappingChange(mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs" />
@@ -2356,16 +2301,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       {/* Webhook History Dialog */}
       <Dialog open={isWebhookHistoryDialogOpen} onOpenChange={setIsWebhookHistoryDialogOpen}>
         <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[85vh] flex flex-col" data-no-drag="true">
-          <JsonPathPicker
-            title="Histórico de Webhooks Recebidos"
-            description="Exibe os últimos 50 eventos de webhook recebidos para este fluxo. Clique em uma chave do JSON para copiar seu caminho."
-            fetchLogs={fetchWebhookLogs}
-            onPathSelect={(path) => {
-                navigator.clipboard.writeText(path).then(() => {
-                    toast({ title: "Caminho copiado!", description: `O caminho "${path}" foi copiado.` });
-                });
-            }}
-          />
+            <DialogHeader>
+              <DialogTitle>Histórico de Webhooks</DialogTitle>
+              <DialogDescription>
+                Exibe os últimos 50 eventos de webhook recebidos para este fluxo. Clique em uma chave do JSON para copiar seu caminho.
+              </DialogDescription>
+            </DialogHeader>
+             <div className="flex-1 overflow-y-auto">
+                {/* O conteúdo do seletor vai aqui, para ser controlado pelo Dialog */}
+            </div>
            <DialogFooter>
             <Button variant="outline" onClick={() => setIsWebhookHistoryDialogOpen(false)}>Fechar</Button>
           </DialogFooter>
@@ -2375,16 +2319,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       {/* API Call History Dialog */}
       <Dialog open={isApiHistoryDialogOpen} onOpenChange={setIsApiHistoryDialogOpen}>
          <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[85vh] flex flex-col" data-no-drag="true">
-          <JsonPathPicker
-            title={`Histórico de Chamadas API: ${node.title}`}
-            description="Exibe as últimas 50 chamadas de API feitas por este nó. Clique em uma chave do JSON para copiar seu caminho."
-            fetchLogs={fetchApiLogs}
-            onPathSelect={(path) => {
-                navigator.clipboard.writeText(path).then(() => {
-                    toast({ title: "Caminho copiado!", description: `O caminho "${path}" foi copiado.` });
-                });
-            }}
-          />
+           <DialogHeader>
+                <DialogTitle>{`Histórico de Chamadas API: ${node.title}`}</DialogTitle>
+                <DialogDescription>
+                   Exibe as últimas 50 chamadas de API feitas por este nó. Clique em uma chave do JSON para copiar seu caminho.
+                </DialogDescription>
+            </DialogHeader>
+             <div className="flex-1 overflow-y-auto">
+                {/* O conteúdo do seletor vai aqui, para ser controlado pelo Dialog */}
+            </div>
            <DialogFooter>
             <Button variant="outline" onClick={() => setIsApiHistoryDialogOpen(false)}>Fechar</Button>
           </DialogFooter>
