@@ -200,9 +200,12 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
         if (optionIndex !== -1) {
           sourceHandleYOffset = OPTION_NODE_HANDLE_INITIAL_Y_OFFSET + (optionIndex * OPTION_NODE_HANDLE_SPACING_Y);
         }
-      } else if (sourceNode.type === 'condition') {
-        if (conn.sourceHandle === 'true') sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (1/3) + 6;
-        else if (conn.sourceHandle === 'false') sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (2/3) + 6;
+      } else if (sourceNode.type === 'condition' || sourceNode.type === 'time-of-day') {
+        if (conn.sourceHandle === 'true') {
+            sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (1/3) + 6;
+        } else if (conn.sourceHandle === 'false') {
+            sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (2/3) + 6;
+        }
       }
 
       const x1 = sourceNode.x + NODE_WIDTH;
