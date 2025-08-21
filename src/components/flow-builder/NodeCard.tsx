@@ -637,21 +637,20 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       });
 
       // Log the successful call
-      if (globalThis.apiCallLogsByFlow && activeWorkspace?.id) {
-          if (!globalThis.apiCallLogsByFlow.has(activeWorkspace.id)) {
-              globalThis.apiCallLogsByFlow.set(activeWorkspace.id, []);
-          }
-          const logs = globalThis.apiCallLogsByFlow.get(activeWorkspace.id)!;
-          logs.unshift({
-              timestamp: new Date().toISOString(),
+      if (activeWorkspace?.id) {
+          const logData = {
+              workspaceId: activeWorkspace.id,
               nodeId: node.id,
               nodeTitle: node.title,
               requestUrl: node.apiUrl,
               response: result.data,
               error: null,
+          };
+          await fetch('/api/api-call-logs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(logData),
           });
-          if (logs.length > 50) logs.pop();
-          globalThis.apiCallLogsByFlow.set(activeWorkspace.id, logs);
       }
 
     } catch (error: any) {
@@ -679,8 +678,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   }, [activeWorkspace?.id, node.id, toast]);
 
   const handleOpenApiHistory = () => {
-    setIsApiHistoryDialogOpen(true);
     setIsLoadingApiLogs(true);
+    setIsApiHistoryDialogOpen(true);
     fetchApiLogs().then(logs => {
         setApiLogs(logs);
     }).catch(err => {
@@ -857,7 +856,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               onChange={(e) => onUpdate(node.id, { apiResponsePathForValue: e.target.value })}
               className="pr-8"
             />
-             <Popover>
+             <Popover onOpenChange={setIsJsonPathPickerOpen}>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
               </PopoverTrigger>
@@ -1168,7 +1167,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                   value={mapping.jsonPath}
                                   onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', e.target.value)}
                                   className="h-7 text-xs pl-2 pr-7" />
-                                <Popover>
+                                <Popover onOpenChange={setIsJsonPathPickerOpen}>
                                   <PopoverTrigger asChild>
                                     <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
                                   </PopoverTrigger>
@@ -2473,5 +2472,3 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
-    
