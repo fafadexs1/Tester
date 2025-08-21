@@ -250,7 +250,7 @@ export async function executeFlow(
           const startTimeStr = (currentNode.startTime ?? '').toString().trim();
           const endTimeStr = (currentNode.endTime ?? '').toString().trim();
       
-          if (startTimeStr && endTimeStr && /^\d{2}:\d{2}(:\d{2})?$/.test(startTimeStr) && /^\d{2}:\d{2}(:\d{2})?$/.test(endTimeStr)) {
+          if (startTimeStr && endTimeStr && /^\d{2}:\d{2}(?::\d{2})?$/.test(startTimeStr) && /^\d{2}:\d{2}(?::\d{2})?$/.test(endTimeStr)) {
             const parseHM = (s: string) => {
               const [h, m, s2 = '0'] = s.split(':').map(Number);
               return { h, m, s: s2 };
@@ -258,15 +258,17 @@ export async function executeFlow(
             const { h: sh, m: sm, s: ss } = parseHM(startTimeStr);
             const { h: eh, m: em, s: es } = parseHM(endTimeStr);
       
-            const startDate = new Date();
+            const startDate = new Date(); // Use server's current date as base
             startDate.setHours(sh, sm, ss, 0);
       
-            const endDate = new Date();
+            const endDate = new Date(); // Use server's current date as base
             endDate.setHours(eh, em, es, 0);
       
             if (endDate.getTime() <= startDate.getTime()) {
-              isInTimeRange = (now.getTime() >= startDate.getTime()) || (now.getTime() <= endDate.getTime());
+              // Handles overnight ranges (e.g., 22:00 to 06:00)
+              isInTimeRange = now.getTime() >= startDate.getTime() || now.getTime() <= endDate.getTime();
             } else {
+              // Same-day range
               isInTimeRange = now.getTime() >= startDate.getTime() && now.getTime() <= endDate.getTime();
             }
           } else {
@@ -274,7 +276,7 @@ export async function executeFlow(
             isInTimeRange = false;
           }
       
-          console.log(`[Flow Engine - ${session.session_id}] Time of Day Check: ${currentNode.startTime}-${currentNode.endTime}. Now: ${now.toLocaleTimeString()}. In range: ${isInTimeRange}`);
+          console.log(`[Flow Engine - ${session.session_id}] Time of Day Check: ${currentNode.startTime}-${currentNode.endTime}. Server Now: ${now.toLocaleTimeString()}. In range: ${isInTimeRange}`);
         } catch (err: any) {
           console.error(`[Flow Engine - ${session.session_id}] Time of Day Error:`, err);
           isInTimeRange = false;
@@ -283,7 +285,7 @@ export async function executeFlow(
         nextNodeId = findNextNodeId(currentNode.id, isInTimeRange ? 'true' : 'false', connections);
         break;
       }
-
+      
       case 'switch': {
         const switchVarName = currentNode.switchVariable?.replace(/\{\{|\}\}/g, '').trim();
         const switchActualValue = switchVarName ? getProperty(session.flow_variables, switchVarName) : undefined;
@@ -381,7 +383,7 @@ export async function executeFlow(
         await sendWhatsAppMessageAction({
           ...apiConfig,
           instanceName,
-          recipientPhoneNumber: recipientPhoneNumber.split('@')[0], // Garante que apenas o número seja usado
+          recipientPhoneNumber: recipientPhoneNumber.split('@')[0], 
           messageType: nodeType === 'whatsapp-text' ? 'text' : currentNode.mediaType || 'image',
           textContent: nodeType === 'whatsapp-text' ? substituteVariablesInText(currentNode.textMessage, session.flow_variables) : undefined,
           mediaUrl: nodeType === 'whatsapp-media' ? substituteVariablesInText(currentNode.mediaUrl, session.flow_variables) : undefined,
@@ -478,5 +480,3 @@ export async function executeFlow(
     }
   }
 }
-
-    
