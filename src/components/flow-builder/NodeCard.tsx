@@ -830,55 +830,54 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     if (node.type === 'end-flow') return null;
 
     if (node.type === 'start') {
-      const allTriggers = node.triggers || [];
-      let yPosition = 50; // base interna do card
+        const allTriggers = node.triggers || [];
+        let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
 
-      return allTriggers
-        .filter(t => t.enabled)
-        .map((trigger) => {
-          const currentY = yPosition;
-          const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
+        return allTriggers
+            .filter(t => t.enabled)
+            .map((trigger) => {
+                const triggerY = yOffset;
+                const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
+                const triggerBlockHeight = 40 + (keywords.length * START_NODE_TRIGGER_SPACING_Y);
+                yOffset += triggerBlockHeight;
 
-          const triggerHeight = 60 + (keywords.length * 35);
-          yPosition += triggerHeight;
+                return (
+                    <React.Fragment key={trigger.id}>
+                        <div
+                            className="absolute -right-2.5 z-10 flex items-center"
+                            style={{ top: `${triggerY}px`, transform: 'translateY(-50%)' }}
+                            title={`Gatilho: ${trigger.name}`}
+                        >
+                            <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
+                            <div
+                                className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+                                onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
+                                data-connector="true" data-handle-type="source" data-handle-id={trigger.name}
+                            >
+                                <Hash className="w-3 h-3 text-accent-foreground" />
+                            </div>
+                        </div>
 
-          return (
-            <React.Fragment key={trigger.id}>
-              <div
-                className="absolute -right-2.5 z-10 flex items-center"
-                style={{ top: `${currentY - 10}px` }}
-                title={`Gatilho: ${trigger.name}`}
-              >
-                <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
-                <div
-                  className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-                  onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
-                  data-connector="true" data-handle-type="source" data-handle-id={trigger.name}
-                >
-                  <Hash className="w-3 h-3 text-accent-foreground" />
-                </div>
-              </div>
-
-              {keywords.map((kw, kwIndex) => (
-                <div
-                  key={`${trigger.id}-${kw}`}
-                  className="absolute -right-2.5 z-10 flex items-center"
-                  style={{ top: `${currentY + 35 + (kwIndex * START_NODE_TRIGGER_SPACING_Y) - 10}px` }}
-                  title={`Palavra-chave: ${kw}`}
-                >
-                  <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{kw}</span>
-                  <div
-                    className="w-5 h-5 bg-purple-500 hover:bg-purple-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-                    onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, kw); }}
-                    data-connector="true" data-handle-type="source" data-handle-id={kw}
-                  >
-                    <KeyRound className="w-3 h-3 text-white" />
-                  </div>
-                </div>
-              ))}
-            </React.Fragment>
-          );
-        });
+                        {keywords.map((kw, kwIndex) => (
+                            <div
+                                key={`${trigger.id}-${kw}`}
+                                className="absolute -right-2.5 z-10 flex items-center"
+                                style={{ top: `${triggerY + 25 + (kwIndex * START_NODE_TRIGGER_SPACING_Y)}px`, transform: 'translateY(-50%)' }}
+                                title={`Palavra-chave: ${kw}`}
+                            >
+                                <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{kw}</span>
+                                <div
+                                    className="w-5 h-5 bg-purple-500 hover:bg-purple-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+                                    onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, kw); }}
+                                    data-connector="true" data-handle-type="source" data-handle-id={kw}
+                                >
+                                    <KeyRound className="w-3 h-3 text-white" />
+                                </div>
+                            </div>
+                        ))}
+                    </React.Fragment>
+                );
+            });
     }
 
     if (node.type === 'option') {
@@ -1363,10 +1362,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     <div className="relative">
                         <Input
                             id={`${node.id}-condval`}
-                            placeholder={
-                                node.conditionDataType === 'date' ? "HH:mm ou {{now}}" :
-                                "Valor ou {{outra_var}}"
-                            }
+                            placeholder="Valor ou {{outra_var}}"
                             value={node.conditionValue || ''}
                             onChange={(e) => onUpdate(node.id, { conditionValue: e.target.value })}
                             className="pr-8"
