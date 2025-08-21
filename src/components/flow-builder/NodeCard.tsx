@@ -24,7 +24,7 @@ import {
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
   CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, Headset, Hash,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, Hourglass, GitCommitHorizontal, MessageCircle, Rocket, AlertCircle, FileText, History, Target, Bold, Italic, Strikethrough, Code
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, Loader2, KeyRound, StopCircle, MousePointerClick, Hourglass, GitCommitHorizontal, MessageCircle, Rocket, AlertCircle, FileText, History, Target, Bold, Italic, Strikethrough, Code, List, Baseline
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -126,45 +126,48 @@ const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onS
   );
 };
 
-const WebhookPathPicker = ({ onPathSelect, workspaceId }: { onPathSelect: (path: string) => void, workspaceId: string }) => {
-  const [logs, setLogs] = useState<WebhookLogEntry[]>([]);
+// Componente reutilizado para Webhook e API
+const JsonPathPicker = ({ title, description, fetchLogs, onPathSelect }: {
+  title: string;
+  description: string;
+  fetchLogs: () => Promise<any[]>;
+  onPathSelect: (path: string) => void;
+}) => {
+  const [logs, setLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedLog, setSelectedLog] = useState<WebhookLogEntry | null>(null);
+  const [selectedLog, setSelectedLog] = useState<any | null>(null);
+  const { toast } = useToast();
 
-  const fetchLogs = useCallback(async () => {
+  const handleFetch = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/evolution/webhook-logs?workspaceId=${workspaceId}`);
-      if (!response.ok) throw new Error('Falha ao buscar logs');
-      const data = await response.json();
+      const data = await fetchLogs();
       setLogs(data);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
-  }, [workspaceId]);
+  }, [fetchLogs]);
 
   return (
-    <PopoverContent className="w-80" align="end" onOpenAutoFocus={fetchLogs} data-no-drag="true">
+    <PopoverContent className="w-80" align="end" onOpenAutoFocus={handleFetch} data-no-drag="true">
       <div className="space-y-2">
-        <h4 className="font-medium leading-none text-sm">Seletor de Caminho do Webhook</h4>
-        <p className="text-xs text-muted-foreground">
-          {selectedLog ? "Clique em uma chave para selecionar o caminho." : "Selecione um webhook recebido para inspecionar."}
-        </p>
+        <h4 className="font-medium leading-none text-sm">{title}</h4>
+        <p className="text-xs text-muted-foreground">{description}</p>
         <div className="border rounded-md max-h-60 overflow-y-auto">
           {isLoading && <div className="p-2 text-xs text-muted-foreground">Carregando...</div>}
           {error && <div className="p-2 text-xs text-destructive">{error}</div>}
-          {!isLoading && !error && logs.length === 0 && <div className="p-2 text-xs text-muted-foreground">Nenhum log encontrado para este fluxo.</div>}
+          {!isLoading && !error && logs.length === 0 && <div className="p-2 text-xs text-muted-foreground">Nenhum log encontrado.</div>}
           {!isLoading && !error && logs.length > 0 && (
             <div className="p-1">
               {!selectedLog ? (
                 logs.map((log, index) => (
                   <button key={index} onClick={() => setSelectedLog(log)} className="w-full text-left p-1.5 text-xs rounded hover:bg-muted">
                     <div className="font-mono text-primary/80">{new Date(log.timestamp).toLocaleString()}</div>
-                    <div className="text-muted-foreground truncate">{log.extractedMessage || 'Sem mensagem extraída'}</div>
+                    <div className="text-muted-foreground truncate">{log.extractedMessage || log.requestUrl || 'Log Entry'}</div>
                   </button>
                 ))
               ) : (
@@ -173,7 +176,10 @@ const WebhookPathPicker = ({ onPathSelect, workspaceId }: { onPathSelect: (path:
                     &larr; Voltar para a lista
                   </Button>
                   <div className="p-1 bg-background/50 rounded">
-                    <JsonTreeView data={selectedLog.payload} onSelectPath={onPathSelect} />
+                    <JsonTreeView data={selectedLog.payload || selectedLog.response} onSelectPath={(path) => {
+                        onPathSelect(path);
+                        toast({ title: "Caminho Copiado!", description: `O caminho "${path}" foi selecionado.` });
+                    }} />
                   </div>
                 </div>
               )}
@@ -247,14 +253,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const [isTestingApi, setIsTestingApi] = useState(false);
 
   const [isWebhookHistoryDialogOpen, setIsWebhookHistoryDialogOpen] = useState(false);
-  const [webhookLogs, setWebhookLogs] = useState<WebhookLogEntry[]>([]);
-  const [isLoadingWebhookLogs, setIsLoadingWebhookLogs] = useState(false);
-  const [webhookLogsError, setWebhookLogsError] = useState<string | null>(null);
   
   const [isApiHistoryDialogOpen, setIsApiHistoryDialogOpen] = useState(false);
-  const [apiLogs, setApiLogs] = useState<ApiLogEntry[]>([]);
-  const [isLoadingApiLogs, setIsLoadingApiLogs] = useState(false);
-  const [apiLogsError, setApiLogsError] = useState<string | null>(null);
 
 
   const [supabaseTables, setSupabaseTables] = useState<{ name: string }[]>([]);
@@ -551,7 +551,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     const currentList = (node[listName] as any[] || []);
     let newItem;
     if(listName === 'apiResponseMappings') {
-        newItem = { id: uuidv4(), jsonPath: '', flowVariable: '' };
+        newItem = { id: uuidv4(), jsonPath: '', flowVariable: '', extractAs: 'single' };
     } else {
         newItem = { id: uuidv4(), key: '', value: '' };
     }
@@ -563,7 +563,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     onUpdate(node.id, { [listName]: currentList.filter(item => item.id !== itemId) });
   };
   
-  const handleApiResponseMappingChange = (mappingId: string, field: 'jsonPath' | 'flowVariable', value: string) => {
+  const handleApiResponseMappingChange = (mappingId: string, field: 'jsonPath' | 'flowVariable' | 'extractAs', value: string) => {
     const currentMappings = (node.apiResponseMappings || []);
     onUpdate(node.id, {
         apiResponseMappings: currentMappings.map(mapping => 
@@ -652,55 +652,31 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   
   const fetchApiLogs = useCallback(async () => {
     if (!activeWorkspace?.id) {
-        setApiLogsError("ID do fluxo ativo não encontrado.");
-        return;
+        toast({ title: "Erro", description: "ID do fluxo não encontrado para buscar logs.", variant: "destructive" });
+        return [];
     }
-    setIsLoadingApiLogs(true);
-    setApiLogsError(null);
-    try {
-        const response = await fetch(`/api/api-call-logs?workspaceId=${activeWorkspace.id}`);
-        if (!response.ok) throw new Error('Falha ao buscar logs de API');
-        const data: ApiLogEntry[] = await response.json();
-        const filteredLogs = data.filter(log => log.nodeId === node.id);
-        setApiLogs(filteredLogs);
-    } catch (error: any) {
-        setApiLogsError(error.message);
-        setApiLogs([]);
-    } finally {
-        setIsLoadingApiLogs(false);
-    }
-  }, [activeWorkspace?.id, node.id]);
+    const response = await fetch(`/api/api-call-logs?workspaceId=${activeWorkspace.id}`);
+    if (!response.ok) throw new Error('Falha ao buscar logs de API');
+    const data: ApiLogEntry[] = await response.json();
+    return data.filter(log => log.nodeId === node.id);
+  }, [activeWorkspace?.id, node.id, toast]);
 
   const handleOpenApiHistory = () => {
-    fetchApiLogs();
     setIsApiHistoryDialogOpen(true);
   };
 
-
   const fetchWebhookLogs = useCallback(async () => {
     if (!activeWorkspace?.id) {
-      setWebhookLogsError("ID do fluxo ativo não encontrado.");
-      return;
+      toast({ title: "Erro", description: "ID do fluxo não encontrado para buscar logs.", variant: "destructive" });
+      return [];
     }
-    setIsLoadingWebhookLogs(true);
-    setWebhookLogsError(null);
-    try {
-      const response = await fetch(`/api/evolution/webhook-logs?workspaceId=${activeWorkspace.id}`);
-      if (!response.ok) {
-        throw new Error('Falha ao buscar logs do webhook');
-      }
-      const data: WebhookLogEntry[] = await response.json();
-      setWebhookLogs(data);
-    } catch (error: any) {
-      setWebhookLogsError(error.message);
-      setWebhookLogs([]);
-    } finally {
-      setIsLoadingWebhookLogs(false);
-    }
-  }, [activeWorkspace?.id]);
+    const response = await fetch(`/api/evolution/webhook-logs?workspaceId=${activeWorkspace.id}`);
+    if (!response.ok) throw new Error('Falha ao buscar logs de webhook');
+    return await response.json();
+  }, [activeWorkspace?.id, toast]);
+
 
   const handleOpenWebhookHistory = () => {
-    fetchWebhookLogs();
     setIsWebhookHistoryDialogOpen(true);
   };
 
@@ -856,11 +832,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               onChange={(e) => onUpdate(node.id, { apiResponsePathForValue: e.target.value })}
               className="pr-8"
             />
-            <Popover>
+             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
               </PopoverTrigger>
-              <WebhookPathPicker onPathSelect={(path) => onUpdate(node.id, { apiResponsePathForValue: path })} workspaceId={activeWorkspace?.id || ''} />
+              <JsonPathPicker
+                title="Seletor de Caminho da API"
+                description="Selecione uma chamada recente para inspecionar e escolher um caminho."
+                fetchLogs={fetchApiLogs}
+                onPathSelect={(path) => onUpdate(node.id, { apiResponsePathForValue: path })}
+              />
             </Popover>
           </div>
           <p className="text-xs text-muted-foreground mt-1">O fluxo usará o valor deste caminho como se fosse a resposta do usuário.</p>
@@ -1169,7 +1150,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                   <PopoverTrigger asChild>
                                     <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
                                   </PopoverTrigger>
-                                  <WebhookPathPicker onPathSelect={(path) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', path)} workspaceId={activeWorkspace?.id || ''} />
+                                  <JsonPathPicker 
+                                      title="Seletor de Caminho do Webhook"
+                                      description="Selecione um webhook recente para inspecionar e escolher um caminho."
+                                      fetchLogs={fetchWebhookLogs}
+                                      onPathSelect={(path) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', path)} 
+                                  />
                                 </Popover>
                               </div>
                               <Input placeholder="Variável (ex: mensagem_usuario)" value={mapping.flowVariable} onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs flex-1" />
@@ -1636,7 +1622,20 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               <TabsContent value="mapping" className="mt-4 space-y-3">
                   <div>
                     <Label htmlFor={`${node.id}-apiResponsePath`}>Caminho do Dado Principal (opcional)</Label>
-                    <Input id={`${node.id}-apiResponsePath`} placeholder="Ex: data.user.name" value={node.apiResponsePath || ''} onChange={(e) => onUpdate(node.id, { apiResponsePath: e.target.value })} />
+                     <div className="relative">
+                        <Input id={`${node.id}-apiResponsePath`} placeholder="Ex: data.user.name" value={node.apiResponsePath || ''} onChange={(e) => onUpdate(node.id, { apiResponsePath: e.target.value })} className="pr-8" />
+                         <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
+                            </PopoverTrigger>
+                            <JsonPathPicker 
+                                title="Seletor de Caminho da API"
+                                description="Selecione uma chamada recente para inspecionar e escolher um caminho."
+                                fetchLogs={fetchApiLogs}
+                                onPathSelect={(path) => onUpdate(node.id, { apiResponsePath: path })} 
+                            />
+                        </Popover>
+                    </div>
                     <p className="text-xs text-muted-foreground mt-1">Se preenchido, extrai este dado para a variável de resultado principal.</p>
                   </div>
                   <div>
@@ -1647,16 +1646,38 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     <Label className="text-xs font-medium">Mapeamento de Múltiplas Variáveis (Opcional)</Label>
                     <div className="space-y-2 mt-1">
                       {(node.apiResponseMappings || []).map(mapping => (
-                        <div key={mapping.id} className="flex items-center space-x-1.5">
-                          <div className="relative flex-1">
+                        <div key={mapping.id} className="grid grid-cols-[1fr,1fr,auto] items-center gap-x-1.5">
+                           <div className="relative">
                             <Input
                               placeholder="Caminho JSON (ex: data.id)"
                               value={mapping.jsonPath}
                               onChange={(e) => handleApiResponseMappingChange(mapping.id, 'jsonPath', e.target.value)}
                               className="h-7 text-xs pl-2 pr-7" />
+                               <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
+                                  </PopoverTrigger>
+                                  <JsonPathPicker 
+                                    title="Seletor de Caminho da API"
+                                    description="Selecione uma chamada recente para inspecionar e escolher um caminho."
+                                    fetchLogs={fetchApiLogs}
+                                    onPathSelect={(path) => handleApiResponseMappingChange(mapping.id, 'jsonPath', path)} 
+                                  />
+                                </Popover>
                           </div>
-                          <Input placeholder="Variável (ex: id_usuario)" value={mapping.flowVariable} onChange={(e) => handleApiResponseMappingChange(mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs flex-1" />
-                          <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6"><Trash2 className="w-3.5 h-3.5" /></Button>
+                          <Input placeholder="Variável (ex: id_usuario)" value={mapping.flowVariable} onChange={(e) => handleApiResponseMappingChange(mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs" />
+                          <div className="flex items-center gap-0.5">
+                             <Select value={mapping.extractAs || 'single'} onValueChange={(value) => handleApiResponseMappingChange(mapping.id, 'extractAs', value)}>
+                                <SelectTrigger className="h-7 w-[65px] text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="single"><div className="flex items-center gap-1.5"><Baseline className="w-3.5 h-3.5"/><span>Valor</span></div></SelectItem>
+                                  <SelectItem value="list"><div className="flex items-center gap-1.5"><List className="w-3.5 h-3.5"/><span>Lista</span></div></SelectItem>
+                                </SelectContent>
+                              </Select>
+                            <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6"><Trash2 className="w-3.5 h-3.5" /></Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -2335,59 +2356,17 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       {/* Webhook History Dialog */}
       <Dialog open={isWebhookHistoryDialogOpen} onOpenChange={setIsWebhookHistoryDialogOpen}>
         <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[85vh] flex flex-col" data-no-drag="true">
-          <DialogHeader>
-            <DialogTitle>Histórico de Webhooks Recebidos</DialogTitle>
-            <DialogDescription>
-              Exibe os últimos 50 eventos de webhook recebidos para este fluxo. Clique em uma chave do JSON para copiar seu caminho para a área de transferência.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
-            {isLoadingWebhookLogs && <div className="flex justify-center items-center h-full"><Loader2 className="w-8 w-8 animate-spin text-muted-foreground" /></div>}
-            {webhookLogsError && (
-              <div className="p-3 bg-destructive/10 border border-destructive text-destructive rounded-md text-sm">
-                <div className="flex items-center gap-2 font-medium"><AlertCircle className="h-5 w-5" /> Erro ao carregar logs:</div>
-                <p className="mt-1 text-xs">{webhookLogsError}</p>
-              </div>
-            )}
-            {!isLoadingWebhookLogs && !webhookLogsError && webhookLogs.length === 0 && (
-              <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4">
-                <FileText className="w-12 h-12 mb-3" />
-                <p className="text-sm">Nenhum log de webhook encontrado para este fluxo.</p>
-              </div>
-            )}
-            {!isLoadingWebhookLogs && webhookLogs.length > 0 && (
-              <ScrollArea className="flex-1 border rounded-md bg-muted/30">
-                <div className="p-3 space-y-3">
-                  {webhookLogs.map((log, index) => (
-                    <details key={index} className="bg-background p-2.5 rounded shadow-sm text-xs">
-                      <summary className="cursor-pointer font-medium text-foreground/80 hover:text-foreground select-none">
-                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm text-primary/80 mr-2">{new Date(log.timestamp).toLocaleString()}</span>
-                        <span className="font-semibold mr-1">{log.method}</span>
-                        {log.payload?.event && <span className="text-accent font-semibold">{log.payload.event}</span>}
-                        {log.extractedMessage && <span className="ml-2 text-slate-500 italic">Msg: "{log.extractedMessage.substring(0, 30)}{log.extractedMessage.length > 30 ? '...' : ''}"</span>}
-                        {log.webhook_remoteJid && <span className="ml-2 text-blue-500 text-xs">De: {log.webhook_remoteJid}</span>}
-                      </summary>
-                      <div className="mt-2 p-2 bg-muted/20 rounded-sm overflow-auto text-xs text-foreground/70 space-y-1.5">
-                        {log.method && log.url && <div><strong>Endpoint:</strong> <span className="break-all">{log.method} {log.url}</span></div>}
-                        {log.ip && <div><strong>IP Origem:</strong> {log.ip}</div>}
-                        {log.headers && <div><strong>Headers:</strong><pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-24 overflow-y-auto">{JSON.stringify(log.headers, null, 2)}</pre></div>}
-                        <div><strong>Payload Completo (clique para copiar caminho):</strong>
-                          <div className="mt-1 p-2 bg-background/30 rounded text-xs max-h-60 overflow-y-auto">
-                            <JsonTreeView data={log.payload} onSelectPath={(path) => {
-                              navigator.clipboard.writeText(path).then(() => {
-                                toast({ title: "Caminho copiado!", description: `O caminho "${path}" foi copiado.` });
-                              });
-                            }} />
-                          </div>
-                        </div>
-                      </div>
-                    </details>
-                  ))}
-                </div>
-              </ScrollArea>
-            )}
-          </div>
-          <DialogFooter>
+          <JsonPathPicker
+            title="Histórico de Webhooks Recebidos"
+            description="Exibe os últimos 50 eventos de webhook recebidos para este fluxo. Clique em uma chave do JSON para copiar seu caminho."
+            fetchLogs={fetchWebhookLogs}
+            onPathSelect={(path) => {
+                navigator.clipboard.writeText(path).then(() => {
+                    toast({ title: "Caminho copiado!", description: `O caminho "${path}" foi copiado.` });
+                });
+            }}
+          />
+           <DialogFooter>
             <Button variant="outline" onClick={() => setIsWebhookHistoryDialogOpen(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
@@ -2395,48 +2374,20 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       
       {/* API Call History Dialog */}
       <Dialog open={isApiHistoryDialogOpen} onOpenChange={setIsApiHistoryDialogOpen}>
-        <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[85vh] flex flex-col" data-no-drag="true">
-            <DialogHeader>
-                <DialogTitle>Histórico de Chamadas API: {node.title}</DialogTitle>
-                <DialogDescription>
-                  Exibe as últimas 50 chamadas de API feitas por este nó.
-                </DialogDescription>
-            </DialogHeader>
-             <div className="flex-1 overflow-hidden flex flex-col py-4 space-y-2">
-                 {isLoadingApiLogs && <div className="flex justify-center items-center h-full"><Loader2 className="w-8 w-8 animate-spin text-muted-foreground" /></div>}
-                 {apiLogsError && <p className="text-destructive text-sm">{apiLogsError}</p>}
-                 {!isLoadingApiLogs && !apiLogsError && apiLogs.length === 0 && (
-                     <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground p-4">
-                        <Webhook className="w-12 h-12 mb-3" />
-                        <p className="text-sm">Nenhum log de chamada API encontrado para este nó.</p>
-                    </div>
-                )}
-                 {!isLoadingApiLogs && apiLogs.length > 0 && (
-                     <ScrollArea className="flex-1 border rounded-md bg-muted/30">
-                        <div className="p-3 space-y-3">
-                        {apiLogs.map((log, index) => (
-                            <details key={index} className="bg-background p-2.5 rounded shadow-sm text-xs">
-                                <summary className="cursor-pointer font-medium text-foreground/80 hover:text-foreground select-none">
-                                    <span className="font-mono bg-muted px-1.5 py-0.5 rounded-sm text-primary/80 mr-2">{new Date(log.timestamp).toLocaleString()}</span>
-                                    <span className={cn("font-semibold", log.error ? 'text-destructive' : 'text-green-500')}>{log.error ? 'FALHA' : 'SUCESSO'}</span>
-                                    <span className="ml-2 text-slate-500 italic truncate" title={log.requestUrl}>{log.requestUrl}</span>
-                                </summary>
-                                 <div className="mt-2 p-2 bg-muted/20 rounded-sm overflow-auto text-xs text-foreground/70 space-y-1.5">
-                                    {log.error ? (
-                                        <div><strong>Erro:</strong><pre className="mt-1 p-1 bg-destructive/10 rounded text-xs max-h-24 overflow-y-auto">{JSON.stringify(log.error, null, 2)}</pre></div>
-                                    ) : (
-                                        <div><strong>Resposta:</strong><pre className="mt-1 p-1 bg-background/30 rounded text-xs max-h-60 overflow-y-auto">{JSON.stringify(log.response, null, 2)}</pre></div>
-                                    )}
-                                </div>
-                            </details>
-                        ))}
-                        </div>
-                    </ScrollArea>
-                )}
-            </div>
-            <DialogFooter>
-                <Button variant="outline" onClick={() => setIsApiHistoryDialogOpen(false)}>Fechar</Button>
-            </DialogFooter>
+         <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[85vh] flex flex-col" data-no-drag="true">
+          <JsonPathPicker
+            title={`Histórico de Chamadas API: ${node.title}`}
+            description="Exibe as últimas 50 chamadas de API feitas por este nó. Clique em uma chave do JSON para copiar seu caminho."
+            fetchLogs={fetchApiLogs}
+            onPathSelect={(path) => {
+                navigator.clipboard.writeText(path).then(() => {
+                    toast({ title: "Caminho copiado!", description: `O caminho "${path}" foi copiado.` });
+                });
+            }}
+          />
+           <DialogFooter>
+            <Button variant="outline" onClick={() => setIsApiHistoryDialogOpen(false)}>Fechar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -49,6 +49,7 @@
     "firebase": "^11.7.0",
     "framer-motion": "^11.2.10",
     "genkit": "^1.8.0",
+    "jsonata": "^2.0.3",
     "lucide-react": "^0.475.0",
     "next": "15.2.3",
     "nodemailer": "^6.9.13",
@@ -79,5 +80,3 @@
     "typescript": "^5"
   }
 }
-
-    

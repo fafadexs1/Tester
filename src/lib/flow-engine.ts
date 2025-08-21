@@ -341,7 +341,7 @@ export async function executeFlow(
           const startTimeStr = (currentNode.startTime ?? '').toString().trim();
           const endTimeStr = (currentNode.endTime ?? '').toString().trim();
       
-          if (startTimeStr && endTimeStr && /^\d{2}:\d{2}(:\d{2})?$/.test(startTimeStr) && /^\d{2}:\d{2}(:\d{2})?$/.test(endTimeStr)) {
+          if (startTimeStr && endTimeStr && /^\d{2}:\d{2}(?::\d{2})?$/.test(startTimeStr) && /^\d{2}:\d{2}(?::\d{2})?$/.test(endTimeStr)) {
             const parseHM = (s: string) => {
               const [h, m, s2 = '0'] = s.split(':').map(Number);
               return { h, m, s: s2 };
@@ -355,9 +355,12 @@ export async function executeFlow(
             const endDate = new Date();
             endDate.setHours(eh, em, es, 0);
       
+            // Lógica para intervalo que atravessa a meia-noite (ex: 22:00-06:00)
             if (endDate.getTime() <= startDate.getTime()) {
+              // Se a hora atual for DEPOIS do início OU ANTES do fim, está dentro.
               isInTimeRange = (now.getTime() >= startDate.getTime()) || (now.getTime() <= endDate.getTime());
             } else {
+              // Intervalo normal no mesmo dia
               isInTimeRange = now.getTime() >= startDate.getTime() && now.getTime() <= endDate.getTime();
             }
           } else {
@@ -411,8 +414,12 @@ export async function executeFlow(
 
       case 'api-call': {
         const varName = currentNode.apiOutputVariable;
+        let responseData: any = null;
+        let errorData: any = null;
+
+        let url = '';
         try {
-          let url = substituteVariablesInText(currentNode.apiUrl, session.flow_variables);
+          url = substituteVariablesInText(currentNode.apiUrl, session.flow_variables);
           const method = currentNode.apiMethod || 'GET';
           const headers = new Headers();
           (currentNode.apiHeadersList || []).forEach(h => headers.append(substituteVariablesInText(h.key, session.flow_variables), substituteVariablesInText(h.value, session.flow_variables)));
@@ -442,23 +449,55 @@ export async function executeFlow(
 
           console.log(`[Flow Engine - ${session.session_id}] API Call: ${method} ${url}`);
           const response = await fetch(url, { method, headers, body });
-          const responseData = await response.json().catch(() => response.text());
+          responseData = await response.json().catch(() => response.text());
+
+          if (!response.ok) {
+            throw new Error(`API returned status ${response.status}`);
+          }
 
           if (varName) {
             let valueToSave = responseData;
             if (currentNode.apiResponsePath) {
-              const extractedValue = getProperty(responseData, currentNode.apiResponsePath);
-              if (extractedValue !== undefined) {
-                valueToSave = extractedValue;
-              }
+              valueToSave = getProperty(responseData, currentNode.apiResponsePath, responseData);
             }
             setProperty(session.flow_variables, varName, valueToSave);
           }
+          
+          if (currentNode.apiResponseMappings && Array.isArray(currentNode.apiResponseMappings)) {
+              currentNode.apiResponseMappings.forEach((mapping: ApiResponseMapping) => {
+                  if (mapping.jsonPath && mapping.flowVariable) {
+                      const extractedValue = getProperty(responseData, mapping.jsonPath);
+                      if (extractedValue !== undefined) {
+                          setProperty(session.flow_variables, mapping.flowVariable, extractedValue);
+                          console.log(`[Flow Engine] API Mapping: Set '${mapping.flowVariable}' from path '${mapping.jsonPath}'`);
+                      }
+                  }
+              });
+          }
+
         } catch (error: any) {
           console.error(`[Flow Engine - ${session.session_id}] API Call Error:`, error);
+          errorData = { error: error.message };
           if (varName) {
-            setProperty(session.flow_variables, varName, { error: error.message });
+            setProperty(session.flow_variables, varName, errorData);
           }
+        } finally {
+            if (!globalThis.apiCallLogsByFlow.has(workspace.id)) {
+              globalThis.apiCallLogsByFlow.set(workspace.id, []);
+            }
+            const apiLogs = globalThis.apiCallLogsByFlow.get(workspace.id)!;
+            apiLogs.unshift({
+                timestamp: new Date().toISOString(),
+                nodeId: currentNode.id,
+                nodeTitle: currentNode.title,
+                requestUrl: url,
+                response: responseData,
+                error: errorData,
+            });
+            if (apiLogs.length > MAX_API_LOG_ENTRIES_PER_FLOW) {
+                apiLogs.pop();
+            }
+            globalThis.apiCallLogsByFlow.set(workspace.id, apiLogs);
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
@@ -472,7 +511,7 @@ export async function executeFlow(
         await sendWhatsAppMessageAction({
           ...apiConfig,
           instanceName,
-          recipientPhoneNumber: recipientPhoneNumber.split('@')[0], // Garante que apenas o número seja usado
+          recipientPhoneNumber: recipientPhoneNumber.split('@')[0], 
           messageType: nodeType === 'whatsapp-text' ? 'text' : currentNode.mediaType || 'image',
           textContent: nodeType === 'whatsapp-text' ? substituteVariablesInText(currentNode.textMessage, session.flow_variables) : undefined,
           mediaUrl: nodeType === 'whatsapp-media' ? substituteVariablesInText(currentNode.mediaUrl, session.flow_variables) : undefined,
@@ -544,7 +583,7 @@ export async function executeFlow(
       }
 
       default: {
-        console.warn(`[Flow Engine - ${session.session_id}] Node type ${currentNode.type} not fully implemented or does not pause. Trying 'default' exit.`);
+        console.warn(`[Flow Engine - ${session.session_id}] Node type '${currentNode.type}' (normalized='${nodeType}') not fully implemented or does not pause. Trying 'default' exit.`);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }

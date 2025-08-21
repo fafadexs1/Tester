@@ -15,6 +15,7 @@ import type { NodeData, Connection, FlowSession, WorkspaceData, ApiResponseMappi
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates } from './utils';
+import jsonata from 'jsonata';
 
 // NOVO: Armazenamento de logs para chamadas de API
 if (!globalThis.apiCallLogsByFlow) {
@@ -254,6 +255,7 @@ export async function executeFlow(
         let isInTimeRange = false;
         try {
           const now = new Date();
+      
           const startTimeStr = (currentNode.startTime ?? '').toString().trim();
           const endTimeStr = (currentNode.endTime ?? '').toString().trim();
       
@@ -271,12 +273,9 @@ export async function executeFlow(
             const endDate = new Date();
             endDate.setHours(eh, em, es, 0);
       
-            // Lógica para intervalo que atravessa a meia-noite (ex: 22:00-06:00)
             if (endDate.getTime() <= startDate.getTime()) {
-              // Se a hora atual for DEPOIS do início OU ANTES do fim, está dentro.
-              isInTimeRange = now.getTime() >= startDate.getTime() || now.getTime() <= endDate.getTime();
+              isInTimeRange = (now.getTime() >= startDate.getTime()) || (now.getTime() <= endDate.getTime());
             } else {
-              // Intervalo normal no mesmo dia
               isInTimeRange = now.getTime() >= startDate.getTime() && now.getTime() <= endDate.getTime();
             }
           } else {
@@ -374,25 +373,30 @@ export async function executeFlow(
           if (varName) {
             let valueToSave = responseData;
             if (currentNode.apiResponsePath) {
-              const extractedValue = getProperty(responseData, currentNode.apiResponsePath);
-              if (extractedValue !== undefined) {
-                valueToSave = extractedValue;
-              }
+                const expression = jsonata(currentNode.apiResponsePath);
+                valueToSave = await expression.evaluate(responseData);
             }
             setProperty(session.flow_variables, varName, valueToSave);
           }
           
-          // NOVO: Mapeamento de múltiplas variáveis
           if (currentNode.apiResponseMappings && Array.isArray(currentNode.apiResponseMappings)) {
-              currentNode.apiResponseMappings.forEach((mapping: ApiResponseMapping) => {
+              for (const mapping of currentNode.apiResponseMappings) {
                   if (mapping.jsonPath && mapping.flowVariable) {
-                      const extractedValue = getProperty(responseData, mapping.jsonPath);
-                      if (extractedValue !== undefined) {
-                          setProperty(session.flow_variables, mapping.flowVariable, extractedValue);
+                      try {
+                          const expression = jsonata(mapping.jsonPath);
+                          const extractedValue = await expression.evaluate(responseData);
+                          
+                           if (mapping.extractAs === 'list' && !Array.isArray(extractedValue)) {
+                              setProperty(session.flow_variables, mapping.flowVariable, [extractedValue]);
+                          } else {
+                              setProperty(session.flow_variables, mapping.flowVariable, extractedValue);
+                          }
                           console.log(`[Flow Engine] API Mapping: Set '${mapping.flowVariable}' from path '${mapping.jsonPath}'`);
+                      } catch (e: any) {
+                          console.error(`[Flow Engine] Error evaluating JSONata expression '${mapping.jsonPath}':`, e.message);
                       }
                   }
-              });
+              }
           }
 
         } catch (error: any) {
@@ -402,7 +406,6 @@ export async function executeFlow(
             setProperty(session.flow_variables, varName, errorData);
           }
         } finally {
-            // NOVO: Logging da chamada de API
             if (!globalThis.apiCallLogsByFlow.has(workspace.id)) {
               globalThis.apiCallLogsByFlow.set(workspace.id, []);
             }
