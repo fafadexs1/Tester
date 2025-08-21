@@ -1,3 +1,4 @@
+
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
@@ -443,17 +444,19 @@ export async function executeFlow(
         break;
       }
 
-      case 'end-flow':
+      case 'end-flow': {
         console.log(`[Flow Engine - ${session.session_id}] Reached End Flow node. Deleting session.`);
         await deleteSessionFromDB(session.session_id);
         shouldContinue = false;
         nextNodeId = null;
         break;
+      }
 
-      default:
+      default: {
         console.warn(`[Flow Engine - ${session.session_id}] Node type '${currentNode.type}' (normalized='${nodeType}') not fully implemented or does not pause. Trying 'default' exit.`);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
+      }
     }
 
     if (shouldContinue) {
@@ -475,3 +478,5 @@ export async function executeFlow(
     }
   }
 }
+
+    
