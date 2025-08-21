@@ -48,6 +48,7 @@ import {
 import { fetchSupabaseTablesAction, fetchSupabaseTableColumnsAction } from '@/lib/supabase/actions';
 import { checkEvolutionInstanceStatus } from '@/app/actions/evolutionApiActions';
 import { checkChatwootInstanceStatus } from '@/app/actions/chatwootApiActions';
+import { checkDialogyInstanceStatus } from '@/app/actions/dialogyApiActions';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 interface NodeCardProps {
@@ -829,64 +830,54 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     if (node.type === 'end-flow') return null;
 
     if (node.type === 'start') {
-        const triggerElements = (node.triggers || [])
-            .filter(t => t.enabled)
-            .map((trigger) => {
-                const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
-                const triggerHeight = 60 + (keywords.length * 35); // Estimativa de altura do bloco do gatilho
+      const allTriggers = node.triggers || [];
+      let yPosition = 50; // base interna do card
 
-                return {
-                    id: trigger.id,
-                    name: trigger.name,
-                    keywords: keywords,
-                    height: triggerHeight
-                };
-            });
+      return allTriggers
+        .filter(t => t.enabled)
+        .map((trigger) => {
+          const currentY = yPosition;
+          const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
 
-        let currentY = 50; // Posição Y inicial dentro do conteúdo do nó
-        return triggerElements.map(trigger => {
-            const yOffsetForTrigger = currentY;
-            
-            // Incrementa a posição para o próximo gatilho
-            currentY += trigger.height;
+          const triggerHeight = 60 + (keywords.length * 35);
+          yPosition += triggerHeight;
 
-            return (
-                <React.Fragment key={trigger.id}>
-                    {/* Conector para o gatilho principal */}
-                    <div
-                        className="absolute -right-2.5 z-10 flex items-center"
-                        style={{ top: `${yOffsetForTrigger - 10}px` }}
-                        title={`Gatilho: ${trigger.name}`}
-                    >
-                        <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
-                        <div
-                            className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-                            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
-                            data-connector="true" data-handle-type="source" data-handle-id={trigger.name}
-                        >
-                            <Hash className="w-3 h-3 text-accent-foreground" />
-                        </div>
-                    </div>
-                    {/* Conectores para as palavras-chave */}
-                    {trigger.keywords.map((kw, kwIndex) => (
-                        <div
-                            key={`${trigger.id}-${kw}`}
-                            className="absolute -right-2.5 z-10 flex items-center"
-                            style={{ top: `${yOffsetForTrigger + 35 + (kwIndex * START_NODE_TRIGGER_SPACING_Y) - 10}px` }}
-                            title={`Palavra-chave: ${kw}`}
-                        >
-                            <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{kw}</span>
-                            <div
-                                className="w-5 h-5 bg-purple-500 hover:bg-purple-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-                                onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, kw); }}
-                                data-connector="true" data-handle-type="source" data-handle-id={kw}
-                            >
-                                <KeyRound className="w-3 h-3 text-white" />
-                            </div>
-                        </div>
-                    ))}
-                </React.Fragment>
-            );
+          return (
+            <React.Fragment key={trigger.id}>
+              <div
+                className="absolute -right-2.5 z-10 flex items-center"
+                style={{ top: `${currentY - 10}px` }}
+                title={`Gatilho: ${trigger.name}`}
+              >
+                <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
+                <div
+                  className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+                  onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
+                  data-connector="true" data-handle-type="source" data-handle-id={trigger.name}
+                >
+                  <Hash className="w-3 h-3 text-accent-foreground" />
+                </div>
+              </div>
+
+              {keywords.map((kw, kwIndex) => (
+                <div
+                  key={`${trigger.id}-${kw}`}
+                  className="absolute -right-2.5 z-10 flex items-center"
+                  style={{ top: `${currentY + 35 + (kwIndex * START_NODE_TRIGGER_SPACING_Y) - 10}px` }}
+                  title={`Palavra-chave: ${kw}`}
+                >
+                  <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{kw}</span>
+                  <div
+                    className="w-5 h-5 bg-purple-500 hover:bg-purple-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+                    onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, kw); }}
+                    data-connector="true" data-handle-type="source" data-handle-id={kw}
+                  >
+                    <KeyRound className="w-3 h-3 text-white" />
+                  </div>
+                </div>
+              ))}
+            </React.Fragment>
+          );
         });
     }
 
@@ -1186,7 +1177,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                         <Textarea ref={textAreaRef} id={`${node.id}-watext`} value={node.textMessage || ''} onChange={(e) => onUpdate(node.id, { textMessage: e.target.value })} rows={2} className="pr-8" />
                         {renderVariableInserter('textMessage', true)}
                     </div>
-                     <TextFormatToolbar fieldName="textMessage" textAreaRef={textAreaRef} onUpdate={onUpdate} nodeId={node.id} />
+                     <TextFormatToolbar fieldName="textMessage" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
                 </div>
                 <div>
                   <Label htmlFor={`${node.id}-instance`}>Instância</Label>
@@ -1275,7 +1266,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     <Input ref={inputRef} id={`${node.id}-caption`} value={node.caption || ''} onChange={(e) => onUpdate(node.id, { caption: e.target.value })} className="pr-8" />
                     {renderVariableInserter('caption')}
                   </div>
-                  <TextFormatToolbar fieldName="caption" textAreaRef={inputRef} onUpdate={onUpdate} nodeId={node.id} />
+                  <TextFormatToolbar fieldName="caption" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
                 </div>
               </>
             )}
@@ -1648,7 +1639,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   <Input ref={inputRef} id={`${node.id}-mediadisplaytext`} placeholder="Descrição da mídia" value={node.mediaDisplayText || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayText: e.target.value })} className="pr-8" />
                   {renderVariableInserter('mediaDisplayText')}
                 </div>
-                <TextFormatToolbar fieldName="mediaDisplayText" textAreaRef={inputRef} onUpdate={onUpdate} nodeId={node.id} />
+                <TextFormatToolbar fieldName="mediaDisplayText" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
               </div>
             </div>
           </div>
@@ -1712,7 +1703,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <Input ref={inputRef} id={`${node.id}-uploadprompt`} placeholder="Por favor, envie seu documento." value={node.uploadPromptText || ''} onChange={(e) => onUpdate(node.id, { uploadPromptText: e.target.value })} className="pr-8" />
                 {renderVariableInserter('uploadPromptText')}
               </div>
-               <TextFormatToolbar fieldName="uploadPromptText" textAreaRef={inputRef} onUpdate={onUpdate} nodeId={node.id} />
+               <TextFormatToolbar fieldName="uploadPromptText" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <div>
               <Label htmlFor={`${node.id}-filefilter`}>Filtro de Tipo de Arquivo (ex: image/*, .pdf)</Label>
@@ -1738,7 +1729,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <Input ref={inputRef} id={`${node.id}-ratingq`} placeholder="Como você nos avalia?" value={node.ratingQuestionText || ''} onChange={(e) => onUpdate(node.id, { ratingQuestionText: e.target.value })} className="pr-8" />
                 {renderVariableInserter('ratingQuestionText')}
               </div>
-              <TextFormatToolbar fieldName="ratingQuestionText" textAreaRef={inputRef} onUpdate={onUpdate} nodeId={node.id} />
+              <TextFormatToolbar fieldName="ratingQuestionText" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <div>
               <Label htmlFor={`${node.id}-maxrating`}>Avaliação Máxima</Label>
@@ -1768,7 +1759,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <Textarea ref={textAreaRef} id={`${node.id}-aiprompt`} placeholder="Gere uma descrição para um produto chamado {{input.nome_produto}}." value={node.aiPromptText || ''} onChange={(e) => onUpdate(node.id, { aiPromptText: e.target.value })} rows={4} className="pr-8" />
                 {renderVariableInserter('aiPromptText', true)}
               </div>
-               <TextFormatToolbar fieldName="aiPromptText" textAreaRef={textAreaRef} onUpdate={onUpdate} nodeId={node.id} />
+               <TextFormatToolbar fieldName="aiPromptText" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <div>
               <Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional)</Label>
@@ -1800,7 +1791,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <Input ref={inputRef} id={`${node.id}-emailsubject`} placeholder="Assunto do seu e-mail" value={node.emailSubject || ''} onChange={(e) => onUpdate(node.id, { emailSubject: e.target.value })} className="pr-8" />
                 {renderVariableInserter('emailSubject')}
               </div>
-              <TextFormatToolbar fieldName="emailSubject" textAreaRef={inputRef} onUpdate={onUpdate} nodeId={node.id} />
+              <TextFormatToolbar fieldName="emailSubject" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <div>
               <Label htmlFor={`${node.id}-emailbody`}>Corpo do E-mail (HTML ou Texto)</Label>
@@ -1808,7 +1799,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <Textarea ref={textAreaRef} id={`${node.id}-emailbody`} placeholder="Olá {{input.nome_cliente}},\n\nSua mensagem aqui." value={node.emailBody || ''} onChange={(e) => onUpdate(node.id, { emailBody: e.target.value })} rows={4} className="pr-8" />
                 {renderVariableInserter('emailBody', true)}
               </div>
-              <TextFormatToolbar fieldName="emailBody" textAreaRef={textAreaRef} onUpdate={onUpdate} nodeId={node.id} />
+              <TextFormatToolbar fieldName="emailBody" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <div>
               <Label htmlFor={`${node.id}-emailfrom`}>De (E-mail - opcional)</Label>
@@ -2039,7 +2030,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 />
                 {renderVariableInserter('dialogyMessageContent', true)}
               </div>
-              <TextFormatToolbar fieldName="dialogyMessageContent" textAreaRef={textAreaRef} onUpdate={onUpdate} nodeId={node.id} />
+              <TextFormatToolbar fieldName="dialogyMessageContent" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <p className="text-xs text-muted-foreground">
               A instância da Dialogy a ser usada é definida nas Configurações do Fluxo.
@@ -2297,3 +2288,5 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
+    
