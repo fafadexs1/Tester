@@ -52,6 +52,7 @@ import { checkEvolutionInstanceStatus } from '@/app/actions/evolutionApiActions'
 import { checkChatwootInstanceStatus } from '@/app/actions/chatwootApiActions';
 import { checkDialogyInstanceStatus } from '@/app/actions/dialogyApiActions';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import jsonata from 'jsonata';
 
 interface NodeCardProps {
   node: NodeData;
@@ -2480,3 +2481,5 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
+    
