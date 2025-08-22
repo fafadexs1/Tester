@@ -636,17 +636,17 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         description: `Status: ${result.status}`,
       });
 
-      // Log the successful call
       if (activeWorkspace?.id) {
           const logData = {
               workspaceId: activeWorkspace.id,
+              type: 'api-call', // Centralized log type
               nodeId: node.id,
               nodeTitle: node.title,
               requestUrl: node.apiUrl,
               response: result.data,
               error: null,
           };
-          await fetch('/api/api-call-logs', {
+          await fetch('/api/evolution/webhook-logs', { // Use the central log endpoint
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(logData),
@@ -671,10 +671,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         toast({ title: "Erro", description: "ID do fluxo não encontrado para buscar logs.", variant: "destructive" });
         return [];
     }
-    const response = await fetch(`/api/api-call-logs?workspaceId=${activeWorkspace.id}`);
+    const response = await fetch(`/api/evolution/webhook-logs?workspaceId=${activeWorkspace.id}`);
     if (!response.ok) throw new Error('Falha ao buscar logs de API');
-    const data: ApiLogEntry[] = await response.json();
-    return data.filter(log => log.nodeId === node.id);
+    const data: any[] = await response.json();
+    return data.filter(log => log.type === 'api-call' && log.nodeId === node.id);
   }, [activeWorkspace?.id, node.id, toast]);
 
   const handleOpenApiHistory = () => {
@@ -1722,7 +1722,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <div>
               <Label htmlFor={`${node.id}-datelabel`}>Texto da Pergunta</Label>
               <div className="relative">
-                <Input id={`${node.id}-datelabel`} placeholder="Ex: Qual sua data de nascimento?" value={node.dateInputLabel || ''} onChange={(e) => onUpdate(node.id, { dateInputLabel: e.target.value })} className="pr-8" />
+                <Input ref={inputRef} id={`${node.id}-datelabel`} placeholder="Ex: Qual sua data de nascimento?" value={node.dateInputLabel || ''} onChange={(e) => onUpdate(node.id, { dateInputLabel: e.target.value })} className="pr-8" />
                 {renderVariableInserter('dateInputLabel')}
               </div>
             </div>
@@ -2472,3 +2472,5 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+
+    

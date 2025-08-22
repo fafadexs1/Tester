@@ -1,13 +1,8 @@
+
 'use server';
 import { getProperty } from 'dot-prop';
 import type { NextRequest } from 'next/server';
 import type { FlowContextType } from '@/lib/types';
-
-if (!globalThis.webhookLogsByFlow) {
-  console.log('[Webhook Handler INIT] globalThis.webhookLogsByFlow não existe. Inicializando como novo Map.');
-  globalThis.webhookLogsByFlow = new Map<string, any[]>();
-}
-const MAX_LOG_ENTRIES_PER_FLOW = 50;
 
 export async function storeRequestDetails(
   request: NextRequest,
@@ -60,6 +55,8 @@ export async function storeRequestDetails(
   }
 
   const logEntry: Record<string, any> = {
+    workspaceId: webhookId,
+    type: 'webhook', // Centralized log type
     timestamp: currentTimestamp,
     method: request.method,
     url: request.url,
@@ -71,15 +68,14 @@ export async function storeRequestDetails(
     payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
   };
 
-  if (!globalThis.webhookLogsByFlow.has(webhookId)) {
-    globalThis.webhookLogsByFlow.set(webhookId, []);
-  }
-  const flowLogs = globalThis.webhookLogsByFlow.get(webhookId)!;
-  flowLogs.unshift(logEntry);
-  if (flowLogs.length > MAX_LOG_ENTRIES_PER_FLOW) {
-    flowLogs.pop();
-  }
-  globalThis.webhookLogsByFlow.set(webhookId, flowLogs);
+  // Dispara um POST para o endpoint central de logs sem aguardar
+  fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/evolution/webhook-logs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(logEntry),
+  }).catch(e => console.error("[Webhook Handler] Failed to post webhook log:", e));
 
   return logEntry;
 }
+
+    

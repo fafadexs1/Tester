@@ -17,13 +17,6 @@ import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates } from './utils';
 import jsonata from 'jsonata';
 
-// NOVO: Armazenamento de logs para chamadas de API
-if (!globalThis.apiCallLogsByFlow) {
-  globalThis.apiCallLogsByFlow = new Map<string, any[]>();
-}
-const MAX_API_LOG_ENTRIES_PER_FLOW = 50;
-
-
 interface ApiConfig {
   baseUrl: string;
   apiKey?: string;
@@ -406,22 +399,23 @@ export async function executeFlow(
             setProperty(session.flow_variables, varName, errorData);
           }
         } finally {
-            if (!globalThis.apiCallLogsByFlow.has(workspace.id)) {
-              globalThis.apiCallLogsByFlow.set(workspace.id, []);
-            }
-            const apiLogs = globalThis.apiCallLogsByFlow.get(workspace.id)!;
-            apiLogs.unshift({
-                timestamp: new Date().toISOString(),
-                nodeId: currentNode.id,
-                nodeTitle: currentNode.title,
-                requestUrl: url,
-                response: responseData,
-                error: errorData,
-            });
-            if (apiLogs.length > MAX_API_LOG_ENTRIES_PER_FLOW) {
-                apiLogs.pop();
-            }
-            globalThis.apiCallLogsByFlow.set(workspace.id, apiLogs);
+            // Log a centralização
+            const logData = {
+              workspaceId: workspace.id,
+              type: 'api-call',
+              nodeId: currentNode.id,
+              nodeTitle: currentNode.title,
+              requestUrl: url,
+              response: responseData,
+              error: errorData,
+            };
+
+            // Dispara um POST para o endpoint central de logs sem aguardar
+            fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/evolution/webhook-logs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(logData),
+            }).catch(e => console.error("[Flow Engine] Failed to post API log:", e));
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
@@ -532,3 +526,5 @@ export async function executeFlow(
     }
   }
 }
+
+    
