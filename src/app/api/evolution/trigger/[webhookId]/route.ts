@@ -1,4 +1,5 @@
 
+
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -15,9 +16,11 @@ import {
   loadDialogyInstanceFromDB,
   loadWorkspacesForOrganizationFromDB,
 } from '@/app/actions/databaseActions';
-import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData, FlowContextType } from '@/lib/types';
+import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData, FlowContextType, ApiResponseMapping } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
+import jsonata from 'jsonata';
+
 
 // **MODIFICADO**: Armazena logs em um Map, com a chave sendo o webhookId (workspaceId)
 if (!globalThis.webhookLogsByFlow) {
@@ -25,6 +28,7 @@ if (!globalThis.webhookLogsByFlow) {
   globalThis.webhookLogsByFlow = new Map<string, any[]>();
 }
 const MAX_LOG_ENTRIES_PER_FLOW = 50;
+const MAX_API_LOG_ENTRIES_PER_FLOW = 50;
 
 
 // --- Funções Auxiliares para o Motor de Fluxo ---
@@ -38,40 +42,63 @@ function findNextNodeId(fromNodeId: string, sourceHandle: string | undefined, co
 }
 
 function substituteVariablesInText(text: string | undefined, variables: Record<string, any>): string {
-  if (text === undefined || text === null) {
-    return '';
-  }
+  if (text === undefined || text === null) return '';
   let subbedText = String(text);
-  
-  if (subbedText.includes('{{now}}')) {
-    subbedText = subbedText.replace(/\{\{now\}\}/g, new Date().toISOString());
-  }
 
   const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
-  let match;
-
-  while ((match = variableRegex.exec(text)) !== null) {
-    const fullMatch = match[0];
-    const varName = match[1].trim();
+  subbedText = subbedText.replace(variableRegex, (_full, varNameRaw) => {
+    const varName = String(varNameRaw).trim();
+    if (varName === 'now') {
+      return new Date().toISOString();
+    }
     let value: any = getProperty(variables, varName);
-
     if (value === undefined && !varName.includes('.')) {
       value = variables[varName];
     }
-
-    if (value === undefined || value === null) {
-      subbedText = subbedText.replace(fullMatch, '');
-    } else if (typeof value === 'object' || Array.isArray(value)) {
-      try {
-        subbedText = subbedText.replace(fullMatch, JSON.stringify(value, null, 2));
-      } catch (e) {
-        subbedText = subbedText.replace(fullMatch, `[Error stringifying ${varName}]`);
-      }
-    } else {
-      subbedText = subbedText.replace(fullMatch, String(value));
+    if (value === undefined || value === null) return '';
+    if (typeof value === 'object') {
+      try { return JSON.stringify(value, null, 2); }
+      catch { return `[Error stringifying ${varName}]`; }
     }
-  }
+    return String(value);
+  });
+
   return subbedText;
+}
+
+function coerceToDate(raw: any): Date | null {
+  if (raw === undefined || raw === null) return null;
+  if (raw instanceof Date && !isNaN(raw.getTime())) return raw;
+  if (typeof raw === 'number' && isFinite(raw)) {
+    const ms = raw < 1e11 ? raw * 1000 : raw;
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const str = String(raw).trim();
+  if (!str) return null;
+  const timeOnly = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(str);
+  if (timeOnly) {
+    const [_, hh, mm, ss] = timeOnly;
+    const d = new Date();
+    d.setSeconds(0, 0);
+    d.setHours(Number(hh), Number(mm), ss ? Number(ss) : 0, 0);
+    return d;
+  }
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) return d;
+  const br = /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(str);
+  if (br) {
+    const [, dd, mm, yyyy, hh = '00', mi = '00', ss = '00'] = br;
+    const d2 = new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss), 0);
+    return isNaN(d2.getTime()) ? null : d2;
+  }
+  return null;
+}
+
+function compareDates(a: any, b: any): {a: Date|null; b: Date|null} {
+  const da = coerceToDate(a);
+  const db = coerceToDate(b);
+  return { a: da, b: db };
 }
 
 interface ApiConfig {
@@ -99,13 +126,11 @@ async function executeFlow(
       return;
     }
 
-    // 1) Dialogy tem prioridade se for o contexto
     if (session.flow_context === 'dialogy') {
       const chatId =
         getProperty(session.flow_variables, 'dialogy_conversation_id') ||
         getProperty(session.flow_variables, 'webhook_payload.conversation.id');
 
-      // Tenta carregar instância configurada no workspace
       let dialogyInstance = null;
       if (workspace.dialogy_instance_id) {
         dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
@@ -125,10 +150,9 @@ async function executeFlow(
           `instance=${!!dialogyInstance}, chatId=${chatId}`
         );
       }
-      return; // NÃO fazer fallback pro Evolution
+      return;
     }
 
-    // 2) Chatwoot
     if (session.flow_context === 'chatwoot') {
       if (workspace.chatwoot_instance_id) {
         const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
@@ -151,10 +175,9 @@ async function executeFlow(
           `[Flow Engine - ${session.session_id}] Chatwoot selecionado por flow_context, mas workspace.chatwoot_instance_id não está configurado.`
         );
       }
-      return; // NÃO fazer fallback pro Evolution
+      return;
     }
 
-    // 3) Evolution (padrão apenas quando o contexto não é dialogy/chatwoot)
     console.log(`[Flow Engine - ${session.session_id}] Sending message via default channel (Evolution API)...`);
     const recipientPhoneNumber =
       session.flow_variables.whatsapp_sender_jid ||
@@ -178,7 +201,7 @@ async function executeFlow(
     console.log(`[Flow Engine - ${session.session_id}] Executing Node: ${currentNode.id} (${currentNode.type} - ${currentNode.title})`);
 
     let nextNodeId: string | null = null;
-    session.current_node_id = currentNodeId; // Update session with the node we are currently processing
+    session.current_node_id = currentNodeId;
 
     switch (currentNode.type) {
       case 'start': {
@@ -257,67 +280,109 @@ async function executeFlow(
       }
 
       case 'condition': {
-        const varNameCond = currentNode.conditionVariable?.replace(/\{\{|\}\}/g, '').trim();
-        const actualValueRaw = varNameCond ? getProperty(session.flow_variables, varNameCond) : undefined;
-        const compareValueRaw = substituteVariablesInText(currentNode.conditionValue, session.flow_variables);
-        const dataType = currentNode.conditionDataType || 'string';
         let conditionMet = false;
-
-        const parseValue = (value: any, type: typeof dataType): any => {
-          if (value === undefined || value === null || String(value).trim() === '') return value;
-      
-          switch (type) {
-            case 'number':
-              const num = parseFloat(String(value));
-              return isNaN(num) ? value : num;
-            case 'boolean':
-              return String(value).toLowerCase() === 'true';
-            case 'date': {
-              const timeRegex = /^\d{2}:\d{2}$/;
-              const strValue = String(value);
-      
-              if (timeRegex.test(strValue)) {
-                const today = new Date();
-                const [hours, minutes] = strValue.split(':').map(Number);
-                today.setHours(hours, minutes, 0, 0); 
-                return today;
-              }
-      
-              const date = new Date(strValue);
-              return isNaN(date.getTime()) ? value : date;
-            }
-            default:
-              return String(value);
+        const op = (currentNode.conditionOperator || '').toString().trim().toLowerCase();
+        
+        const varPath = currentNode.conditionVariable?.replace(/\{\{|\}\}/g, '').trim();
+        let rawValA = varPath ? getProperty(session.flow_variables, varPath) : currentNode.conditionVariable;
+        if (rawValA === undefined) rawValA = currentNode.conditionVariable;
+        
+        const rawValB = substituteVariablesInText(currentNode.conditionValue, session.flow_variables);
+        
+        const isDateOp = op === 'isdateafter' || op === 'isdatebefore';
+        const dataType = (currentNode.conditionDataType || 'string').toString().toLowerCase();
+        
+        const parseValue = (v: any) => {
+          if (isDateOp || dataType === 'date') {
+              return coerceToDate(v) ?? v;
           }
+          if (dataType === 'number') {
+            const num = parseFloat(String(v));
+            return isNaN(num) ? v : num;
+          }
+          if (dataType === 'boolean') {
+              if (String(v).toLowerCase() === 'true') return true;
+              if (String(v).toLowerCase() === 'false') return false;
+              return v;
+          }
+          return v; 
         };
 
-        const valA = parseValue(actualValueRaw, dataType);
-        const valB = parseValue(compareValueRaw, dataType);
+        const valA: any = parseValue(rawValA);
+        const valB: any = parseValue(rawValB);
 
-        const isValidA = valA !== undefined && valA !== null && (typeof valA !== 'number' || !Number.isNaN(valA));
-        const isValidB = valB !== undefined && valB !== null && (typeof valB !== 'number' || !Number.isNaN(valB));
-
-        switch (currentNode.conditionOperator) {
-          case '==': conditionMet = (valA as any) == (valB as any); break;
-          case '!=': conditionMet = (valA as any) != (valB as any); break;
-          case '>': conditionMet = isValidA && isValidB && (valA as any) > (valB as any); break;
-          case '<': conditionMet = isValidA && isValidB && (valA as any) < (valB as any); break;
-          case '>=': conditionMet = isValidA && isValidB && (valA as any) >= (valB as any); break;
-          case '<=': conditionMet = isValidA && isValidB && (valA as any) <= (valB as any); break;
-          case 'contains': conditionMet = isValidA && isValidB && String(valA).toLowerCase().includes(String(valB).toLowerCase()); break;
-          case 'startsWith': conditionMet = isValidA && isValidB && String(valA).toLowerCase().startsWith(String(valB).toLowerCase()); break;
-          case 'endsWith': conditionMet = isValidA && isValidB && String(valA).toLowerCase().endsWith(String(valB).toLowerCase()); break;
-          case 'isEmpty': conditionMet = valA === undefined || valA === null || String(valA).trim() === ''; break;
-          case 'isNotEmpty': conditionMet = valA !== undefined && valA !== null && String(valA).trim() !== ''; break;
-          case 'isTrue': conditionMet = valA === true; break;
-          case 'isFalse': conditionMet = valA === false; break;
-          case 'isDateAfter': conditionMet = valA instanceof Date && valB instanceof Date && (valA as any) > (valB as any); break;
-          case 'isDateBefore': conditionMet = valA instanceof Date && valB instanceof Date && (valA as any) < (valB as any); break;
-          default: conditionMet = false;
+        switch (op) {
+          case '==':          conditionMet = (valA as any) == (valB as any); break;
+          case '!=':          conditionMet = (valA as any) != (valB as any); break;
+          case '>':           conditionMet = (valA as any) >  (valB as any); break;
+          case '<':           conditionMet = (valA as any) <  (valB as any); break;
+          case '>=':          conditionMet = (valA as any) >= (valB as any); break;
+          case '<=':          conditionMet = (valA as any) <= (valB as any); break;
+          case 'contains':    conditionMet = String(valA ?? '').toLowerCase().includes(String(valB ?? '').toLowerCase()); break;
+          case 'startswith':  conditionMet = String(valA ?? '').toLowerCase().startsWith(String(valB ?? '').toLowerCase()); break;
+          case 'endswith':    conditionMet = String(valA ?? '').toLowerCase().endsWith(String(valB ?? '').toLowerCase()); break;
+          case 'isempty':     conditionMet = valA === undefined || valA === null || String(valA).trim() === ''; break;
+          case 'isnotempty':  conditionMet = !(valA === undefined || valA === null || String(valA).trim() === ''); break;
+          case 'istrue':      conditionMet = valA === true || String(valA).toLowerCase() === 'true'; break;
+          case 'isfalse':     conditionMet = valA === false || String(valA).toLowerCase() === 'false'; break;
+          case 'isdateafter': {
+            const { a, b } = compareDates(valA, valB);
+            conditionMet = !!(a && b && a.getTime() > b.getTime());
+            break;
+          }
+          case 'isdatebefore': {
+            const { a, b } = compareDates(valA, valB);
+            conditionMet = !!(a && b && a.getTime() < b.getTime());
+            break;
+          }
+          default:
+            console.warn(`[Flow Engine] Operador de condição desconhecido: "${currentNode.conditionOperator}" (normalizado: "${op}")`);
+            conditionMet = false;
         }
 
-        console.log(`[Flow Engine - ${session.session_id}] Condition: Var ('${varNameCond}')='${actualValueRaw}'(parsed: ${valA}) ${currentNode.conditionOperator} '${compareValueRaw}'(parsed: ${valB}) -> ${conditionMet}`);
         nextNodeId = findNextNodeId(currentNode.id, conditionMet ? 'true' : 'false', connections);
+        break;
+      }
+
+      case 'time-of-day': {
+        let isInTimeRange = false;
+        try {
+          const now = new Date();
+      
+          const startTimeStr = (currentNode.startTime ?? '').toString().trim();
+          const endTimeStr = (currentNode.endTime ?? '').toString().trim();
+      
+          if (startTimeStr && endTimeStr && /^\d{2}:\d{2}(?::\d{2})?$/.test(startTimeStr) && /^\d{2}:\d{2}(?::\d{2})?$/.test(endTimeStr)) {
+            const parseHM = (s: string) => {
+              const [h, m, s2 = '0'] = s.split(':').map(Number);
+              return { h, m, s: s2 };
+            };
+            const { h: sh, m: sm, s: ss } = parseHM(startTimeStr);
+            const { h: eh, m: em, s: es } = parseHM(endTimeStr);
+      
+            const startDate = new Date();
+            startDate.setHours(sh, sm, ss, 0);
+      
+            const endDate = new Date();
+            endDate.setHours(eh, em, es, 0);
+      
+            if (endDate.getTime() <= startDate.getTime()) {
+              isInTimeRange = (now.getTime() >= startDate.getTime()) || (now.getTime() <= endDate.getTime());
+            } else {
+              isInTimeRange = now.getTime() >= startDate.getTime() && now.getTime() <= endDate.getTime();
+            }
+          } else {
+            console.warn(`[Flow Engine - ${session.session_id}] time-of-day: horários inválidos ou ausentes (start="${startTimeStr}" end="${endTimeStr}"). Considerando fora do intervalo.`);
+            isInTimeRange = false;
+          }
+      
+          console.log(`[Flow Engine - ${session.session_id}] Time of Day Check: ${currentNode.startTime}-${currentNode.endTime}. Now: ${now.toLocaleTimeString()}. In range: ${isInTimeRange}`);
+        } catch (err: any) {
+          console.error(`[Flow Engine - ${session.session_id}] Time of Day Error:`, err);
+          isInTimeRange = false;
+        }
+      
+        nextNodeId = findNextNodeId(currentNode.id, isInTimeRange ? 'true' : 'false', connections);
         break;
       }
 
@@ -357,8 +422,11 @@ async function executeFlow(
 
       case 'api-call': {
         const varName = currentNode.apiOutputVariable;
+        let url: string | undefined;
+        let responseData: any;
+        let errorObj: any;
         try {
-          let url = substituteVariablesInText(currentNode.apiUrl, session.flow_variables);
+          url = substituteVariablesInText(currentNode.apiUrl, session.flow_variables);
           const method = currentNode.apiMethod || 'GET';
           const headers = new Headers();
           (currentNode.apiHeadersList || []).forEach(h => headers.append(substituteVariablesInText(h.key, session.flow_variables), substituteVariablesInText(h.value, session.flow_variables)));
@@ -374,7 +442,7 @@ async function executeFlow(
           const queryParams = new URLSearchParams();
           (currentNode.apiQueryParamsList || []).forEach(p => queryParams.append(substituteVariablesInText(p.key, session.flow_variables), substituteVariablesInText(p.value, session.flow_variables)));
           const queryString = queryParams.toString();
-          if (queryString) url += (url.includes('?') ? '&' : '?') + queryString;
+          if (queryString && url) url += (url.includes('?') ? '&' : '?') + queryString;
 
           let body: BodyInit | null = null;
           if (method !== 'GET' && method !== 'HEAD') {
@@ -387,24 +455,64 @@ async function executeFlow(
           }
 
           console.log(`[Flow Engine - ${session.session_id}] API Call: ${method} ${url}`);
-          const response = await fetch(url, { method, headers, body });
-          const responseData = await response.json().catch(() => response.text());
+          const response = await fetch(url!, { method, headers, body });
+          responseData = await response.json().catch(() => response.text());
+          
+          if (!response.ok) {
+            throw new Error(`API returned status ${response.status}`);
+          }
 
           if (varName) {
             let valueToSave = responseData;
             if (currentNode.apiResponsePath) {
-              const extractedValue = getProperty(responseData, currentNode.apiResponsePath);
-              if (extractedValue !== undefined) {
-                valueToSave = extractedValue;
-              }
+                const expression = jsonata(currentNode.apiResponsePath);
+                valueToSave = await expression.evaluate(responseData);
             }
             setProperty(session.flow_variables, varName, valueToSave);
           }
+          
+          if (currentNode.apiResponseMappings && Array.isArray(currentNode.apiResponseMappings)) {
+              for (const mapping of currentNode.apiResponseMappings) {
+                  if (mapping.jsonPath && mapping.flowVariable) {
+                      try {
+                          const expression = jsonata(mapping.jsonPath);
+                          const extractedValue = await expression.evaluate(responseData);
+                          
+                           if (mapping.extractAs === 'list' && !Array.isArray(extractedValue)) {
+                              setProperty(session.flow_variables, mapping.flowVariable, [extractedValue]);
+                          } else {
+                              setProperty(session.flow_variables, mapping.flowVariable, extractedValue);
+                          }
+                          console.log(`[Flow Engine] API Mapping: Set '${mapping.flowVariable}' from path '${mapping.jsonPath}'`);
+                      } catch (e: any) {
+                          console.error(`[Flow Engine] Error evaluating JSONata expression '${mapping.jsonPath}':`, e.message);
+                      }
+                  }
+              }
+          }
+
         } catch (error: any) {
+          errorObj = error;
           console.error(`[Flow Engine - ${session.session_id}] API Call Error:`, error);
           if (varName) {
             setProperty(session.flow_variables, varName, { error: error.message });
           }
+        } finally {
+          const logData = {
+            workspaceId: workspace.id,
+            type: 'api-call',
+            nodeId: currentNode.id,
+            nodeTitle: currentNode.title,
+            requestUrl: url,
+            response: responseData,
+            error: errorObj ? errorObj.message || String(errorObj) : null,
+          };
+          // Não aguarda para não bloquear o fluxo
+          fetch('/api/evolution/webhook-logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(logData),
+          }).catch(e => console.error("[Flow Engine] Failed to post API log:", e));
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
@@ -418,7 +526,7 @@ async function executeFlow(
         await sendWhatsAppMessageAction({
           ...apiConfig,
           instanceName,
-          recipientPhoneNumber: recipientPhoneNumber.split('@')[0], // Garante que apenas o número seja usado
+          recipientPhoneNumber: recipientPhoneNumber.split('@')[0],
           messageType: currentNode.type === 'whatsapp-text' ? 'text' : currentNode.mediaType || 'image',
           textContent: currentNode.type === 'whatsapp-text' ? substituteVariablesInText(currentNode.textMessage, session.flow_variables) : undefined,
           mediaUrl: currentNode.type === 'whatsapp-media' ? substituteVariablesInText(currentNode.mediaUrl, session.flow_variables) : undefined,
@@ -494,35 +602,33 @@ async function executeFlow(
         break;
     }
 
-    // Prepare for the next loop iteration
     if (shouldContinue) {
       currentNodeId = nextNodeId;
     }
   }
 
-  // After the loop finishes (either by pausing or reaching the end), save the final session state.
-  if (shouldContinue && !currentNodeId) { // This means the loop finished because currentNodeId is null (a dead end)
-    session.current_node_id = null; // Explicitly set to null to indicate a paused/dead-end state
-    session.awaiting_input_type = null; // Ensure it's not waiting for input
+  if (shouldContinue && !currentNodeId) {
+    session.current_node_id = null;
+    session.awaiting_input_type = null;
     session.awaiting_input_details = null;
     console.log(`[Flow Engine - ${session.session_id}] Execution loop ended at a dead end. Pausing session silently.`);
-    await saveSessionToDB(session); // Save the paused state
-  } else if (!shouldContinue) { // Loop was broken by a node that pauses (e.g., input) or ends the flow
+    await saveSessionToDB(session);
+  } else if (!shouldContinue) {
     session.current_node_id = currentNodeId;
     console.log(`[Flow Engine - ${session.session_id}] Execution loop paused or ended. Saving session state. Paused: ${!!session.current_node_id}.`);
-    if (session.current_node_id) { // Only save if the session is not deleted
+    if (session.current_node_id) {
       await saveSessionToDB(session);
     }
   }
 }
 
 
-// **MODIFICADO**: Função de armazenamento agora é específica para o fluxo
+
 async function storeRequestDetails(
   request: NextRequest,
   parsedPayload: any,
   rawBodyText: string | null,
-  webhookId: string // webhookId (workspaceId) é a chave
+  webhookId: string
 ): Promise<any> {
   const currentTimestamp = new Date().toISOString();
   let extractedMessage: string | null = null;
@@ -569,6 +675,8 @@ async function storeRequestDetails(
   }
 
   const logEntry: Record<string, any> = {
+    workspaceId: webhookId,
+    type: 'webhook',
     timestamp: currentTimestamp,
     method: request.method,
     url: request.url,
@@ -580,16 +688,11 @@ async function storeRequestDetails(
     payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
   };
 
-  // **MODIFICADO**: Usa o Map para armazenar logs por fluxo
-  if (!globalThis.webhookLogsByFlow.has(webhookId)) {
-    globalThis.webhookLogsByFlow.set(webhookId, []);
-  }
-  const flowLogs = globalThis.webhookLogsByFlow.get(webhookId)!;
-  flowLogs.unshift(logEntry);
-  if (flowLogs.length > MAX_LOG_ENTRIES_PER_FLOW) {
-    flowLogs.pop();
-  }
-  globalThis.webhookLogsByFlow.set(webhookId, flowLogs);
+  fetch('/api/evolution/webhook-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(logEntry),
+  }).catch(e => console.error("[Webhook Handler] Failed to post webhook log:", e));
 
   return logEntry;
 }
@@ -772,7 +875,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 }
               } else {
                 if (!isApiCallResponse) {
-                  // Função auxiliar para envio de mensagem omnichannel (PRIORIDADE PELO flow_context)
                   const sendOmniChannelMessage = async (content: string) => {
                     if (!content) return;
 
@@ -793,8 +895,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                           chatId: chatId,
                           content: content,
                         });
-                      } else {
-                        console.error(`[Flow Engine - ${session!.session_id}] Dialogy selecionado por flow_context (helper), mas faltam dados.`);
                       }
                       return;
                     }
@@ -809,8 +909,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                           conversationId: session!.flow_variables.chatwoot_conversation_id,
                           content: content
                         });
-                      } else {
-                        console.error(`[Flow Engine - ${session!.session_id}] Chatwoot selecionado por flow_context (helper), mas faltam dados.`);
                       }
                       return;
                     }
@@ -844,7 +942,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             session = null;
           }
         } else {
-          // New message received, but not awaiting input. Treat as a restart.
           console.log(`[API Evolution Trigger - ${session.session_id}] New message received in active session not awaiting input. Restarting flow.`);
           await deleteSessionFromDB(session.session_id);
           session = null;
@@ -1025,3 +1122,4 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
+
