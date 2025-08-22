@@ -1,4 +1,5 @@
 
+
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
@@ -399,7 +400,6 @@ export async function executeFlow(
             setProperty(session.flow_variables, varName, errorData);
           }
         } finally {
-            // Log a centralização
             const logData = {
               workspaceId: workspace.id,
               type: 'api-call',
@@ -409,8 +409,6 @@ export async function executeFlow(
               response: responseData,
               error: errorData,
             };
-
-            // Dispara um POST para o endpoint central de logs sem aguardar
             fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/evolution/webhook-logs`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -526,5 +524,3 @@ export async function executeFlow(
     }
   }
 }
-
-    

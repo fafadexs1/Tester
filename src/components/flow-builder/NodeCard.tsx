@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -636,21 +637,23 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         description: `Status: ${result.status}`,
       });
 
+      // Salva o log no servidor após o teste
       if (activeWorkspace?.id) {
           const logData = {
               workspaceId: activeWorkspace.id,
-              type: 'api-call', // Centralized log type
+              type: 'api-call', // tipo de log centralizado
               nodeId: node.id,
               nodeTitle: node.title,
               requestUrl: node.apiUrl,
               response: result.data,
               error: null,
           };
-          await fetch('/api/evolution/webhook-logs', { // Use the central log endpoint
+          // Não precisa esperar (await) para não bloquear a UI
+          fetch('/api/evolution/webhook-logs', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(logData),
-          });
+          }).catch(e => console.error("Falha ao postar o log do teste de API:", e));
       }
 
     } catch (error: any) {
@@ -671,10 +674,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         toast({ title: "Erro", description: "ID do fluxo não encontrado para buscar logs.", variant: "destructive" });
         return [];
     }
-    const response = await fetch(`/api/evolution/webhook-logs?workspaceId=${activeWorkspace.id}`);
-    if (!response.ok) throw new Error('Falha ao buscar logs de API');
-    const data: any[] = await response.json();
-    return data.filter(log => log.type === 'api-call' && log.nodeId === node.id);
+    try {
+        const response = await fetch(`/api/evolution/webhook-logs?workspaceId=${activeWorkspace.id}`);
+        if (!response.ok) throw new Error('Falha ao buscar logs de API');
+        const data: any[] = await response.json();
+        return data.filter(log => log.type === 'api-call' && log.nodeId === node.id);
+    } catch(e: any) {
+        toast({ title: "Erro", description: `Não foi possível buscar os logs: ${e.message}`, variant: "destructive" });
+        return [];
+    }
   }, [activeWorkspace?.id, node.id, toast]);
 
   const handleOpenApiHistory = () => {
@@ -2472,5 +2480,3 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
-    
