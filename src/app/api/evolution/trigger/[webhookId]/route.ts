@@ -4,9 +4,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getProperty, setProperty } from 'dot-prop';
-import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
-import { sendChatwootMessageAction } from '@/app/actions/chatwootApiActions';
-import { sendDialogyMessageAction } from '@/app/actions/dialogyApiActions';
 import {
   loadSessionFromDB,
   saveSessionToDB,
@@ -16,9 +13,12 @@ import {
   loadDialogyInstanceFromDB,
   loadWorkspacesForOrganizationFromDB,
 } from '@/app/actions/databaseActions';
-import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData, FlowContextType, ApiResponseMapping } from '@/lib/types';
+import { sendChatwootMessageAction } from '@/app/actions/chatwootApiActions';
+import { sendDialogyMessageAction } from '@/app/actions/dialogyApiActions';
+import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
+import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData, FlowContextType, ApiResponseMapping } from '@/lib/types';
 import jsonata from 'jsonata';
 
 
@@ -261,7 +261,7 @@ async function executeFlow(
             currentNode.type === 'input' ? 'promptText' :
               currentNode.type === 'date-input' ? 'dateInputLabel' :
                 currentNode.type === 'file-upload' ? 'uploadPromptText' :
-                  'rating-input' ? 'ratingQuestionText' : '';
+                  'ratingQuestionText';
 
           promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
           if (promptText) {
@@ -485,7 +485,7 @@ async function executeFlow(
                           if (mapping.extractAs === 'list') {
                               let list = Array.isArray(extractedValue) ? extractedValue : [extractedValue];
                               if (mapping.itemField) {
-                                  list = list.map(item => item?.[mapping.itemField]);
+                                  list = list.map(item => item?.[mapping.itemField!]);
                               }
                               valueToSave = list;
                           }
@@ -530,9 +530,8 @@ async function executeFlow(
         const varName = currentNode.codeOutputVariable;
         if (currentNode.codeSnippet) {
           try {
-            // Cria uma função assíncrona a partir do snippet de código do usuário
-            const userCode = new Function('variables', `return (async (variables) => { ${currentNode.codeSnippet} })(variables);`);
-            // Executa o código e aguarda o resultado
+            const substitutedCode = substituteVariablesInText(currentNode.codeSnippet, session.flow_variables);
+            const userCode = new Function('variables', `return (async (variables) => { ${substitutedCode} })(variables);`);
             const result = await userCode(session.flow_variables);
 
             if (varName) {
@@ -1154,5 +1153,3 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
-
-    
