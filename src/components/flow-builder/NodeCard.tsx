@@ -551,7 +551,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     const currentList = (node[listName] as any[] || []);
     let newItem;
     if(listName === 'apiResponseMappings') {
-        newItem = { id: uuidv4(), jsonPath: '', flowVariable: '', extractAs: 'single', itemField: '' };
+        newItem = { id: uuidv4(), jsonPath: '', flowVariable: '', extractAs: 'single' };
     } else {
         newItem = { id: uuidv4(), key: '', value: '' };
     }
@@ -563,7 +563,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     onUpdate(node.id, { [listName]: currentList.filter(item => item.id !== itemId) });
   };
   
-  const handleApiResponseMappingChange = (mappingId: string, field: 'jsonPath' | 'flowVariable' | 'extractAs' | 'itemField', value: string) => {
+  const handleApiResponseMappingChange = (mappingId: string, field: 'jsonPath' | 'flowVariable' | 'extractAs', value: string) => {
     const currentMappings = (node.apiResponseMappings || []);
     onUpdate(node.id, {
         apiResponseMappings: currentMappings.map(mapping => 
@@ -778,26 +778,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[200px] p-0" data-no-drag="true" align="end">
-          <ScrollArea
-            className="max-h-[150px]"
-            onWheel={(e) => e.stopPropagation()}
-          >
+          <ScrollArea className="h-auto max-h-[150px]">
             <div className="p-1 text-xs">
               {allVars.map((varName) => (
                 <Button
                   key={varName}
                   variant="ghost"
                   className="w-full justify-start h-7 px-2 text-xs"
-                  onClick={() =>
-                    handleVariableInsert(
-                      fieldName,
-                      varName,
-                      isTextarea,
-                      isListItem,
-                      itemId,
-                      itemKeyOrValue
-                    )
-                  }
+                  onClick={() => handleVariableInsert(fieldName, varName, isTextarea, isListItem, itemId, itemKeyOrValue)}
                 >
                   {varName}
                 </Button>
@@ -1682,7 +1670,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     <Label className="text-xs font-medium">Mapeamento de Múltiplas Variáveis (Opcional)</Label>
                     <div className="space-y-2 mt-1">
                       {(node.apiResponseMappings || []).map(mapping => (
-                        <div key={mapping.id} className="grid grid-cols-[1fr,1fr,1fr,auto] items-center gap-x-1.5">
+                        <div key={mapping.id} className="grid grid-cols-[1fr,1fr,auto] items-center gap-x-1.5">
                            <div className="relative">
                             <Input
                               placeholder="Caminho JSON (ex: data.id)"
@@ -1699,17 +1687,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                 </Popover>
                           </div>
                           <Input placeholder="Variável (ex: id_usuario)" value={mapping.flowVariable} onChange={(e) => handleApiResponseMappingChange(mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs" />
-                          {mapping.extractAs === 'list' ? (
-                            <Input
-                              placeholder="Campo da lista (ex: numero)"
-                              title="Exemplo: campo 'numero' para extrair somente os números de contratos"
-                              value={mapping.itemField || ''}
-                              onChange={(e) => handleApiResponseMappingChange(mapping.id, 'itemField', e.target.value)}
-                              className="h-7 text-xs"
-                            />
-                          ) : (
-                            <div />
-                          )}
                           <div className="flex items-center gap-0.5">
                              <Select value={mapping.extractAs || 'single'} onValueChange={(value) => handleApiResponseMappingChange(mapping.id, 'extractAs', value)}>
                                 <SelectTrigger className="h-7 w-[65px] text-xs">
@@ -2505,3 +2482,4 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
 
+    

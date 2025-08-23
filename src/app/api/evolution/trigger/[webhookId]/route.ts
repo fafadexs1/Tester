@@ -477,17 +477,12 @@ async function executeFlow(
                       try {
                           const expression = jsonata(mapping.jsonPath);
                           const extractedValue = await expression.evaluate(responseData);
-
-                          let valueToSave: any = extractedValue;
-                          if (mapping.extractAs === 'list') {
-                              let list = Array.isArray(extractedValue) ? extractedValue : [extractedValue];
-                              if (mapping.itemField) {
-                                  list = list.map(item => item?.[mapping.itemField]);
-                              }
-                              valueToSave = list;
+                          
+                           if (mapping.extractAs === 'list' && !Array.isArray(extractedValue)) {
+                              setProperty(session.flow_variables, mapping.flowVariable, [extractedValue]);
+                          } else {
+                              setProperty(session.flow_variables, mapping.flowVariable, extractedValue);
                           }
-
-                          setProperty(session.flow_variables, mapping.flowVariable, valueToSave);
                           console.log(`[Flow Engine] API Mapping: Set '${mapping.flowVariable}' from path '${mapping.jsonPath}'`);
                       } catch (e: any) {
                           console.error(`[Flow Engine] Error evaluating JSONata expression '${mapping.jsonPath}':`, e.message);
@@ -513,11 +508,11 @@ async function executeFlow(
             error: errorObj ? errorObj.message || String(errorObj) : null,
           };
           // Não aguarda para não bloquear o fluxo
-          fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/evolution/webhook-logs`, {
+          fetch('/api/evolution/webhook-logs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(logData),
-          }).catch(e => console.error("[Webhook Handler] Failed to post webhook log:", e));
+          }).catch(e => console.error("[Flow Engine] Failed to post API log:", e));
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
@@ -693,7 +688,7 @@ async function storeRequestDetails(
     payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
   };
 
-  fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/evolution/webhook-logs`, {
+  fetch('/api/evolution/webhook-logs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(logEntry),
@@ -1127,3 +1122,4 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
+

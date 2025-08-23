@@ -71,7 +71,6 @@ export interface ApiResponseMapping {
   jsonPath: string;
   flowVariable: string;
   extractAs?: 'single' | 'list';
-  itemField?: string;
 }
 
 
