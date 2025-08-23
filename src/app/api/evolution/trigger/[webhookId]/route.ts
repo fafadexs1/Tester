@@ -556,30 +556,21 @@ async function executeFlow(
       case 'code-execution': {
         const varName = currentNode.codeOutputVariable;
         if (currentNode.codeSnippet) {
-          try {
-            const substitutedCode = substituteVariablesInCode(currentNode.codeSnippet, session.flow_variables);
-            let result: any;
-            
-            const functionMatch = substitutedCode.match(/function\s+([a-zA-Z0-9_]+)\s*\(/);
-            if (functionMatch && !substitutedCode.includes(`${functionMatch[1]}()`)) {
-                const finalCode = `${substitutedCode}\nreturn ${functionMatch[1]}();`;
-                const userCode = new Function('variables', `return (async () => { ${finalCode} })();`);
-                result = await userCode(session.flow_variables);
-            } else {
-                const userCode = new Function('variables', `return (async () => { ${substitutedCode} })();`);
-                result = await userCode(session.flow_variables);
+            try {
+                // Use o objeto de variáveis diretamente, não substitua no texto
+                const userCode = new Function('variables', `return (async (variables) => { ${currentNode.codeSnippet} })(variables);`);
+                const result = await userCode(session.flow_variables);
+                
+                if (varName) {
+                    setProperty(session.flow_variables, varName, result);
+                    console.log(`[Flow Engine] Code Execution: Saved result to "${varName}".`);
+                }
+            } catch (e: any) {
+                console.error(`[Flow Engine - ${session.session_id}] Code Execution Error:`, e);
+                if (varName) {
+                    setProperty(session.flow_variables, varName, { error: e.message });
+                }
             }
-
-            if (varName) {
-              setProperty(session.flow_variables, varName, result);
-              console.log(`[Flow Engine] Code Execution: Saved result to "${varName}".`);
-            }
-          } catch (e: any) {
-            console.error(`[Flow Engine - ${session.session_id}] Code Execution Error:`, e);
-            if (varName) {
-              setProperty(session.flow_variables, varName, { error: e.message });
-            }
-          }
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
