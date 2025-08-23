@@ -557,8 +557,13 @@ async function executeFlow(
         const varName = currentNode.codeOutputVariable;
         if (currentNode.codeSnippet) {
             try {
-                // Use o objeto de variáveis diretamente, não substitua no texto
-                const userCode = new Function('variables', `return (async (variables) => { ${currentNode.codeSnippet} })(variables);`);
+                // A função agora é construída para retornar o valor da chamada da função interna.
+                const userCode = new Function('variables', `
+                    const code = async (variables) => { 
+                        ${currentNode.codeSnippet} 
+                    };
+                    return code(variables);
+                `);
                 const result = await userCode(session.flow_variables);
                 
                 if (varName) {
@@ -574,7 +579,7 @@ async function executeFlow(
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
-      }
+    }
 
       case 'whatsapp-text':
       case 'whatsapp-media': {
