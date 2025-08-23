@@ -563,7 +563,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     onUpdate(node.id, { [listName]: currentList.filter(item => item.id !== itemId) });
   };
   
-  const handleApiResponseMappingChange = (mappingId: string, field: 'jsonPath' | 'flowVariable' | 'extractAs', value: string) => {
+  const handleApiResponseMappingChange = (mappingId: string, field: 'jsonPath' | 'flowVariable' | 'extractAs' | 'itemField', value: string) => {
     const currentMappings = (node.apiResponseMappings || []);
     onUpdate(node.id, {
         apiResponseMappings: currentMappings.map(mapping => 
@@ -1687,17 +1687,25 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                 </Popover>
                           </div>
                           <Input placeholder="Variável (ex: id_usuario)" value={mapping.flowVariable} onChange={(e) => handleApiResponseMappingChange(mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs" />
-                          <div className="flex items-center gap-0.5">
-                             <Select value={mapping.extractAs || 'single'} onValueChange={(value) => handleApiResponseMappingChange(mapping.id, 'extractAs', value)}>
-                                <SelectTrigger className="h-7 w-[65px] text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="single"><div className="flex items-center gap-1.5"><Baseline className="w-3.5 h-3.5"/><span>Valor</span></div></SelectItem>
-                                  <SelectItem value="list"><div className="flex items-center gap-1.5"><List className="w-3.5 h-3.5"/><span>Lista</span></div></SelectItem>
-                                </SelectContent>
+                          <div className="flex items-center gap-1">
+                              <Select value={mapping.extractAs || 'single'} onValueChange={(value) => handleApiResponseMappingChange(mapping.id, 'extractAs', value)}>
+                                  <SelectTrigger className="h-7 w-[90px] text-xs">
+                                      <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                      <SelectItem value="single"><div className="flex items-center gap-1.5"><Baseline className="w-3.5 h-3.5"/><span>Valor</span></div></SelectItem>
+                                      <SelectItem value="list"><div className="flex items-center gap-1.5"><List className="w-3.5 h-3.5"/><span>Lista</span></div></SelectItem>
+                                  </SelectContent>
                               </Select>
-                            <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6"><Trash2 className="w-3.5 h-3.5" /></Button>
+                              {mapping.extractAs === 'list' && (
+                                <Input 
+                                  placeholder="Campo do item" 
+                                  value={mapping.itemField || ''} 
+                                  onChange={(e) => handleApiResponseMappingChange(mapping.id, 'itemField', e.target.value)} 
+                                  className="h-7 text-xs w-[100px]"
+                                />
+                              )}
+                              <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6"><Trash2 className="w-3.5 h-3.5" /></Button>
                           </div>
                         </div>
                       ))}
@@ -1805,7 +1813,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <div>
               <Label htmlFor={`${node.id}-codesnippet`}>Trecho de Código (JavaScript)</Label>
               <div className="relative">
-                <Textarea id={`${node.id}-codesnippet`} placeholder="async (input, variables) => {\n  // input é o valor do nó anterior, se conectado\n  // variables é um objeto com as variáveis do fluxo\n  // Ex: const nome = variables.nome_usuario;\n  // return { resultado: 1 + 1, nome_modificado: nome.toUpperCase() };\n}" value={node.codeSnippet || ''} onChange={(e) => onUpdate(node.id, { codeSnippet: e.target.value })} rows={6} className="pr-8" />
+                <Textarea id={`${node.id}-codesnippet`} placeholder="function minhaFuncao(variaveis) {&#10;  // Use variaveis.nome_da_variavel para acessar&#10;  return { resultado: 'sucesso' };&#10;}&#10;minhaFuncao(variables);" value={node.codeSnippet || ''} onChange={(e) => onUpdate(node.id, { codeSnippet: e.target.value })} rows={6} className="pr-8 font-mono text-xs" />
                 {renderVariableInserter('codeSnippet', true)}
               </div>
             </div>
@@ -2481,5 +2489,3 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
-
-    

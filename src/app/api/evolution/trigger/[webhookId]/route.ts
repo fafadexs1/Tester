@@ -512,7 +512,7 @@ async function executeFlow(
                           if (mapping.extractAs === 'list') {
                               let list = Array.isArray(extractedValue) ? extractedValue : [extractedValue];
                               if (mapping.itemField) {
-                                  list = list.map(item => item?.[mapping.itemField]);
+                                  list = list.map(item => item?.[mapping.itemField!]);
                               }
                               valueToSave = list;
                           }
@@ -552,7 +552,7 @@ async function executeFlow(
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
-
+      
       case 'code-execution': {
         const varName = currentNode.codeOutputVariable;
         if (currentNode.codeSnippet) {
@@ -560,7 +560,6 @@ async function executeFlow(
             const substitutedCode = substituteVariablesInCode(currentNode.codeSnippet, session.flow_variables);
             let result: any;
             
-            // Verifica se o código é uma definição de função e a chama
             const functionMatch = substitutedCode.match(/function\s+([a-zA-Z0-9_]+)\s*\(/);
             if (functionMatch && !substitutedCode.includes(`${functionMatch[1]}()`)) {
                 const finalCode = `${substitutedCode}\nreturn ${functionMatch[1]}();`;
@@ -887,7 +886,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
         if (session.awaiting_input_type && session.awaiting_input_details) {
           const originalNodeId = session.awaiting_input_details.originalNodeId;
-          const awaitingNode = findNodeById(originalNodeId, workspace.nodes);
+          const awaitingNode = findNodeById(originalNodeId!, workspace.nodes);
 
           if (awaitingNode) {
             let nextNode: string | null = null;
@@ -946,52 +945,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                   const sendOmniChannelMessage = async (content: string) => {
                     if (!content) return;
 
-                    if (session.flow_context === 'dialogy') {
-                      const chatId =
-                        getProperty(session.flow_variables, 'dialogy_conversation_id') ||
-                        getProperty(session.flow_variables, 'webhook_payload.conversation.id');
-
+                    if (session!.flow_context === 'dialogy') {
+                      const chatId = getProperty(session!.flow_variables, 'dialogy_conversation_id') || getProperty(session!.flow_variables, 'webhook_payload.conversation.id');
                       let dialogyInstance = null;
-                      if (workspace.dialogy_instance_id) {
-                        dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
+                      if (workspace!.dialogy_instance_id) {
+                        dialogyInstance = await loadDialogyInstanceFromDB(workspace!.dialogy_instance_id);
                       }
-
                       if (dialogyInstance && chatId) {
-                        await sendDialogyMessageAction({
-                          baseUrl: dialogyInstance.baseUrl,
-                          apiKey: dialogyInstance.apiKey,
-                          chatId: chatId,
-                          content: content,
-                        });
+                        await sendDialogyMessageAction({ baseUrl: dialogyInstance.baseUrl, apiKey: dialogyInstance.apiKey, chatId: chatId, content: content });
                       }
                       return;
                     }
 
-                    if (session.flow_context === 'chatwoot' && workspace.chatwoot_instance_id) {
-                      const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
-                      if (chatwootInstance && session.flow_variables.chatwoot_account_id && session.flow_variables.chatwoot_conversation_id) {
-                        await sendChatwootMessageAction({
-                          baseUrl: chatwootInstance.baseUrl,
-                          apiAccessToken: chatwootInstance.apiAccessToken,
-                          accountId: session.flow_variables.chatwoot_account_id,
-                          conversationId: session.flow_variables.chatwoot_conversation_id,
-                          content: content
-                        });
+                    if (session!.flow_context === 'chatwoot' && workspace!.chatwoot_instance_id) {
+                      const chatwootInstance = await loadChatwootInstanceFromDB(workspace!.chatwoot_instance_id);
+                      if (chatwootInstance && session!.flow_variables.chatwoot_account_id && session!.flow_variables.chatwoot_conversation_id) {
+                        await sendChatwootMessageAction({ baseUrl: chatwootInstance.baseUrl, apiAccessToken: chatwootInstance.apiAccessToken, accountId: session!.flow_variables.chatwoot_account_id, conversationId: session!.flow_variables.chatwoot_conversation_id, content: content });
                       }
                       return;
                     }
-
-                    const recipientPhoneNumber =
-                      session.flow_variables.whatsapp_sender_jid ||
-                      session.session_id.split('@@')[0].replace('evolution_jid_', '');
-                    await sendWhatsAppMessageAction({
-                      ...apiConfig,
-                      recipientPhoneNumber: recipientPhoneNumber,
-                      messageType: 'text',
-                      textContent: content,
-                    });
+                    
+                    const recipientPhoneNumber = session!.flow_variables.whatsapp_sender_jid || session!.session_id.split('@@')[0].replace('evolution_jid_', '');
+                    await sendWhatsAppMessageAction({ ...apiConfig, recipientPhoneNumber: recipientPhoneNumber, messageType: 'text', textContent: content });
                   };
-
                   await sendOmniChannelMessage("Opção inválida. Por favor, tente novamente.");
                 }
                 nextNode = null;
