@@ -1,4 +1,4 @@
-'use server';
+
 import { getProperty } from 'dot-prop';
 import type { NodeData, Connection } from '@/lib/types';
 
