@@ -57,6 +57,7 @@ function substituteVariablesInText(text: string | undefined, variables: Record<s
     }
     if (value === undefined || value === null) return '';
     if (Array.isArray(value)) {
+        // Se for um array, junte com quebra de linha.
         return value.join('\n');
     }
     if (typeof value === 'object') {
@@ -68,6 +69,32 @@ function substituteVariablesInText(text: string | undefined, variables: Record<s
 
   return subbedText;
 }
+
+function substituteVariablesInCode(text: string | undefined, variables: Record<string, any>): string {
+    if (text === undefined || text === null) return '';
+    let subbedText = String(text);
+    const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
+    subbedText = subbedText.replace(variableRegex, (_full, varNameRaw) => {
+        const varName = String(varNameRaw).trim();
+        let value: any = getProperty(variables, varName);
+        if (value === undefined && !varName.includes('.')) {
+            value = variables[varName];
+        }
+        if (value === undefined || value === null) return 'null';
+        // Para código, sempre tentamos stringificar arrays/objetos para que sejam literais JS válidos.
+        if (typeof value === 'object') {
+            return JSON.stringify(value);
+        }
+        // Se for string, envolve com aspas para ser um literal de string em JS.
+        if (typeof value === 'string') {
+            return `\`${value.replace(/`/g, '\\`')}\``;
+        }
+        // Outros tipos (número, booleano) podem ser convertidos diretamente.
+        return String(value);
+    });
+    return subbedText;
+}
+
 
 function coerceToDate(raw: any): Date | null {
   if (raw === undefined || raw === null) return null;
@@ -530,9 +557,19 @@ async function executeFlow(
         const varName = currentNode.codeOutputVariable;
         if (currentNode.codeSnippet) {
           try {
-            const substitutedCode = substituteVariablesInText(currentNode.codeSnippet, session.flow_variables);
-            const userCode = new Function('variables', `return (async (variables) => { ${substitutedCode} })(variables);`);
-            const result = await userCode(session.flow_variables);
+            const substitutedCode = substituteVariablesInCode(currentNode.codeSnippet, session.flow_variables);
+            let result: any;
+            
+            // Verifica se o código é uma definição de função e a chama
+            const functionMatch = substitutedCode.match(/function\s+([a-zA-Z0-9_]+)\s*\(/);
+            if (functionMatch && !substitutedCode.match(new RegExp(`${functionMatch[1]}\\s*\\(`, 'g'))) {
+                const finalCode = `${substitutedCode}\nreturn ${functionMatch[1]}();`;
+                const userCode = new Function('variables', `return (async () => { ${finalCode} })();`);
+                result = await userCode(session.flow_variables);
+            } else {
+                const userCode = new Function('variables', `return (async () => { ${substitutedCode} })();`);
+                result = await userCode(session.flow_variables);
+            }
 
             if (varName) {
               setProperty(session.flow_variables, varName, result);
