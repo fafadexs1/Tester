@@ -1,5 +1,4 @@
 
-
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
@@ -524,5 +523,3 @@ export async function executeFlow(
     }
   }
 }
-
-    
