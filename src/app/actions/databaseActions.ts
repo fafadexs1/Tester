@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { Pool, type QueryResult } from 'pg';
@@ -1196,7 +1197,8 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
         fs.last_interaction_at
       FROM flow_sessions fs
       JOIN workspaces ws ON fs.workspace_id = ws.id
-      WHERE ws.owner_id = $1::uuid
+      JOIN organization_users ou ON ws.organization_id = ou.organization_id
+      WHERE ou.user_id = $1::uuid
       ORDER BY fs.last_interaction_at DESC;
     `;
     const result = await runQuery<FlowSession>(query, [ownerId]);
@@ -1219,8 +1221,10 @@ export async function deleteAllSessionsForOwnerFromDB(ownerId: string): Promise<
     }
 
     const query = `
-        DELETE FROM flow_sessions
-        WHERE workspace_id IN (SELECT id FROM workspaces WHERE owner_id = $1::uuid);
+      DELETE FROM flow_sessions fs
+      USING workspaces ws
+      JOIN organization_users ou ON ws.organization_id = ou.organization_id
+      WHERE fs.workspace_id = ws.id AND ou.user_id = $1::uuid;
     `;
     const result = await runQuery(query, [ownerId]);
 
