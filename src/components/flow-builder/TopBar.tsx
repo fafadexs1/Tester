@@ -396,24 +396,27 @@ const TopBar: React.FC<TopBarProps> = ({
   };
   
   const handleGoToNodeInFlow = (session: FlowSession) => {
-    if (onHighlightNode && session.current_node_id) {
-        if (session.workspace_id !== activeWorkspace?.id) {
-            toast({
-                title: "Ação Interrompida",
-                description: "Esta sessão pertence a um fluxo diferente do que está aberto.",
-                variant: "destructive"
-            });
-            return;
-        }
-        onHighlightNode(session.current_node_id);
-        setIsSessionsDialogOpen(false); 
-    } else {
-        toast({
-            title: "Informação Incompleta",
-            description: "Não foi possível determinar o nó da sessão.",
-            variant: "destructive"
-        });
-    }
+      const nodeIdToGo = session.current_node_id || session.awaiting_input_details?.originalNodeId;
+  
+      if (session.workspace_id !== activeWorkspace?.id) {
+          toast({
+              title: "Ação Interrompida",
+              description: "Esta sessão pertence a um fluxo diferente do que está aberto.",
+              variant: "destructive"
+          });
+          return;
+      }
+      
+      if (nodeIdToGo) {
+          onHighlightNode(nodeIdToGo);
+          setIsSessionsDialogOpen(false);
+      } else {
+          toast({
+              title: "Sessão Pausada",
+              description: "A sessão foi pausada em um ponto sem nó ativo. Não é possível pular para o nó.",
+              variant: "default"
+          });
+      }
   };
 
   return (
@@ -1059,7 +1062,9 @@ const TopBar: React.FC<TopBarProps> = ({
                         <CardContent className="space-y-2 text-sm flex-grow">
                            <div>
                                 <p className="font-medium text-muted-foreground text-xs">Nó Atual</p>
-                                <p className="font-mono text-xs truncate" title={session.current_node_id || 'N/A'}>{session.current_node_id || 'Nenhum (Pausado)'}</p>
+                                <p className="font-mono text-xs truncate" title={session.current_node_id || session.awaiting_input_details?.originalNodeId || 'N/A'}>
+                                  {session.current_node_id || session.awaiting_input_details?.originalNodeId || 'Nenhum (Pausado)'}
+                                </p>
                            </div>
                            <div>
                                 <p className="font-medium text-muted-foreground text-xs">Última Interação</p>
