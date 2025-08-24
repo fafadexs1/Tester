@@ -21,10 +21,14 @@ export function substituteVariablesInText(text: string | undefined, variables: R
     if (varName === 'now') {
       return new Date().toISOString();
     }
+    // A função getProperty já lida com caminhos aninhados (ex: 'objeto.propriedade')
     let value: any = getProperty(variables, varName);
+    
+    // Se getProperty não encontrar (para variáveis de nível superior sem ponto), tenta o acesso direto.
     if (value === undefined && !varName.includes('.')) {
       value = variables[varName];
     }
+    
     if (value === undefined || value === null) return '';
     if (typeof value === 'object') {
       try { return JSON.stringify(value, null, 2); }
