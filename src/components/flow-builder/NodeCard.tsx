@@ -1670,43 +1670,45 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     <Label className="text-xs font-medium">Mapeamento de Múltiplas Variáveis (Opcional)</Label>
                     <div className="space-y-2 mt-1">
                       {(node.apiResponseMappings || []).map(mapping => (
-                        <div key={mapping.id} className="grid grid-cols-[1fr,1fr,auto] items-center gap-x-1.5">
-                           <div className="relative">
-                            <Input
-                              placeholder="Caminho JSON (ex: data.id)"
-                              value={mapping.jsonPath}
-                              onChange={(e) => handleApiResponseMappingChange(mapping.id, 'jsonPath', e.target.value)}
-                              className="h-7 text-xs pl-2 pr-7" />
-                               <Popover onOpenChange={setIsJsonPathPickerOpen}>
-                                  <PopoverTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-80 p-0" align="end" data-no-drag="true">
-                                    <JsonPathPicker onSelectPath={(path) => handleApiResponseMappingChange(mapping.id, 'jsonPath', path)} logSource={fetchApiLogs} isOpen={isJsonPathPickerOpen} />
-                                  </PopoverContent>
-                                </Popover>
-                          </div>
-                          <Input placeholder="Variável (ex: id_usuario)" value={mapping.flowVariable} onChange={(e) => handleApiResponseMappingChange(mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs" />
-                          <div className="flex items-center gap-1">
-                              <Select value={mapping.extractAs || 'single'} onValueChange={(value) => handleApiResponseMappingChange(mapping.id, 'extractAs', value)}>
-                                  <SelectTrigger className="h-7 w-[90px] text-xs">
-                                      <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                      <SelectItem value="single"><div className="flex items-center gap-1.5"><Baseline className="w-3.5 h-3.5"/><span>Valor</span></div></SelectItem>
-                                      <SelectItem value="list"><div className="flex items-center gap-1.5"><List className="w-3.5 h-3.5"/><span>Lista</span></div></SelectItem>
-                                  </SelectContent>
-                              </Select>
-                              {mapping.extractAs === 'list' && (
-                                <Input 
-                                  placeholder="Campo do item" 
-                                  value={mapping.itemField || ''} 
-                                  onChange={(e) => handleApiResponseMappingChange(mapping.id, 'itemField', e.target.value)} 
-                                  className="h-7 text-xs w-[100px]"
-                                />
-                              )}
-                              <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6"><Trash2 className="w-3.5 h-3.5" /></Button>
-                          </div>
+                        <div key={mapping.id} className="space-y-2">
+                            <div className="grid grid-cols-[1fr,1fr] gap-x-1.5">
+                                <div className="relative">
+                                    <Input
+                                    placeholder="Caminho JSON (ex: data.id)"
+                                    value={mapping.jsonPath}
+                                    onChange={(e) => handleApiResponseMappingChange(mapping.id, 'jsonPath', e.target.value)}
+                                    className="h-7 text-xs pl-2 pr-7" />
+                                    <Popover onOpenChange={setIsJsonPathPickerOpen}>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 -translate-y-1/2 h-6 w-6" aria-label="Selecionar Caminho"><Target className="w-3.5 h-3.5 text-muted-foreground" /></Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-80 p-0" align="end" data-no-drag="true">
+                                        <JsonPathPicker onSelectPath={(path) => handleApiResponseMappingChange(mapping.id, 'jsonPath', path)} logSource={fetchApiLogs} isOpen={isJsonPathPickerOpen} />
+                                    </PopoverContent>
+                                    </Popover>
+                                </div>
+                                <Input placeholder="Variável (ex: id_usuario)" value={mapping.flowVariable} onChange={(e) => handleApiResponseMappingChange(mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs" />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Select value={mapping.extractAs || 'single'} onValueChange={(value) => handleApiResponseMappingChange(mapping.id, 'extractAs', value)}>
+                                    <SelectTrigger className="h-7 w-[90px] text-xs">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="single"><div className="flex items-center gap-1.5"><Baseline className="w-3.5 h-3.5"/><span>Valor</span></div></SelectItem>
+                                        <SelectItem value="list"><div className="flex items-center gap-1.5"><List className="w-3.5 h-3.5"/><span>Lista</span></div></SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {mapping.extractAs === 'list' && (
+                                    <Input 
+                                    placeholder="Campo do item (opcional)" 
+                                    value={mapping.itemField || ''} 
+                                    onChange={(e) => handleApiResponseMappingChange(mapping.id, 'itemField', e.target.value)} 
+                                    className="h-7 text-xs flex-1"
+                                    />
+                                )}
+                                <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-destructive hover:text-destructive/80 w-7 h-7 ml-auto"><Trash2 className="w-3.5 h-3.5" /></Button>
+                            </div>
                         </div>
                       ))}
                     </div>
