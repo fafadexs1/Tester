@@ -636,7 +636,7 @@ async function initializeDatabaseSchema(): Promise<void> {
     console.error('[DB Actions] Error initializing/migrating database schema, transaction rolled back.', error);
     throw error;
   } finally {
-    client.release();
+    if (client) client.release();
   }
 }
 
@@ -1024,7 +1024,8 @@ export async function loadWorkspaceFromDB(workspaceId: string): Promise<Workspac
   try {
     const result = await runQuery<WorkspaceData>(`
         SELECT 
-            id, name, nodes, connections, owner_id, organization_id, created_at, updated_at, evolution_instance_id, chatwoot_enabled, chatwoot_instance_id, dialogy_instance_id
+            id, name, nodes, connections, owner_id, organization_id, created_at, updated_at, 
+            evolution_instance_id, chatwoot_enabled, chatwoot_instance_id, dialogy_instance_id
         FROM workspaces 
         WHERE id = $1
     `, [workspaceId]);
@@ -1051,7 +1052,8 @@ export async function loadWorkspacesForOrganizationFromDB(organizationId: string
     }
     const result = await runQuery<WorkspaceData>(
       `SELECT 
-        id, name, nodes, connections, owner_id, organization_id, created_at, updated_at, evolution_instance_id, chatwoot_enabled, chatwoot_instance_id, dialogy_instance_id
+        id, name, nodes, connections, owner_id, organization_id, created_at, updated_at, 
+        evolution_instance_id, chatwoot_enabled, chatwoot_instance_id, dialogy_instance_id
        FROM workspaces 
        WHERE organization_id = $1 
        ORDER BY updated_at DESC`,
