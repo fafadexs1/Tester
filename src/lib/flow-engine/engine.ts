@@ -54,6 +54,7 @@ export async function executeFlow(
       return;
     }
 
+    // Prioridade #1: Dialogy
     if (session.flow_context === 'dialogy' && workspace.dialogy_instance_id) {
       const chatId =
         getProperty(session.flow_variables, 'dialogy_conversation_id') ||
@@ -68,12 +69,13 @@ export async function executeFlow(
           chatId: chatId,
           content: content,
         });
-        return; 
+        return; // **CRÍTICO**: Encerra a função após enviar pela Dialogy
       } else {
         console.warn(`[Flow Engine - ${session.session_id}] Dialogy context detected, but instance or chat ID is missing. Falling back.`);
       }
     }
-
+    
+    // Prioridade #2: Chatwoot
     if (session.flow_context === 'chatwoot' && workspace.chatwoot_instance_id) {
       const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
       if (chatwootInstance && session.flow_variables.chatwoot_account_id && session.flow_variables.chatwoot_conversation_id) {
@@ -85,13 +87,13 @@ export async function executeFlow(
           conversationId: session.flow_variables.chatwoot_conversation_id,
           content: content
         });
-        return; 
+        return; // **CRÍTICO**: Encerra a função após enviar pelo Chatwoot
       } else {
         console.warn(`[Flow Engine - ${session.session_id}] Chatwoot context detected, but instance or session details are missing. Falling back.`);
       }
     }
 
-    // Fallback or default action: send via Evolution/WhatsApp
+    // Fallback ou Ação Padrão: Enviar via Evolution/WhatsApp
     const recipientPhoneNumber =
       session.flow_variables.whatsapp_sender_jid ||
       session.session_id.split('@@')[0].replace('evolution_jid_', '');
