@@ -18,7 +18,7 @@ import { sendDialogyMessageAction } from '@/app/actions/dialogyApiActions';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
 import { executeFlow } from '@/lib/flow-engine/engine';
 import { storeRequestDetails } from '@/lib/flow-engine/webhook-handler';
-import { findNodeById } from '@/lib/flow-engine/utils';
+import { findNodeById, findNextNodeId } from '@/lib/flow-engine/utils';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData, FlowContextType } from '@/lib/types';
 
 
