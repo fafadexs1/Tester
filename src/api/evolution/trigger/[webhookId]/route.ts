@@ -1,5 +1,4 @@
 
-
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -117,7 +116,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           console.log(`[API Evolution Trigger - ${session.session_id}] Session timed out. Deleting session and starting a new one.`);
           await deleteSessionFromDB(session.session_id);
           session = null;
-          workspace = null; 
+          // workspace is kept here, as it's likely the same one will be used.
         }
       }
     }
@@ -127,12 +126,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (session.current_node_id === null && session.awaiting_input_type === null) {
         console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Restarting flow due to new message.`);
         await deleteSessionFromDB(session.session_id);
-        session = null;
+        session = null; // Important: session is nullified, but workspace object is kept
       } else {
         const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
         session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
         
-        // CORREÇÃO: Garante que o contexto da sessão seja o contexto atual da requisição
         session.flow_context = flowContext;
 
         if (session.awaiting_input_type && session.awaiting_input_details) {
@@ -204,7 +202,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             console.warn(`[API Evolution Trigger - ${session.session_id}] Awaiting node ${originalNodeId} not found, restarting flow.`);
             await deleteSessionFromDB(session.session_id);
             session = null;
-            workspace = null;
+            // Keep workspace loaded
           }
         } else {
           console.log(`[API Evolution Trigger - ${session.session_id}] New message received in active session not awaiting input. Restarting flow.`);
@@ -221,7 +219,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       console.log(`[API Evolution Trigger] No active session or session was reset for ${sessionKeyIdentifier}. Trying to start a new flow.`);
 
-      let workspaceToStart: WorkspaceData | null = workspace;
+      let workspaceToStart: WorkspaceData | null = workspace; // Use already loaded workspace if available
       let matchingTrigger: StartNodeTrigger | null = null;
       let startNodeForFlow: NodeData | null = null;
       let matchingKeyword: string | null = null;
@@ -307,7 +305,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           const value = getProperty(payloadToUse, path);
           if (value !== undefined) setProperty(initialVars, varName, value);
         }
-        // GARANTIA EXTRA: Assegura que a variável principal está no lugar certo
         if (getProperty(payloadToUse, 'conversation.id')) {
             initialVars['dialogy_conversation_id'] = getProperty(payloadToUse, 'conversation.id');
         }
