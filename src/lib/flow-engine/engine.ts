@@ -1,4 +1,3 @@
-
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import ivm from 'isolated-vm';
@@ -29,12 +28,50 @@ function getSharedIsolate() {
     return sharedIsolate;
 }
 
+// A função de envio omnicanal que decide qual serviço usar.
+async function sendOmniChannelMessage(
+    content: string,
+    session: FlowSession,
+    workspace: WorkspaceData,
+    apiConfig: { baseUrl: string; apiKey?: string; instanceName: string }
+): Promise<void> {
+    if (!content) return;
+    
+    // 1. Prioridade para Dialogy
+    if (session.flow_context === 'dialogy' && workspace.dialogy_instance_id) {
+        const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
+        const chatId = getProperty(session.flow_variables, 'dialogy_conversation_id');
+        if (dialogyInstance && chatId) {
+            console.log(`[Flow Engine] Roteando para Dialogy (chatId=${chatId})`);
+            await sendDialogyMessageAction({ baseUrl: dialogyInstance.baseUrl, apiKey: dialogyInstance.apiKey, chatId, content });
+            return;
+        }
+    }
+
+    // 2. Prioridade para Chatwoot
+    if (session.flow_context === 'chatwoot' && workspace.chatwoot_instance_id) {
+        const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
+        const accountId = getProperty(session.flow_variables, 'chatwoot_account_id');
+        const conversationId = getProperty(session.flow_variables, 'chatwoot_conversation_id');
+        if (chatwootInstance && accountId && conversationId) {
+            console.log(`[Flow Engine] Roteando para Chatwoot (conv=${conversationId})`);
+            await sendChatwootMessageAction({ baseUrl: chatwootInstance.baseUrl, apiAccessToken: chatwootInstance.apiAccessToken, accountId, conversationId, content });
+            return;
+        }
+    }
+
+    // 3. Fallback para Evolution (WhatsApp)
+    const recipientPhoneNumber = session.flow_variables.whatsapp_sender_jid || session.session_id.split('@@')[0].replace('evolution_jid_', '');
+    console.log(`[Flow Engine] Roteando para Evolution (recipient=${recipientPhoneNumber})`);
+    await sendWhatsAppMessageAction({ ...apiConfig, recipientPhoneNumber, messageType: 'text', textContent: content });
+}
+
 
 export async function executeFlow(
   session: FlowSession,
   nodes: NodeData[],
   connections: Connection[],
-  transport: { sendMessage: (content: string) => Promise<void> },
+  apiConfig: { baseUrl: string; apiKey?: string; instanceName: string },
   workspace: WorkspaceData
 ): Promise<void> {
   let currentNodeId = session.current_node_id;
@@ -71,7 +108,7 @@ export async function executeFlow(
 
       case 'message': {
         const messageText = substituteVariablesInText(currentNode.text, session.flow_variables);
-        await transport.sendMessage(messageText);
+        await sendOmniChannelMessage(messageText, session, workspace, apiConfig);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
@@ -98,7 +135,7 @@ export async function executeFlow(
               finalMessage += "\nResponda com o número da opção desejada ou o texto exato da opção.";
             }
 
-            await transport.sendMessage(finalMessage);
+            await sendOmniChannelMessage(finalMessage, session, workspace, apiConfig);
             session.awaiting_input_type = 'option';
             session.awaiting_input_details = {
               variableToSave: currentNode.variableToSaveChoice || 'last_user_choice',
@@ -117,7 +154,7 @@ export async function executeFlow(
             'ratingQuestionText';
 
           promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
-          if (promptText) await transport.sendMessage(promptText);
+          if (promptText) await sendOmniChannelMessage(promptText, session, workspace, apiConfig);
 
           session.awaiting_input_type = nodeType as any;
           session.awaiting_input_details = {
@@ -529,7 +566,7 @@ export async function executeFlow(
       }
       
       case 'dialogy-send-message': {
-        await transport.sendMessage(substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables));
+        await sendOmniChannelMessage(substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables), session, workspace, apiConfig);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
