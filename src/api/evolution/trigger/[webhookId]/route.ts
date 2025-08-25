@@ -45,7 +45,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const sessionKeyIdentifier = loggedEntry.session_key_identifier;
     const receivedMessageText = loggedEntry.extractedMessage;
-    const flowContext: FlowContextType = loggedEntry.flow_context;
+    const flowContext = loggedEntry.flow_context;
 
     // Agent intervention checks
     if (flowContext === 'chatwoot') {
@@ -97,11 +97,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ message: `Webhook logged, but no flow execution: ${reason}.` }, { status: 200 });
     }
 
-    let workspace: WorkspaceData | null = null;
+    let workspace: WorkspaceData | null = await loadWorkspaceFromDB(webhookId);
     let session: FlowSession | null = await loadSessionFromDB(sessionKeyIdentifier);
+    
+    console.log(`[API Evolution Trigger] Loaded initial workspace for webhookId ${webhookId}:`, workspace?.id);
+    console.log(`[API Evolution Trigger] Loaded initial session for sessionKeyIdentifier ${sessionKeyIdentifier}:`, session?.session_id);
+
 
     if (session) {
-      workspace = await loadWorkspaceFromDB(session.workspace_id);
+       // Se uma sessão existe, o workspace correto é o da sessão, não o da URL.
+      if (session.workspace_id !== workspace?.id) {
+          console.log(`[API Evolution Trigger] Session belongs to a different workspace (${session.workspace_id}). Loading correct workspace...`);
+          workspace = await loadWorkspaceFromDB(session.workspace_id);
+      }
+
       console.log(`[API Evolution Trigger - ${session.session_id}] Existing session found in workspace ${workspace?.id}. Last interaction: ${session.last_interaction_at}, Timeout: ${session.session_timeout_seconds}s`);
       if (!workspace) {
         console.error(`[API Evolution Trigger] Session ${session.session_id} exists but its workspace ${session.workspace_id} was not found. Deleting orphan session.`);
@@ -126,7 +135,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (session.current_node_id === null && session.awaiting_input_type === null) {
         console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Restarting flow due to new message.`);
         await deleteSessionFromDB(session.session_id);
-        session = null; // Important: session is nullified, but workspace object is kept
+        const reloadedWorkspace = await loadWorkspaceFromDB(webhookId);
+        session = null;
+        workspace = reloadedWorkspace; // Força recarregar o workspace da URL
       } else {
         const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
         session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
@@ -225,35 +236,39 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       let matchingKeyword: string | null = null;
 
       if (!workspaceToStart) {
-        const defaultWorkspace = await loadWorkspaceFromDB(webhookId);
-        if (defaultWorkspace?.organization_id) {
-            const organizationId = defaultWorkspace.organization_id;
-            const allWorkspaces = await loadWorkspacesForOrganizationFromDB(organizationId);
+        console.log(`[API Evolution Trigger] Workspace was null, reloading from webhookId: ${webhookId}`);
+        workspaceToStart = await loadWorkspaceFromDB(webhookId);
+      }
 
-            for (const ws of allWorkspaces) {
-                const startNode = ws.nodes.find(n => n.type === 'start');
-                if (startNode?.triggers) {
-                    for (const trigger of startNode.triggers) {
-                        if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword && receivedMessageText) {
-                            const keywords = trigger.keyword.split(',').map(k => k.trim().toLowerCase());
-                            const foundKeyword = keywords.find(kw => kw === receivedMessageText.toLowerCase());
-                            if (foundKeyword) {
-                                workspaceToStart = ws;
-                                matchingTrigger = trigger;
-                                startNodeForFlow = startNode;
-                                matchingKeyword = foundKeyword;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (workspaceToStart) break;
-            }
-        }
-        if (!workspaceToStart && defaultWorkspace) {
-            console.log(`[API Evolution Trigger] No keyword match found. Falling back to default flow from URL: ${webhookId}`);
-            workspaceToStart = defaultWorkspace;
-        }
+      if (workspaceToStart?.organization_id) {
+          const organizationId = workspaceToStart.organization_id;
+          const allWorkspaces = await loadWorkspacesForOrganizationFromDB(organizationId);
+
+          for (const ws of allWorkspaces) {
+              const startNode = ws.nodes.find(n => n.type === 'start');
+              if (startNode?.triggers) {
+                  for (const trigger of startNode.triggers) {
+                      if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword && receivedMessageText) {
+                          const keywords = trigger.keyword.split(',').map(k => k.trim().toLowerCase());
+                          const foundKeyword = keywords.find(kw => kw === receivedMessageText.toLowerCase());
+                          if (foundKeyword) {
+                              workspaceToStart = ws;
+                              matchingTrigger = trigger;
+                              startNodeForFlow = startNode;
+                              matchingKeyword = foundKeyword;
+                              break;
+                          }
+                      }
+                  }
+              }
+              if (workspaceToStart && matchingTrigger) break; // Sai dos dois loops se encontrar um workspace por keyword
+          }
+      }
+      
+      // Se não encontrou por keyword, volta para o default da URL
+      if (!matchingTrigger) {
+          console.log(`[API Evolution Trigger] No keyword match found. Falling back to default flow from URL: ${webhookId}`);
+          workspaceToStart = await loadWorkspaceFromDB(webhookId);
       }
       
       if (!workspaceToStart) {
@@ -262,7 +277,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
 
       startNodeForFlow = workspaceToStart.nodes.find(n => n.type === 'start');
-      matchingTrigger = startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled) || null;
+      if (!matchingTrigger) { // Se ainda não tem um trigger, pega o primeiro webhook enabled
+        matchingTrigger = startNodeForFlow?.triggers?.find(t => t.type === 'webhook' && t.enabled) || null;
+      }
 
       if (!startNodeForFlow || !matchingTrigger) {
         console.log(`[API Evolution Trigger] Workspace ${workspaceToStart.name} has no enabled webhook trigger.`);
@@ -329,12 +346,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         session_timeout_seconds: matchingTrigger.sessionTimeoutSeconds || 0,
         flow_context: flowContext,
       };
+      console.log("[API Evolution Trigger] New session created:", JSON.stringify(session, null, 2));
       workspace = workspaceToStart;
       startExecution = true;
     }
 
     if (startExecution && session?.current_node_id && workspace) {
-      console.log(`[API Evolution Trigger] Calling executeFlow for session. Context: ${session.flow_context}`);
+      console.log(`[API Evolution Trigger] Calling executeFlow for session. Context: ${session.flow_context}. Workspace ID: ${workspace.id}`);
       await executeFlow(session, workspace.nodes, workspace.connections || [], workspace);
     } else if (session && !startExecution) {
       await saveSessionToDB(session);
