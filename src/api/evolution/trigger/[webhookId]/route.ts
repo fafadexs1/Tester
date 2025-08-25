@@ -14,7 +14,7 @@ import {
 } from '@/app/actions/databaseActions';
 import { executeFlow } from '@/lib/flow-engine/engine';
 import { storeRequestDetails } from '@/lib/flow-engine/webhook-handler';
-import { findNodeById, findNextNodeId } from '@/lib/flow-engine/utils';
+import { findNodeById } from '@/lib/flow-engine/utils';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData } from '@/lib/types';
 
 
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (workspaceForResume && workspaceForResume.nodes) {
           sessionToResume.flow_variables[sessionToResume.awaiting_input_details?.variableToSave || 'external_response_data'] = parsedBody;
           sessionToResume.awaiting_input_type = null;
-          await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], workspaceForResume);
+          await executeFlow(sessionToResume, workspaceForResume);
           return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
         }
       } else {
@@ -329,7 +329,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     if (startExecution && session?.current_node_id && workspace) {
       console.log(`[API Evolution Trigger] Calling executeFlow for session. Context: ${session.flow_context}. Workspace ID: ${workspace.id}`);
-      await executeFlow(session, workspace.nodes, workspace.connections || [], workspace);
+      await executeFlow(session, workspace);
     } else if (session && !startExecution) {
       await saveSessionToDB(session);
     }

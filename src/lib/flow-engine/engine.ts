@@ -53,11 +53,11 @@ async function sendOmniChannelMessage(
           chatId: String(chatId), 
           content 
         });
-        return; // Exit after successful send
+        return; 
       }
     }
-    console.error(`[sendOmniChannelMessage] Falha ao enviar pela Dialogy. Instância ou Chat ID ausente. Workspace tem instância? ${!!workspace.dialogy_instance_id}, Sessão tem ChatID? ${!!chatId}`);
-    return; // DO NOT FALLBACK
+    console.error(`[sendOmniChannelMessage] Falha ao enviar pela Dialogy. Instância (${workspace.dialogy_instance_id}) ou Chat ID (${chatId}) ausente.`);
+    return;
   }
 
   if (session.flow_context === 'chatwoot') {
@@ -74,14 +74,13 @@ async function sendOmniChannelMessage(
           conversationId: Number(conversationId), 
           content 
         });
-        return; // Exit after successful send
+        return;
       }
     }
      console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Chatwoot. Instância, Account ID ou Conversation ID ausente.`);
-    return; // DO NOT FALLBACK
+    return;
   }
   
-  // Default/Fallback behavior (e.g., for 'evolution' context)
   console.log(`[sendOmniChannelMessage] Roteando para Evolution (padrão/fallback)...`);
   const evolutionInstanceId = workspace.evolution_instance_id;
   if (!evolutionInstanceId) {
@@ -89,26 +88,17 @@ async function sendOmniChannelMessage(
     return;
   }
   
-  // This logic should be adapted to fetch the correct instance details
-  // For now, it's a placeholder. A robust implementation would query the DB.
    console.warn(`[sendOmniChannelMessage] Lógica para buscar detalhes da instância Evolution (ID: ${evolutionInstanceId}) não implementada.`);
    
   const evoRecipient = session.flow_variables.whatsapp_sender_jid || 
                        session.session_id.split('@@')[0].replace('evolution_jid_', '');
 
   console.log(`[sendOmniChannelMessage] Tentando enviar para Evolution (recipient=${evoRecipient}) (LÓGICA INCOMPLETA)`);
-  // Example of what it should do:
-  // const evoInstance = await loadEvolutionInstanceFromDB(evolutionInstanceId);
-  // if (evoInstance) {
-  //   await sendWhatsAppMessageAction({ ... });
-  // }
 }
 
 export async function executeFlow(
   session: FlowSession,
-  nodes: NodeData[],
-  connections: Connection[],
-  workspaceIn: WorkspaceData
+  workspaceIn?: WorkspaceData
 ): Promise<void> {
   
   console.log(`[Flow Engine] executeFlow called with session:`, JSON.stringify(session, null, 2));
@@ -126,6 +116,7 @@ export async function executeFlow(
       console.log(`[Flow Engine] Workspace reloaded successfully:`, JSON.stringify(workspace, null, 2));
   }
   
+  const { nodes, connections } = workspace;
   let currentNodeId = session.current_node_id;
   let shouldContinue = true;
 
