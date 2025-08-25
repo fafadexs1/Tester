@@ -69,7 +69,7 @@ export async function executeFlow(
           content: content,
         });
       }
-      return;
+      // REMOVIDO: 'return;' que causava a parada prematura
     }
 
     if (session.flow_context === 'chatwoot') {
@@ -85,9 +85,10 @@ export async function executeFlow(
           });
         }
       }
-      return;
+       // REMOVIDO: 'return;' que causava a parada prematura
     }
 
+    // Ação padrão (ou fallback) é enviar para Evolution/WhatsApp
     const recipientPhoneNumber =
       session.flow_variables.whatsapp_sender_jid ||
       session.session_id.split('@@')[0].replace('evolution_jid_', '');
@@ -446,7 +447,6 @@ export async function executeFlow(
                 console.log('[Flow Engine Code] Injetando variáveis no sandbox.');
 
                 const scriptToRun = `
-                    // Torna qualquer valor JSON-safe (sem ciclos; tipagens especiais normalizadas)
                     function toJSONSafe(value, seen = new WeakSet()) {
                         if (value === null || value === undefined) return value;
                         const t = typeof value;
