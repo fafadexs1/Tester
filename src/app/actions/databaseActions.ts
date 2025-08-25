@@ -855,8 +855,6 @@ export async function createOrganization(name: string, ownerId: string): Promise
     if (client) await client.query('ROLLBACK');
     console.error('[DB Actions] Erro ao criar organização:', error);
     return { success: false, error: `Erro de banco de dados: ${error.message}` };
-  } finally {
-    if (client) client.release();
   }
 }
 

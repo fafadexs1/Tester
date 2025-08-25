@@ -1,4 +1,3 @@
-
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import ivm from 'isolated-vm';
@@ -36,13 +35,25 @@ async function sendOmniChannelMessage(
   content: string
 ): Promise<void> {
   if (!content) return;
-  console.log(`[sendOmniChannelMessage] Initiating send for session ${session.session_id} with context ${session.flow_context}`);
-  console.log('[sendOmniChannelMessage] Full session object:', JSON.stringify(session, null, 2));
-  console.log('[sendOmniChannelMessage] Full workspace object:', JSON.stringify(workspace, null, 2));
+  
+  // Resilient context discovery
+  const ctx = session.flow_context || (
+    session.session_id.startsWith('dialogy_conv_') ? 'dialogy' :
+    session.session_id.startsWith('chatwoot_conv_') ? 'chatwoot' :
+    'evolution'
+  );
 
-  // Strict channel logic based on context
-  if (session.flow_context === 'dialogy') {
-    const chatId = getProperty(session.flow_variables, 'dialogy_conversation_id');
+  console.log(`[sendOmniChannelMessage] Initiating send for session ${session.session_id}. Determined context: ${ctx}`);
+
+  if (ctx === 'dialogy') {
+    // Resilient chatId discovery
+    let chatId =
+      getProperty(session.flow_variables, 'dialogy_conversation_id') ||
+      getProperty(session.flow_variables, 'webhook_payload.conversation.id') ||
+      (session.session_id.startsWith('dialogy_conv_')
+        ? session.session_id.replace('dialogy_conv_', '')
+        : null);
+
     if (workspace.dialogy_instance_id && chatId) {
       const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
       if (dialogyInstance) {
@@ -54,13 +65,16 @@ async function sendOmniChannelMessage(
           content 
         });
         return; 
+      } else {
+         console.error(`[sendOmniChannelMessage] Instância Dialogy ${workspace.dialogy_instance_id} não encontrada na base.`);
+         return;
       }
     }
     console.error(`[sendOmniChannelMessage] Falha ao enviar pela Dialogy. Instância (${workspace.dialogy_instance_id}) ou Chat ID (${chatId}) ausente.`);
     return;
   }
 
-  if (session.flow_context === 'chatwoot') {
+  if (ctx === 'chatwoot') {
     const accountId = getProperty(session.flow_variables, 'chatwoot_account_id');
     const conversationId = getProperty(session.flow_variables, 'chatwoot_conversation_id');
     if (workspace.chatwoot_instance_id && accountId && conversationId) {
@@ -84,10 +98,11 @@ async function sendOmniChannelMessage(
   console.log(`[sendOmniChannelMessage] Roteando para Evolution (padrão/fallback)...`);
   const evolutionInstanceId = workspace.evolution_instance_id;
   if (!evolutionInstanceId) {
-    console.warn(`[sendOmniChannelMessage] Contexto é ${session.flow_context}, mas nenhuma instância Evolution está configurada para este workspace.`);
+    console.warn(`[sendOmniChannelMessage] Contexto é ${ctx}, mas nenhuma instância Evolution está configurada para este workspace.`);
     return;
   }
   
+   // NOTE: This part is incomplete as we don't have a way to get Evolution instance details from its ID yet.
    console.warn(`[sendOmniChannelMessage] Lógica para buscar detalhes da instância Evolution (ID: ${evolutionInstanceId}) não implementada.`);
    
   const evoRecipient = session.flow_variables.whatsapp_sender_jid || 

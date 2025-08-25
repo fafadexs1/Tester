@@ -1,4 +1,3 @@
-
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -35,7 +34,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const sessionKeyIdentifier = loggedEntry.session_key_identifier;
     const receivedMessageText = loggedEntry.extractedMessage;
-    const flowContext = loggedEntry.flow_context; // Correctly identified here
+    const flowContext = loggedEntry.flow_context;
 
     // Agent intervention checks
     if (flowContext === 'chatwoot') {
@@ -90,8 +89,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     let workspace: WorkspaceData | null = null;
     let session: FlowSession | null = await loadSessionFromDB(sessionKeyIdentifier);
     
+    let payloadToUse = parsedBody;
+    if (Array.isArray(payloadToUse) && payloadToUse.length > 0) {
+      payloadToUse = payloadToUse[0];
+    }
+
     if (session) {
       workspace = await loadWorkspaceFromDB(session.workspace_id);
+      
+      // Essencial: Atualiza o contexto da sessão existente
+      session.flow_context = flowContext;
+      if (flowContext === 'dialogy') {
+          const convId = getProperty(payloadToUse, 'conversation.id');
+          if (convId) setProperty(session.flow_variables, 'dialogy_conversation_id', convId);
+      }
 
       if (!workspace) {
         console.error(`[API Evolution Trigger] Session ${session.session_id} exists but its workspace ${session.workspace_id} was not found. Deleting orphan session.`);
@@ -272,11 +283,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({ error: `Start node trigger handle '${triggerHandle}' is not connected.` }, { status: 500 });
       }
 
-      let payloadToUse = parsedBody;
-      if (Array.isArray(payloadToUse) && payloadToUse.length > 0) {
-        payloadToUse = payloadToUse[0];
-      }
-
       const initialVars: Record<string, any> = {
         mensagem_whatsapp: receivedMessageText || '',
         webhook_payload: payloadToUse,
@@ -284,23 +290,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         _triggerHandle: triggerHandle,
       };
 
-      if (flowContext === 'evolution') {
-        setProperty(initialVars, 'whatsapp_sender_jid', getProperty(payloadToUse, 'data.key.remoteJid') || getProperty(payloadToUse, 'sender.identifier'));
+      // Essencial: Adiciona variáveis específicas do Dialogy se o contexto for dialogy
+      if (flowContext === 'dialogy') {
+          setProperty(initialVars, 'dialogy_conversation_id', getProperty(payloadToUse, 'conversation.id'));
+          setProperty(initialVars, 'dialogy_contact_id',      getProperty(payloadToUse, 'contact.id'));
+          setProperty(initialVars, 'dialogy_account_id',      getProperty(payloadToUse, 'account.id'));
+          setProperty(initialVars, 'contact_name',            getProperty(payloadToUse, 'contact.name'));
+          setProperty(initialVars, 'contact_phone',           getProperty(payloadToUse, 'contact.phone_number'));
       } else if (flowContext === 'chatwoot') {
         const chatwootMappings = { chatwoot_conversation_id: 'conversation.id', chatwoot_contact_id: 'sender.id', chatwoot_account_id: 'account.id', chatwoot_inbox_id: 'inbox.id', contact_name: 'sender.name', contact_phone: 'sender.phone_number' };
         for (const [varName, path] of Object.entries(chatwootMappings)) {
           const value = getProperty(payloadToUse, path);
           if (value !== undefined) setProperty(initialVars, varName, value);
         }
-      } else if (flowContext === 'dialogy') {
-        const dialogyMappings = { dialogy_conversation_id: 'conversation.id', dialogy_contact_id: 'contact.id', dialogy_account_id: 'account.id', contact_name: 'contact.name', contact_phone: 'contact.phone_number' };
-        for (const [varName, path] of Object.entries(dialogyMappings)) {
-          const value = getProperty(payloadToUse, path);
-          if (value !== undefined) setProperty(initialVars, varName, value);
-        }
-        if (getProperty(payloadToUse, 'conversation.id')) {
-            initialVars['dialogy_conversation_id'] = getProperty(payloadToUse, 'conversation.id');
-        }
+      } else if (flowContext === 'evolution') {
+        setProperty(initialVars, 'whatsapp_sender_jid', getProperty(payloadToUse, 'data.key.remoteJid') || getProperty(payloadToUse, 'sender.identifier'));
       }
 
       if (matchingTrigger.variableMappings) {
