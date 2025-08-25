@@ -423,17 +423,20 @@ export async function executeFlow(
         if (currentNode.codeSnippet && varName) {
           try {
             console.log(`[Flow Engine - ${session.session_id}] Executing code snippet.`);
-            const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-            const codeToRun = `
-              const variables = arguments[0];
+            // Create a function that takes 'variables' as an argument.
+            const executor = new Function('variables', `
               try {
                 ${currentNode.codeSnippet}
               } catch (e) {
+                // Return errors as a specific object structure
                 return { __error: e.message || 'An unknown error occurred in the script.' };
               }
-            `;
-            const executor = new AsyncFunction(codeToRun);
-            const result = await executor(session.flow_variables);
+            `);
+
+            // Execute the function, passing in the flow variables.
+            const result = executor(session.flow_variables);
+
+            console.log(`[Flow Engine - ${session.session_id}] Code execution result:`, result);
 
             if (result && result.__error) {
               console.error(`[Flow Engine - ${session.session_id}] Error in user code-execution script:`, result.__error);
@@ -442,8 +445,9 @@ export async function executeFlow(
               setProperty(session.flow_variables, varName, result);
               console.log(`[Flow Engine - ${session.session_id}] Code execution successful. Result stored in "${varName}".`);
             }
+
           } catch (e: any) {
-            console.error(`[Flow Engine - ${session.session_id}] Failed to execute code snippet:`, e);
+            console.error(`[Flow Engine - ${session.session_id}] Failed to compile/execute code snippet:`, e);
             setProperty(session.flow_variables, varName, { error: e.message || 'Failed to run script.' });
           }
         }
