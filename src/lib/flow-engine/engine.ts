@@ -1,6 +1,7 @@
 
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
+import ivm from 'isolated-vm';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
 import { sendChatwootMessageAction } from '@/app/actions/chatwootApiActions';
 import { sendDialogyMessageAction } from '@/app/actions/dialogyApiActions';
@@ -426,33 +427,39 @@ export async function executeFlow(
       case 'code-execution': {
         const varName = currentNode.codeOutputVariable;
         if (currentNode.codeSnippet && varName) {
-            console.log('[Flow Engine Code] Executing code snippet.');
+            const isolate = new ivm.Isolate({ memoryLimit: 128 });
             try {
-                // Create an async function wrapper.
-                const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-                const userFunction = new AsyncFunction('variables', 'console', `
-                    try {
-                        ${currentNode.codeSnippet}
-                    } catch(e) {
-                        return { __error: e.message };
-                    }
-                `);
-                
-                // Execute the function.
-                const result = await userFunction(session.flow_variables, console);
+                console.log('[Flow Engine Code] Criando sandbox de execução com isolated-vm.');
+                const context = await isolate.createContext();
+                const jail = context.global;
+                await jail.set('global', jail.derefInto());
 
-                console.log('[Flow Engine Code] Code execution result:', result);
+                console.log('[Flow Engine Code] Injetando variáveis no sandbox.');
+                await jail.set('variables', new ivm.ExternalCopy(session.flow_variables).copyInto());
+                
+                const script = await isolate.compileScript(currentNode.codeSnippet);
+                console.log('[Flow Engine Code] Executando script no sandbox...');
+                const rawResult = await script.run(context, { timeout: 1000 });
+                
+                console.log('[Flow Engine Code] Resultado bruto da execução:', rawResult);
+
+                // O resultado de isolated-vm pode ser um Reference. Precisamos copiá-lo para fora.
+                const result = await (rawResult instanceof ivm.Reference ? rawResult.copy() : rawResult);
 
                 if (result && result.__error) {
                     throw new Error(result.__error);
                 }
-
+                
                 setProperty(session.flow_variables, varName, result);
-                console.log(`[Flow Engine Code] Code execution successful. Result stored in "${varName}".`);
+                console.log(`[Flow Engine Code] Variável "${varName}" definida com sucesso.`);
 
             } catch (e: any) {
-                console.error(`[Flow Engine - ${session.session_id}] Failed to compile/execute code snippet:`, e);
+                console.error(`[Flow Engine - ${session.session_id}] Erro ao executar código com isolated-vm:`, e);
                 setProperty(session.flow_variables, varName, { error: e.message });
+            } finally {
+                if (!isolate.isDisposed) {
+                    isolate.dispose();
+                }
             }
         } else {
             console.warn(`[Flow Engine] Nó 'Executar Código' sem script ou variável de saída definida.`);
