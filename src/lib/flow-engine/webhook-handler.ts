@@ -29,7 +29,7 @@ export async function storeRequestDetails(
     const chatwootContent = getProperty(actualPayloadToExtractFrom, 'content');
     const chatwootConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id');
     const chatwootMessageType = getProperty(actualPayloadToExtractFrom, 'message_type');
-    const evolutionSenderJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid');
+    const evolutionSenderJid = getProperty(actualPayloadToExtractFrom, 'data.key.remoteJid') || getProperty(actualPayloadToExtractFrom, 'sender.identifier');
     const dialogyEvent = getProperty(actualPayloadToExtractFrom, 'event');
     const dialogyConversationId = getProperty(actualPayloadToExtractFrom, 'conversation.id');
 
@@ -71,12 +71,10 @@ export async function storeRequestDetails(
     }
   };
 
-  // Salva o log no banco de dados de forma assíncrona, sem bloquear a resposta.
   saveFlowLog(logEntry).catch(e => console.error("[Webhook Handler] Failed to save webhook log to DB:", e));
   
-  // Retorna os dados extraídos para serem usados imediatamente pelo trigger da API
   return {
-    ...logEntry.details, // Flatten details for immediate use
+    ...logEntry.details,
     session_key_identifier: sessionKeyIdentifier,
   };
 }
