@@ -426,27 +426,27 @@ export async function executeFlow(
       case 'code-execution': {
         const varName = currentNode.codeOutputVariable;
         if (currentNode.codeSnippet && varName) {
-          try {
-            console.log(`[Flow Engine - ${session.session_id}] Executing code snippet.`);
-            // Wrap the user's code to ensure it returns a value from the last expression
-            const scriptToRun = `
-              return (function() {
-                const variables = arguments[0];
-                ${currentNode.codeSnippet}
-              })(arguments[0]);
-            `;
-            const executor = new Function('variables', scriptToRun);
-            
-            const result = executor(session.flow_variables);
+            try {
+                console.log(`[Flow Engine - ${session.session_id}] Executing code snippet.`);
+                // ROBUST IMPLEMENTATION: Create a function from the user's code and call it.
+                // This ensures 'return' statements are correctly handled.
+                const scriptToRun = `
+                    return (function(variables) {
+                        ${currentNode.codeSnippet}
+                    })(arguments[0]);
+                `;
+                const executor = new Function('variables', scriptToRun);
+                const result = executor(session.flow_variables);
 
-            console.log(`[Flow Engine - ${session.session_id}] Code execution result:`, result);
-            
-            setProperty(session.flow_variables, varName, result);
+                console.log(`[Flow Engine - ${session.session_id}] Code execution result:`, result);
+                
+                setProperty(session.flow_variables, varName, result);
+                console.log(`[Flow Engine - ${session.session_id}] Code execution successful. Result stored in "${varName}".`);
 
-          } catch (e: any) {
-            console.error(`[Flow Engine - ${session.session_id}] Failed to compile/execute code snippet:`, e);
-            setProperty(session.flow_variables, varName, { error: e.message || 'Failed to run script.' });
-          }
+            } catch (e: any) {
+                console.error(`[Flow Engine - ${session.session_id}] Failed to compile/execute code snippet:`, e);
+                setProperty(session.flow_variables, varName, { error: e.message || 'Failed to run script.' });
+            }
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
