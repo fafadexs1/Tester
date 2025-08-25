@@ -33,6 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     rawBody = await request.text();
     parsedBody = rawBody ? JSON.parse(rawBody) : { message: "Request body was empty." };
+    console.log('[API Evolution Trigger] Received Webhook Payload:', JSON.stringify(parsedBody, null, 2));
     loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
 
     const sessionKeyIdentifier = loggedEntry.session_key_identifier;
