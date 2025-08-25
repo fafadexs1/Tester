@@ -1,3 +1,4 @@
+
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -19,22 +20,82 @@ import { storeRequestDetails } from '@/lib/flow-engine/webhook-handler';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData, FlowContextType } from '@/lib/types';
 import { findNodeById, findNextNodeId } from '@/lib/flow-engine/utils';
 
+// Função auxiliar para criar o sender de forma consistente
+async function createMessageSender(
+  session: FlowSession, 
+  workspace: WorkspaceData | null,
+  evolutionApiBaseUrl?: string,
+  evolutionApiKey?: string,
+  instanceName?: string
+): Promise<(content: string) => Promise<void>> {
+  // Dialogy
+  if (session.flow_context === 'dialogy' && workspace?.dialogy_instance_id) {
+    const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
+    const chatId = getProperty(session.flow_variables, 'dialogy_conversation_id');
+    if (dialogyInstance && chatId) {
+      return async (content: string) => {
+        console.log(`[Flow Engine] Sending via Dialogy (chatId=${chatId})`);
+        await sendDialogyMessageAction({ 
+          baseUrl: dialogyInstance.baseUrl, 
+          apiKey: dialogyInstance.apiKey, 
+          chatId, 
+          content 
+        });
+      };
+    }
+  }
+  
+  // Chatwoot
+  if (session.flow_context === 'chatwoot' && workspace?.chatwoot_instance_id) {
+    const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
+    const accountId = getProperty(session.flow_variables, 'chatwoot_account_id');
+    const conversationId = getProperty(session.flow_variables, 'chatwoot_conversation_id');
+    if (chatwootInstance && accountId && conversationId) {
+      return async (content: string) => {
+        console.log(`[Flow Engine] Sending via Chatwoot (conv=${conversationId})`);
+        await sendChatwootMessageAction({ 
+          baseUrl: chatwootInstance.baseUrl, 
+          apiAccessToken: chatwootInstance.apiAccessToken, 
+          accountId, 
+          conversationId, 
+          content 
+        });
+      };
+    }
+  }
+  
+  // Fallback: Evolution (WhatsApp)
+  const evoRecipient = session.flow_variables.whatsapp_sender_jid || 
+                       session.session_id.split('@@')[0].replace('evolution_jid_', '');
+  const evoConfig = { 
+    baseUrl: evolutionApiBaseUrl || '', 
+    apiKey: evolutionApiKey || undefined, 
+    instanceName: instanceName || '' 
+  };
+  
+  return async (content: string) => {
+    console.log(`[Flow Engine] Sending via Evolution (recipient=${evoRecipient})`);
+    await sendWhatsAppMessageAction({ 
+      ...evoConfig, 
+      recipientPhoneNumber: evoRecipient, 
+      messageType: 'text', 
+      textContent: content 
+    });
+  };
+}
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   const { webhookId } = await params;
-
-  console.log(`[API Evolution Trigger] POST received for webhook ID: "${webhookId}"`);
-
   let rawBody: string | null = null;
   let parsedBody: any = null;
-  let loggedEntry: any = null;
-  let startExecution = false;
 
   try {
     rawBody = await request.text();
     parsedBody = rawBody ? JSON.parse(rawBody) : { message: "Request body was empty." };
-    console.log('[API Evolution Trigger] Received Webhook Payload:', JSON.stringify(parsedBody, null, 2));
-    loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
+    console.log(`[API Evolution Trigger] Webhook Received for ${webhookId}:`, JSON.stringify(parsedBody, null, 2));
+
+    let loggedEntry: any = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
+    let startExecution = false;
 
     const sessionKeyIdentifier = loggedEntry.session_key_identifier;
     const receivedMessageText = loggedEntry.extractedMessage;
@@ -68,12 +129,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const evolutionApiKey = getProperty(loggedEntry.payload, 'apikey') as string;
     const instanceName = getProperty(loggedEntry.payload, 'instance') as string;
     
-    const apiConfig = { 
-      baseUrl: evolutionApiBaseUrl, 
-      apiKey: evolutionApiKey || undefined, 
-      instanceName 
-    };
-    
     const isApiCallResponse = getProperty(loggedEntry.payload, 'isApiCallResponse') === true;
     const resumeSessionId = getProperty(loggedEntry.payload, 'resume_session_id');
 
@@ -86,8 +141,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (workspaceForResume && workspaceForResume.nodes) {
           sessionToResume.flow_variables[sessionToResume.awaiting_input_details?.variableToSave || 'external_response_data'] = parsedBody;
           sessionToResume.awaiting_input_type = null;
+
+          const sendMessage = await createMessageSender(
+            sessionToResume, 
+            workspaceForResume, 
+            evolutionApiBaseUrl, 
+            evolutionApiKey, 
+            instanceName
+          );
           
-          await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], apiConfig, workspaceForResume);
+          await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], sendMessage, workspaceForResume);
           return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
         }
       } else {
@@ -127,12 +190,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Continue existing session
     if (session && workspace) {
-      console.log(`[API Evolution Trigger - ${session.session_id}] Existing session is active. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
-
       if (session.current_node_id === null && session.awaiting_input_type === null) {
         console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Restarting flow due to new message.`);
         await deleteSessionFromDB(session.session_id);
         session = null;
+        workspace = null; // CORREÇÃO: resetar workspace também
       } else {
         const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
         session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
@@ -181,8 +243,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 }
                 nextNode = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
               } else if (!isApiCallResponse) {
-                  session.flow_variables._invalidOption = true; 
-                  nextNode = awaitingNode.id; 
+                const sendInvalidOptionMessage = await createMessageSender(
+                  session, 
+                  workspace, 
+                  evolutionApiBaseUrl, 
+                  evolutionApiKey, 
+                  instanceName
+                );
+                await sendInvalidOptionMessage("Opção inválida. Por favor, tente novamente.");
+                startExecution = false;
               }
             }
 
@@ -342,7 +411,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Execute flow if needed
     if (startExecution && session?.current_node_id && workspace) {
-      await executeFlow(session, workspace.nodes, workspace.connections || [], apiConfig, workspace);
+      const sendMessage = await createMessageSender(
+        session, 
+        workspace, 
+        evolutionApiBaseUrl, 
+        evolutionApiKey, 
+        instanceName
+      );
+      
+      await executeFlow(session, workspace.nodes, workspace.connections || [], sendMessage, workspace);
     } else if (session && !startExecution) {
       await saveSessionToDB(session);
     }

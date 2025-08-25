@@ -30,23 +30,27 @@ function getSharedIsolate() {
 }
 
 // A função de envio omnicanal que decide qual serviço usar.
+// Esta função é chamada pelo executeFlow quando um nó de mensagem precisa ser enviado.
 async function sendOmniChannelMessage(
     content: string,
     session: FlowSession,
     workspace: WorkspaceData,
-    apiConfig: { baseUrl: string; apiKey?: string; instanceName: string }
+    evolutionApiConfig: { baseUrl: string; apiKey?: string; instanceName: string } // Agora apenas para fallback
 ): Promise<void> {
     if (!content) return;
     
+    console.log(`[sendOmniChannelMessage] Initiating send for session ${session.session_id} with context ${session.flow_context}`);
+
     // 1. Prioridade para Dialogy
     if (session.flow_context === 'dialogy' && workspace.dialogy_instance_id) {
         const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
         const chatId = getProperty(session.flow_variables, 'dialogy_conversation_id') || getProperty(session.flow_variables, 'webhook_payload.conversation.id');
         if (dialogyInstance && chatId) {
-            console.log(`[Flow Engine] Roteando para Dialogy (chatId=${chatId})`);
+            console.log(`[sendOmniChannelMessage] Routing to Dialogy (chatId=${chatId})`);
             await sendDialogyMessageAction({ baseUrl: dialogyInstance.baseUrl, apiKey: dialogyInstance.apiKey, chatId, content });
-            return;
+            return; // Encerra a execução após enviar
         }
+         console.warn(`[sendOmniChannelMessage] Dialogy context detected, but instance or chatId is missing. Workspace instance: ${workspace.dialogy_instance_id}, ChatID found: ${!!chatId}`);
     }
 
     // 2. Prioridade para Chatwoot
@@ -55,16 +59,17 @@ async function sendOmniChannelMessage(
         const accountId = getProperty(session.flow_variables, 'chatwoot_account_id');
         const conversationId = getProperty(session.flow_variables, 'chatwoot_conversation_id');
         if (chatwootInstance && accountId && conversationId) {
-            console.log(`[Flow Engine] Roteando para Chatwoot (conv=${conversationId})`);
+            console.log(`[sendOmniChannelMessage] Routing to Chatwoot (conv=${conversationId})`);
             await sendChatwootMessageAction({ baseUrl: chatwootInstance.baseUrl, apiAccessToken: chatwootInstance.apiAccessToken, accountId, conversationId, content });
-            return;
+            return; // Encerra a execução
         }
+         console.warn(`[sendOmniChannelMessage] Chatwoot context detected, but instance or IDs are missing.`);
     }
 
     // 3. Fallback para Evolution (WhatsApp)
     const recipientPhoneNumber = session.flow_variables.whatsapp_sender_jid || session.session_id.split('@@')[0].replace('evolution_jid_', '');
-    console.log(`[Flow Engine] Roteando para Evolution (recipient=${recipientPhoneNumber})`);
-    await sendWhatsAppMessageAction({ ...apiConfig, recipientPhoneNumber, messageType: 'text', textContent: content });
+    console.log(`[sendOmniChannelMessage] Falling back to Evolution (recipient=${recipientPhoneNumber})`);
+    await sendWhatsAppMessageAction({ ...evolutionApiConfig, recipientPhoneNumber, messageType: 'text', textContent: content });
 }
 
 
@@ -72,7 +77,7 @@ export async function executeFlow(
   session: FlowSession,
   nodes: NodeData[],
   connections: Connection[],
-  apiConfig: { baseUrl: string; apiKey?: string; instanceName: string },
+  apiConfig: { baseUrl: string; apiKey?: string; instanceName: string }, // Renomeado para clareza
   workspace: WorkspaceData
 ): Promise<void> {
   let currentNodeId = session.current_node_id;
@@ -109,6 +114,7 @@ export async function executeFlow(
 
       case 'message': {
         const messageText = substituteVariablesInText(currentNode.text, session.flow_variables);
+        // CORREÇÃO: Usar a função omni-channel
         await sendOmniChannelMessage(messageText, session, workspace, apiConfig);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;

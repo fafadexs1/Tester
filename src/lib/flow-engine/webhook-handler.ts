@@ -70,8 +70,13 @@ export async function storeRequestDetails(
       payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
     }
   };
-
-  saveFlowLog(logEntry).catch(e => console.error("[Webhook Handler] Failed to save webhook log to DB:", e));
+  
+  // CORREÇÃO: Chamar a função do banco de dados diretamente, em vez de fazer uma chamada de API.
+  try {
+    await saveFlowLog(logEntry);
+  } catch(e) {
+    console.error("[Webhook Handler] Failed to save webhook log to DB:", e);
+  }
   
   return {
     ...logEntry.details,

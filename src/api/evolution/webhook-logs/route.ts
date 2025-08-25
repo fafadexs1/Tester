@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getFlowLogsForWorkspace, saveFlowLog } from '@/app/actions/databaseActions';
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
     // Transforma os dados para o formato que a UI espera
     const formattedLogs = logs.map(log => ({
       timestamp: log.timestamp,
-      ...log.details
+      ...(log.details || {})
     }));
     
     return NextResponse.json(formattedLogs, { status: 200 });
