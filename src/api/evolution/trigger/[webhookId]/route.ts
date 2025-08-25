@@ -58,7 +58,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         console.log(`[API Trigger] Dialogy message from agent (from_me=true) in conversation ${sessionKeyIdentifier}. Ignoring.`);
         return NextResponse.json({ message: "Message from agent, automation ignored." }, { status: 200 });
       }
-      // Modificação: A automação só deve parar se a conversa estiver explicitamente em atendimento humano.
       if (status === 'atendimentos') {
         console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status 'atendimentos'. Ignoring.`);
         return NextResponse.json({ message: "Conversation in 'atendimentos', automation ignored." }, { status: 200 });
@@ -113,7 +112,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (!workspace) {
         console.error(`[API Evolution Trigger] Session ${session.session_id} exists but its workspace ${session.workspace_id} was not found. Deleting orphan session.`);
         await deleteSessionFromDB(session.session_id);
-        session = null;
+        session = null; // Invalidate session
       }
     }
 
@@ -127,7 +126,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (Date.now() > expirationTime) {
           console.log(`[API Evolution Trigger - ${session.session_id}] Session timed out. Deleting session and starting a new one.`);
           await deleteSessionFromDB(session.session_id);
-          session = null;
+          session = null; // Invalidate session
         }
       }
     }
@@ -142,6 +141,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       } else {
         const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
         session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
+        session.flow_context = flowContext; // Refresh flow context on every interaction
 
         if (session.awaiting_input_type && session.awaiting_input_details) {
           const originalNodeId = session.awaiting_input_details.originalNodeId;
@@ -236,16 +236,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           } else {
             console.warn(`[API Evolution Trigger - ${session.session_id}] Awaiting node ${originalNodeId} not found, restarting flow.`);
             await deleteSessionFromDB(session.session_id);
-            session = null;
+            session = null; // Invalidate session
           }
         } else {
           console.log(`[API Evolution Trigger - ${session.session_id}] New message received in active session not awaiting input. Restarting flow.`);
           await deleteSessionFromDB(session.session_id);
-          session = null;
+          session = null; // Invalidate session
         }
       }
     }
 
+    // Logic to start a new session if none exists or was invalidated
     if (!session) {
       if (isApiCallResponse) {
         console.log(`[API Evolution Trigger] API response received but no active session found for ${sessionKeyIdentifier}. Ignoring.`);
@@ -300,8 +301,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const triggerHandle = matchingKeyword || matchingTrigger.name;
       console.log(`[API Evolution Trigger] Determined to start flow: ${workspaceToStart.name} (ID: ${workspaceToStart.id}) with trigger handle: ${triggerHandle}`);
 
-      const findNextNodeId = (from: string, handle: string, conns: Connection[]) => (conns.find(c => c.from === from && c.sourceHandle === handle) || { to: null }).to;
-      const initialNodeId = findNextNodeId(startNodeForFlow.id, triggerHandle, workspaceToStart.connections || []);
+      const findNextNodeIdFn = (from: string, handle: string, conns: Connection[]) => (conns.find(c => c.from === from && c.sourceHandle === handle) || { to: null }).to;
+      const initialNodeId = findNextNodeIdFn(startNodeForFlow.id, triggerHandle, workspaceToStart.connections || []);
       if (!initialNodeId) {
         console.error(`[API Evolution Trigger] Start node trigger handle '${triggerHandle}' is not connected in flow ${workspaceToStart.name}.`);
         return NextResponse.json({ error: `Start node trigger handle '${triggerHandle}' is not connected.` }, { status: 500 });
@@ -358,13 +359,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         awaiting_input_type: null,
         awaiting_input_details: null,
         session_timeout_seconds: matchingTrigger.sessionTimeoutSeconds || 0,
-        flow_context: flowContext,
+        flow_context: flowContext, // Make sure context is set here
       };
       workspace = workspaceToStart;
       startExecution = true;
     }
 
-    if (startExecution && session.current_node_id && workspace) {
+    if (startExecution && session && session.current_node_id && workspace) {
       await executeFlow(session, workspace.nodes, workspace.connections || [], apiConfig, workspace);
     } else if (session && !startExecution) {
       await saveSessionToDB(session);
@@ -404,6 +405,3 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
-
-
-    
