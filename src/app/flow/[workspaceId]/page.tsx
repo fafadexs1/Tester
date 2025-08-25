@@ -13,7 +13,7 @@ export default async function FlowEditorPage({ params }: { params: { workspaceId
     redirect('/login');
   }
 
-  const { workspaceId } = await params;
+  const { workspaceId } = params;
 
   if (workspaceId === 'new') {
     console.warn(`[FlowEditorPage] Rota /flow/new acessada diretamente. Redirecionando para o dashboard...`);
