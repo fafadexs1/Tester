@@ -28,25 +28,80 @@ function getSharedIsolate() {
     return sharedIsolate;
 }
 
+// A função de envio omnicanal agora vive dentro do motor de fluxo.
+async function sendOmniChannelMessage(
+  session: FlowSession,
+  workspace: WorkspaceData,
+  content: string
+): Promise<void> {
+  if (!content) return;
+  console.log(`[sendOmniChannelMessage] Initiating send for session ${session.session_id} with context ${session.flow_context}`);
+  
+  // 1. Dialogy
+  if (session.flow_context === 'dialogy' && workspace.dialogy_instance_id) {
+    const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
+    const chatId = getProperty(session.flow_variables, 'dialogy_conversation_id') || getProperty(session.flow_variables, 'webhook_payload.conversation.id');
+    if (dialogyInstance && chatId) {
+      console.log(`[sendOmniChannelMessage] Roteando para Dialogy (chatId=${chatId})`);
+      await sendDialogyMessageAction({ 
+        baseUrl: dialogyInstance.baseUrl, 
+        apiKey: dialogyInstance.apiKey, 
+        chatId, 
+        content 
+      });
+      return; // Importante: encerrar a execução aqui
+    }
+  }
+  
+  // 2. Chatwoot
+  if (session.flow_context === 'chatwoot' && workspace.chatwoot_instance_id) {
+    const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
+    const accountId = getProperty(session.flow_variables, 'chatwoot_account_id');
+    const conversationId = getProperty(session.flow_variables, 'chatwoot_conversation_id');
+    if (chatwootInstance && accountId && conversationId) {
+      console.log(`[sendOmniChannelMessage] Roteando para Chatwoot (conv=${conversationId})`);
+      await sendChatwootMessageAction({ 
+        baseUrl: chatwootInstance.baseUrl, 
+        apiAccessToken: chatwootInstance.apiAccessToken, 
+        accountId, 
+        conversationId, 
+        content 
+      });
+      return; // Importante: encerrar a execução aqui
+    }
+  }
+  
+  // 3. Fallback: Evolution (WhatsApp)
+  const evoRecipient = session.flow_variables.whatsapp_sender_jid || 
+                       session.session_id.split('@@')[0].replace('evolution_jid_', '');
+
+  if (workspace.evolution_instance_id) {
+    // Carregar instância do Evolution do banco de dados (se necessário, ou usar dados do workspace)
+    // Para simplificar, assumimos que o workspace já tem os dados ou que a instância padrão será usada.
+  }
+  
+  console.log(`[sendOmniChannelMessage] Falling back to Evolution (recipient=${evoRecipient})`);
+  // Os detalhes da API do Evolution (URL, Key, etc.) devem ser acessados de forma segura,
+  // idealmente através da configuração do workspace ou de um serviço de configuração.
+  // Por agora, vamos assumir que eles estão disponíveis no workspace se necessário.
+  await sendWhatsAppMessageAction({ 
+      baseUrl: workspace.evolution_api_url, 
+      apiKey: workspace.evolution_api_key || undefined, 
+      instanceName: workspace.evolution_instance_name || '', 
+      recipientPhoneNumber: evoRecipient, 
+      messageType: 'text', 
+      textContent: content 
+  });
+}
+
+
 export async function executeFlow(
   session: FlowSession,
   nodes: NodeData[],
   connections: Connection[],
-  transport: { sendMessage: (content: string) => Promise<void> } | ((content: string) => Promise<void>),
   workspace: WorkspaceData
 ): Promise<void> {
-  // Normaliza o transporte para uma função
-  const send: (content: string) => Promise<void> =
-    typeof transport === 'function'
-      ? transport
-      : transport && typeof (transport as any).sendMessage === 'function'
-      ? (transport as any).sendMessage
-      : (() => {
-          throw new Error(
-            "Invalid transport passed to executeFlow: expected a function or an object with sendMessage(content) => Promise<void>."
-          );
-        })();
-
+  
   let currentNodeId = session.current_node_id;
   let shouldContinue = true;
 
@@ -81,7 +136,7 @@ export async function executeFlow(
 
       case 'message': {
         const messageText = substituteVariablesInText(currentNode.text, session.flow_variables);
-        await send(messageText);
+        await sendOmniChannelMessage(session, workspace, messageText);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
@@ -92,7 +147,7 @@ export async function executeFlow(
       case 'rating-input':
       case 'option': {
         if (getProperty(session.flow_variables, '_invalidOption') === true) {
-            await send("Opção inválida. Por favor, tente novamente.");
+            await sendOmniChannelMessage(session, workspace, "Opção inválida. Por favor, tente novamente.");
             delete session.flow_variables['_invalidOption']; // Limpa a flag
             shouldContinue = false; // Para a execução e aguarda nova entrada
             break;
@@ -114,7 +169,7 @@ export async function executeFlow(
               finalMessage += "\nResponda com o número da opção desejada ou o texto exato da opção.";
             }
 
-            await send(finalMessage);
+            await sendOmniChannelMessage(session, workspace, finalMessage);
             session.awaiting_input_type = 'option';
             session.awaiting_input_details = {
               variableToSave: currentNode.variableToSaveChoice || 'last_user_choice',
@@ -133,7 +188,7 @@ export async function executeFlow(
             'rating-input' ? 'ratingQuestionText' : '';
 
           const promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
-          if (promptText) await send(promptText);
+          if (promptText) await sendOmniChannelMessage(session, workspace, promptText);
 
           session.awaiting_input_type = nodeType as any;
           session.awaiting_input_details = {
@@ -545,7 +600,7 @@ export async function executeFlow(
       }
       
       case 'dialogy-send-message': {
-        await send(substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables));
+        await sendOmniChannelMessage(session, workspace, substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables));
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
