@@ -55,6 +55,8 @@ export async function storeRequestDetails(
     }
   }
 
+  console.log(`[Webhook Handler] Determined flowContext: "${flowContext}"`);
+
   const logEntry: Omit<FlowLog, 'id'> = {
     workspace_id: webhookId,
     log_type: 'webhook',
@@ -71,7 +73,6 @@ export async function storeRequestDetails(
     }
   };
   
-  // CORREÇÃO: Chamar a função do banco de dados diretamente, em vez de fazer uma chamada de API.
   try {
     await saveFlowLog(logEntry);
   } catch(e) {
@@ -83,3 +84,5 @@ export async function storeRequestDetails(
     session_key_identifier: sessionKeyIdentifier,
   };
 }
+
+    

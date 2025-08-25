@@ -1,3 +1,4 @@
+
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -7,25 +8,33 @@ import {
   saveSessionToDB,
   deleteSessionFromDB,
   loadWorkspaceFromDB,
+  loadChatwootInstanceFromDB,
+  loadDialogyInstanceFromDB,
   loadWorkspacesForOrganizationFromDB,
 } from '@/app/actions/databaseActions';
+import { sendChatwootMessageAction } from '@/app/actions/chatwootApiActions';
+import { sendDialogyMessageAction } from '@/app/actions/dialogyApiActions';
+import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
 import { executeFlow } from '@/lib/flow-engine/engine';
 import { storeRequestDetails } from '@/lib/flow-engine/webhook-handler';
-import type { NodeData, FlowSession, StartNodeTrigger, WorkspaceData, FlowContextType } from '@/lib/types';
+import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData, FlowContextType } from '@/lib/types';
 import { findNodeById, findNextNodeId } from '@/lib/flow-engine/utils';
+
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   const { webhookId } = await params;
+
+  console.log(`[API Evolution Trigger] POST received for webhook ID: "${webhookId}"`);
+
   let rawBody: string | null = null;
   let parsedBody: any = null;
+  let loggedEntry: any = null;
+  let startExecution = false;
 
   try {
     rawBody = await request.text();
     parsedBody = rawBody ? JSON.parse(rawBody) : { message: "Request body was empty." };
-    console.log(`[API Evolution Trigger] Webhook Received for ${webhookId}:`, JSON.stringify(parsedBody, null, 2));
-
-    let loggedEntry: any = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
-    let startExecution = false;
+    loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
 
     const sessionKeyIdentifier = loggedEntry.session_key_identifier;
     const receivedMessageText = loggedEntry.extractedMessage;
@@ -55,6 +64,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     }
 
+    const evolutionApiBaseUrl = getProperty(loggedEntry.payload, 'server_url') as string;
+    const evolutionApiKey = getProperty(loggedEntry.payload, 'apikey') as string;
+    const instanceName = getProperty(loggedEntry.payload, 'instance') as string;
+    
     const isApiCallResponse = getProperty(loggedEntry.payload, 'isApiCallResponse') === true;
     const resumeSessionId = getProperty(loggedEntry.payload, 'resume_session_id');
 
@@ -68,6 +81,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           sessionToResume.flow_variables[sessionToResume.awaiting_input_details?.variableToSave || 'external_response_data'] = parsedBody;
           sessionToResume.awaiting_input_type = null;
 
+          console.log('[API Evolution Trigger - RESUME] Calling executeFlow with session:', JSON.stringify(sessionToResume, null, 2));
           await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], workspaceForResume);
           return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
         }
@@ -85,6 +99,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     let workspace: WorkspaceData | null = null;
     let session: FlowSession | null = await loadSessionFromDB(sessionKeyIdentifier);
+    
+    if(session) {
+      console.log('[API Evolution Trigger] Found existing session from DB:', JSON.stringify(session, null, 2));
+    }
+
 
     // Timeout logic
     if (session) {
@@ -93,6 +112,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         console.error(`[API Evolution Trigger] Session ${session.session_id} exists but its workspace ${session.workspace_id} was not found. Deleting orphan session.`);
         await deleteSessionFromDB(session.session_id);
         session = null;
+        workspace = null; // Clear workspace as well
       } else if (session.session_timeout_seconds && session.session_timeout_seconds > 0 && session.last_interaction_at) {
         const lastInteractionDate = new Date(session.last_interaction_at);
         const timeoutMilliseconds = session.session_timeout_seconds * 1000;
@@ -102,17 +122,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           console.log(`[API Evolution Trigger - ${session.session_id}] Session timed out. Deleting session and starting a new one.`);
           await deleteSessionFromDB(session.session_id);
           session = null;
+          workspace = null; // Clear workspace as well
         }
       }
     }
 
     // Continue existing session
     if (session && workspace) {
+      console.log(`[API Evolution Trigger - ${session.session_id}] Existing session is active. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
+
       if (session.current_node_id === null && session.awaiting_input_type === null) {
         console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Restarting flow due to new message.`);
         await deleteSessionFromDB(session.session_id);
         session = null;
-        workspace = null; // Reset workspace as well
+        workspace = null; // Clear workspace as well
       } else {
         const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
         session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
@@ -172,7 +195,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               session.current_node_id = nextNode;
               startExecution = true;
             } else if (!isApiCallResponse && session.awaiting_input_type === 'option') {
-              startExecution = false;
+              startExecution = true;
             } else {
               session.awaiting_input_type = null;
               session.awaiting_input_details = null;
@@ -186,6 +209,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             console.warn(`[API Evolution Trigger - ${session.session_id}] Awaiting node ${originalNodeId} not found, restarting flow.`);
             await deleteSessionFromDB(session.session_id);
             session = null;
+            workspace = null;
           }
         } else {
           console.log(`[API Evolution Trigger - ${session.session_id}] New message received in active session not awaiting input. Restarting flow.`);
@@ -317,12 +341,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         session_timeout_seconds: matchingTrigger.sessionTimeoutSeconds || 0,
         flow_context: flowContext,
       };
+      console.log('[API Evolution Trigger] Created new session object:', JSON.stringify(session, null, 2));
       workspace = workspaceToStart;
       startExecution = true;
     }
 
     // Execute flow if needed
     if (startExecution && session?.current_node_id && workspace) {
+      console.log('[API Evolution Trigger] Calling executeFlow with session:', JSON.stringify(session, null, 2));
       await executeFlow(session, workspace.nodes, workspace.connections || [], workspace);
     } else if (session && !startExecution) {
       await saveSessionToDB(session);
@@ -364,3 +390,5 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
+
+    

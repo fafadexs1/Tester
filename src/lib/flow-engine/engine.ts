@@ -1,3 +1,4 @@
+
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import ivm from 'isolated-vm';
@@ -36,6 +37,8 @@ async function sendOmniChannelMessage(
 ): Promise<void> {
   if (!content) return;
   console.log(`[sendOmniChannelMessage] Initiating send for session ${session.session_id} with context ${session.flow_context}`);
+  console.log(`[sendOmniChannelMessage] Full session object:`, JSON.stringify(session, null, 2));
+  console.log(`[sendOmniChannelMessage] Full workspace object:`, JSON.stringify(workspace, null, 2));
   
   // 1. Dialogy
   if (session.flow_context === 'dialogy' && workspace.dialogy_instance_id) {
@@ -50,6 +53,8 @@ async function sendOmniChannelMessage(
         content 
       });
       return; // Importante: encerrar a execução aqui
+    } else {
+      console.warn(`[sendOmniChannelMessage] Dialogy context detected, but instance or chatId is missing. Instance ID: ${workspace.dialogy_instance_id}, Chat ID: ${chatId}`);
     }
   }
   
@@ -75,15 +80,15 @@ async function sendOmniChannelMessage(
   const evoRecipient = session.flow_variables.whatsapp_sender_jid || 
                        session.session_id.split('@@')[0].replace('evolution_jid_', '');
 
-  if (workspace.evolution_instance_id) {
-    // Carregar instância do Evolution do banco de dados (se necessário, ou usar dados do workspace)
-    // Para simplificar, assumimos que o workspace já tem os dados ou que a instância padrão será usada.
+  if (!workspace.evolution_instance_id) {
+    console.warn(`[sendOmniChannelMessage] Fallback to Evolution, but no Evolution instance is configured for this workspace.`);
+    return;
   }
   
   console.log(`[sendOmniChannelMessage] Falling back to Evolution (recipient=${evoRecipient})`);
-  // Os detalhes da API do Evolution (URL, Key, etc.) devem ser acessados de forma segura,
-  // idealmente através da configuração do workspace ou de um serviço de configuração.
-  // Por agora, vamos assumir que eles estão disponíveis no workspace se necessário.
+  // Os detalhes da API do Evolution (URL, Key, etc.) agora estão no workspace, mas não são mais necessários aqui.
+  // A ação `sendWhatsAppMessageAction` deve buscar os dados da instância. No momento, estamos pegando do workspace
+  // para manter a compatibilidade. O ideal é refatorar isso no futuro.
   await sendWhatsAppMessageAction({ 
       baseUrl: workspace.evolution_api_url, 
       apiKey: workspace.evolution_api_key || undefined, 
@@ -101,6 +106,8 @@ export async function executeFlow(
   connections: Connection[],
   workspace: WorkspaceData
 ): Promise<void> {
+  
+  console.log('[Flow Engine] executeFlow called with session:', JSON.stringify(session, null, 2));
   
   let currentNodeId = session.current_node_id;
   let shouldContinue = true;
@@ -639,3 +646,5 @@ export async function executeFlow(
     }
   }
 }
+
+    
