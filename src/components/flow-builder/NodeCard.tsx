@@ -17,6 +17,7 @@ import type {
   DialogyInstance,
   NodeType,
   ApiResponseMapping,
+  FlowLog,
 } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
@@ -62,28 +63,6 @@ interface NodeCardProps {
   availableVariables: string[];
   isSessionHighlighted?: boolean;
   activeWorkspace: WorkspaceData | undefined | null;
-}
-
-interface ApiLogEntry {
-    timestamp: string;
-    nodeId: string;
-    nodeTitle: string;
-    requestUrl: string;
-    response: any;
-    error: any;
-}
-
-
-interface WebhookLogEntry {
-  timestamp: string;
-  method?: string;
-  url?: string;
-  headers?: Record<string, string>;
-  payload?: any;
-  ip?: string;
-  extractedMessage?: string | null;
-  webhook_remoteJid?: string | null;
-  workspaceNameParam?: string;
 }
 
 const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onSelectPath: (path: string) => void, currentPath?: string[] }) => {
@@ -252,7 +231,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const [isWebhookHistoryDialogOpen, setIsWebhookHistoryDialogOpen] = useState(false);
   
   const [isApiHistoryDialogOpen, setIsApiHistoryDialogOpen] = useState(false);
-  const [apiLogs, setApiLogs] = useState<ApiLogEntry[]>([]);
+  const [apiLogs, setApiLogs] = useState<any[]>([]);
   const [isLoadingApiLogs, setIsLoadingApiLogs] = useState(false);
   const [isJsonPathPickerOpen, setIsJsonPathPickerOpen] = useState(false);
 
@@ -676,10 +655,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return [];
     }
     try {
-        const response = await fetch(`/api/evolution/webhook-logs?workspaceId=${activeWorkspace.id}`);
+        const response = await fetch(`/api/evolution/webhook-logs?workspaceId=${activeWorkspace.id}&type=api-call&nodeId=${node.id}`);
         if (!response.ok) throw new Error('Falha ao buscar logs de API');
-        const data: any[] = await response.json();
-        return data.filter(log => log.type === 'api-call' && log.nodeId === node.id);
+        return await response.json();
     } catch(e: any) {
         toast({ title: "Erro", description: `Não foi possível buscar os logs: ${e.message}`, variant: "destructive" });
         return [];
@@ -703,7 +681,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       toast({ title: "Erro", description: "ID do fluxo não encontrado para buscar logs.", variant: "destructive" });
       return [];
     }
-    const response = await fetch(`/api/evolution/webhook-logs?workspaceId=${activeWorkspace.id}`);
+    const response = await fetch(`/api/evolution/webhook-logs?workspaceId=${activeWorkspace.id}&type=webhook`);
     if (!response.ok) throw new Error('Falha ao buscar logs de webhook');
     return await response.json();
   }, [activeWorkspace?.id, toast]);

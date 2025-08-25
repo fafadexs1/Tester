@@ -22,7 +22,8 @@ import type {
   WorkspaceVersion,
   AuditLog,
   MarketplaceListing,
-  UserPurchase
+  UserPurchase,
+  FlowLog,
 } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { redirect } from 'next/navigation';
@@ -549,6 +550,21 @@ async function initializeDatabaseSchema(): Promise<void> {
         UNIQUE(user_id, listing_id)
       );
     `);
+    
+    // NEW: Flow Logs Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS flow_logs (
+        id BIGSERIAL PRIMARY KEY,
+        workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        log_type TEXT NOT NULL, -- 'webhook' or 'api-call'
+        session_id TEXT, -- Can be null for logs not tied to a session
+        details JSONB,
+        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_flow_logs_workspace_id_timestamp ON flow_logs (workspace_id, timestamp DESC);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_flow_logs_log_type ON flow_logs (log_type);`);
+
 
     // ---- SEEDS ----
     const permissionsToSeed: Permission[] = [
@@ -612,6 +628,7 @@ async function initializeDatabaseSchema(): Promise<void> {
     await ensureUuidColumn(client, 'team_members', 'team_id');
     await ensureUuidColumn(client, 'team_members', 'user_id');
     await ensureUuidColumn(client, 'team_members', 'organization_id');
+    await ensureUuidColumn(client, 'flow_logs', 'workspace_id');
 
     await client.query('COMMIT');
     console.log('[DB Actions] Schema initialization and migration check complete.');
@@ -623,6 +640,48 @@ async function initializeDatabaseSchema(): Promise<void> {
     client.release();
   }
 }
+
+// --- Flow Log Actions ---
+export async function saveFlowLog(log: Omit<FlowLog, 'id'>): Promise<void> {
+  try {
+    const query = `
+      INSERT INTO flow_logs (workspace_id, log_type, session_id, details, timestamp)
+      VALUES ($1, $2, $3, $4, $5);
+    `;
+    await runQuery(query, [log.workspace_id, log.log_type, log.session_id, JSON.stringify(log.details), log.timestamp]);
+  } catch (error) {
+    console.error('[DB Actions] Failed to save flow log:', { log, error });
+  }
+}
+
+export async function getFlowLogsForWorkspace(
+  workspaceId: string,
+  options: {
+    logType: 'webhook' | 'api-call';
+    nodeId?: string;
+    limit?: number;
+  }
+): Promise<FlowLog[]> {
+  const { logType, nodeId, limit = 50 } = options;
+  const params: any[] = [workspaceId, logType];
+  let query = `
+    SELECT id, workspace_id, log_type, session_id, details, timestamp
+    FROM flow_logs
+    WHERE workspace_id = $1 AND log_type = $2
+  `;
+
+  if (logType === 'api-call' && nodeId) {
+    query += ` AND details->>'nodeId' = $3`;
+    params.push(nodeId);
+  }
+
+  query += ` ORDER BY timestamp DESC LIMIT $${params.length + 1}`;
+  params.push(limit);
+
+  const result = await runQuery<FlowLog>(query, params);
+  return result.rows;
+}
+
 
 // --- Audit Log Actions ---
 export async function createAuditLog(

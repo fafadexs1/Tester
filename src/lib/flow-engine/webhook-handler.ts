@@ -2,13 +2,14 @@
 'use server';
 import { getProperty } from 'dot-prop';
 import type { NextRequest } from 'next/server';
-import type { FlowContextType } from '@/lib/types';
+import type { FlowContextType, FlowLog } from '@/lib/types';
+import { saveFlowLog } from '@/app/actions/databaseActions';
 
 export async function storeRequestDetails(
   request: NextRequest,
   parsedPayload: any,
   rawBodyText: string | null,
-  webhookId: string 
+  webhookId: string // This is the workspace ID
 ): Promise<any> {
   const currentTimestamp = new Date().toISOString();
   let extractedMessage: string | null = null;
@@ -54,34 +55,28 @@ export async function storeRequestDetails(
     }
   }
 
-  const logEntry: Record<string, any> = {
-    workspaceId: webhookId,
-    type: 'webhook', // Centralized log type
+  const logEntry: Omit<FlowLog, 'id'> = {
+    workspace_id: webhookId,
+    log_type: 'webhook',
+    session_id: sessionKeyIdentifier,
     timestamp: currentTimestamp,
-    method: request.method,
-    url: request.url,
-    headers: headers,
-    ip: ip,
-    extractedMessage: extractedMessage,
-    session_key_identifier: sessionKeyIdentifier,
-    flow_context: flowContext,
-    payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
+    details: {
+      method: request.method,
+      url: request.url,
+      headers: headers,
+      ip: ip,
+      extractedMessage: extractedMessage,
+      flowContext: flowContext,
+      payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
+    }
   };
+
+  // Salva o log no banco de dados de forma assíncrona, sem bloquear a resposta.
+  saveFlowLog(logEntry).catch(e => console.error("[Webhook Handler] Failed to save webhook log to DB:", e));
   
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
-  if (appUrl) {
-    // Dispara um POST para o endpoint central de logs sem aguardar
-    fetch(`${appUrl}/api/evolution/webhook-logs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(logEntry),
-    }).catch(e => console.error("[Webhook Handler] Failed to post webhook log:", e));
-  } else {
-    console.error("[Webhook Handler] NEXT_PUBLIC_APP_URL is not set. Cannot post webhook log.");
-  }
-
-
-  return logEntry;
+  // Retorna os dados extraídos para serem usados imediatamente pelo trigger da API
+  return {
+    ...logEntry.details, // Flatten details for immediate use
+    session_key_identifier: sessionKeyIdentifier,
+  };
 }
-
-    

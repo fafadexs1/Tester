@@ -456,3 +456,13 @@ export interface UserPurchase {
     price_paid: number;
     purchased_at: string | Date;
 }
+
+// --- Flow Log Type ---
+export interface FlowLog {
+  id: number;
+  workspace_id: string;
+  log_type: 'webhook' | 'api-call';
+  session_id: string | null;
+  details: Record<string, any>;
+  timestamp: string | Date;
+}
