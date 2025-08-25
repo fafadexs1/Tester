@@ -428,15 +428,19 @@ export async function executeFlow(
         if (currentNode.codeSnippet && varName) {
             try {
                 console.log(`[Flow Engine - ${session.session_id}] Executing code snippet.`);
-                // ROBUST IMPLEMENTATION: Create a function from the user's code and call it.
-                // This ensures 'return' statements are correctly handled.
+                // ROBUST IMPLEMENTATION: Create an async function from the user's code and call it.
                 const scriptToRun = `
-                    return (function(variables) {
-                        ${currentNode.codeSnippet}
-                    })(arguments[0]);
+                    try {
+                        const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+                        const userFunction = new AsyncFunction('variables', \`${currentNode.codeSnippet}\`);
+                        return await userFunction(variables);
+                    } catch (e) {
+                        console.error("Error during user script execution:", e);
+                        return { error: e.message || 'An unknown error occurred in the script.' };
+                    }
                 `;
                 const executor = new Function('variables', scriptToRun);
-                const result = executor(session.flow_variables);
+                const result = await executor(session.flow_variables);
 
                 console.log(`[Flow Engine - ${session.session_id}] Code execution result:`, result);
                 
@@ -451,7 +455,6 @@ export async function executeFlow(
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
-
 
       case 'whatsapp-text':
       case 'whatsapp-media': {
