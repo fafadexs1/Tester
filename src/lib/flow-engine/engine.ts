@@ -1,4 +1,5 @@
 
+
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import ivm from 'isolated-vm';
@@ -68,8 +69,8 @@ export async function executeFlow(
           chatId: chatId,
           content: content,
         });
+        return; // A mensagem foi enviada pelo canal correto, podemos parar aqui.
       }
-      // REMOVIDO: 'return;' que causava a parada prematura
     }
 
     if (session.flow_context === 'chatwoot') {
@@ -83,9 +84,9 @@ export async function executeFlow(
             conversationId: session.flow_variables.chatwoot_conversation_id,
             content: content
           });
+           return; // A mensagem foi enviada pelo canal correto, podemos parar aqui.
         }
       }
-       // REMOVIDO: 'return;' que causava a parada prematura
     }
 
     // Ação padrão (ou fallback) é enviar para Evolution/WhatsApp
@@ -443,7 +444,7 @@ export async function executeFlow(
                 await jail.set('global', jail.derefInto());
 
                 const variablesJson = JSON.stringify(session.flow_variables);
-                await jail.set('variablesJson', variablesJson);
+                await jail.set('variablesJson', new ivm.ExternalCopy(variablesJson).copyInto());
                 console.log('[Flow Engine Code] Injetando variáveis no sandbox.');
 
                 const scriptToRun = `
@@ -451,17 +452,13 @@ export async function executeFlow(
                         if (value === null || value === undefined) return value;
                         const t = typeof value;
                         if (t === 'string' || t === 'number' || t === 'boolean') return value;
-
                         if (t === 'bigint') return value.toString();
                         if (t === 'function' || t === 'symbol') return undefined;
-
                         if (value instanceof Date) return value.toISOString();
                         if (value instanceof RegExp) return value.toString();
-
                         if (typeof value === 'object') {
                             if (seen.has(value)) return '[Circular]';
                             seen.add(value);
-
                             if (value instanceof Map) {
                                 return Array.from(value.entries()).map(([k, v]) => [toJSONSafe(k, seen), toJSONSafe(v, seen)]);
                             }
@@ -486,7 +483,6 @@ export async function executeFlow(
                         }
                         return value;
                     }
-
                     async function __run__() {
                         const variables = JSON.parse(variablesJson);
                         try {
@@ -495,13 +491,12 @@ export async function executeFlow(
                             return JSON.stringify({ __error: (err && err.message) ? String(err.message) : String(err) });
                         }
                     }
-
                     (async () => {
                         const res = await __run__();
                         const payload = (typeof res === 'string' && (res.startsWith('{') || res.startsWith('[')))
                             ? res
                             : JSON.stringify(toJSONSafe(res));
-                        return payload;
+                        return new ivm.ExternalCopy(payload).copyInto();
                     })();
                 `;
 
