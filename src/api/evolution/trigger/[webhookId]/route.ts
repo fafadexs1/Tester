@@ -328,7 +328,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           if (value !== undefined) setProperty(initialVars, varName, value);
         }
       } else if (flowContext === 'dialogy') {
-        const dialogyMappings = { dialogy_conversation_id: 'conversation.id', dialogy_contact_id: 'contact.id', dialogy_account_id: 'account.id', contact_name: 'contact.name', contact_phone: 'contact.phone_number' };
+        const dialogyMappings = { 
+            dialogy_conversation_id: 'conversation.id', 
+            dialogy_contact_id: 'contact.id', 
+            dialogy_account_id: 'account.id', 
+            contact_name: 'contact.name', 
+            contact_phone: 'contact.phone_number' 
+        };
         for (const [varName, path] of Object.entries(dialogyMappings)) {
           const value = getProperty(payloadToUse, path);
           if (value !== undefined) setProperty(initialVars, varName, value);
@@ -398,3 +404,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
+
+
+    
