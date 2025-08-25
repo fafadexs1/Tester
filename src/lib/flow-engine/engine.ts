@@ -20,11 +20,6 @@ import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates } from './utils';
 import jsonata from 'jsonata';
 
-interface ApiConfig {
-  baseUrl: string;
-  apiKey?: string;
-  instanceName: string;
-}
 
 let sharedIsolate: ivm.Isolate | null = null;
 function getSharedIsolate() {
@@ -40,72 +35,13 @@ export async function executeFlow(
   session: FlowSession,
   nodes: NodeData[],
   connections: Connection[],
-  apiConfig: ApiConfig,
+  transport: { sendMessage: (content: string) => Promise<void> },
   workspace: WorkspaceData
 ): Promise<void> {
   let currentNodeId = session.current_node_id;
   let shouldContinue = true;
 
   console.log(`[Flow Engine] Starting execution loop. Start Node: ${currentNodeId}`);
-
-  const sendOmniChannelMessage = async (content: string) => {
-    if (!content) {
-      console.warn(`[Flow Engine - ${session.session_id}] sendOmniChannelMessage called with empty content.`);
-      return;
-    }
-
-    // Prioridade #1: Dialogy
-    if (session.flow_context === 'dialogy' && workspace.dialogy_instance_id) {
-      const chatId =
-        getProperty(session.flow_variables, 'dialogy_conversation_id') ||
-        getProperty(session.flow_variables, 'webhook_payload.conversation.id');
-      const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
-      
-      if (dialogyInstance && chatId) {
-        console.log(`[Flow Engine - ${session.session_id}] Sending message via Dialogy to chat ID: ${chatId}`);
-        await sendDialogyMessageAction({
-          baseUrl: dialogyInstance.baseUrl,
-          apiKey: dialogyInstance.apiKey,
-          chatId: chatId,
-          content: content,
-        });
-        return; // **CRÍTICO**: Encerra a função após enviar pela Dialogy
-      } else {
-        console.warn(`[Flow Engine - ${session.session_id}] Dialogy context detected, but instance or chat ID is missing. Falling back.`);
-      }
-    }
-    
-    // Prioridade #2: Chatwoot
-    if (session.flow_context === 'chatwoot' && workspace.chatwoot_instance_id) {
-      const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
-      if (chatwootInstance && session.flow_variables.chatwoot_account_id && session.flow_variables.chatwoot_conversation_id) {
-        console.log(`[Flow Engine - ${session.session_id}] Sending message via Chatwoot to conversation ID: ${session.flow_variables.chatwoot_conversation_id}`);
-        await sendChatwootMessageAction({
-          baseUrl: chatwootInstance.baseUrl,
-          apiAccessToken: chatwootInstance.apiAccessToken,
-          accountId: session.flow_variables.chatwoot_account_id,
-          conversationId: session.flow_variables.chatwoot_conversation_id,
-          content: content
-        });
-        return; // **CRÍTICO**: Encerra a função após enviar pelo Chatwoot
-      } else {
-        console.warn(`[Flow Engine - ${session.session_id}] Chatwoot context detected, but instance or session details are missing. Falling back.`);
-      }
-    }
-
-    // Fallback ou Ação Padrão: Enviar via Evolution/WhatsApp
-    const recipientPhoneNumber =
-      session.flow_variables.whatsapp_sender_jid ||
-      session.session_id.split('@@')[0].replace('evolution_jid_', '');
-    
-    console.log(`[Flow Engine - ${session.session_id}] Sending message via Evolution (WhatsApp) to: ${recipientPhoneNumber}`);
-    await sendWhatsAppMessageAction({
-      ...apiConfig,
-      recipientPhoneNumber: recipientPhoneNumber,
-      messageType: 'text',
-      textContent: content,
-    });
-  };
 
   while (currentNodeId && shouldContinue) {
     const currentNode = findNodeById(currentNodeId, nodes);
@@ -136,7 +72,7 @@ export async function executeFlow(
 
       case 'message': {
         const messageText = substituteVariablesInText(currentNode.text, session.flow_variables);
-        await sendOmniChannelMessage(messageText);
+        await transport.sendMessage(messageText);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
@@ -163,7 +99,7 @@ export async function executeFlow(
               finalMessage += "\nResponda com o número da opção desejada ou o texto exato da opção.";
             }
 
-            await sendOmniChannelMessage(finalMessage);
+            await transport.sendMessage(finalMessage);
             session.awaiting_input_type = 'option';
             session.awaiting_input_details = {
               variableToSave: currentNode.variableToSaveChoice || 'last_user_choice',
@@ -182,7 +118,7 @@ export async function executeFlow(
             'ratingQuestionText';
 
           promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
-          if (promptText) await sendOmniChannelMessage(promptText);
+          if (promptText) await transport.sendMessage(promptText);
 
           session.awaiting_input_type = nodeType as any;
           session.awaiting_input_details = {
@@ -440,9 +376,9 @@ export async function executeFlow(
       
       case 'code-execution': {
         const varName = currentNode.codeOutputVariable;
+        let context: ivm.Context | null = null;
         if (currentNode.codeSnippet && varName) {
             const isolate = getSharedIsolate();
-            let context: ivm.Context | null = null;
             try {
                 console.log('[Flow Engine Code] Criando contexto de execução com isolated-vm.');
                 context = await isolate.createContext();
@@ -589,6 +525,12 @@ export async function executeFlow(
 
       case 'log-console': {
         console.log(`[FLOW LOG - ${session.session_id}] ${substituteVariablesInText(currentNode.logMessage, session.flow_variables)}`);
+        nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+        break;
+      }
+      
+      case 'dialogy-send-message': {
+        await transport.sendMessage(substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables));
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }

@@ -39,8 +39,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const sessionKeyIdentifier = loggedEntry.session_key_identifier;
     const receivedMessageText = loggedEntry.extractedMessage;
-    const flowContext = loggedEntry.flow_context;
+    const flowContext = loggedEntry.flow_context as FlowContextType;
 
+    // Agent intervention checks
     if (flowContext === 'chatwoot') {
       let payloadToCheck = parsedBody;
       if (Array.isArray(payloadToCheck) && payloadToCheck.length > 0) {
@@ -58,16 +59,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         console.log(`[API Trigger] Dialogy message from agent (from_me=true) in conversation ${sessionKeyIdentifier}. Ignoring.`);
         return NextResponse.json({ message: "Message from agent, automation ignored." }, { status: 200 });
       }
-      if (status === 'atendimentos') {
-        console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status 'atendimentos'. Ignoring.`);
-        return NextResponse.json({ message: "Conversation in 'atendimentos', automation ignored." }, { status: 200 });
+      if (status === 'atendimentos' || status === 'resolvidos' || status === 'finalizados') {
+        console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status '${status}'. Ignoring.`);
+        return NextResponse.json({ message: `Conversation in '${status}', automation ignored.` }, { status: 200 });
       }
     }
 
     const evolutionApiBaseUrl = getProperty(loggedEntry.payload, 'server_url') as string;
     const evolutionApiKey = getProperty(loggedEntry.payload, 'apikey') as string;
     const instanceName = getProperty(loggedEntry.payload, 'instance') as string;
-
+    
+    // Resume flow from external API call
     const isApiCallResponse = getProperty(loggedEntry.payload, 'isApiCallResponse') === true;
     const resumeSessionId = getProperty(loggedEntry.payload, 'resume_session_id');
 
@@ -80,13 +82,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           sessionToResume.flow_variables[sessionToResume.awaiting_input_details?.variableToSave || 'external_response_data'] = parsedBody;
           sessionToResume.awaiting_input_type = null;
 
-          const apiConfigForResume = {
-            baseUrl: evolutionApiBaseUrl || '',
-            apiKey: evolutionApiKey || undefined,
-            instanceName: instanceName || ''
+          const makeSenderForResume = async () => async (content: string) => {
+            console.log(`[Flow Engine - ${sessionToResume.session_id}] Sending via Evolution (resume callback)`);
+            await sendWhatsAppMessageAction({
+              baseUrl: evolutionApiBaseUrl || '',
+              apiKey: evolutionApiKey || undefined,
+              instanceName: instanceName || '',
+              recipientPhoneNumber: sessionToResume.session_id.split('@@')[0].replace('evolution_jid_', ''),
+              messageType: 'text',
+              textContent: content,
+            });
           };
+          const sendMessage = await makeSenderForResume();
 
-          await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], apiConfigForResume, workspaceForResume);
+          await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], { sendMessage }, workspaceForResume);
           return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
         }
       } else {
@@ -105,20 +114,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     let workspace: WorkspaceData | null = null;
     let session: FlowSession | null = await loadSessionFromDB(sessionKeyIdentifier);
 
-    const apiConfig = { baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey || undefined, instanceName };
-
+    // Timeout logic
     if (session) {
       workspace = await loadWorkspaceFromDB(session.workspace_id);
       if (!workspace) {
         console.error(`[API Evolution Trigger] Session ${session.session_id} exists but its workspace ${session.workspace_id} was not found. Deleting orphan session.`);
         await deleteSessionFromDB(session.session_id);
-        session = null; // Invalidate session
-      }
-    }
-
-    if (session && workspace) {
-      console.log(`[API Evolution Trigger - ${session.session_id}] Existing session found in workspace ${workspace.id}. Last interaction: ${session.last_interaction_at}, Timeout: ${session.session_timeout_seconds}s`);
-      if (session.session_timeout_seconds && session.session_timeout_seconds > 0 && session.last_interaction_at) {
+        session = null;
+      } else if (session.session_timeout_seconds && session.session_timeout_seconds > 0 && session.last_interaction_at) {
         const lastInteractionDate = new Date(session.last_interaction_at);
         const timeoutMilliseconds = session.session_timeout_seconds * 1000;
         const expirationTime = lastInteractionDate.getTime() + timeoutMilliseconds;
@@ -126,22 +129,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (Date.now() > expirationTime) {
           console.log(`[API Evolution Trigger - ${session.session_id}] Session timed out. Deleting session and starting a new one.`);
           await deleteSessionFromDB(session.session_id);
-          session = null; // Invalidate session
+          session = null;
         }
       }
     }
 
+    // Continue existing session
     if (session && workspace) {
       console.log(`[API Evolution Trigger - ${session.session_id}] Existing session is active. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
 
       if (session.current_node_id === null && session.awaiting_input_type === null) {
         console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Restarting flow due to new message.`);
         await deleteSessionFromDB(session.session_id);
-        session = null;
+        session = null; // Invalidate to start a new one
       } else {
         const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
         session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
-        session.flow_context = flowContext; // Refresh flow context on every interaction
+        session.flow_context = flowContext;
 
         if (session.awaiting_input_type && session.awaiting_input_details) {
           const originalNodeId = session.awaiting_input_details.originalNodeId;
@@ -149,7 +153,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
           if (awaitingNode) {
             let nextNode: string | null = null;
-
             if (awaitingNode.apiResponseAsInput && !isApiCallResponse) {
               console.log(`[API Evolution Trigger] Node ${awaitingNode.id} expects API response, but received user message. Ignoring.`);
               return NextResponse.json({ message: "Awaiting API response, user message ignored." }, { status: 200 });
@@ -186,67 +189,58 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                   setProperty(session.flow_variables, session.awaiting_input_details.variableToSave, chosenOptionText);
                 }
                 nextNode = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
-                if (nextNode) {
-                  session.awaiting_input_type = null;
-                  session.awaiting_input_details = null;
-                  session.current_node_id = nextNode;
-                  startExecution = true;
-                } else {
-                  session.awaiting_input_type = null;
-                  session.awaiting_input_details = null;
-                  session.current_node_id = null;
-                  startExecution = false;
-                  await saveSessionToDB(session);
-                  return NextResponse.json({ message: "Flow paused at dead end." }, { status: 200 });
-                }
-              } else {
-                if (!isApiCallResponse) {
-                  const sendOmniChannelMessage = async (content: string) => {
-                    if (!content) return;
-                    if (session!.flow_context === 'dialogy' && workspace!.dialogy_instance_id) {
-                      const chatId = getProperty(session!.flow_variables, 'dialogy_conversation_id') || getProperty(session!.flow_variables, 'webhook_payload.conversation.id');
-                      const dialogyInstance = await loadDialogyInstanceFromDB(workspace!.dialogy_instance_id);
-                      if (dialogyInstance && chatId) {
-                        await sendDialogyMessageAction({ baseUrl: dialogyInstance.baseUrl, apiKey: dialogyInstance.apiKey, chatId: chatId, content: content });
-                      }
-                      return;
-                    }
-                    if (session!.flow_context === 'chatwoot' && workspace!.chatwoot_instance_id) {
-                      const chatwootInstance = await loadChatwootInstanceFromDB(workspace!.chatwoot_instance_id);
-                      if (chatwootInstance && session!.flow_variables.chatwoot_account_id && session!.flow_variables.chatwoot_conversation_id) {
-                        await sendChatwootMessageAction({ baseUrl: chatwootInstance.baseUrl, apiAccessToken: chatwootInstance.apiAccessToken, accountId: session!.flow_variables.chatwoot_account_id, conversationId: session!.flow_variables.chatwoot_conversation_id, content: content });
-                      }
-                      return;
-                    }
+              } else if (!isApiCallResponse) {
+                const sendInvalidOptionMessage = async (content: string) => {
+                  if (!content) return;
+                  if (session!.flow_context === 'dialogy' && workspace!.dialogy_instance_id) {
+                    const chatId = getProperty(session!.flow_variables, 'dialogy_conversation_id');
+                    const dialogyInstance = await loadDialogyInstanceFromDB(workspace!.dialogy_instance_id);
+                    if (dialogyInstance && chatId) await sendDialogyMessageAction({ baseUrl: dialogyInstance.baseUrl, apiKey: dialogyInstance.apiKey, chatId: chatId, content: content });
+                  } else if (session!.flow_context === 'chatwoot' && workspace!.chatwoot_instance_id) {
+                    const chatwootInstance = await loadChatwootInstanceFromDB(workspace!.chatwoot_instance_id);
+                    const accountId = getProperty(session!.flow_variables, 'chatwoot_account_id');
+                    const conversationId = getProperty(session!.flow_variables, 'chatwoot_conversation_id');
+                    if (chatwootInstance && accountId && conversationId) await sendChatwootMessageAction({ baseUrl: chatwootInstance.baseUrl, apiAccessToken: chatwootInstance.apiAccessToken, accountId: accountId, conversationId: conversationId, content: content });
+                  } else {
                     const recipientPhoneNumber = session!.flow_variables.whatsapp_sender_jid || session!.session_id.split('@@')[0].replace('evolution_jid_', '');
-                    await sendWhatsAppMessageAction({ ...apiConfig, recipientPhoneNumber: recipientPhoneNumber, messageType: 'text', textContent: content });
-                  };
-                  await sendOmniChannelMessage("Opção inválida. Por favor, tente novamente.");
-                }
-                nextNode = null;
-                startExecution = false;
+                    await sendWhatsAppMessageAction({ baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey || undefined, instanceName, recipientPhoneNumber: recipientPhoneNumber, messageType: 'text', textContent: content });
+                  }
+                };
+                await sendInvalidOptionMessage("Opção inválida. Por favor, tente novamente.");
+                startExecution = false; // Don't proceed, just wait for next valid input
               }
             }
+
             if (nextNode) {
               session.awaiting_input_type = null;
               session.awaiting_input_details = null;
               session.current_node_id = nextNode;
               startExecution = true;
+            } else if (!isApiCallResponse && !chosenOptionText && session.awaiting_input_type === 'option') {
+              startExecution = false;
+            } else {
+                session.awaiting_input_type = null;
+                session.awaiting_input_details = null;
+                session.current_node_id = null; // Pause at dead end
+                startExecution = false;
+                await saveSessionToDB(session);
+                return NextResponse.json({ message: "Flow paused at dead end." }, { status: 200 });
             }
+
           } else {
             console.warn(`[API Evolution Trigger - ${session.session_id}] Awaiting node ${originalNodeId} not found, restarting flow.`);
             await deleteSessionFromDB(session.session_id);
-            session = null; // Invalidate session
+            session = null;
           }
         } else {
           console.log(`[API Evolution Trigger - ${session.session_id}] New message received in active session not awaiting input. Restarting flow.`);
           await deleteSessionFromDB(session.session_id);
-          session = null; // Invalidate session
+          session = null;
         }
       }
     }
 
-    // Logic to start a new session if none exists or was invalidated
+    // Start new session
     if (!session) {
       if (isApiCallResponse) {
         console.log(`[API Evolution Trigger] API response received but no active session found for ${sessionKeyIdentifier}. Ignoring.`);
@@ -300,9 +294,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       const triggerHandle = matchingKeyword || matchingTrigger.name;
       console.log(`[API Evolution Trigger] Determined to start flow: ${workspaceToStart.name} (ID: ${workspaceToStart.id}) with trigger handle: ${triggerHandle}`);
+      const initialNodeId = findNextNodeId(startNodeForFlow.id, triggerHandle, workspaceToStart.connections || []);
 
-      const findNextNodeIdFn = (from: string, handle: string, conns: Connection[]) => (conns.find(c => c.from === from && c.sourceHandle === handle) || { to: null }).to;
-      const initialNodeId = findNextNodeIdFn(startNodeForFlow.id, triggerHandle, workspaceToStart.connections || []);
       if (!initialNodeId) {
         console.error(`[API Evolution Trigger] Start node trigger handle '${triggerHandle}' is not connected in flow ${workspaceToStart.name}.`);
         return NextResponse.json({ error: `Start node trigger handle '${triggerHandle}' is not connected.` }, { status: 500 });
@@ -359,14 +352,49 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         awaiting_input_type: null,
         awaiting_input_details: null,
         session_timeout_seconds: matchingTrigger.sessionTimeoutSeconds || 0,
-        flow_context: flowContext, // Make sure context is set here
+        flow_context: flowContext,
       };
       workspace = workspaceToStart;
       startExecution = true;
     }
 
-    if (startExecution && session && session.current_node_id && workspace) {
-      await executeFlow(session, workspace.nodes, workspace.connections || [], apiConfig, workspace);
+    if (startExecution && session?.current_node_id && workspace) {
+      const currentSession = session; // Capture the session object
+      const makeOmniSender = async () => {
+        if (currentSession.flow_context === 'dialogy' && workspace?.dialogy_instance_id) {
+          const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
+          const chatId = getProperty(currentSession.flow_variables, 'dialogy_conversation_id');
+          if (dialogyInstance && chatId) {
+            return async (content: string) => {
+              console.log(`[Flow Engine] Sending via Dialogy (chatId=${chatId})`);
+              await sendDialogyMessageAction({ baseUrl: dialogyInstance.baseUrl, apiKey: dialogyInstance.apiKey, chatId, content });
+            };
+          }
+        }
+        if (currentSession.flow_context === 'chatwoot' && workspace?.chatwoot_instance_id) {
+          const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
+          const accountId = getProperty(currentSession.flow_variables, 'chatwoot_account_id');
+          const conversationId = getProperty(currentSession.flow_variables, 'chatwoot_conversation_id');
+          if (chatwootInstance && accountId && conversationId) {
+            return async (content: string) => {
+              console.log(`[Flow Engine] Sending via Chatwoot (conv=${conversationId})`);
+              await sendChatwootMessageAction({ baseUrl: chatwootInstance.baseUrl, apiAccessToken: chatwootInstance.apiAccessToken, accountId, conversationId, content });
+            };
+          }
+        }
+        
+        // Fallback: Evolution (WhatsApp)
+        const evoRecipient = currentSession.flow_variables.whatsapp_sender_jid || currentSession.session_id.split('@@')[0].replace('evolution_jid_', '');
+        const evoConfig = { baseUrl: evolutionApiBaseUrl || '', apiKey: evolutionApiKey || undefined, instanceName: instanceName || '' };
+        return async (content: string) => {
+          console.log(`[Flow Engine] Sending via Evolution (recipient=${evoRecipient})`);
+          await sendWhatsAppMessageAction({ ...evoConfig, recipientPhoneNumber: evoRecipient, messageType: 'text', textContent: content });
+        };
+      };
+      
+      const sendMessage = await makeOmniSender();
+      await executeFlow(session, workspace.nodes, workspace.connections || [], { sendMessage }, workspace);
+
     } else if (session && !startExecution) {
       await saveSessionToDB(session);
     }
