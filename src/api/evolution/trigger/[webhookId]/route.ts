@@ -1,4 +1,3 @@
-
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -94,7 +93,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     if (session) {
       workspace = await loadWorkspaceFromDB(session.workspace_id);
-      console.log(`[API Evolution Trigger] Loaded existing session. Context: ${session.flow_context}`);
+      console.log(`[API Evolution Trigger - ${session.session_id}] Existing session found in workspace ${workspace?.id}. Last interaction: ${session.last_interaction_at}, Timeout: ${session.session_timeout_seconds}s`);
       if (!workspace) {
         console.error(`[API Evolution Trigger] Session ${session.session_id} exists but its workspace ${session.workspace_id} was not found. Deleting orphan session.`);
         await deleteSessionFromDB(session.session_id);
@@ -120,7 +119,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Restarting flow due to new message.`);
         await deleteSessionFromDB(session.session_id);
         session = null;
-        workspace = null; 
+        workspace = null; // CRITICAL: Ensure workspace is also reset
       } else {
         const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
         session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
@@ -329,6 +328,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       startExecution = true;
     }
 
+    // Execute flow if needed
     if (startExecution && session?.current_node_id && workspace) {
       console.log(`[API Evolution Trigger] Calling executeFlow for NEW session. Context: ${session.flow_context}`);
       await executeFlow(session, workspace.nodes, workspace.connections || [], workspace);
@@ -375,5 +375,3 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
-
-    

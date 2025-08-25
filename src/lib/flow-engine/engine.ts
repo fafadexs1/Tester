@@ -12,6 +12,7 @@ import {
   loadChatwootInstanceFromDB,
   loadDialogyInstanceFromDB,
   saveFlowLog,
+  loadWorkspaceFromDB,
 } from '@/app/actions/databaseActions';
 import type { NodeData, Connection, FlowSession, WorkspaceData, ApiResponseMapping, FlowLog } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
@@ -49,7 +50,7 @@ async function sendOmniChannelMessage(
       await sendDialogyMessageAction({ 
         baseUrl: dialogyInstance.baseUrl, 
         apiKey: dialogyInstance.apiKey, 
-        chatId, 
+        chatId: String(chatId), 
         content 
       });
       return;
@@ -68,8 +69,8 @@ async function sendOmniChannelMessage(
       await sendChatwootMessageAction({ 
         baseUrl: chatwootInstance.baseUrl, 
         apiAccessToken: chatwootInstance.apiAccessToken, 
-        accountId, 
-        conversationId, 
+        accountId: Number(accountId), 
+        conversationId: Number(conversationId), 
         content 
       });
       return;
@@ -83,17 +84,16 @@ async function sendOmniChannelMessage(
     return;
   }
   
-  // A ação `sendWhatsAppMessageAction` precisa ser capaz de buscar os detalhes da instância
-  // Apenas passar o ID da instância é o ideal, mas por enquanto, vamos passar os detalhes do workspace
-  // Esta parte pode precisar de refatoração para carregar os detalhes da instância Evolution aqui ou na própria ação.
+  // Esta parte foi refatorada para não depender de apiConfig
   const evoRecipient = session.flow_variables.whatsapp_sender_jid || 
                        session.session_id.split('@@')[0].replace('evolution_jid_', '');
 
   console.log(`[sendOmniChannelMessage] Roteando para Evolution (recipient=${evoRecipient})`);
+  // A ação agora depende dos dados no próprio workspace
   await sendWhatsAppMessageAction({ 
-      baseUrl: workspace.evolution_api_url, 
-      apiKey: workspace.evolution_api_key || undefined, 
-      instanceName: workspace.evolution_instance_name || '', 
+      baseUrl: (workspace as any).evolution_api_url, 
+      apiKey: (workspace as any).evolution_api_key || undefined, 
+      instanceName: (workspace as any).evolution_instance_name || '', 
       recipientPhoneNumber: evoRecipient, 
       messageType: 'text', 
       textContent: content 
@@ -105,10 +105,22 @@ export async function executeFlow(
   session: FlowSession,
   nodes: NodeData[],
   connections: Connection[],
-  workspace: WorkspaceData
+  workspaceIn: WorkspaceData
 ): Promise<void> {
   
   console.log('[Flow Engine] executeFlow called with session:', JSON.stringify(session, null, 2));
+
+  let workspace = workspaceIn;
+  if (!workspace || Object.keys(workspace).length === 0) {
+      console.warn(`[Flow Engine] Workspace object is empty or null. Reloading from DB using session's workspace_id: ${session.workspace_id}`);
+      const reloadedWorkspace = await loadWorkspaceFromDB(session.workspace_id);
+      if (!reloadedWorkspace) {
+        console.error(`[Flow Engine] FATAL: Could not reload workspace ${session.workspace_id}. Aborting execution.`);
+        await deleteSessionFromDB(session.session_id);
+        return;
+      }
+      workspace = reloadedWorkspace;
+  }
   
   let currentNodeId = session.current_node_id;
   let shouldContinue = true;
@@ -193,7 +205,7 @@ export async function executeFlow(
             nodeType === 'input' ? 'promptText' :
             nodeType === 'date-input' ? 'dateInputLabel' :
             nodeType === 'file-upload' ? 'uploadPromptText' :
-            'rating-input' ? 'ratingQuestionText' : '';
+            'ratingQuestionText';
 
           const promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
           if (promptText) await sendOmniChannelMessage(session, workspace, promptText);
@@ -647,5 +659,3 @@ export async function executeFlow(
     }
   }
 }
-
-    
