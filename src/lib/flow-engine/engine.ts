@@ -427,31 +427,30 @@ export async function executeFlow(
         const varName = currentNode.codeOutputVariable;
         if (currentNode.codeSnippet && varName) {
             try {
-                console.log(`[Flow Engine - ${session.session_id}] Executing code snippet.`);
-                const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-                const userFunction = new AsyncFunction('variables', `
-                    try {
-                        ${currentNode.codeSnippet}
-                    } catch(e) {
-                        console.error("[Flow Engine - User Script Error]", e);
-                        return { error: e.message || String(e) };
-                    }
-                `);
+                console.log(`[Flow Engine Code] Variáveis recebidas:`, JSON.stringify(session.flow_variables, null, 2));
+                const userScript = currentNode.codeSnippet;
                 
-                const result = await userFunction(session.flow_variables);
-
-                console.log(`[Flow Engine - ${session.session_id}] Code execution result:`, result);
+                // Criamos uma função assíncrona que pode usar 'await' e aceita 'variables' como argumento
+                const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+                const func = new AsyncFunction('variables', userScript);
+                
+                console.log(`[Flow Engine Code] Executando script...`);
+                const result = await func(session.flow_variables);
+                
+                console.log(`[Flow Engine Code] Resultado capturado:`, result);
                 setProperty(session.flow_variables, varName, result);
-                console.log(`[Flow Engine - ${session.session_id}] Code execution successful. Result stored in "${varName}".`);
 
             } catch (e: any) {
                 console.error(`[Flow Engine - ${session.session_id}] Failed to compile/execute code snippet:`, e);
                 setProperty(session.flow_variables, varName, { error: e.message || 'Failed to run script.' });
             }
+        } else {
+            console.warn(`[Flow Engine - ${session.session_id}] Nó 'Executar Código' sem script ou variável de saída definida.`);
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
+
 
       case 'whatsapp-text':
       case 'whatsapp-media': {
