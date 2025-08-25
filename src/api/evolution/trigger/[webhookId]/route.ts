@@ -68,7 +68,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const evolutionApiKey = getProperty(loggedEntry.payload, 'apikey') as string;
     const instanceName = getProperty(loggedEntry.payload, 'instance') as string;
     
-    // Resume flow from external API call
     const isApiCallResponse = getProperty(loggedEntry.payload, 'isApiCallResponse') === true;
     const resumeSessionId = getProperty(loggedEntry.payload, 'resume_session_id');
 
@@ -81,7 +80,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           sessionToResume.flow_variables[sessionToResume.awaiting_input_details?.variableToSave || 'external_response_data'] = parsedBody;
           sessionToResume.awaiting_input_type = null;
 
-          const makeOmniSenderForResume = async () => {
+          const makeOmniSender = async () => {
             if (sessionToResume.flow_context === 'dialogy' && workspaceForResume?.dialogy_instance_id) {
               const dialogyInstance = await loadDialogyInstanceFromDB(workspaceForResume.dialogy_instance_id);
               const chatId = getProperty(sessionToResume.flow_variables, 'dialogy_conversation_id');
@@ -110,8 +109,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 await sendWhatsAppMessageAction({ ...evoConfig, recipientPhoneNumber: evoRecipient, messageType: 'text', textContent: content });
             };
           };
-
-          const sender = await makeOmniSenderForResume();
+          
+          const sender = await makeOmniSender();
           const transport = { sendMessage: sender };
 
           await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], transport, workspaceForResume);
@@ -453,5 +452,3 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
-
-    
