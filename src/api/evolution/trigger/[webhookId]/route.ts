@@ -149,8 +149,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             instanceName
           );
           
-          const transport = { sendMessage };
-          await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], transport, workspaceForResume);
+          await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], sendMessage, workspaceForResume);
           return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
         }
       } else {
@@ -419,8 +418,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         instanceName
       );
       
-      const transport = { sendMessage };
-      await executeFlow(session, workspace.nodes, workspace.connections || [], transport, workspace);
+      await executeFlow(session, workspace.nodes, workspace.connections || [], sendMessage, workspace);
     } else if (session && !startExecution) {
       await saveSessionToDB(session);
     }

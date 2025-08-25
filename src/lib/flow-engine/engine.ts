@@ -32,9 +32,21 @@ export async function executeFlow(
   session: FlowSession,
   nodes: NodeData[],
   connections: Connection[],
-  transport: { sendMessage: (content: string) => Promise<void> },
+  transport: { sendMessage: (content: string) => Promise<void> } | ((content: string) => Promise<void>),
   workspace: WorkspaceData
 ): Promise<void> {
+  // Normaliza o transporte para uma função
+  const send: (content: string) => Promise<void> =
+    typeof transport === 'function'
+      ? transport
+      : transport && typeof (transport as any).sendMessage === 'function'
+      ? (transport as any).sendMessage
+      : (() => {
+          throw new Error(
+            "Invalid transport passed to executeFlow: expected a function or an object with sendMessage(content) => Promise<void>."
+          );
+        })();
+
   let currentNodeId = session.current_node_id;
   let shouldContinue = true;
 
@@ -69,7 +81,7 @@ export async function executeFlow(
 
       case 'message': {
         const messageText = substituteVariablesInText(currentNode.text, session.flow_variables);
-        await transport.sendMessage(messageText);
+        await send(messageText);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
@@ -80,13 +92,12 @@ export async function executeFlow(
       case 'rating-input':
       case 'option': {
         if (getProperty(session.flow_variables, '_invalidOption') === true) {
-            await transport.sendMessage("Opção inválida. Por favor, tente novamente.");
+            await send("Opção inválida. Por favor, tente novamente.");
             delete session.flow_variables['_invalidOption']; // Limpa a flag
             shouldContinue = false; // Para a execução e aguarda nova entrada
             break;
         }
         
-        let promptText: string | undefined = '';
         if (nodeType === 'option') {
           const q = substituteVariablesInText(currentNode.questionText, session.flow_variables);
           const optionsList = (currentNode.optionsList || '')
@@ -103,7 +114,7 @@ export async function executeFlow(
               finalMessage += "\nResponda com o número da opção desejada ou o texto exato da opção.";
             }
 
-            await transport.sendMessage(finalMessage);
+            await send(finalMessage);
             session.awaiting_input_type = 'option';
             session.awaiting_input_details = {
               variableToSave: currentNode.variableToSaveChoice || 'last_user_choice',
@@ -119,10 +130,10 @@ export async function executeFlow(
             nodeType === 'input' ? 'promptText' :
             nodeType === 'date-input' ? 'dateInputLabel' :
             nodeType === 'file-upload' ? 'uploadPromptText' :
-            'ratingQuestionText';
+            'rating-input' ? 'ratingQuestionText' : '';
 
-          promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
-          if (promptText) await transport.sendMessage(promptText);
+          const promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
+          if (promptText) await send(promptText);
 
           session.awaiting_input_type = nodeType as any;
           session.awaiting_input_details = {
@@ -534,7 +545,7 @@ export async function executeFlow(
       }
       
       case 'dialogy-send-message': {
-        await transport.sendMessage(substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables));
+        await send(substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables));
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
