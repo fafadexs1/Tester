@@ -58,6 +58,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         console.log(`[API Trigger] Dialogy message from agent (from_me=true) in conversation ${sessionKeyIdentifier}. Ignoring.`);
         return NextResponse.json({ message: "Message from agent, automation ignored." }, { status: 200 });
       }
+      // Modificação: A automação só deve parar se a conversa estiver explicitamente em atendimento humano.
       if (status === 'atendimentos') {
         console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status 'atendimentos'. Ignoring.`);
         return NextResponse.json({ message: "Conversation in 'atendimentos', automation ignored." }, { status: 200 });
@@ -202,12 +203,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 if (!isApiCallResponse) {
                   const sendOmniChannelMessage = async (content: string) => {
                     if (!content) return;
-                    if (session!.flow_context === 'dialogy') {
+                    if (session!.flow_context === 'dialogy' && workspace!.dialogy_instance_id) {
                       const chatId = getProperty(session!.flow_variables, 'dialogy_conversation_id') || getProperty(session!.flow_variables, 'webhook_payload.conversation.id');
-                      let dialogyInstance = null;
-                      if (workspace!.dialogy_instance_id) {
-                        dialogyInstance = await loadDialogyInstanceFromDB(workspace!.dialogy_instance_id);
-                      }
+                      const dialogyInstance = await loadDialogyInstanceFromDB(workspace!.dialogy_instance_id);
                       if (dialogyInstance && chatId) {
                         await sendDialogyMessageAction({ baseUrl: dialogyInstance.baseUrl, apiKey: dialogyInstance.apiKey, chatId: chatId, content: content });
                       }
@@ -400,4 +398,3 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
-
