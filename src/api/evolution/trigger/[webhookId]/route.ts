@@ -1,5 +1,4 @@
 
-
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -59,7 +58,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         console.log(`[API Trigger] Dialogy message from agent (from_me=true) in conversation ${sessionKeyIdentifier}. Ignoring.`);
         return NextResponse.json({ message: "Message from agent, automation ignored." }, { status: 200 });
       }
-      if (status === 'atendimentos') {
+       if (status === 'atendimentos') {
         console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status 'atendimentos'. Ignoring.`);
         return NextResponse.json({ message: `Conversation in 'atendimentos', automation ignored.` }, { status: 200 });
       }
@@ -93,9 +92,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               textContent: content,
             });
           };
-          const sendMessage = await makeSenderForResume();
+          
+          const sender = await makeSenderForResume();
+          const transport = { sendMessage: sender };
 
-          await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], { sendMessage }, workspaceForResume);
+          await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], transport, workspaceForResume);
           return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
         }
       } else {
@@ -216,7 +217,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               session.awaiting_input_details = null;
               session.current_node_id = nextNode;
               startExecution = true;
-            } else if (!isApiCallResponse && !chosenOptionText && session.awaiting_input_type === 'option') {
+            } else if (!isApiCallResponse && session.awaiting_input_type === 'option') {
               startExecution = false;
             } else {
                 session.awaiting_input_type = null;
@@ -359,7 +360,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     if (startExecution && session?.current_node_id && workspace) {
-      const currentSession = session; // Capture the session object
+      const currentSession = session;
       const makeOmniSender = async () => {
         if (currentSession.flow_context === 'dialogy' && workspace?.dialogy_instance_id) {
           const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
@@ -392,8 +393,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         };
       };
       
-      const sendMessage = await makeOmniSender();
-      await executeFlow(session, workspace.nodes, workspace.connections || [], { sendMessage }, workspace);
+      const sender = await makeOmniSender();
+      const transport = { sendMessage: sender };
+      await executeFlow(session, workspace.nodes, workspace.connections || [], transport, workspace);
 
     } else if (session && !startExecution) {
       await saveSessionToDB(session);
