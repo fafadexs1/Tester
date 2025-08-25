@@ -24,6 +24,18 @@ interface ApiConfig {
   instanceName: string;
 }
 
+// Otimização: Crie um único Isolate para todo o processo do servidor.
+// Isso evita a sobrecarga de criar uma nova VM V8 a cada execução.
+let sharedIsolate: ivm.Isolate | null = null;
+function getSharedIsolate() {
+    if (!sharedIsolate || sharedIsolate.isDisposed) {
+        console.log('[Flow Engine Code] Creating new shared isolated-vm Isolate.');
+        sharedIsolate = new ivm.Isolate({ memoryLimit: 128 });
+    }
+    return sharedIsolate;
+}
+
+
 export async function executeFlow(
   session: FlowSession,
   nodes: NodeData[],
@@ -427,50 +439,103 @@ export async function executeFlow(
       case 'code-execution': {
         const varName = currentNode.codeOutputVariable;
         if (currentNode.codeSnippet && varName) {
-          const isolate = new ivm.Isolate({ memoryLimit: 128 });
-          const context = await isolate.createContext();
-          try {
-            console.log('[Flow Engine Code] Criando sandbox de execução com isolated-vm.');
-            const jail = context.global;
-            await jail.set('global', jail.derefInto());
-      
-            const variablesJson = JSON.stringify(session.flow_variables);
-            await jail.set('variablesJson', new ivm.ExternalCopy(variablesJson).copyInto());
-      
-            const scriptToRun = `
-              const variables = JSON.parse(variablesJson);
-              async function __run__() {
-                ${currentNode.codeSnippet}
-              }
-              __run__();
-            `;
-      
-            const script = await isolate.compileScript(scriptToRun);
-            console.log('[Flow Engine Code] Executando script no sandbox...');
-            const rawResult = await script.run(context, { timeout: 5000, promise: true });
-            
-            // Transfere o resultado de volta de forma segura
-            let resultForHost;
-            if (rawResult instanceof ivm.Reference) {
-                resultForHost = await rawResult.copy();
-                rawResult.release();
-            } else {
-                resultForHost = rawResult;
-            }
+            const isolate = getSharedIsolate();
+            let context: ivm.Context | null = null;
+            try {
+                context = await isolate.createContext();
+                const jail = context.global;
+                await jail.set('global', jail.derefInto());
 
-            console.log('[Flow Engine Code] Resultado bruto da execução:', resultForHost);
-            setProperty(session.flow_variables, varName, resultForHost);
-            console.log(`[Flow Engine Code] Variável "${varName}" definida com sucesso.`);
-      
-          } catch (e: any) {
-            console.error(`[Flow Engine - ${session.session_id}] Erro ao executar código com isolated-vm:`, e);
-            setProperty(session.flow_variables, varName, { error: e.message });
-          } finally {
-            try { if (context) context.release(); } catch {}
-            try { if (isolate) isolate.dispose(); } catch {}
-          }
+                const variablesJson = JSON.stringify(session.flow_variables);
+                await jail.set('variablesJson', variablesJson);
+
+                const scriptToRun = `
+                    // Torna qualquer valor JSON-safe (sem ciclos; tipagens especiais normalizadas)
+                    function toJSONSafe(value, seen = new WeakSet()) {
+                        if (value === null || value === undefined) return value;
+                        const t = typeof value;
+                        if (t === 'string' || t === 'number' || t === 'boolean') return value;
+
+                        if (t === 'bigint') return value.toString();
+                        if (t === 'function' || t === 'symbol') return undefined;
+
+                        if (value instanceof Date) return value.toISOString();
+                        if (value instanceof RegExp) return value.toString();
+
+                        if (typeof value === 'object') {
+                            if (seen.has(value)) return '[Circular]';
+                            seen.add(value);
+
+                            if (value instanceof Map) {
+                                return Array.from(value.entries()).map(([k, v]) => [toJSONSafe(k, seen), toJSONSafe(v, seen)]);
+                            }
+                            if (value instanceof Set) {
+                                return Array.from(value.values()).map(v => toJSONSafe(v, seen));
+                            }
+                            if (value instanceof Error) {
+                                return { name: value.name, message: value.message, stack: value.stack || '' };
+                            }
+                            if (Array.isArray(value)) {
+                                return value.map(v => toJSONSafe(v, seen));
+                            }
+                            const out = {};
+                            for (const k in value) {
+                                try {
+                                    out[k] = toJSONSafe(value[k], seen);
+                                } catch (_) {
+                                    out[k] = '[Unserializable]';
+                                }
+                            }
+                            return out;
+                        }
+                        return value;
+                    }
+
+                    async function __run__() {
+                        const variables = JSON.parse(variablesJson);
+                        try {
+                            ${currentNode.codeSnippet}
+                        } catch (err) {
+                            return JSON.stringify({ __error: (err && err.message) ? String(err.message) : String(err) });
+                        }
+                    }
+
+                    (async () => {
+                        const res = await __run__();
+                        const payload = (typeof res === 'string' && (res.startsWith('{') || res.startsWith('[')))
+                            ? res
+                            : JSON.stringify(toJSONSafe(res));
+                        return payload;
+                    })();
+                `;
+
+                console.log('[Flow Engine Code] Executando script no sandbox...');
+                const script = await isolate.compileScript(scriptToRun);
+                const raw = await script.run(context, { timeout: 2000, promise: true });
+
+                let parsed;
+                try {
+                    parsed = raw ? JSON.parse(String(raw)) : null;
+                } catch {
+                    parsed = { value: String(raw) };
+                }
+
+                if (parsed && parsed.__error) {
+                    throw new Error(parsed.__error);
+                }
+
+                setProperty(session.flow_variables, varName, parsed);
+                console.log(`[Flow Engine Code] Variável "${varName}" definida com sucesso.`);
+            } catch (e: any) {
+                console.error(`[Flow Engine - ${session.session_id}] Erro ao executar código com isolated-vm:`, e);
+                setProperty(session.flow_variables, varName, { error: e.message });
+            } finally {
+                if (context) {
+                    try { context.release(); } catch {}
+                }
+            }
         } else {
-          console.warn(`[Flow Engine] Nó 'Executar Código' sem script ou variável de saída definida.`);
+            console.warn(`[Flow Engine] Nó 'Executar Código' sem script ou variável de saída definida.`);
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
