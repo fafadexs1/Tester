@@ -428,22 +428,19 @@ export async function executeFlow(
         if (currentNode.codeSnippet && varName) {
             try {
                 console.log(`[Flow Engine - ${session.session_id}] Executing code snippet.`);
-                // ROBUST IMPLEMENTATION: Create an async function from the user's code and call it.
-                const scriptToRun = `
+                const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+                const userFunction = new AsyncFunction('variables', `
                     try {
-                        const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-                        const userFunction = new AsyncFunction('variables', \`${currentNode.codeSnippet}\`);
-                        return await userFunction(variables);
-                    } catch (e) {
-                        console.error("Error during user script execution:", e);
-                        return { error: e.message || 'An unknown error occurred in the script.' };
+                        ${currentNode.codeSnippet}
+                    } catch(e) {
+                        console.error("[Flow Engine - User Script Error]", e);
+                        return { error: e.message || String(e) };
                     }
-                `;
-                const executor = new Function('variables', scriptToRun);
-                const result = await executor(session.flow_variables);
+                `);
+                
+                const result = await userFunction(session.flow_variables);
 
                 console.log(`[Flow Engine - ${session.session_id}] Code execution result:`, result);
-                
                 setProperty(session.flow_variables, varName, result);
                 console.log(`[Flow Engine - ${session.session_id}] Code execution successful. Result stored in "${varName}".`);
 
