@@ -1,4 +1,5 @@
 
+
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import ivm from 'isolated-vm';
@@ -38,51 +39,53 @@ async function sendOmniChannelMessage(
 ): Promise<void> {
   if (!content) return;
   console.log(`[sendOmniChannelMessage] Initiating send for session ${session.session_id} with context ${session.flow_context}`);
+  console.log('[sendOmniChannelMessage] Full session object:', JSON.stringify(session, null, 2));
+  console.log('[sendOmniChannelMessage] Full workspace object:', JSON.stringify(workspace, null, 2));
+
   
-  // 1. Dialogy
-  if (session.flow_context === 'dialogy' && workspace?.dialogy_instance_id) {
+  // 1. Prioridade 1: Dialogy. A verificação é mais robusta.
+  const chatIdDialogy = getProperty(session.flow_variables, 'dialogy_conversation_id') || getProperty(session.flow_variables, 'webhook_payload.conversation.id');
+  if (session.flow_context === 'dialogy' && workspace?.dialogy_instance_id && chatIdDialogy) {
     const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
-    const chatId = getProperty(session.flow_variables, 'dialogy_conversation_id') || getProperty(session.flow_variables, 'webhook_payload.conversation.id');
-    if (dialogyInstance && chatId) {
-      console.log(`[sendOmniChannelMessage] Roteando para Dialogy (chatId=${chatId})`);
+    if (dialogyInstance) {
+      console.log(`[sendOmniChannelMessage] Roteando para Dialogy (chatId=${chatIdDialogy})`);
       await sendDialogyMessageAction({ 
         baseUrl: dialogyInstance.baseUrl, 
         apiKey: dialogyInstance.apiKey, 
-        chatId: String(chatId), 
+        chatId: String(chatIdDialogy), 
         content 
       });
-      return;
+      return; // <-- Envio realizado com sucesso, encerra a função.
     } else {
-      console.warn(`[sendOmniChannelMessage] Dialogy context detected, but instance or chatId is missing. Instance ID: ${workspace.dialogy_instance_id}, Chat ID: ${chatId}`);
+       console.warn(`[sendOmniChannelMessage] Dialogy instance with ID ${workspace.dialogy_instance_id} not found in DB.`);
     }
   }
   
-  // 2. Chatwoot
-  if (session.flow_context === 'chatwoot' && workspace?.chatwoot_instance_id) {
+  // 2. Prioridade 2: Chatwoot
+  const accountIdChatwoot = getProperty(session.flow_variables, 'chatwoot_account_id');
+  const conversationIdChatwoot = getProperty(session.flow_variables, 'chatwoot_conversation_id');
+  if (session.flow_context === 'chatwoot' && workspace?.chatwoot_instance_id && accountIdChatwoot && conversationIdChatwoot) {
     const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
-    const accountId = getProperty(session.flow_variables, 'chatwoot_account_id');
-    const conversationId = getProperty(session.flow_variables, 'chatwoot_conversation_id');
-    if (chatwootInstance && accountId && conversationId) {
-      console.log(`[sendOmniChannelMessage] Roteando para Chatwoot (conv=${conversationId})`);
+    if (chatwootInstance) {
+      console.log(`[sendOmniChannelMessage] Roteando para Chatwoot (conv=${conversationIdChatwoot})`);
       await sendChatwootMessageAction({ 
         baseUrl: chatwootInstance.baseUrl, 
         apiAccessToken: chatwootInstance.apiAccessToken, 
-        accountId: Number(accountId), 
-        conversationId: Number(conversationId), 
+        accountId: Number(accountIdChatwoot), 
+        conversationId: Number(conversationIdChatwoot), 
         content 
       });
-      return;
+      return; // <-- Envio realizado com sucesso, encerra a função.
     }
   }
   
-  // 3. Fallback: Evolution (WhatsApp)
+  // 3. Fallback Final: Evolution (WhatsApp)
   console.log(`[sendOmniChannelMessage] Falling back to Evolution...`);
   if (!workspace.evolution_instance_id) {
     console.warn(`[sendOmniChannelMessage] Fallback to Evolution, but no Evolution instance is configured for this workspace.`);
     return;
   }
   
-  // Esta parte foi refatorada para não depender de apiConfig
   const evoRecipient = session.flow_variables.whatsapp_sender_jid || 
                        session.session_id.split('@@')[0].replace('evolution_jid_', '');
 
@@ -658,5 +661,3 @@ export async function executeFlow(
     }
   }
 }
-
-    
