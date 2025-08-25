@@ -38,8 +38,6 @@ async function sendOmniChannelMessage(
 ): Promise<void> {
   if (!content) return;
   console.log(`[sendOmniChannelMessage] Initiating send for session ${session.session_id} with context ${session.flow_context}`);
-  console.log(`[sendOmniChannelMessage] Full session object:`, JSON.stringify(session, null, 2));
-  console.log(`[sendOmniChannelMessage] Full workspace object:`, JSON.stringify(workspace, null, 2));
   
   // 1. Dialogy
   if (session.flow_context === 'dialogy' && workspace?.dialogy_instance_id) {
@@ -108,7 +106,7 @@ export async function executeFlow(
   workspaceIn: WorkspaceData
 ): Promise<void> {
   
-  console.log('[Flow Engine] executeFlow called with session:', JSON.stringify(session, null, 2));
+  console.log(`[Flow Engine] executeFlow called with session:`, JSON.stringify(session, null, 2));
 
   let workspace = workspaceIn;
   if (!workspace || Object.keys(workspace).length === 0) {
@@ -120,6 +118,7 @@ export async function executeFlow(
         return;
       }
       workspace = reloadedWorkspace;
+      console.log(`[Flow Engine] Workspace reloaded successfully:`, JSON.stringify(workspace, null, 2));
   }
   
   let currentNodeId = session.current_node_id;
@@ -659,3 +658,5 @@ export async function executeFlow(
     }
   }
 }
+
+    

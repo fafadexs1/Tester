@@ -1,3 +1,4 @@
+
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -23,7 +24,7 @@ import { findNodeById, findNextNodeId } from '@/lib/flow-engine/utils';
 export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   const { webhookId } = await params;
   console.log(`[API Evolution Trigger] POST received for webhook ID: "${webhookId}"`);
-  
+
   let rawBody: string | null = null;
   let parsedBody: any = null;
   let loggedEntry: any = null;
@@ -119,7 +120,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Restarting flow due to new message.`);
         await deleteSessionFromDB(session.session_id);
         session = null;
-        workspace = null; // CRITICAL: Ensure workspace is also reset
+        // CORREÇÃO: workspace não pode ser nulo aqui, pois precisaremos dele se iniciarmos um novo fluxo.
+        // A lógica abaixo já lida com o carregamento do workspace se session for nulo.
       } else {
         const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
         session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
@@ -179,7 +181,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               session.current_node_id = nextNode;
               startExecution = true;
             } else if (!isApiCallResponse && session.awaiting_input_type === 'option') {
-              startExecution = true;
+              startExecution = true; // Reinicia o loop para enviar msg de opção inválida
             } else {
               session.awaiting_input_type = null;
               session.awaiting_input_details = null;
@@ -198,7 +200,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           console.log(`[API Evolution Trigger - ${session.session_id}] New message received in active session not awaiting input. Restarting flow.`);
           await deleteSessionFromDB(session.session_id);
           session = null;
-          workspace = null;
         }
       }
     }
@@ -216,7 +217,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       let startNodeForFlow: NodeData | null = null;
       let matchingKeyword: string | null = null;
 
-      const defaultWorkspace = await loadWorkspaceFromDB(webhookId);
+      // CORREÇÃO: Usa o workspace já carregado se ele existir, ou carrega um novo.
+      const defaultWorkspace = workspace || await loadWorkspaceFromDB(webhookId);
 
       if (defaultWorkspace?.organization_id) {
         const organizationId = defaultWorkspace.organization_id;
@@ -330,10 +332,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Execute flow if needed
     if (startExecution && session?.current_node_id && workspace) {
-      console.log(`[API Evolution Trigger] Calling executeFlow for NEW session. Context: ${session.flow_context}`);
-      await executeFlow(session, workspace.nodes, workspace.connections || [], workspace);
-    } else if (session && workspace) {
-      console.log(`[API Evolution Trigger] Calling executeFlow for EXISTING session. Context: ${session.flow_context}`);
+      console.log(`[API Evolution Trigger] Calling executeFlow for session. Context: ${session.flow_context}`);
       await executeFlow(session, workspace.nodes, workspace.connections || [], workspace);
     } else if (session && !startExecution) {
       await saveSessionToDB(session);
@@ -375,3 +374,5 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
+
+    
