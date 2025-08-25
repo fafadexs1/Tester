@@ -23,9 +23,8 @@ import { findNodeById, findNextNodeId } from '@/lib/flow-engine/utils';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   const { webhookId } = await params;
-
   console.log(`[API Evolution Trigger] POST received for webhook ID: "${webhookId}"`);
-
+  
   let rawBody: string | null = null;
   let parsedBody: any = null;
   let loggedEntry: any = null;
@@ -63,15 +62,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({ message: `Conversation in 'atendimentos', automation ignored.` }, { status: 200 });
       }
     }
-
-    const evolutionApiBaseUrl = getProperty(loggedEntry.payload, 'server_url') as string;
-    const evolutionApiKey = getProperty(loggedEntry.payload, 'apikey') as string;
-    const instanceName = getProperty(loggedEntry.payload, 'instance') as string;
     
     const isApiCallResponse = getProperty(loggedEntry.payload, 'isApiCallResponse') === true;
     const resumeSessionId = getProperty(loggedEntry.payload, 'resume_session_id');
 
-    // Handle resume session
     if (resumeSessionId) {
       console.log(`[API Evolution Trigger] Resume call detected for session ID: ${resumeSessionId}`);
       const sessionToResume = await loadSessionFromDB(resumeSessionId);
@@ -80,8 +74,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (workspaceForResume && workspaceForResume.nodes) {
           sessionToResume.flow_variables[sessionToResume.awaiting_input_details?.variableToSave || 'external_response_data'] = parsedBody;
           sessionToResume.awaiting_input_type = null;
-
-          console.log('[API Evolution Trigger - RESUME] Calling executeFlow with session:', JSON.stringify(sessionToResume, null, 2));
           await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], workspaceForResume);
           return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
         }
@@ -99,20 +91,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     let workspace: WorkspaceData | null = null;
     let session: FlowSession | null = await loadSessionFromDB(sessionKeyIdentifier);
-    
-    if(session) {
-      console.log('[API Evolution Trigger] Found existing session from DB:', JSON.stringify(session, null, 2));
-    }
 
-
-    // Timeout logic
     if (session) {
       workspace = await loadWorkspaceFromDB(session.workspace_id);
+      console.log(`[API Evolution Trigger] Loaded existing session. Context: ${session.flow_context}`);
       if (!workspace) {
         console.error(`[API Evolution Trigger] Session ${session.session_id} exists but its workspace ${session.workspace_id} was not found. Deleting orphan session.`);
         await deleteSessionFromDB(session.session_id);
         session = null;
-        workspace = null; // Clear workspace as well
       } else if (session.session_timeout_seconds && session.session_timeout_seconds > 0 && session.last_interaction_at) {
         const lastInteractionDate = new Date(session.last_interaction_at);
         const timeoutMilliseconds = session.session_timeout_seconds * 1000;
@@ -122,12 +108,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           console.log(`[API Evolution Trigger - ${session.session_id}] Session timed out. Deleting session and starting a new one.`);
           await deleteSessionFromDB(session.session_id);
           session = null;
-          workspace = null; // Clear workspace as well
+          workspace = null; 
         }
       }
     }
 
-    // Continue existing session
     if (session && workspace) {
       console.log(`[API Evolution Trigger - ${session.session_id}] Existing session is active. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}`);
 
@@ -135,7 +120,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Restarting flow due to new message.`);
         await deleteSessionFromDB(session.session_id);
         session = null;
-        workspace = null; // Clear workspace as well
+        workspace = null; 
       } else {
         const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
         session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
@@ -185,7 +170,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 nextNode = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
               } else if (!isApiCallResponse) {
                 setProperty(session.flow_variables, '_invalidOption', true);
-                nextNode = awaitingNode.id; // Loop back to the same node to show invalid option message
+                nextNode = awaitingNode.id;
               }
             }
 
@@ -204,7 +189,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               await saveSessionToDB(session);
               return NextResponse.json({ message: "Flow paused at dead end." }, { status: 200 });
             }
-
           } else {
             console.warn(`[API Evolution Trigger - ${session.session_id}] Awaiting node ${originalNodeId} not found, restarting flow.`);
             await deleteSessionFromDB(session.session_id);
@@ -341,14 +325,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         session_timeout_seconds: matchingTrigger.sessionTimeoutSeconds || 0,
         flow_context: flowContext,
       };
-      console.log('[API Evolution Trigger] Created new session object:', JSON.stringify(session, null, 2));
       workspace = workspaceToStart;
       startExecution = true;
     }
 
-    // Execute flow if needed
     if (startExecution && session?.current_node_id && workspace) {
-      console.log('[API Evolution Trigger] Calling executeFlow with session:', JSON.stringify(session, null, 2));
+      console.log(`[API Evolution Trigger] Calling executeFlow for NEW session. Context: ${session.flow_context}`);
+      await executeFlow(session, workspace.nodes, workspace.connections || [], workspace);
+    } else if (session && workspace) {
+      console.log(`[API Evolution Trigger] Calling executeFlow for EXISTING session. Context: ${session.flow_context}`);
       await executeFlow(session, workspace.nodes, workspace.connections || [], workspace);
     } else if (session && !startExecution) {
       await saveSessionToDB(session);

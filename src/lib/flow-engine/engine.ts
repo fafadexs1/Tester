@@ -41,7 +41,7 @@ async function sendOmniChannelMessage(
   console.log(`[sendOmniChannelMessage] Full workspace object:`, JSON.stringify(workspace, null, 2));
   
   // 1. Dialogy
-  if (session.flow_context === 'dialogy' && workspace.dialogy_instance_id) {
+  if (session.flow_context === 'dialogy' && workspace?.dialogy_instance_id) {
     const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
     const chatId = getProperty(session.flow_variables, 'dialogy_conversation_id') || getProperty(session.flow_variables, 'webhook_payload.conversation.id');
     if (dialogyInstance && chatId) {
@@ -52,14 +52,14 @@ async function sendOmniChannelMessage(
         chatId, 
         content 
       });
-      return; // Importante: encerrar a execução aqui
+      return;
     } else {
       console.warn(`[sendOmniChannelMessage] Dialogy context detected, but instance or chatId is missing. Instance ID: ${workspace.dialogy_instance_id}, Chat ID: ${chatId}`);
     }
   }
   
   // 2. Chatwoot
-  if (session.flow_context === 'chatwoot' && workspace.chatwoot_instance_id) {
+  if (session.flow_context === 'chatwoot' && workspace?.chatwoot_instance_id) {
     const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
     const accountId = getProperty(session.flow_variables, 'chatwoot_account_id');
     const conversationId = getProperty(session.flow_variables, 'chatwoot_conversation_id');
@@ -72,23 +72,24 @@ async function sendOmniChannelMessage(
         conversationId, 
         content 
       });
-      return; // Importante: encerrar a execução aqui
+      return;
     }
   }
   
   // 3. Fallback: Evolution (WhatsApp)
-  const evoRecipient = session.flow_variables.whatsapp_sender_jid || 
-                       session.session_id.split('@@')[0].replace('evolution_jid_', '');
-
+  console.log(`[sendOmniChannelMessage] Falling back to Evolution...`);
   if (!workspace.evolution_instance_id) {
     console.warn(`[sendOmniChannelMessage] Fallback to Evolution, but no Evolution instance is configured for this workspace.`);
     return;
   }
   
-  console.log(`[sendOmniChannelMessage] Falling back to Evolution (recipient=${evoRecipient})`);
-  // Os detalhes da API do Evolution (URL, Key, etc.) agora estão no workspace, mas não são mais necessários aqui.
-  // A ação `sendWhatsAppMessageAction` deve buscar os dados da instância. No momento, estamos pegando do workspace
-  // para manter a compatibilidade. O ideal é refatorar isso no futuro.
+  // A ação `sendWhatsAppMessageAction` precisa ser capaz de buscar os detalhes da instância
+  // Apenas passar o ID da instância é o ideal, mas por enquanto, vamos passar os detalhes do workspace
+  // Esta parte pode precisar de refatoração para carregar os detalhes da instância Evolution aqui ou na própria ação.
+  const evoRecipient = session.flow_variables.whatsapp_sender_jid || 
+                       session.session_id.split('@@')[0].replace('evolution_jid_', '');
+
+  console.log(`[sendOmniChannelMessage] Roteando para Evolution (recipient=${evoRecipient})`);
   await sendWhatsAppMessageAction({ 
       baseUrl: workspace.evolution_api_url, 
       apiKey: workspace.evolution_api_key || undefined, 
