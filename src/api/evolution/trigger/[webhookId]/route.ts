@@ -81,19 +81,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           sessionToResume.flow_variables[sessionToResume.awaiting_input_details?.variableToSave || 'external_response_data'] = parsedBody;
           sessionToResume.awaiting_input_type = null;
 
-          const makeSenderForResume = async () => async (content: string) => {
-            console.log(`[Flow Engine - ${sessionToResume.session_id}] Sending via Evolution (resume callback)`);
-            await sendWhatsAppMessageAction({
-              baseUrl: evolutionApiBaseUrl || '',
-              apiKey: evolutionApiKey || undefined,
-              instanceName: instanceName || '',
-              recipientPhoneNumber: sessionToResume.session_id.split('@@')[0].replace('evolution_jid_', ''),
-              messageType: 'text',
-              textContent: content,
-            });
+          const makeOmniSenderForResume = async () => {
+            if (sessionToResume.flow_context === 'dialogy' && workspaceForResume?.dialogy_instance_id) {
+              const dialogyInstance = await loadDialogyInstanceFromDB(workspaceForResume.dialogy_instance_id);
+              const chatId = getProperty(sessionToResume.flow_variables, 'dialogy_conversation_id');
+              if (dialogyInstance && chatId) {
+                return async (content: string) => {
+                  console.log(`[Flow Engine] Sending via Dialogy (chatId=${chatId}) on resume`);
+                  await sendDialogyMessageAction({ baseUrl: dialogyInstance.baseUrl, apiKey: dialogyInstance.apiKey, chatId, content });
+                };
+              }
+            }
+            if (sessionToResume.flow_context === 'chatwoot' && workspaceForResume?.chatwoot_instance_id) {
+                const chatwootInstance = await loadChatwootInstanceFromDB(workspaceForResume.chatwoot_instance_id);
+                const accountId = getProperty(sessionToResume.flow_variables, 'chatwoot_account_id');
+                const conversationId = getProperty(sessionToResume.flow_variables, 'chatwoot_conversation_id');
+                if (chatwootInstance && accountId && conversationId) {
+                    return async (content: string) => {
+                    console.log(`[Flow Engine] Sending via Chatwoot (conv=${conversationId}) on resume`);
+                    await sendChatwootMessageAction({ baseUrl: chatwootInstance.baseUrl, apiAccessToken: chatwootInstance.apiAccessToken, accountId, conversationId, content });
+                    };
+                }
+            }
+            const evoRecipient = sessionToResume.flow_variables.whatsapp_sender_jid || sessionToResume.session_id.split('@@')[0].replace('evolution_jid_', '');
+            const evoConfig = { baseUrl: evolutionApiBaseUrl || '', apiKey: evolutionApiKey || undefined, instanceName: instanceName || '' };
+            return async (content: string) => {
+                console.log(`[Flow Engine] Sending via Evolution (recipient=${evoRecipient}) on resume`);
+                await sendWhatsAppMessageAction({ ...evoConfig, recipientPhoneNumber: evoRecipient, messageType: 'text', textContent: content });
+            };
           };
-          
-          const sender = await makeSenderForResume();
+
+          const sender = await makeOmniSenderForResume();
           const transport = { sendMessage: sender };
 
           await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], transport, workspaceForResume);
@@ -435,3 +453,5 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
+
+    
