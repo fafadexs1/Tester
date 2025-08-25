@@ -16,6 +16,7 @@ import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-fl
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates } from './utils';
 import jsonata from 'jsonata';
+import { VM } from 'vm2';
 
 interface ApiConfig {
   baseUrl: string;
@@ -426,26 +427,29 @@ export async function executeFlow(
       case 'code-execution': {
         const varName = currentNode.codeOutputVariable;
         if (currentNode.codeSnippet && varName) {
-            try {
-                console.log(`[Flow Engine Code] Variáveis recebidas:`, JSON.stringify(session.flow_variables, null, 2));
-                const userScript = currentNode.codeSnippet;
-                
-                // Criamos uma função assíncrona que pode usar 'await' e aceita 'variables' como argumento
-                const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-                const func = new AsyncFunction('variables', userScript);
-                
-                console.log(`[Flow Engine Code] Executando script...`);
-                const result = await func(session.flow_variables);
-                
-                console.log(`[Flow Engine Code] Resultado capturado:`, result);
-                setProperty(session.flow_variables, varName, result);
+            console.log('[Flow Engine Code] Criando sandbox de execução.');
+            const sandbox = { variables: session.flow_variables, console: console };
+            console.log('[Flow Engine Code] Injetando variáveis no sandbox:', JSON.stringify(sandbox.variables, null, 2));
+            const vm = new VM({
+                timeout: 1000,
+                sandbox: sandbox,
+                eval: false,
+                wasm: false,
+                allowAsync: true,
+            });
 
+            try {
+                console.log('[Flow Engine Code] Executando script no sandbox...');
+                const result = await vm.run(currentNode.codeSnippet);
+                console.log('[Flow Engine Code] Resultado bruto da execução:', result);
+                setProperty(session.flow_variables, varName, result);
+                console.log(`[Flow Engine Code] Variável "${varName}" definida com sucesso.`);
             } catch (e: any) {
-                console.error(`[Flow Engine - ${session.session_id}] Failed to compile/execute code snippet:`, e);
-                setProperty(session.flow_variables, varName, { error: e.message || 'Failed to run script.' });
+                console.error(`[Flow Engine] Falha ao executar script:`, e);
+                setProperty(session.flow_variables, varName, { error: e.message || 'Falha ao executar script.' });
             }
         } else {
-            console.warn(`[Flow Engine - ${session.session_id}] Nó 'Executar Código' sem script ou variável de saída definida.`);
+            console.warn(`[Flow Engine] Nó 'Executar Código' sem script ou variável de saída definida.`);
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
