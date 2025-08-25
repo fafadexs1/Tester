@@ -437,9 +437,17 @@ export async function executeFlow(
                 console.log('[Flow Engine Code] Injetando variáveis no sandbox.');
                 await jail.set('variables', new ivm.ExternalCopy(session.flow_variables).copyInto());
                 
-                const script = await isolate.compileScript(currentNode.codeSnippet);
+                // Wrap user code in an async function to allow top-level await and return
+                const scriptToRun = `
+                    async function __run__() {
+                        ${currentNode.codeSnippet}
+                    }
+                    __run__();
+                `;
+
+                const script = await isolate.compileScript(scriptToRun);
                 console.log('[Flow Engine Code] Executando script no sandbox...');
-                const rawResult = await script.run(context, { timeout: 1000 });
+                const rawResult = await script.run(context, { timeout: 1000, promise: true });
                 
                 console.log('[Flow Engine Code] Resultado bruto da execução:', rawResult);
 
