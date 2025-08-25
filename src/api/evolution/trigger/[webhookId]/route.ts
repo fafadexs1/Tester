@@ -1,3 +1,4 @@
+
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -67,8 +68,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const evolutionApiKey = getProperty(loggedEntry.payload, 'apikey') as string;
     const instanceName = getProperty(loggedEntry.payload, 'instance') as string;
     
-    const apiConfig = { baseUrl: evolutionApiBaseUrl, apiKey: evolutionApiKey || undefined, instanceName };
-
+    // This object is now used only as a fallback by the engine
+    const apiConfig = { 
+      baseUrl: evolutionApiBaseUrl, 
+      apiKey: evolutionApiKey || undefined, 
+      instanceName 
+    };
+    
     const isApiCallResponse = getProperty(loggedEntry.payload, 'isApiCallResponse') === true;
     const resumeSessionId = getProperty(loggedEntry.payload, 'resume_session_id');
 
@@ -176,20 +182,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 }
                 nextNode = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
               } else if (!isApiCallResponse) {
-                  if (session.flow_context === 'dialogy' && workspace.dialogy_instance_id) {
-                      const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
-                      if (dialogyInstance) {
-                          await sendDialogyMessageAction({ baseUrl: dialogyInstance.baseUrl, apiKey: dialogyInstance.apiKey, chatId: session.flow_variables.dialogy_conversation_id, content: "Opção inválida. Por favor, tente novamente." });
-                      }
-                  } else if (session.flow_context === 'chatwoot' && workspace.chatwoot_instance_id) {
-                      const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
-                      if (chatwootInstance) {
-                          await sendChatwootMessageAction({ baseUrl: chatwootInstance.baseUrl, apiAccessToken: chatwootInstance.apiAccessToken, accountId: session.flow_variables.chatwoot_account_id, conversationId: session.flow_variables.chatwoot_conversation_id, content: "Opção inválida. Por favor, tente novamente." });
-                      }
-                  } else {
-                      await sendWhatsAppMessageAction({ ...apiConfig, recipientPhoneNumber: session.flow_variables.whatsapp_sender_jid, messageType: 'text', textContent: "Opção inválida. Por favor, tente novamente." });
-                  }
-                startExecution = false;
+                  // Re-centralize sending invalid option message inside the engine logic
+                  session.flow_variables._invalidOption = true; // Flag for the engine
+                  nextNode = awaitingNode.id; // Re-process the same node
               }
             }
 
@@ -347,6 +342,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       startExecution = true;
     }
 
+    // Execute flow if needed
     if (startExecution && session?.current_node_id && workspace) {
       await executeFlow(session, workspace.nodes, workspace.connections || [], apiConfig, workspace);
     } else if (session && !startExecution) {

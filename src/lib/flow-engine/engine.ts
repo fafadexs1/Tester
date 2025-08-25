@@ -1,3 +1,4 @@
+
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import ivm from 'isolated-vm';
@@ -118,6 +119,13 @@ export async function executeFlow(
       case 'file-upload':
       case 'rating-input':
       case 'option': {
+        if (getProperty(session.flow_variables, '_invalidOption') === true) {
+            await sendOmniChannelMessage("Opção inválida. Por favor, tente novamente.", session, workspace, apiConfig);
+            delete session.flow_variables['_invalidOption']; // Limpa a flag
+            shouldContinue = false; // Para a execução e aguarda nova entrada
+            break;
+        }
+        
         let promptText: string | undefined = '';
         if (nodeType === 'option') {
           const q = substituteVariablesInText(currentNode.questionText, session.flow_variables);
