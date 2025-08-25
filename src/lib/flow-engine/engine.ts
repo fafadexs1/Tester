@@ -41,7 +41,7 @@ async function sendOmniChannelMessage(
     // 1. Prioridade para Dialogy
     if (session.flow_context === 'dialogy' && workspace.dialogy_instance_id) {
         const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
-        const chatId = getProperty(session.flow_variables, 'dialogy_conversation_id');
+        const chatId = getProperty(session.flow_variables, 'dialogy_conversation_id') || getProperty(session.flow_variables, 'webhook_payload.conversation.id');
         if (dialogyInstance && chatId) {
             console.log(`[Flow Engine] Roteando para Dialogy (chatId=${chatId})`);
             await sendDialogyMessageAction({ baseUrl: dialogyInstance.baseUrl, apiKey: dialogyInstance.apiKey, chatId, content });

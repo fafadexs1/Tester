@@ -1,4 +1,3 @@
-
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -68,7 +67,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const evolutionApiKey = getProperty(loggedEntry.payload, 'apikey') as string;
     const instanceName = getProperty(loggedEntry.payload, 'instance') as string;
     
-    // This object is now used only as a fallback by the engine
     const apiConfig = { 
       baseUrl: evolutionApiBaseUrl, 
       apiKey: evolutionApiKey || undefined, 
@@ -182,9 +180,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 }
                 nextNode = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
               } else if (!isApiCallResponse) {
-                  // Re-centralize sending invalid option message inside the engine logic
-                  session.flow_variables._invalidOption = true; // Flag for the engine
-                  nextNode = awaitingNode.id; // Re-process the same node
+                  session.flow_variables._invalidOption = true; 
+                  nextNode = awaitingNode.id; 
               }
             }
 
