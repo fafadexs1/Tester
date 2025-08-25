@@ -1,4 +1,3 @@
-
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import ivm from 'isolated-vm';
@@ -33,7 +32,7 @@ export async function executeFlow(
   session: FlowSession,
   nodes: NodeData[],
   connections: Connection[],
-  sendMessage: (content: string) => Promise<void>,
+  transport: { sendMessage: (content: string) => Promise<void> },
   workspace: WorkspaceData
 ): Promise<void> {
   let currentNodeId = session.current_node_id;
@@ -70,7 +69,7 @@ export async function executeFlow(
 
       case 'message': {
         const messageText = substituteVariablesInText(currentNode.text, session.flow_variables);
-        await sendMessage(messageText);
+        await transport.sendMessage(messageText);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
@@ -81,7 +80,7 @@ export async function executeFlow(
       case 'rating-input':
       case 'option': {
         if (getProperty(session.flow_variables, '_invalidOption') === true) {
-            await sendMessage("Opção inválida. Por favor, tente novamente.");
+            await transport.sendMessage("Opção inválida. Por favor, tente novamente.");
             delete session.flow_variables['_invalidOption']; // Limpa a flag
             shouldContinue = false; // Para a execução e aguarda nova entrada
             break;
@@ -104,7 +103,7 @@ export async function executeFlow(
               finalMessage += "\nResponda com o número da opção desejada ou o texto exato da opção.";
             }
 
-            await sendMessage(finalMessage);
+            await transport.sendMessage(finalMessage);
             session.awaiting_input_type = 'option';
             session.awaiting_input_details = {
               variableToSave: currentNode.variableToSaveChoice || 'last_user_choice',
@@ -123,7 +122,7 @@ export async function executeFlow(
             'ratingQuestionText';
 
           promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
-          if (promptText) await sendMessage(promptText);
+          if (promptText) await transport.sendMessage(promptText);
 
           session.awaiting_input_type = nodeType as any;
           session.awaiting_input_details = {
@@ -535,7 +534,7 @@ export async function executeFlow(
       }
       
       case 'dialogy-send-message': {
-        await sendMessage(substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables));
+        await transport.sendMessage(substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables));
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }

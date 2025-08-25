@@ -1,4 +1,3 @@
-
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -150,7 +149,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             instanceName
           );
           
-          await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], sendMessage, workspaceForResume);
+          const transport = { sendMessage };
+          await executeFlow(sessionToResume, workspaceForResume.nodes, workspaceForResume.connections || [], transport, workspaceForResume);
           return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
         }
       } else {
@@ -419,7 +419,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         instanceName
       );
       
-      await executeFlow(session, workspace.nodes, workspace.connections || [], sendMessage, workspace);
+      const transport = { sendMessage };
+      await executeFlow(session, workspace.nodes, workspace.connections || [], transport, workspace);
     } else if (session && !startExecution) {
       await saveSessionToDB(session);
     }
