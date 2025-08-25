@@ -434,12 +434,13 @@ export async function executeFlow(
                 const jail = context.global;
                 await jail.set('global', jail.derefInto());
 
-                console.log('[Flow Engine Code] Injetando variáveis no sandbox.');
-                await jail.set('variables', new ivm.ExternalCopy(session.flow_variables).copyInto());
+                const variablesJson = JSON.stringify(session.flow_variables);
+                console.log('[Flow Engine Code] Injetando variáveis no sandbox (como JSON).');
+                await jail.set('variablesJson', variablesJson);
                 
-                // Wrap user code in an async function to allow top-level await and return
                 const scriptToRun = `
                     async function __run__() {
+                        const variables = JSON.parse(variablesJson);
                         ${currentNode.codeSnippet}
                     }
                     __run__();
@@ -449,10 +450,8 @@ export async function executeFlow(
                 console.log('[Flow Engine Code] Executando script no sandbox...');
                 const rawResult = await script.run(context, { timeout: 1000, promise: true });
                 
-                console.log('[Flow Engine Code] Resultado bruto da execução:', rawResult);
-
-                // O resultado de isolated-vm pode ser um Reference. Precisamos copiá-lo para fora.
                 const result = await (rawResult instanceof ivm.Reference ? rawResult.copy() : rawResult);
+                console.log('[Flow Engine Code] Resultado bruto da execução:', result);
 
                 if (result && result.__error) {
                     throw new Error(result.__error);
@@ -475,7 +474,6 @@ export async function executeFlow(
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
-
 
       case 'whatsapp-text':
       case 'whatsapp-media': {
