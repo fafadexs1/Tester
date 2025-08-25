@@ -11,8 +11,9 @@ import {
   deleteSessionFromDB,
   loadChatwootInstanceFromDB,
   loadDialogyInstanceFromDB,
+  saveFlowLog, // Importado para uso direto
 } from '@/app/actions/databaseActions';
-import type { NodeData, Connection, FlowSession, WorkspaceData, ApiResponseMapping } from '@/lib/types';
+import type { NodeData, Connection, FlowSession, WorkspaceData, ApiResponseMapping, FlowLog } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates } from './utils';
@@ -24,8 +25,6 @@ interface ApiConfig {
   instanceName: string;
 }
 
-// Otimização: Crie um único Isolate para todo o processo do servidor.
-// Isso evita a sobrecarga de criar uma nova VM V8 a cada execução.
 let sharedIsolate: ivm.Isolate | null = null;
 function getSharedIsolate() {
     if (!sharedIsolate || sharedIsolate.isDisposed) {
@@ -412,25 +411,20 @@ export async function executeFlow(
             setProperty(session.flow_variables, varName, errorData);
           }
         } finally {
-            const logData = {
-              workspaceId: workspace.id,
-              type: 'api-call',
-              nodeId: currentNode.id,
-              nodeTitle: currentNode.title,
-              requestUrl: url,
-              response: responseData,
-              error: errorData,
+            const logEntry: Omit<FlowLog, 'id'> = {
+              workspace_id: workspace.id,
+              log_type: 'api-call',
+              session_id: session.session_id,
+              timestamp: new Date().toISOString(),
+              details: {
+                nodeId: currentNode.id,
+                nodeTitle: currentNode.title,
+                requestUrl: url,
+                response: responseData,
+                error: errorData,
+              }
             };
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
-            if (appUrl) {
-                fetch(`${appUrl}/api/evolution/webhook-logs`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(logData),
-                }).catch(e => console.error("[Flow Engine] Failed to post API log:", e));
-            } else {
-                console.error("[Flow Engine] NEXT_PUBLIC_APP_URL is not set. Cannot post API log.");
-            }
+            saveFlowLog(logEntry).catch(e => console.error("[Flow Engine] Failed to save API log to DB:", e));
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
@@ -442,12 +436,14 @@ export async function executeFlow(
             const isolate = getSharedIsolate();
             let context: ivm.Context | null = null;
             try {
+                console.log('[Flow Engine Code] Criando contexto de execução com isolated-vm.');
                 context = await isolate.createContext();
                 const jail = context.global;
                 await jail.set('global', jail.derefInto());
 
                 const variablesJson = JSON.stringify(session.flow_variables);
                 await jail.set('variablesJson', variablesJson);
+                console.log('[Flow Engine Code] Injetando variáveis no sandbox.');
 
                 const scriptToRun = `
                     // Torna qualquer valor JSON-safe (sem ciclos; tipagens especiais normalizadas)
