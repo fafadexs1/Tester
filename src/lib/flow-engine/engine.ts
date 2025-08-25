@@ -1,5 +1,4 @@
 
-
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import ivm from 'isolated-vm';
@@ -31,7 +30,6 @@ function getSharedIsolate() {
     return sharedIsolate;
 }
 
-// A função de envio omnicanal agora vive dentro do motor de fluxo.
 async function sendOmniChannelMessage(
   session: FlowSession,
   workspace: WorkspaceData,
@@ -41,74 +39,70 @@ async function sendOmniChannelMessage(
   console.log(`[sendOmniChannelMessage] Initiating send for session ${session.session_id} with context ${session.flow_context}`);
   console.log('[sendOmniChannelMessage] Full session object:', JSON.stringify(session, null, 2));
   console.log('[sendOmniChannelMessage] Full workspace object:', JSON.stringify(workspace, null, 2));
-  
-  // 1. Prioridade 1: Dialogy.
-  const chatIdDialogy = getProperty(session.flow_variables, 'dialogy_conversation_id') || getProperty(session.flow_variables, 'webhook_payload.conversation.id');
-  if (session.flow_context === 'dialogy' && workspace?.dialogy_instance_id && chatIdDialogy) {
-    const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
-    if (dialogyInstance) {
-      console.log(`[sendOmniChannelMessage] Roteando para Dialogy (chatId=${chatIdDialogy})`);
-      await sendDialogyMessageAction({ 
-        baseUrl: dialogyInstance.baseUrl, 
-        apiKey: dialogyInstance.apiKey, 
-        chatId: String(chatIdDialogy), 
-        content 
-      });
-      return;
-    } else {
-       console.warn(`[sendOmniChannelMessage] Dialogy instance with ID ${workspace.dialogy_instance_id} not found in DB.`);
+
+  // Strict channel logic based on context
+  if (session.flow_context === 'dialogy') {
+    const chatId = getProperty(session.flow_variables, 'dialogy_conversation_id');
+    if (workspace.dialogy_instance_id && chatId) {
+      const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
+      if (dialogyInstance) {
+        console.log(`[sendOmniChannelMessage] Roteando para Dialogy (chatId=${chatId})`);
+        await sendDialogyMessageAction({ 
+          baseUrl: dialogyInstance.baseUrl, 
+          apiKey: dialogyInstance.apiKey, 
+          chatId: String(chatId), 
+          content 
+        });
+        return; // Exit after successful send
+      }
     }
+    console.error(`[sendOmniChannelMessage] Falha ao enviar pela Dialogy. Instância ou Chat ID ausente. Workspace tem instância? ${!!workspace.dialogy_instance_id}, Sessão tem ChatID? ${!!chatId}`);
+    return; // DO NOT FALLBACK
+  }
+
+  if (session.flow_context === 'chatwoot') {
+    const accountId = getProperty(session.flow_variables, 'chatwoot_account_id');
+    const conversationId = getProperty(session.flow_variables, 'chatwoot_conversation_id');
+    if (workspace.chatwoot_instance_id && accountId && conversationId) {
+      const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
+      if (chatwootInstance) {
+        console.log(`[sendOmniChannelMessage] Roteando para Chatwoot (conv=${conversationId})`);
+        await sendChatwootMessageAction({ 
+          baseUrl: chatwootInstance.baseUrl, 
+          apiAccessToken: chatwootInstance.apiAccessToken, 
+          accountId: Number(accountId), 
+          conversationId: Number(conversationId), 
+          content 
+        });
+        return; // Exit after successful send
+      }
+    }
+     console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Chatwoot. Instância, Account ID ou Conversation ID ausente.`);
+    return; // DO NOT FALLBACK
   }
   
-  // 2. Prioridade 2: Chatwoot
-  const accountIdChatwoot = getProperty(session.flow_variables, 'chatwoot_account_id');
-  const conversationIdChatwoot = getProperty(session.flow_variables, 'chatwoot_conversation_id');
-  if (session.flow_context === 'chatwoot' && workspace?.chatwoot_instance_id && accountIdChatwoot && conversationIdChatwoot) {
-    const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
-    if (chatwootInstance) {
-      console.log(`[sendOmniChannelMessage] Roteando para Chatwoot (conv=${conversationIdChatwoot})`);
-      await sendChatwootMessageAction({ 
-        baseUrl: chatwootInstance.baseUrl, 
-        apiAccessToken: chatwootInstance.apiAccessToken, 
-        accountId: Number(accountIdChatwoot), 
-        conversationId: Number(conversationIdChatwoot), 
-        content 
-      });
-      return;
-    }
-  }
-  
-  // 3. Fallback Final: Evolution (WhatsApp)
-  console.log(`[sendOmniChannelMessage] Falling back to Evolution...`);
-  const evolutionInstanceId = (workspace as any)?.evolution_instance_id;
+  // Default/Fallback behavior (e.g., for 'evolution' context)
+  console.log(`[sendOmniChannelMessage] Roteando para Evolution (padrão/fallback)...`);
+  const evolutionInstanceId = workspace.evolution_instance_id;
   if (!evolutionInstanceId) {
-    console.warn(`[sendOmniChannelMessage] Fallback to Evolution, but no Evolution instance is configured for this workspace.`);
+    console.warn(`[sendOmniChannelMessage] Contexto é ${session.flow_context}, mas nenhuma instância Evolution está configurada para este workspace.`);
     return;
   }
   
-  // Aqui, precisamos buscar os dados da instância do Evolution do banco
-  const { data: evoInstances } = await getEvolutionInstancesForUser(workspace.owner_id);
-  const evoInstance = evoInstances?.find(i => i.id === evolutionInstanceId);
-
-  if (!evoInstance) {
-      console.warn(`[sendOmniChannelMessage] Evolution instance with ID ${evolutionInstanceId} not found in DB for user ${workspace.owner_id}.`);
-      return;
-  }
-  
+  // This logic should be adapted to fetch the correct instance details
+  // For now, it's a placeholder. A robust implementation would query the DB.
+   console.warn(`[sendOmniChannelMessage] Lógica para buscar detalhes da instância Evolution (ID: ${evolutionInstanceId}) não implementada.`);
+   
   const evoRecipient = session.flow_variables.whatsapp_sender_jid || 
                        session.session_id.split('@@')[0].replace('evolution_jid_', '');
 
-  console.log(`[sendOmniChannelMessage] Roteando para Evolution (recipient=${evoRecipient})`);
-  await sendWhatsAppMessageAction({ 
-      baseUrl: evoInstance.baseUrl, 
-      apiKey: evoInstance.apiKey || undefined, 
-      instanceName: evoInstance.name, 
-      recipientPhoneNumber: evoRecipient, 
-      messageType: 'text', 
-      textContent: content 
-  });
+  console.log(`[sendOmniChannelMessage] Tentando enviar para Evolution (recipient=${evoRecipient}) (LÓGICA INCOMPLETA)`);
+  // Example of what it should do:
+  // const evoInstance = await loadEvolutionInstanceFromDB(evolutionInstanceId);
+  // if (evoInstance) {
+  //   await sendWhatsAppMessageAction({ ... });
+  // }
 }
-
 
 export async function executeFlow(
   session: FlowSession,
@@ -630,7 +624,8 @@ export async function executeFlow(
       }
       
       case 'dialogy-send-message': {
-        await sendOmniChannelMessage(session, workspace, substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables));
+        const content = substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables);
+        await sendOmniChannelMessage(session, workspace, content);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
@@ -668,10 +663,4 @@ export async function executeFlow(
       await saveSessionToDB(session);
     }
   }
-}
-
-// Dummy a função que falta para evitar erros de compilação.
-async function getEvolutionInstancesForUser(userId: string): Promise<{ data?: any[]; error?: string }> {
-  // Em uma implementação real, isso buscaria as instâncias do banco de dados.
-  return { data: [] };
 }
