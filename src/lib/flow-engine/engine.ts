@@ -69,7 +69,7 @@ export async function executeFlow(
           chatId: chatId,
           content: content,
         });
-        return; // A mensagem foi enviada pelo canal correto, podemos parar aqui.
+        return; 
       }
     }
 
@@ -84,7 +84,7 @@ export async function executeFlow(
             conversationId: session.flow_variables.chatwoot_conversation_id,
             content: content
           });
-           return; // A mensagem foi enviada pelo canal correto, podemos parar aqui.
+           return; 
         }
       }
     }
@@ -435,120 +435,104 @@ export async function executeFlow(
       case 'code-execution': {
         const varName = currentNode.codeOutputVariable;
         if (currentNode.codeSnippet && varName) {
-            const isolate = getSharedIsolate();
-            let context: ivm.Context | null = null;
-            try {
-                console.log('[Flow Engine Code] Criando contexto de execução com isolated-vm.');
-                context = await isolate.createContext();
-                const jail = context.global;
-                await jail.set('global', jail.derefInto());
-
-                const variablesJson = JSON.stringify(session.flow_variables);
-                await jail.set('variablesJson', new ivm.ExternalCopy(variablesJson).copyInto());
-                console.log('[Flow Engine Code] Injetando variáveis no sandbox.');
-
-                const scriptToRun = `
-                    function toJSONSafe(value, seen = new WeakSet()) {
-                        if (value === null || value === undefined) return value;
-                        const t = typeof value;
-                        if (t === 'string' || t === 'number' || t === 'boolean') return value;
-                        if (t === 'bigint') return value.toString();
-                        if (t === 'function' || t === 'symbol') return undefined;
-                        if (value instanceof Date) return value.toISOString();
-                        if (value instanceof RegExp) return value.toString();
-                        if (typeof value === 'object') {
-                            if (seen.has(value)) return '[Circular]';
-                            seen.add(value);
-                            if (value instanceof Map) {
-                                return Array.from(value.entries()).map(([k, v]) => [toJSONSafe(k, seen), toJSONSafe(v, seen)]);
-                            }
-                            if (value instanceof Set) {
-                                return Array.from(value.values()).map(v => toJSONSafe(v, seen));
-                            }
-                            if (value instanceof Error) {
-                                return { name: value.name, message: value.message, stack: value.stack || '' };
-                            }
-                            if (Array.isArray(value)) {
-                                return value.map(v => toJSONSafe(v, seen));
-                            }
-                            const out = {};
-                            for (const k in value) {
-                                try {
-                                    out[k] = toJSONSafe(value[k], seen);
-                                } catch (_) {
-                                    out[k] = '[Unserializable]';
-                                }
-                            }
-                            return out;
-                        }
-                        return value;
+          const isolate = getSharedIsolate();
+          let context: ivm.Context | null = null;
+          try {
+            console.log('[Flow Engine Code] Criando contexto de execução com isolated-vm.');
+            context = await isolate.createContext();
+            const jail = context.global;
+            await jail.set('global', jail.derefInto());
+      
+            const variablesJson = JSON.stringify(session.flow_variables);
+            await jail.set('variablesJson', variablesJson);
+            console.log('[Flow Engine Code] Injetando variáveis no sandbox.');
+      
+            const scriptToRun = `
+              function toJSONSafe(value, seen = new WeakSet()) {
+                if (value === null || value === undefined) return value;
+                const t = typeof value;
+                if (t === 'string' || t === 'number' || t === 'boolean') return value;
+                if (t === 'bigint') return value.toString();
+                if (t === 'function' || t === 'symbol') return undefined;
+                if (value instanceof Date) return value.toISOString();
+                if (value instanceof RegExp) return value.toString();
+                if (typeof value === 'object') {
+                  if (seen.has(value)) return '[Circular]';
+                  seen.add(value);
+                  if (value instanceof Map) {
+                    return Array.from(value.entries()).map(([k, v]) => [toJSONSafe(k, seen), toJSONSafe(v, seen)]);
+                  }
+                  if (value instanceof Set) {
+                    return Array.from(value.values()).map(v => toJSONSafe(v, seen));
+                  }
+                  if (value instanceof Error) {
+                    return { name: value.name, message: value.message, stack: value.stack || '' };
+                  }
+                  if (Array.isArray(value)) {
+                    return value.map(v => toJSONSafe(v, seen));
+                  }
+                  const out = {};
+                  for (const k in value) {
+                    try {
+                      out[k] = toJSONSafe(value[k], seen);
+                    } catch (_) {
+                      out[k] = '[Unserializable]';
                     }
-                    async function __run__() {
-                        const variables = JSON.parse(variablesJson);
-                        try {
-                            ${currentNode.codeSnippet}
-                        } catch (err) {
-                            return JSON.stringify({ __error: (err && err.message) ? String(err.message) : String(err) });
-                        }
-                    }
-                    (async () => {
-                        const res = await __run__();
-                        const payload = (typeof res === 'string' && (res.startsWith('{') || res.startsWith('[')))
-                            ? res
-                            : JSON.stringify(toJSONSafe(res));
-                        return new ivm.ExternalCopy(payload).copyInto();
-                    })();
-                `;
-
-                console.log('[Flow Engine Code] Executando script no sandbox...');
-                const script = await isolate.compileScript(scriptToRun);
-                const raw = await script.run(context, { timeout: 2000, promise: true });
-
-                let parsed;
+                  }
+                  return out;
+                }
+                return value;
+              }
+      
+              async function __run__() {
+                const variables = JSON.parse(variablesJson);
                 try {
-                    parsed = raw ? JSON.parse(String(raw)) : null;
-                } catch {
-                    parsed = { value: String(raw) };
+                  ${currentNode.codeSnippet}
+                } catch (err) {
+                  return JSON.stringify({ __error: (err && err.message) ? String(err.message) : String(err) });
                 }
-
-                if (parsed && parsed.__error) {
-                    throw new Error(parsed.__error);
-                }
-
-                setProperty(session.flow_variables, varName, parsed);
-                console.log(`[Flow Engine Code] Variável "${varName}" definida com sucesso.`);
-            } catch (e: any) {
-                console.error(`[Flow Engine - ${session.session_id}] Erro ao executar código com isolated-vm:`, e);
-                setProperty(session.flow_variables, varName, { error: e.message });
-            } finally {
-                if (context) {
-                    try { context.release(); } catch {}
-                }
+              }
+      
+              (async () => {
+                const res = await __run__();
+                const payload = (typeof res === 'string' && (res.startsWith('{') || res.startsWith('[')))
+                  ? res
+                  : JSON.stringify(toJSONSafe(res));
+                return payload;
+              })();
+            `;
+      
+            const script = await isolate.compileScript(scriptToRun);
+            console.log('[Flow Engine Code] Executando script no sandbox...');
+            const raw = await script.run(context, { timeout: 2000, promise: true });
+      
+            let parsed: any;
+            try {
+              parsed = raw ? JSON.parse(String(raw)) : null;
+            } catch {
+              parsed = { value: String(raw) };
             }
+      
+            if (parsed && parsed.__error) {
+              throw new Error(parsed.__error);
+            }
+      
+            setProperty(session.flow_variables, varName, parsed);
+            console.log(`[Flow Engine Code] Variável "${varName}" definida com sucesso.`);
+          } catch (e: any) {
+            console.error(`[Flow Engine - ${session.session_id}] Erro ao executar código com isolated-vm:`, e);
+            setProperty(session.flow_variables, varName, { error: e.message });
+          } finally {
+            if (context) {
+              try { context.release(); } catch {}
+            }
+          }
         } else {
-            console.warn(`[Flow Engine] Nó 'Executar Código' sem script ou variável de saída definida.`);
+          console.warn(`[Flow Engine] Nó 'Executar Código' sem script ou variável de saída definida.`);
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
-      }
-      
-      case 'whatsapp-text':
-      case 'whatsapp-media': {
-        const recipientPhoneNumber = substituteVariablesInText(currentNode.phoneNumber, session.flow_variables) || session.session_id.split("@@")[0];
-        const instanceName = substituteVariablesInText(currentNode.instanceName, session.flow_variables) || apiConfig.instanceName;
-
-        await sendWhatsAppMessageAction({
-          ...apiConfig,
-          instanceName,
-          recipientPhoneNumber: recipientPhoneNumber.split('@')[0], 
-          messageType: nodeType === 'whatsapp-text' ? 'text' : currentNode.mediaType || 'image',
-          textContent: nodeType === 'whatsapp-text' ? substituteVariablesInText(currentNode.textMessage, session.flow_variables) : undefined,
-          mediaUrl: nodeType === 'whatsapp-media' ? substituteVariablesInText(currentNode.mediaUrl, session.flow_variables) : undefined,
-          caption: nodeType === 'whatsapp-media' ? substituteVariablesInText(currentNode.caption, session.flow_variables) : undefined,
-        });
-        nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
-        break;
-      }
+      }      
 
       case 'ai-text-generation': {
         const varName = currentNode.aiOutputVariable;
