@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { Pool, type QueryResult } from 'pg';
@@ -648,7 +647,8 @@ export async function saveFlowLog(log: Omit<FlowLog, 'id'>): Promise<void> {
       INSERT INTO flow_logs (workspace_id, log_type, session_id, details, timestamp)
       VALUES ($1, $2, $3, $4, $5);
     `;
-    await runQuery(query, [log.workspace_id, log.log_type, log.session_id, JSON.stringify(log.details), log.timestamp]);
+    // CORREÇÃO: Passar o objeto 'log.details' diretamente para ser serializado como JSONB pelo driver pg.
+    await runQuery(query, [log.workspace_id, log.log_type, log.session_id, log.details, log.timestamp]);
   } catch (error) {
     console.error('[DB Actions] Failed to save flow log:', { log, error });
   }
