@@ -408,11 +408,16 @@ export async function executeFlow(
               response: responseData,
               error: errorData,
             };
-            fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/evolution/webhook-logs`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(logData),
-            }).catch(e => console.error("[Flow Engine] Failed to post API log:", e));
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+            if (appUrl) {
+                fetch(`${appUrl}/api/evolution/webhook-logs`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(logData),
+                }).catch(e => console.error("[Flow Engine] Failed to post API log:", e));
+            } else {
+                console.error("[Flow Engine] NEXT_PUBLIC_APP_URL is not set. Cannot post API log.");
+            }
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
@@ -423,28 +428,20 @@ export async function executeFlow(
         if (currentNode.codeSnippet && varName) {
           try {
             console.log(`[Flow Engine - ${session.session_id}] Executing code snippet.`);
-            // Create a function that takes 'variables' as an argument.
-            const executor = new Function('variables', `
-              try {
+            // Wrap the user's code to ensure it returns a value from the last expression
+            const scriptToRun = `
+              return (function() {
+                const variables = arguments[0];
                 ${currentNode.codeSnippet}
-              } catch (e) {
-                // Return errors as a specific object structure
-                return { __error: e.message || 'An unknown error occurred in the script.' };
-              }
-            `);
-
-            // Execute the function, passing in the flow variables.
+              })(arguments[0]);
+            `;
+            const executor = new Function('variables', scriptToRun);
+            
             const result = executor(session.flow_variables);
 
             console.log(`[Flow Engine - ${session.session_id}] Code execution result:`, result);
-
-            if (result && result.__error) {
-              console.error(`[Flow Engine - ${session.session_id}] Error in user code-execution script:`, result.__error);
-              setProperty(session.flow_variables, varName, { error: result.__error });
-            } else {
-              setProperty(session.flow_variables, varName, result);
-              console.log(`[Flow Engine - ${session.session_id}] Code execution successful. Result stored in "${varName}".`);
-            }
+            
+            setProperty(session.flow_variables, varName, result);
 
           } catch (e: any) {
             console.error(`[Flow Engine - ${session.session_id}] Failed to compile/execute code snippet:`, e);

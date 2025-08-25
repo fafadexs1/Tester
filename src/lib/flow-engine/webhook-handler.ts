@@ -67,13 +67,19 @@ export async function storeRequestDetails(
     flow_context: flowContext,
     payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
   };
+  
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+  if (appUrl) {
+    // Dispara um POST para o endpoint central de logs sem aguardar
+    fetch(`${appUrl}/api/evolution/webhook-logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(logEntry),
+    }).catch(e => console.error("[Webhook Handler] Failed to post webhook log:", e));
+  } else {
+    console.error("[Webhook Handler] NEXT_PUBLIC_APP_URL is not set. Cannot post webhook log.");
+  }
 
-  // Dispara um POST para o endpoint central de logs sem aguardar
-  fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/evolution/webhook-logs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(logEntry),
-  }).catch(e => console.error("[Webhook Handler] Failed to post webhook log:", e));
 
   return logEntry;
 }
