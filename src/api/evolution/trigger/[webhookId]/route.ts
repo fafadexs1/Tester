@@ -36,30 +36,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const sessionKeyIdentifier = loggedEntry.session_key_identifier;
     const receivedMessageText = loggedEntry.extractedMessage;
     const flowContext = loggedEntry.flow_context;
-
-    // Agent intervention checks
-    if (flowContext === 'chatwoot') {
-      let payloadToCheck = parsedBody;
-      if (Array.isArray(payloadToCheck) && payloadToCheck.length > 0) {
-        payloadToCheck = payloadToCheck[0];
-      }
-      if (getProperty(payloadToCheck, 'sender_type') === 'User') {
-        console.log(`[API Trigger] Human agent (Chatwoot User) message detected in conversation ${sessionKeyIdentifier}. Pausing automation.`);
-        return NextResponse.json({ message: "Automation paused due to human intervention." }, { status: 200 });
-      }
-    }
-    if (flowContext === 'dialogy') {
-      const fromMe = getProperty(parsedBody, 'message.from_me');
-      const status = getProperty(parsedBody, 'conversation.status');
-      if (fromMe === true) {
-        console.log(`[API Trigger] Dialogy message from agent (from_me=true) in conversation ${sessionKeyIdentifier}. Ignoring.`);
-        return NextResponse.json({ message: "Message from agent, automation ignored." }, { status: 200 });
-      }
-      if (status === 'atendimentos') {
-        console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status 'atendimentos'. Ignoring.`);
-        return NextResponse.json({ message: `Conversation in 'atendimentos', automation ignored.` }, { status: 200 });
-      }
-    }
     
     const isApiCallResponse = getProperty(loggedEntry.payload, 'isApiCallResponse') === true;
     const resumeSessionId = getProperty(loggedEntry.payload, 'resume_session_id');
@@ -93,6 +69,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     let payloadToUse = parsedBody;
     if (Array.isArray(payloadToUse) && payloadToUse.length > 0) {
       payloadToUse = payloadToUse[0];
+    }
+    
+    // Agent intervention checks - MOVED HERE TO USE `payloadToUse`
+    if (flowContext === 'chatwoot') {
+      if (getProperty(payloadToUse, 'sender_type') === 'User') {
+        console.log(`[API Trigger] Human agent (Chatwoot User) message detected in conversation ${sessionKeyIdentifier}. Pausing automation.`);
+        return NextResponse.json({ message: "Automation paused due to human intervention." }, { status: 200 });
+      }
+    }
+    if (flowContext === 'dialogy') {
+      const fromMe = getProperty(payloadToUse, 'message.from_me');
+      const status = getProperty(payloadToUse, 'conversation.status');
+      if (fromMe === true) {
+        console.log(`[API Trigger] Dialogy message from agent (from_me=true) in conversation ${sessionKeyIdentifier}. Ignoring.`);
+        return NextResponse.json({ message: "Message from agent, automation ignored." }, { status: 200 });
+      }
+      if (status === 'atendimentos') {
+        console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status 'atendimentos'. Ignoring.`);
+        return NextResponse.json({ message: `Conversation in 'atendimentos', automation ignored.` }, { status: 200 });
+      }
     }
 
     if (session) {
@@ -375,5 +371,3 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
-
-    
