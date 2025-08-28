@@ -138,10 +138,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     if (session && workspace) {
       console.log(`[API Evolution Trigger - ${session.session_id}] Existing session is active. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}, Context: ${session.flow_context}`);
+      
+      // *** CORREÇÃO APLICADA AQUI ***
+      // Se o fluxo chegou ao fim (pausado em um beco sem saída), não reinicie com uma nova mensagem. Apenas ignore.
       if (session.current_node_id === null && session.awaiting_input_type === null) {
-        console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Restarting flow due to new message.`);
-        await deleteSessionFromDB(session.session_id);
-        session = null; 
+        console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Ignoring new message to prevent unwanted restart.`);
+        return NextResponse.json({ message: "Flow is paused. New message ignored." }, { status: 200 });
       } else {
         const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
         session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
@@ -390,5 +392,3 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   return POST(request, { params });
 }
-
-    
