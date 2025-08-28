@@ -9,7 +9,8 @@ export async function storeRequestDetails(
   request: NextRequest,
   parsedPayload: any,
   rawBodyText: string | null,
-  webhookId: string // This is the workspace ID
+  webhookId: string, // This is the workspace ID
+  workspaceExists: boolean // NEW: Flag to indicate if the workspace is valid
 ): Promise<any> {
   const currentTimestamp = new Date().toISOString();
   let extractedMessage: string | null = null;
@@ -57,30 +58,42 @@ export async function storeRequestDetails(
 
   console.log(`[Webhook Handler] Determined flowContext: "${flowContext}"`);
 
-  const logEntry: Omit<FlowLog, 'id'> = {
-    workspace_id: webhookId,
-    log_type: 'webhook',
-    session_id: sessionKeyIdentifier,
-    timestamp: currentTimestamp,
-    details: {
-      method: request.method,
-      url: request.url,
-      headers: headers,
-      ip: ip,
-      extractedMessage: extractedMessage,
-      flowContext: flowContext,
-      payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
+  // Only save the log if the workspace exists to prevent foreign key violations.
+  if (workspaceExists) {
+    const logEntry: Omit<FlowLog, 'id'> = {
+      workspace_id: webhookId,
+      log_type: 'webhook',
+      session_id: sessionKeyIdentifier,
+      timestamp: currentTimestamp,
+      details: {
+        method: request.method,
+        url: request.url,
+        headers: headers,
+        ip: ip,
+        extractedMessage: extractedMessage,
+        flowContext: flowContext,
+        payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
+      }
+    };
+    
+    try {
+      await saveFlowLog(logEntry);
+    } catch(e) {
+      console.error("[Webhook Handler] Failed to save webhook log to DB:", e);
     }
-  };
-  
-  try {
-    await saveFlowLog(logEntry);
-  } catch(e) {
-    console.error("[Webhook Handler] Failed to save webhook log to DB:", e);
+  } else {
+    console.warn(`[Webhook Handler] Workspace with ID "${webhookId}" not found. Skipping log save.`);
   }
   
   return {
-    ...logEntry.details,
+    // Return extracted details even if not logged
+    method: request.method,
+    url: request.url,
+    headers: headers,
+    ip: ip,
+    extractedMessage: extractedMessage,
+    flowContext: flowContext,
+    payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" },
     session_key_identifier: sessionKeyIdentifier,
   };
 }

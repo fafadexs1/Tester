@@ -120,22 +120,14 @@ async function sendOmniChannelMessage(
 
 export async function executeFlow(
   session: FlowSession,
-  workspaceIn?: WorkspaceData
+  workspace: WorkspaceData
 ): Promise<void> {
   
   console.log(`[Flow Engine] executeFlow called with session:`, JSON.stringify(session, null, 2));
 
-  let workspace = workspaceIn;
-  if (!workspace || Object.keys(workspace).length === 0 || !workspace.id) {
-      console.warn(`[Flow Engine] Workspace object is empty or null. Reloading from DB using session's workspace_id: ${session.workspace_id}`);
-      const reloadedWorkspace = await loadWorkspaceFromDB(session.workspace_id);
-      if (!reloadedWorkspace) {
-        console.error(`[Flow Engine] FATAL: Could not reload workspace ${session.workspace_id}. Aborting execution.`);
-        await deleteSessionFromDB(session.session_id);
-        return;
-      }
-      workspace = reloadedWorkspace;
-      console.log(`[Flow Engine] Workspace reloaded successfully.`);
+  if (!workspace || !workspace.id) {
+    console.error(`[Flow Engine] FATAL: Invalid workspace object provided. Aborting execution for session ${session.session_id}.`);
+    return;
   }
   
   const { nodes, connections } = workspace;

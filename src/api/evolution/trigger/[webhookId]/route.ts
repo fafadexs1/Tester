@@ -9,21 +9,18 @@ import {
   saveSessionToDB,
   deleteSessionFromDB,
   loadWorkspaceFromDB,
-  loadChatwootInstanceFromDB,
-  loadDialogyInstanceFromDB,
   loadWorkspacesForOrganizationFromDB,
 } from '@/app/actions/databaseActions';
 import { executeFlow } from '@/lib/flow-engine/engine';
 import { storeRequestDetails } from '@/lib/flow-engine/webhook-handler';
-import { findNodeById, findNextNodeId } from '@/lib/flow-engine/utils';
+import { findNodeById } from '@/lib/flow-engine/utils';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData } from '@/lib/types';
 
 // Helper function to check for nil values (null, undefined, '')
 const isNil = (v: any) => v === null || v === undefined || v === '';
 
 // Helper function to robustly determine if a session is paused at a dead-end
-const isPausedSession = (s: FlowSession | null): boolean => {
-    if (!s) return true; // A non-existent session is effectively paused
+const isPausedSession = (s: FlowSession): boolean => {
     // Check for explicit paused flag first
     if (s.flow_variables?.__flowPaused === true) return true;
     // Check for nil values indicating a dead-end state
@@ -33,20 +30,25 @@ const isPausedSession = (s: FlowSession | null): boolean => {
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   const { webhookId } = await params;
-
   console.log(`[API Evolution Trigger] POST received for webhook ID: "${webhookId}"`);
 
   let rawBody: string | null = null;
   let parsedBody: any = null;
-  let loggedEntry: any = null;
   let startExecution = false;
 
   try {
+    const initialWorkspace = await loadWorkspaceFromDB(webhookId);
+    if (!initialWorkspace) {
+        console.warn(`[API Evolution Trigger] Initial validation failed: Workspace with ID "${webhookId}" not found. Ignoring request.`);
+        // Pass false for workspaceExists to prevent log saving attempt for non-existent workspaces
+        await storeRequestDetails(request, null, await request.text().catch(() => null), webhookId, false);
+        return NextResponse.json({ error: `Workspace with ID "${webhookId}" not found.` }, { status: 404 });
+    }
+
     rawBody = await request.text();
     parsedBody = rawBody ? JSON.parse(rawBody) : { message: "Request body was empty." };
-    console.log('[DEBUG] Raw Parsed Body:', JSON.stringify(parsedBody, null, 2));
-
-    loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
+    // Pass true for workspaceExists because we've confirmed it exists.
+    const loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId, true);
 
     const sessionKeyIdentifier = loggedEntry.session_key_identifier;
     const receivedMessageText = loggedEntry.extractedMessage;
@@ -106,7 +108,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       console.log('[DEBUG] Payload is an array, using first element.');
       payloadToUse = payloadToUse[0];
     }
-     console.log('[DEBUG] Final payloadToUse for checks:', JSON.stringify(payloadToUse, null, 2));
+    console.log('[DEBUG] Final payloadToUse for checks:', JSON.stringify(payloadToUse, null, 2));
 
     // Agent intervention checks (Chatwoot specific) - a verificação da Dialogy já foi feita acima.
     if (flowContext === 'chatwoot') {
@@ -151,7 +153,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (session && workspace) {
       console.log(`[API Evolution Trigger - ${session.session_id}] Existing session is active. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}, Context: ${session.flow_context}`);
       
-      // Robust check to see if the session is in a dead-end state.
       if (isPausedSession(session)) {
         console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Ignoring new message to prevent unwanted restart.`);
         return NextResponse.json({ message: "Flow is paused. New message ignored." }, { status: 200 });
