@@ -1,3 +1,4 @@
+
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import ivm from 'isolated-vm';
@@ -95,20 +96,8 @@ async function sendOmniChannelMessage(
     return;
   }
   
-  console.log(`[sendOmniChannelMessage] Roteando para Evolution (padrão/fallback)...`);
-  const evolutionInstanceId = workspace.evolution_instance_id;
-  if (!evolutionInstanceId) {
-    console.warn(`[sendOmniChannelMessage] Contexto é ${ctx}, mas nenhuma instância Evolution está configurada para este workspace.`);
-    return;
-  }
-  
-   // NOTE: This part is incomplete as we don't have a way to get Evolution instance details from its ID yet.
-   console.warn(`[sendOmniChannelMessage] Lógica para buscar detalhes da instância Evolution (ID: ${evolutionInstanceId}) não implementada.`);
-   
-  const evoRecipient = session.flow_variables.whatsapp_sender_jid || 
-                       session.session_id.split('@@')[0].replace('evolution_jid_', '');
-
-  console.log(`[sendOmniChannelMessage] Tentando enviar para Evolution (recipient=${evoRecipient}) (LÓGICA INCOMPLETA)`);
+  // Fallback has been removed as per user request to be strict.
+  console.warn(`[sendOmniChannelMessage] Contexto "${ctx}" não corresponde a 'dialogy' ou 'chatwoot', e não há mais fallback para Evolution. Nenhuma mensagem será enviada.`);
 }
 
 export async function executeFlow(
