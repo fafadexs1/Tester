@@ -9,8 +9,8 @@ export async function storeRequestDetails(
   request: NextRequest,
   parsedPayload: any,
   rawBodyText: string | null,
-  webhookId: string, // This is the workspace ID
-  workspaceExists: boolean // NEW: Flag to indicate if the workspace is valid
+  webhookId: string, 
+  workspaceExists: boolean 
 ): Promise<any> {
   const currentTimestamp = new Date().toISOString();
   let extractedMessage: string | null = null;
@@ -58,7 +58,6 @@ export async function storeRequestDetails(
 
   console.log(`[Webhook Handler] Determined flowContext: "${flowContext}"`);
 
-  // Only save the log if the workspace exists to prevent foreign key violations.
   if (workspaceExists) {
     const logEntry: Omit<FlowLog, 'id'> = {
       workspace_id: webhookId,
@@ -86,7 +85,6 @@ export async function storeRequestDetails(
   }
   
   return {
-    // Return extracted details even if not logged
     method: request.method,
     url: request.url,
     headers: headers,

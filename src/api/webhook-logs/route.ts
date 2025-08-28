@@ -23,13 +23,9 @@ export async function GET(request: NextRequest) {
       limit: limit,
     });
     
-    // Transforma os dados para o formato que a UI espera
-    const formattedLogs = logs.map(log => ({
-      timestamp: log.timestamp,
-      ...(log.details || {})
-    }));
-    
-    return NextResponse.json(formattedLogs, { status: 200 });
+    // O payload já está sendo armazenado como JSONB
+    return NextResponse.json(logs.map(log => log.details), { status: 200 });
+
   } catch (error: any) {
     console.error(`[API Webhook Logs - GET ERROR]`, error.message, error.stack);
     return NextResponse.json({ error: "Erro interno do servidor ao buscar os logs.", details: error.message }, { status: 500 });
@@ -40,7 +36,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const logData = await request.json();
-    const { workspaceId, type, nodeId, nodeTitle, requestUrl, response, error: logError } = logData;
+    const { workspaceId, type, nodeId, nodeTitle, requestUrl, response, error: logError, sessionId } = logData;
 
     if (!workspaceId || !type) {
       return NextResponse.json({ error: "Os parâmetros 'workspaceId' e 'type' são obrigatórios no corpo do log." }, { status: 400 });
@@ -49,6 +45,7 @@ export async function POST(request: NextRequest) {
     const logEntry: Omit<FlowLog, 'id'> = {
         workspace_id: workspaceId,
         log_type: type,
+        session_id: sessionId || null,
         timestamp: new Date().toISOString(),
         details: {
             nodeId,
