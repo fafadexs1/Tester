@@ -1,3 +1,4 @@
+
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import ivm from 'isolated-vm';
@@ -123,29 +124,15 @@ async function sendOmniChannelMessage(
 
 export async function executeFlow(
   session: FlowSession,
-  workspace: WorkspaceData | null
+  workspace: WorkspaceData
 ): Promise<void> {
   
-  let currentWorkspace = workspace;
-  
-  if (!currentWorkspace || !currentWorkspace.id) {
-    console.warn(`[Flow Engine] Workspace object is empty or null. Reloading from DB using session's workspace_id: ${session.workspace_id}`);
-    const reloadedWorkspace = await loadWorkspaceFromDB(session.workspace_id);
-    if (!reloadedWorkspace) {
-        console.error(`[Flow Engine] FATAL: Failed to reload workspace ${session.workspace_id}. Aborting execution for session ${session.session_id}.`);
-        await deleteSessionFromDB(session.session_id);
-        return;
-    }
-    currentWorkspace = reloadedWorkspace;
-    console.log(`[Flow Engine] Workspace reloaded successfully.`);
-  }
-
-  if (!currentWorkspace || !currentWorkspace.nodes || !currentWorkspace.connections) {
+  if (!workspace || !workspace.id || !workspace.nodes || !workspace.connections) {
     console.error(`[Flow Engine] FATAL: Invalid workspace object provided. Aborting execution for session ${session.session_id}.`);
     return;
   }
 
-  const { nodes, connections } = currentWorkspace;
+  const { nodes, connections } = workspace;
   let currentNodeId = session.current_node_id;
   let shouldContinue = true;
 
@@ -180,7 +167,7 @@ export async function executeFlow(
 
       case 'message': {
         const messageText = substituteVariablesInText(currentNode.text, session.flow_variables);
-        await sendOmniChannelMessage(session, currentWorkspace, messageText);
+        await sendOmniChannelMessage(session, workspace, messageText);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
@@ -191,7 +178,7 @@ export async function executeFlow(
       case 'rating-input':
       case 'option': {
         if (getProperty(session.flow_variables, '_invalidOption') === true) {
-            await sendOmniChannelMessage(session, currentWorkspace, "Opção inválida. Por favor, tente novamente.");
+            await sendOmniChannelMessage(session, workspace, "Opção inválida. Por favor, tente novamente.");
             delete session.flow_variables['_invalidOption']; // Limpa a flag
             shouldContinue = false; // Para a execução e aguarda nova entrada
             break;
@@ -213,7 +200,7 @@ export async function executeFlow(
               finalMessage += "\nResponda com o número da opção desejada ou o texto exato da opção.";
             }
 
-            await sendOmniChannelMessage(session, currentWorkspace, finalMessage);
+            await sendOmniChannelMessage(session, workspace, finalMessage);
             session.awaiting_input_type = 'option';
             session.awaiting_input_details = {
               variableToSave: currentNode.variableToSaveChoice || 'last_user_choice',
@@ -232,7 +219,7 @@ export async function executeFlow(
             'ratingQuestionText';
 
           const promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
-          if (promptText) await sendOmniChannelMessage(session, currentWorkspace, promptText);
+          if (promptText) await sendOmniChannelMessage(session, workspace, promptText);
 
           session.awaiting_input_type = nodeType as any;
           session.awaiting_input_details = {
@@ -470,7 +457,7 @@ export async function executeFlow(
           }
         } finally {
             const logEntry: Omit<FlowLog, 'id'> = {
-              workspace_id: currentWorkspace.id,
+              workspace_id: workspace.id,
               log_type: 'api-call',
               session_id: session.session_id,
               timestamp: new Date().toISOString(),
@@ -645,7 +632,7 @@ export async function executeFlow(
       
       case 'dialogy-send-message': {
         const content = substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables);
-        await sendOmniChannelMessage(session, currentWorkspace, content);
+        await sendOmniChannelMessage(session, workspace, content);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
@@ -679,12 +666,9 @@ export async function executeFlow(
     session.awaiting_input_details = null;
     session.flow_variables.__flowPaused = true;
     console.log(`[Flow Engine - ${session.session_id}] Execution loop ended at a dead end. Pausing session.`);
-    await saveSessionToDB(session);
   } else if (!shouldContinue) {
     session.current_node_id = currentNodeId;
-    console.log(`[Flow Engine - ${session.session_id}] Execution loop paused or ended. Saving session state. Paused on node: ${!!session.current_node_id}.`);
-    if (session.current_node_id || session.awaiting_input_type) {
-      await saveSessionToDB(session);
-    }
+    console.log(`[Flow Engine - ${session.session_id}] Execution loop paused. Saving session state. Paused on node: ${!!session.current_node_id}.`);
   }
+  await saveSessionToDB(session);
 }
