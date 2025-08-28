@@ -156,7 +156,7 @@ const JsonPathPicker = ({ onSelectPath, logSource, isOpen }: { onSelectPath: (pa
                     {selectedLog && (
                         <ScrollArea className="h-48 mt-2 border rounded-md p-2 bg-muted/30">
                             <pre className="text-xs whitespace-pre-wrap break-all">
-                                <JsonTreeView data={selectedLog.response || selectedLog.payload} onSelectPath={onSelectPath} />
+                                <JsonTreeView data={selectedLog.response || selectedLog.details?.payload} onSelectPath={onSelectPath} />
                             </pre>
                         </ScrollArea>
                     )}
@@ -626,6 +626,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               requestUrl: node.apiUrl,
               response: result.data,
               error: null,
+              sessionId: null
           };
           fetch('/api/api-call-logs', {
               method: 'POST',
