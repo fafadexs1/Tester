@@ -1,4 +1,5 @@
 
+
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
@@ -41,6 +42,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     
     console.log(`[DEBUG] Determined Flow Context: ${flowContext}`);
     console.log(`[DEBUG] Determined Session Key Identifier: ${sessionKeyIdentifier}`);
+    
+    // VERIFICAÇÃO IMEDIATA PARA PAUSAR O FLUXO
+    if (flowContext === 'dialogy') {
+        const fromMe = getProperty(parsedBody, 'message.from_me');
+        const status = getProperty(parsedBody, 'conversation.status');
+        console.log(`[IMMEDIATE CHECK] Dialogy Context. from_me: ${fromMe}, status: ${status}`);
+
+        if (fromMe === true) {
+            console.log(`[API Trigger] Dialogy message from agent (from_me=true) in conversation ${sessionKeyIdentifier}. Automation ignored.`);
+            return NextResponse.json({ message: "Message from agent, automation ignored." }, { status: 200 });
+        }
+        if (status === 'atendimentos') {
+            console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status 'atendimentos'. Automation will be ignored.`);
+            return NextResponse.json({ message: `Conversation in 'atendimentos', automation ignored.` }, { status: 200 });
+        }
+    }
+
 
     const isApiCallResponse = getProperty(loggedEntry.payload, 'isApiCallResponse') === true;
     const resumeSessionId = getProperty(loggedEntry.payload, 'resume_session_id');
@@ -78,7 +96,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
      console.log('[DEBUG] Final payloadToUse for checks:', JSON.stringify(payloadToUse, null, 2));
 
-    // Agent intervention checks - MOVED HERE TO USE `payloadToUse`
+    // Agent intervention checks (Chatwoot specific) - a verificação da Dialogy já foi feita acima.
     if (flowContext === 'chatwoot') {
        const senderType = getProperty(payloadToUse, 'sender_type');
        console.log(`[DEBUG Chatwoot Check] Sender Type: ${senderType}`);
@@ -87,21 +105,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({ message: "Automation paused due to human intervention." }, { status: 200 });
       }
     }
-    if (flowContext === 'dialogy') {
-      const fromMe = getProperty(payloadToUse, 'message.from_me');
-      const status = getProperty(payloadToUse, 'conversation.status');
-      console.log(`[DEBUG Dialogy Check] from_me: ${fromMe}, status: ${status}`);
-      if (fromMe === true) {
-        console.log(`[API Trigger] Dialogy message from agent (from_me=true) in conversation ${sessionKeyIdentifier}. Ignoring.`);
-        return NextResponse.json({ message: "Message from agent, automation ignored." }, { status: 200 });
-      }
-      if (status === 'atendimentos') {
-        console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status 'atendimentos'. Automation will be ignored.`);
-        return NextResponse.json({ message: `Conversation in 'atendimentos', automation ignored.` }, { status: 200 });
-      }
-       console.log(`[DEBUG Dialogy Check] Conditions not met, proceeding with flow.`);
-    }
-
+    
     if (session) {
       workspace = await loadWorkspaceFromDB(session.workspace_id);
       console.log(`[DEBUG] Loaded existing session ${session.session_id} and workspace ${workspace?.id}`);
