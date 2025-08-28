@@ -31,12 +31,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     rawBody = await request.text();
     parsedBody = rawBody ? JSON.parse(rawBody) : { message: "Request body was empty." };
+    console.log('[DEBUG] Raw Parsed Body:', JSON.stringify(parsedBody, null, 2));
+
     loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId);
 
     const sessionKeyIdentifier = loggedEntry.session_key_identifier;
     const receivedMessageText = loggedEntry.extractedMessage;
     const flowContext = loggedEntry.flow_context;
     
+    console.log(`[DEBUG] Determined Flow Context: ${flowContext}`);
+    console.log(`[DEBUG] Determined Session Key Identifier: ${sessionKeyIdentifier}`);
+
     const isApiCallResponse = getProperty(loggedEntry.payload, 'isApiCallResponse') === true;
     const resumeSessionId = getProperty(loggedEntry.payload, 'resume_session_id');
 
@@ -68,12 +73,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     
     let payloadToUse = parsedBody;
     if (Array.isArray(payloadToUse) && payloadToUse.length > 0) {
+      console.log('[DEBUG] Payload is an array, using first element.');
       payloadToUse = payloadToUse[0];
     }
-    
+     console.log('[DEBUG] Final payloadToUse for checks:', JSON.stringify(payloadToUse, null, 2));
+
     // Agent intervention checks - MOVED HERE TO USE `payloadToUse`
     if (flowContext === 'chatwoot') {
-      if (getProperty(payloadToUse, 'sender_type') === 'User') {
+       const senderType = getProperty(payloadToUse, 'sender_type');
+       console.log(`[DEBUG Chatwoot Check] Sender Type: ${senderType}`);
+      if (senderType === 'User') {
         console.log(`[API Trigger] Human agent (Chatwoot User) message detected in conversation ${sessionKeyIdentifier}. Pausing automation.`);
         return NextResponse.json({ message: "Automation paused due to human intervention." }, { status: 200 });
       }
@@ -81,24 +90,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (flowContext === 'dialogy') {
       const fromMe = getProperty(payloadToUse, 'message.from_me');
       const status = getProperty(payloadToUse, 'conversation.status');
+      console.log(`[DEBUG Dialogy Check] from_me: ${fromMe}, status: ${status}`);
       if (fromMe === true) {
         console.log(`[API Trigger] Dialogy message from agent (from_me=true) in conversation ${sessionKeyIdentifier}. Ignoring.`);
         return NextResponse.json({ message: "Message from agent, automation ignored." }, { status: 200 });
       }
       if (status === 'atendimentos') {
-        console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status 'atendimentos'. Ignoring.`);
+        console.log(`[API Trigger] Dialogy conversation ${sessionKeyIdentifier} has status 'atendimentos'. Automation will be ignored.`);
         return NextResponse.json({ message: `Conversation in 'atendimentos', automation ignored.` }, { status: 200 });
       }
+       console.log(`[DEBUG Dialogy Check] Conditions not met, proceeding with flow.`);
     }
 
     if (session) {
       workspace = await loadWorkspaceFromDB(session.workspace_id);
+      console.log(`[DEBUG] Loaded existing session ${session.session_id} and workspace ${workspace?.id}`);
       
       // Essencial: Atualiza o contexto da sessão existente
       session.flow_context = flowContext;
       if (flowContext === 'dialogy') {
           const convId = getProperty(payloadToUse, 'conversation.id');
-          if (convId) setProperty(session.flow_variables, 'dialogy_conversation_id', convId);
+          if (convId) {
+             console.log(`[DEBUG] Updating dialogy_conversation_id in existing session to ${convId}`);
+             setProperty(session.flow_variables, 'dialogy_conversation_id', convId);
+          }
       }
 
       if (!workspace) {
@@ -123,7 +138,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Restarting flow due to new message.`);
         await deleteSessionFromDB(session.session_id);
         session = null; 
-        // workspace is kept here, as it's likely the same one will be used.
       } else {
         const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
         session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
@@ -294,6 +308,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           setProperty(initialVars, 'dialogy_account_id',      getProperty(payloadToUse, 'account.id'));
           setProperty(initialVars, 'contact_name',            getProperty(payloadToUse, 'contact.name'));
           setProperty(initialVars, 'contact_phone',           getProperty(payloadToUse, 'contact.phone_number'));
+          console.log('[DEBUG] Auto-injected Dialogy variables:', initialVars);
       } else if (flowContext === 'chatwoot') {
         const chatwootMappings = { chatwoot_conversation_id: 'conversation.id', chatwoot_contact_id: 'sender.id', chatwoot_account_id: 'account.id', chatwoot_inbox_id: 'inbox.id', contact_name: 'sender.name', contact_phone: 'sender.phone_number' };
         for (const [varName, path] of Object.entries(chatwootMappings)) {
