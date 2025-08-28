@@ -1,5 +1,3 @@
-
-
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import ivm from 'isolated-vm';
@@ -95,12 +93,10 @@ async function sendOmniChannelMessage(
     return;
   }
   
-  // O fallback para Evolution foi removido conforme solicitado para evitar comportamento inesperado.
-  // Apenas envia se o contexto for explicitamente 'evolution'.
   if(ctx === 'evolution') {
     const recipientPhoneNumber = session.flow_variables.whatsapp_sender_jid || session.session_id.split('@@')[0].replace('evolution_jid_', '');
     if (workspace.evolution_instance_id && recipientPhoneNumber) {
-        const evoInstance = await loadDialogyInstanceFromDB(workspace.evolution_instance_id); // Este é um erro, deveria ser loadEvolution...
+        const evoInstance = await loadDialogyInstanceFromDB(workspace.evolution_instance_id); 
         if (evoInstance) {
             console.log(`[sendOmniChannelMessage] Roteando para Evolution (jid=${recipientPhoneNumber})`);
             await sendWhatsAppMessageAction({ 
@@ -127,7 +123,7 @@ async function sendOmniChannelMessage(
 
 export async function executeFlow(
   session: FlowSession,
-  workspace: WorkspaceData
+  workspace: WorkspaceData | null
 ): Promise<void> {
   
   let currentWorkspace = workspace;
@@ -142,6 +138,11 @@ export async function executeFlow(
     }
     currentWorkspace = reloadedWorkspace;
     console.log(`[Flow Engine] Workspace reloaded successfully.`);
+  }
+
+  if (!currentWorkspace || !currentWorkspace.nodes || !currentWorkspace.connections) {
+    console.error(`[Flow Engine] FATAL: Invalid workspace object provided. Aborting execution for session ${session.session_id}.`);
+    return;
   }
 
   const { nodes, connections } = currentWorkspace;
@@ -550,7 +551,7 @@ export async function executeFlow(
 
                     (async () => {
                         const res = await __run__();
-                        const payload = (typeof res === 'string' && (res.startsWith('{') || res.startsWith('[')))
+                        const payload = (typeof res === 'string' && (res.startsWith('{') || res.startsWith('['])))
                             ? res
                             : JSON.stringify(toJSONSafe(res));
                         return payload;
