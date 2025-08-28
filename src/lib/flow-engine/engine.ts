@@ -124,13 +124,8 @@ export async function executeFlow(
   
   let currentWorkspace = workspace;
   if (!currentWorkspace || !currentWorkspace.id || !currentWorkspace.nodes || !currentWorkspace.connections) {
-    console.warn(`[Flow Engine] Workspace object is empty or null. Reloading from DB using session's workspace_id: ${session.workspace_id}`);
-    currentWorkspace = await loadWorkspaceFromDB(session.workspace_id);
-    if (!currentWorkspace) {
-      console.error(`[Flow Engine] FATAL: Invalid workspace object provided, and failed to reload from DB. Aborting execution for session ${session.session_id}.`);
-      return;
-    }
-    console.log(`[Flow Engine] Workspace reloaded successfully.`);
+    console.error(`[Flow Engine] FATAL: Invalid workspace object provided. Aborting execution for session ${session.session_id}.`);
+    return;
   }
 
   const { nodes, connections } = currentWorkspace;
@@ -488,8 +483,12 @@ export async function executeFlow(
                 await jail.set('global', jail.derefInto());
 
                 const variablesJson = JSON.stringify(session.flow_variables);
+                const codeSnippetJson = JSON.stringify(currentNode.codeSnippet);
+
                 await jail.set('variablesJson', variablesJson);
-                console.log('[Flow Engine Code] Injetando variáveis no sandbox.');
+                await jail.set('codeSnippetJson', codeSnippetJson);
+
+                console.log('[Flow Engine Code] Injetando variáveis e código no sandbox.');
 
                 const scriptToRun = `
                     function toJSONSafe(value, seen = new WeakSet()) {
@@ -530,8 +529,11 @@ export async function executeFlow(
 
                     async function __run__() {
                         const variables = JSON.parse(variablesJson);
+                        const userCode = JSON.parse(codeSnippetJson);
                         try {
-                            ${currentNode.codeSnippet}
+                            const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+                            const fn = new AsyncFunction('variables', userCode);
+                            return await fn(variables);
                         } catch (err) {
                             return JSON.stringify({ __error: (err && err.message) ? String(err.message) : String(err) });
                         }
@@ -539,7 +541,7 @@ export async function executeFlow(
 
                     (async () => {
                         const res = await __run__();
-                        const payload = (typeof res === 'string' && (res.startsWith('{') || res.startsWith('['])))
+                        const payload = (typeof res === 'string' && (res.startsWith('{') || res.startsWith('[')))
                             ? res
                             : JSON.stringify(toJSONSafe(res));
                         return payload;
