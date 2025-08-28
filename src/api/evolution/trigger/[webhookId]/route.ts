@@ -18,6 +18,18 @@ import { storeRequestDetails } from '@/lib/flow-engine/webhook-handler';
 import { findNodeById, findNextNodeId } from '@/lib/flow-engine/utils';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData } from '@/lib/types';
 
+// Helper function to check for nil values (null, undefined, '')
+const isNil = (v: any) => v === null || v === undefined || v === '';
+
+// Helper function to robustly determine if a session is paused at a dead-end
+const isPausedSession = (s: FlowSession | null): boolean => {
+    if (!s) return true; // A non-existent session is effectively paused
+    // Check for explicit paused flag first
+    if (s.flow_variables?.__flowPaused === true) return true;
+    // Check for nil values indicating a dead-end state
+    return isNil(s.current_node_id) && isNil(s.awaiting_input_type) && !s.awaiting_input_details;
+};
+
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   const { webhookId } = await params;
@@ -139,18 +151,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (session && workspace) {
       console.log(`[API Evolution Trigger - ${session.session_id}] Existing session is active. Node: ${session.current_node_id}, Awaiting: ${session.awaiting_input_type}, Context: ${session.flow_context}`);
       
-      // *** CORREÇÃO APLICADA AQUI ***
-      // Se o fluxo chegou ao fim (pausado em um beco sem saída), não reinicie com uma nova mensagem. Apenas ignore.
-      if (session.current_node_id === null && session.awaiting_input_type === null) {
+      // Robust check to see if the session is in a dead-end state.
+      if (isPausedSession(session)) {
         console.log(`[API Evolution Trigger - ${session.session_id}] Session is in a paused (dead-end) state. Ignoring new message to prevent unwanted restart.`);
         return NextResponse.json({ message: "Flow is paused. New message ignored." }, { status: 200 });
       } else {
         const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
         session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
         
+        // Always ensure context is set on existing session
         session.flow_context = flowContext;
 
         if (session.awaiting_input_type && session.awaiting_input_details) {
+          delete session.flow_variables.__flowPaused; // Clear the paused flag as we are resuming
           const originalNodeId = session.awaiting_input_details.originalNodeId;
           const awaitingNode = findNodeById(originalNodeId!, workspace.nodes);
 
@@ -211,6 +224,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               session.awaiting_input_type = null;
               session.awaiting_input_details = null;
               session.current_node_id = null;
+              session.flow_variables.__flowPaused = true; // Set the persistent paused flag
               startExecution = false;
               await saveSessionToDB(session);
               return NextResponse.json({ message: "Flow paused at dead end." }, { status: 200 });
@@ -221,6 +235,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             session = null;
           }
         } else {
+           if (isNil(session.current_node_id)) {
+                console.log(`[API Evolution Trigger - ${session.session_id}] No current node (dead-end). Ignoring message.`);
+                return NextResponse.json({ message: "Flow is paused. New message ignored." }, { status: 200 });
+            }
           console.log(`[API Evolution Trigger - ${session.session_id}] New message received in active session not awaiting input. Restarting flow.`);
           await deleteSessionFromDB(session.session_id);
           session = null;
@@ -350,6 +368,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     if (startExecution && session?.current_node_id && workspace) {
+      delete session.flow_variables.__flowPaused; // Clear paused flag on new execution start
       console.log(`[API Evolution Trigger] Calling executeFlow for session. Context: ${session.flow_context}. Workspace ID: ${workspace.id}`);
       await executeFlow(session, workspace);
     } else if (session && !startExecution) {
