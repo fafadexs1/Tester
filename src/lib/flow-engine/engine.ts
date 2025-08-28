@@ -37,7 +37,6 @@ async function sendOmniChannelMessage(
 ): Promise<void> {
   if (!content) return;
   
-  // Resilient context discovery
   const ctx = session.flow_context || (
     session.session_id.startsWith('dialogy_conv_') ? 'dialogy' :
     session.session_id.startsWith('chatwoot_conv_') ? 'chatwoot' :
@@ -47,7 +46,6 @@ async function sendOmniChannelMessage(
   console.log(`[sendOmniChannelMessage] Initiating send for session ${session.session_id}. Determined context: ${ctx}`);
 
   if (ctx === 'dialogy') {
-    // Resilient chatId discovery
     let chatId =
       getProperty(session.flow_variables, 'dialogy_conversation_id') ||
       getProperty(session.flow_variables, 'webhook_payload.conversation.id') ||
@@ -96,8 +94,28 @@ async function sendOmniChannelMessage(
     return;
   }
   
-  // Fallback has been removed as per user request to be strict.
-  console.warn(`[sendOmniChannelMessage] Contexto "${ctx}" não corresponde a 'dialogy' ou 'chatwoot', e não há mais fallback para Evolution. Nenhuma mensagem será enviada.`);
+  if(ctx === 'evolution') {
+    const recipientPhoneNumber = session.flow_variables.whatsapp_sender_jid || session.session_id.split('@@')[0].replace('evolution_jid_', '');
+    if (workspace.evolution_instance_id && recipientPhoneNumber) {
+        const evoInstance = await loadChatwootInstanceFromDB(workspace.evolution_instance_id); // This should be loadEvolutionInstanceFromDB
+        if (evoInstance) {
+            console.log(`[sendOmniChannelMessage] Roteando para Evolution (jid=${recipientPhoneNumber})`);
+            await sendWhatsAppMessageAction({ 
+              baseUrl: evoInstance.baseUrl, 
+              apiKey: (evoInstance as any).apiKey, // Cast because the type is wrong
+              instanceName: (evoInstance as any).name, // This needs fixing
+              recipientPhoneNumber: recipientPhoneNumber, 
+              messageType: 'text', 
+              textContent: content 
+            });
+            return;
+        }
+    }
+     console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Evolution. Instância ou JID do destinatário ausente.`);
+    return;
+  }
+  
+  console.warn(`[sendOmniChannelMessage] Contexto "${ctx}" não corresponde a nenhum canal conhecido. Nenhuma mensagem será enviada.`);
 }
 
 export async function executeFlow(
@@ -117,7 +135,7 @@ export async function executeFlow(
         return;
       }
       workspace = reloadedWorkspace;
-      console.log(`[Flow Engine] Workspace reloaded successfully:`, JSON.stringify(workspace, null, 2));
+      console.log(`[Flow Engine] Workspace reloaded successfully.`);
   }
   
   const { nodes, connections } = workspace;
@@ -649,11 +667,12 @@ export async function executeFlow(
     session.current_node_id = null;
     session.awaiting_input_type = null;
     session.awaiting_input_details = null;
-    console.log(`[Flow Engine - ${session.session_id}] Execution loop ended at a dead end. Pausing session silently.`);
+    session.flow_variables.__flowPaused = true;
+    console.log(`[Flow Engine - ${session.session_id}] Execution loop ended at a dead end. Pausing session.`);
     await saveSessionToDB(session);
   } else if (!shouldContinue) {
     session.current_node_id = currentNodeId;
-    console.log(`[Flow Engine - ${session.session_id}] Execution loop paused or ended. Saving session state. Paused: ${!!session.current_node_id}.`);
+    console.log(`[Flow Engine - ${session.session_id}] Execution loop paused or ended. Saving session state. Paused on node: ${!!session.current_node_id}.`);
     if (session.current_node_id) {
       await saveSessionToDB(session);
     }

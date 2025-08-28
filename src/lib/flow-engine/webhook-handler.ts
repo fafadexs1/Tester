@@ -74,7 +74,6 @@ export async function storeRequestDetails(
   };
   
   try {
-    // Corrigido para chamar a função de banco de dados diretamente
     await saveFlowLog(logEntry);
   } catch(e) {
     console.error("[Webhook Handler] Failed to save webhook log to DB:", e);

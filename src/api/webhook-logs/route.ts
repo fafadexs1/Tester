@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const logData = await request.json();
-    const { workspaceId, type, nodeId, nodeTitle, requestUrl, response, error: logError, sessionId } = logData;
+    const { workspaceId, type, nodeId, nodeTitle, requestUrl, response, error: logError } = logData;
 
     if (!workspaceId || !type) {
       return NextResponse.json({ error: "Os parâmetros 'workspaceId' e 'type' são obrigatórios no corpo do log." }, { status: 400 });
@@ -49,7 +49,6 @@ export async function POST(request: NextRequest) {
     const logEntry: Omit<FlowLog, 'id'> = {
         workspace_id: workspaceId,
         log_type: type,
-        session_id: sessionId || null,
         timestamp: new Date().toISOString(),
         details: {
             nodeId,
