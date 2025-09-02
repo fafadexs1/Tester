@@ -3,3 +3,4 @@ config();
 
 import '@/ai/flows/suggested-responses.ts';
 import '@/ai/flows/simple-chat-reply-flow.ts'; // Adicionado novo fluxo
+import '@/ai/flows/intelligent-choice-flow.ts';

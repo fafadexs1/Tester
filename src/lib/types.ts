@@ -112,6 +112,7 @@ export interface NodeData {
   questionText?: string;
   optionsList?: string; 
   variableToSaveChoice?: string;
+  aiEnabled?: boolean; // Novo campo para o nó de opção
 
   // WhatsApp Nodes (can also be triggered by api-call node)
   instanceName?: string; 
