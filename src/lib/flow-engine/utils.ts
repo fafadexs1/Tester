@@ -1,4 +1,5 @@
 import { getProperty } from 'dot-prop';
+import jsonata from 'jsonata';
 import type { NodeData, Connection } from '@/lib/types';
 
 export function findNodeById(nodeId: string, nodes: NodeData[]): NodeData | undefined {
@@ -10,33 +11,91 @@ export function findNextNodeId(fromNodeId: string, sourceHandle: string | undefi
   return connection ? connection.to : null;
 }
 
+const EXPRESSION_REGEX = /\{\{\s*([^}]+?)\s*\}\}/g;
+const PATH_BRACKET_REGEX = /\[(?:"([^"]+)"|'([^']+)'|([^\]]+))\]/g;
+
+const ALIAS_KEYS = ['$json', '$vars', '$flow', '$data'];
+
+function normalizePathExpression(rawPath: string): string {
+  if (!rawPath) return '';
+  return rawPath
+    .replace(PATH_BRACKET_REGEX, (_match, doubleQuoted, singleQuoted, other) => {
+      const candidate = (doubleQuoted ?? singleQuoted ?? other ?? '').trim();
+      if (!candidate) return '';
+      return `.${candidate}`;
+    })
+    .replace(/^\./, '');
+}
+
+function formatEvaluatedValue(value: any, fallbackLabel?: string): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch (err) {
+      console.warn(`[Flow Engine] Failed to stringify value for ${fallbackLabel || 'expression'}.`, err);
+      return '';
+    }
+  }
+  return String(value);
+}
+
+function resolveAliasValue(expression: string, variables: Record<string, any>): { found: boolean; value?: any } {
+  for (const alias of ALIAS_KEYS) {
+    if (expression === alias) {
+      return { found: true, value: variables };
+    }
+    const aliasWithDot = `${alias}.`;
+    if (expression.startsWith(aliasWithDot) || expression.startsWith(`${alias}[`)) {
+      const normalized = normalizePathExpression(expression.slice(alias.length));
+      const value = normalized ? getProperty(variables, normalized) : variables;
+      return { found: true, value };
+    }
+  }
+  return { found: false };
+}
+
+function evaluateExpressionSegment(rawExpression: string, variables: Record<string, any>) {
+  const expression = rawExpression.trim();
+  if (!expression) return '';
+
+  if (expression === 'now') {
+    return new Date().toISOString();
+  }
+
+  const aliasResult = resolveAliasValue(expression, variables);
+  if (aliasResult.found) {
+    return aliasResult.value;
+  }
+
+  const normalizedPath = normalizePathExpression(expression);
+  if (normalizedPath) {
+    const pathValue = getProperty(variables, normalizedPath);
+    if (pathValue !== undefined) {
+      return pathValue;
+    }
+  } else if (Object.prototype.hasOwnProperty.call(variables, expression)) {
+    return variables[expression];
+  }
+
+  try {
+    const expressionEvaluator = jsonata(expression);
+    return expressionEvaluator.evaluate({ vars: variables, json: variables, data: variables });
+  } catch (error) {
+    console.warn(`[Flow Engine] Failed to evaluate expression "{{${expression}}}":`, error);
+    return '';
+  }
+}
+
 export function substituteVariablesInText(text: string | undefined, variables: Record<string, any>): string {
   if (text === undefined || text === null) return '';
-  let subbedText = String(text);
-
-  const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
-  subbedText = subbedText.replace(variableRegex, (_full, varNameRaw) => {
-    const varName = String(varNameRaw).trim();
-    if (varName === 'now') {
-      return new Date().toISOString();
-    }
-    // A função getProperty já lida com caminhos aninhados (ex: 'objeto.propriedade')
-    let value: any = getProperty(variables, varName);
-    
-    // Se getProperty não encontrar (para variáveis de nível superior sem ponto), tenta o acesso direto.
-    if (value === undefined && !varName.includes('.')) {
-      value = variables[varName];
-    }
-    
-    if (value === undefined || value === null) return '';
-    if (typeof value === 'object') {
-      try { return JSON.stringify(value, null, 2); }
-      catch { return `[Error stringifying ${varName}]`; }
-    }
-    return String(value);
-  });
-
-  return subbedText;
+  const source = String(text);
+  if (!source.includes('{{')) {
+    return source;
+  }
+  return source.replace(EXPRESSION_REGEX, (_match, expression) =>
+    formatEvaluatedValue(evaluateExpressionSegment(String(expression), variables), expression)
+  );
 }
 
 export function coerceToDate(raw: any): Date | null {

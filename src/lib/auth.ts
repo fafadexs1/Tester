@@ -7,7 +7,7 @@ const SESSION_COOKIE_NAME = 'nexusflow_session_cookie';
 
 // A função foi corrigida para ser totalmente assíncrona como o Next.js espera
 export async function getCurrentUser(): Promise<User | null> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME);
 
   if (sessionCookie && sessionCookie.value) {
@@ -29,7 +29,7 @@ export async function getCurrentUser(): Promise<User | null> {
 }
 
 export async function createSession(user: User) {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const sessionValue = JSON.stringify(user);
 
   cookieStore.set(SESSION_COOKIE_NAME, sessionValue, {
@@ -42,7 +42,7 @@ export async function createSession(user: User) {
 }
 
 export async function deleteSession() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);
   console.log('[auth.ts] Cookie de sessão deletado.');
 }

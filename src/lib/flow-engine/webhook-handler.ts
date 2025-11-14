@@ -5,6 +5,56 @@ import type { NextRequest } from 'next/server';
 import type { FlowContextType, FlowLog } from '@/lib/types';
 import { saveFlowLog } from '@/app/actions/databaseActions';
 
+const IMPORTANT_HEADER_KEYS = new Set([
+  'content-type',
+  'user-agent',
+  'x-forwarded-for',
+  'x-real-ip',
+  'cf-connecting-ip',
+  'x-request-id',
+]);
+
+const MAX_LOG_PAYLOAD_CHARS = 20000;
+
+const FALLBACK_PAYLOAD_MESSAGE =
+  'Payload indisponível ou não pôde ser serializado. Consulte os logs de origem para detalhes.';
+
+function filterHeadersForLog(headers: Record<string, string>): Record<string, string> {
+  const filteredEntries = Object.entries(headers).filter(([key]) =>
+    IMPORTANT_HEADER_KEYS.has(key.toLowerCase())
+  );
+  if (filteredEntries.length > 0) {
+    return Object.fromEntries(filteredEntries);
+  }
+  return Object.fromEntries(Object.entries(headers).slice(0, 6));
+}
+
+function buildPayloadSnapshot(payload: any, rawBodyText: string | null): any {
+  if (payload && typeof payload === 'object') {
+    try {
+      const serialized = JSON.stringify(payload);
+      if (serialized.length <= MAX_LOG_PAYLOAD_CHARS) {
+        return payload;
+      }
+      return {
+        truncated: true,
+        preview: serialized.slice(0, MAX_LOG_PAYLOAD_CHARS),
+        totalLength: serialized.length,
+      };
+    } catch (error) {
+      console.warn('[Webhook Handler] Failed to serialize payload for logging:', error);
+    }
+  }
+
+  if (rawBodyText && rawBodyText.length > 0) {
+    return rawBodyText.length <= MAX_LOG_PAYLOAD_CHARS
+      ? rawBodyText
+      : `${rawBodyText.slice(0, MAX_LOG_PAYLOAD_CHARS)}…`;
+  }
+
+  return { message: FALLBACK_PAYLOAD_MESSAGE };
+}
+
 export async function storeRequestDetails(
   request: NextRequest,
   parsedPayload: any,
@@ -15,6 +65,7 @@ export async function storeRequestDetails(
   const currentTimestamp = new Date().toISOString();
   let extractedMessage: string | null = null;
   const headers = Object.fromEntries(request.headers.entries());
+  const headersForLog = filterHeadersForLog(headers);
   const ip = request.ip || (headers['x-forwarded-for'] as any) || 'unknown IP';
 
   let sessionKeyIdentifier: string | null = null;
@@ -58,6 +109,10 @@ export async function storeRequestDetails(
 
   console.log(`[Webhook Handler] Determined flowContext: "${flowContext}"`);
 
+  const payloadForProcessing =
+    parsedPayload || { raw_text: rawBodyText, message: 'Payload was not valid JSON or was empty/unreadable' };
+  const payloadSnapshotForLog = buildPayloadSnapshot(parsedPayload, rawBodyText);
+
   if (workspaceExists) {
     const logEntry: Omit<FlowLog, 'id'> = {
       workspace_id: webhookId,
@@ -67,11 +122,11 @@ export async function storeRequestDetails(
       details: {
         method: request.method,
         url: request.url,
-        headers: headers,
+        headers: headersForLog,
         ip: ip,
         extractedMessage: extractedMessage,
         flowContext: flowContext,
-        payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" }
+        payload: payloadSnapshotForLog
       }
     };
     
@@ -87,11 +142,11 @@ export async function storeRequestDetails(
   return {
     method: request.method,
     url: request.url,
-    headers: headers,
+    headers: headersForLog,
     ip: ip,
     extractedMessage: extractedMessage,
     flowContext: flowContext,
-    payload: parsedPayload || { raw_text: rawBodyText, message: "Payload was not valid JSON or was empty/unreadable" },
+    payload: payloadForProcessing,
     session_key_identifier: sessionKeyIdentifier,
   };
 }

@@ -20,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Store } from 'lucide-react';
 import type { WorkspaceData } from '@/lib/types';
-import { listWorkspaceForSaleAction } from '@/app/actions/marketplaceActions';
+const API_ENDPOINT = '/api/marketplace/listings';
 
 interface ListWorkspaceDialogProps {
   userWorkspaces: WorkspaceData[];
@@ -35,24 +35,55 @@ export function ListWorkspaceDialog({ userWorkspaces, onListingCreated }: ListWo
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSubmitting(true);
-    
-    const formData = new FormData(event.currentTarget);
-    const result = await listWorkspaceForSaleAction(formData);
 
-    if (result.success) {
+    const formData = new FormData(event.currentTarget);
+    const payload = {
+      workspaceId: formData.get('workspaceId'),
+      description: formData.get('description'),
+      tags: formData.get('tags'),
+    };
+
+    try {
+      const response = await fetch(API_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+
+      if (!response.ok) {
+        if (result?.issues) {
+          const errorMessages = result.issues
+            .map((issue: any) => `${issue.path.join('.')}: ${issue.message}`)
+            .join('\n');
+          toast({
+            title: 'Erro de Validação',
+            description: <pre className="whitespace-pre-wrap">{errorMessages}</pre>,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Erro ao Listar',
+            description: result?.error || 'Não foi possível listar o fluxo agora.',
+            variant: 'destructive',
+          });
+        }
+        return;
+      }
+
       toast({ title: 'Sucesso!', description: 'Seu fluxo foi listado no marketplace.' });
       onListingCreated();
       setOpen(false);
-    } else {
-      // Handle Zod errors specifically
-      if (result.issues) {
-          const errorMessages = result.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('\n');
-          toast({ title: 'Erro de Validação', description: <pre className="whitespace-pre-wrap">{errorMessages}</pre>, variant: 'destructive' });
-      } else {
-         toast({ title: 'Erro ao Listar', description: result.error, variant: 'destructive' });
-      }
+    } catch (error: any) {
+      console.error('[Marketplace] Falha ao listar fluxo:', error);
+      toast({
+        title: 'Erro ao Listar',
+        description: 'Não foi possível contactar o servidor.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   return (

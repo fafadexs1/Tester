@@ -8,7 +8,7 @@ import {
   saveSessionToDB,
   deleteSessionFromDB,
   loadWorkspaceFromDB,
-  loadWorkspacesForOrganizationFromDB,
+  listWorkspaceIdsForOrganization,
 } from '@/app/actions/databaseActions';
 import { executeFlow } from '@/lib/flow-engine/engine';
 import { storeRequestDetails } from '@/lib/flow-engine/webhook-handler';
@@ -24,31 +24,69 @@ const isPausedSession = (s: FlowSession): boolean => {
     return isNil(s.current_node_id) && isNil(s.awaiting_input_type) && !s.awaiting_input_details;
 };
 
+const MAX_SESSION_MESSAGE_LENGTH = 512;
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
-  const { webhookId } = await params;
+const normalizeIncomingMessage = (value: string | null | undefined): string => {
+  if (!value) return '';
+  const trimmed = value.trim();
+  if (trimmed.length <= MAX_SESSION_MESSAGE_LENGTH) {
+    return trimmed;
+  }
+  return trimmed.slice(0, MAX_SESSION_MESSAGE_LENGTH);
+};
+
+async function readRequestPayload(
+  request: NextRequest
+): Promise<{ parsedBody: any; rawBodyText: string | null }> {
+  let rawText: string | null = null;
+  try {
+    rawText = await request.text();
+  } catch (error) {
+    console.error('[API Evolution Trigger] Failed to read request body:', error);
+  }
+
+  if (!rawText || rawText.trim().length === 0) {
+    return { parsedBody: { message: 'Request body was empty.' }, rawBodyText: null };
+  }
+
+  try {
+    const parsed = JSON.parse(rawText);
+    return { parsedBody: parsed, rawBodyText: rawText };
+  } catch {
+    console.warn('[API Evolution Trigger] Payload is not valid JSON. Using raw text as payload.');
+    return { parsedBody: { raw_text: rawText }, rawBodyText: rawText };
+  }
+}
+
+
+export async function POST(request: NextRequest, { params }: { params: { webhookId: string } }) {
+  const { webhookId } = params;
   console.log(`[API Evolution Trigger] POST received for webhook ID: "${webhookId}"`);
 
-  let rawBody: string | null = null;
-  let parsedBody: any = null;
   let startExecution = false;
   
   // 1. Validar Workspace PRIMEIRO
   const initialWorkspace = await loadWorkspaceFromDB(webhookId);
   if (!initialWorkspace) {
       console.warn(`[API Evolution Trigger] Initial validation failed: Workspace with ID "${webhookId}" not found. Ignoring request.`);
-      await storeRequestDetails(request, null, await request.text().catch(() => null), webhookId, false);
+      const { parsedBody, rawBodyText } = await readRequestPayload(request);
+      await storeRequestDetails(request, parsedBody, rawBodyText, webhookId, false);
       return NextResponse.json({ error: `Workspace with ID "${webhookId}" not found.` }, { status: 404 });
   }
 
+  const bodyData = await readRequestPayload(request);
+  let parsedBody: any = bodyData.parsedBody;
+  let rawBody: string | null = bodyData.rawBodyText;
+
   try {
-    rawBody = await request.text();
-    parsedBody = rawBody ? JSON.parse(rawBody) : { message: "Request body was empty." };
     const loggedEntry = await storeRequestDetails(request, parsedBody, rawBody, webhookId, true);
+    rawBody = null; // release reference as soon as possible
 
     const sessionKeyIdentifier = loggedEntry.session_key_identifier;
     const receivedMessageText = loggedEntry.extractedMessage;
     const flowContext = loggedEntry.flow_context;
+    const normalizedMessageText = normalizeIncomingMessage(receivedMessageText);
+    const lowerCaseMessageText = normalizedMessageText.toLowerCase();
     
     console.log(`[DEBUG] Determined Flow Context: ${flowContext}`);
     console.log(`[DEBUG] Determined Session Key Identifier: ${sessionKeyIdentifier}`);
@@ -143,7 +181,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Se a sessão está aguardando uma entrada, processe-a
       if (session.awaiting_input_type && session.awaiting_input_details) {
         delete session.flow_variables.__flowPaused; // Limpa o flag
-        const responseValue = isApiCallResponse ? parsedBody : receivedMessageText;
+        const responseValue = isApiCallResponse ? parsedBody : normalizedMessageText;
         session.flow_variables.mensagem_whatsapp = isApiCallResponse ? (getProperty(responseValue, 'responseText') || JSON.stringify(responseValue)) : responseValue;
         
         const originalNodeId = session.awaiting_input_details.originalNodeId;
@@ -229,15 +267,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       let matchingTrigger: StartNodeTrigger | null = null;
       let matchingKeyword: string | null = null;
       
-      if (initialWorkspace.organization_id) {
-          const allWorkspaces = await loadWorkspacesForOrganizationFromDB(initialWorkspace.organization_id);
-          for (const ws of allWorkspaces) {
+      if (initialWorkspace.organization_id && lowerCaseMessageText) {
+          const workspaceIds = await listWorkspaceIdsForOrganization(initialWorkspace.organization_id);
+          for (const workspaceId of workspaceIds) {
+              const ws =
+                workspaceId === initialWorkspace.id
+                  ? initialWorkspace
+                  : await loadWorkspaceFromDB(workspaceId);
+              if (!ws) continue;
               const startNode = ws.nodes.find(n => n.type === 'start');
               if (startNode?.triggers) {
                   for (const trigger of startNode.triggers) {
-                      if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword && receivedMessageText) {
+                      if (trigger.type === 'webhook' && trigger.enabled && trigger.keyword) {
                           const keywords = trigger.keyword.split(',').map(k => k.trim().toLowerCase());
-                          const foundKeyword = keywords.find(kw => kw === receivedMessageText.toLowerCase());
+                          const foundKeyword = keywords.find(kw => kw === lowerCaseMessageText);
                           if (foundKeyword) {
                               workspaceToStart = ws;
                               startNodeForFlow = startNode;
@@ -276,7 +319,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         payloadToUse = payloadToUse[0];
       }
       const initialVars: Record<string, any> = {
-        mensagem_whatsapp: receivedMessageText || '',
+        mensagem_whatsapp: normalizedMessageText,
         webhook_payload: payloadToUse,
         session_id: sessionKeyIdentifier,
         _triggerHandle: triggerHandle,

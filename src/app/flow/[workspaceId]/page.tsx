@@ -14,7 +14,7 @@ interface FlowEditorPageProps {
 // O flow editor não usará o AppShell, então o layout aqui é diferente
 export default async function FlowEditorPage({ params }: FlowEditorPageProps) {
   const user = await getCurrentUser();
-  const { workspaceId } = params;
+  const { workspaceId } = await Promise.resolve(params);
 
   if (!user || !user.id) {
     redirect('/login');

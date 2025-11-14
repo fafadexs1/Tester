@@ -926,7 +926,7 @@ const TopBar: React.FC<TopBarProps> = ({
                                 </ScrollArea>
                             </CardContent>
                              <CardFooter>
-                                <p className="text-xs text-muted-foreground">O token de acesso pode ser encontrado no seu Perfil > Configurações dentro do Chatwoot.</p>
+                                <p className="text-xs text-muted-foreground">O token de acesso pode ser encontrado no seu Perfil {'>'} Configurações dentro do Chatwoot.</p>
                             </CardFooter>
                         </Card>
                     </TabsContent>

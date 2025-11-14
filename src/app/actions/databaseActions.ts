@@ -1068,6 +1068,28 @@ export async function loadWorkspacesForOrganizationFromDB(organizationId: string
   }
 }
 
+export async function listWorkspaceIdsForOrganization(organizationId: string): Promise<string[]> {
+  if (!organizationId) {
+    return [];
+  }
+  try {
+    const result = await runQuery<{ id: string }>(
+      `SELECT id
+         FROM workspaces
+        WHERE organization_id = $1
+        ORDER BY updated_at DESC`,
+      [organizationId]
+    );
+    return result.rows.map(row => row.id);
+  } catch (error: any) {
+    console.error(
+      `[DB Actions] listWorkspaceIdsForOrganization Error for organization ID ${organizationId}:`,
+      error
+    );
+    return [];
+  }
+}
+
 export async function deleteWorkspaceFromDB(workspaceId: string): Promise<{ success: boolean; error?: string }> {
   try {
     await runQuery('DELETE FROM workspaces WHERE id = $1', [workspaceId]);

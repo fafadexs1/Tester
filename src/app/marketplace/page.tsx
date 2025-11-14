@@ -8,20 +8,15 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ShoppingCart, Search, Flame, Loader2, ServerCrash, Star, User, GitBranch, Share2, Download, BotMessageSquare } from "lucide-react";
-import type { MarketplaceListing, WorkspaceData, NodeData, Connection } from '@/lib/types';
-import { getListings, getListingDetails } from '@/app/actions/marketplaceActions';
+import { ShoppingCart, Search, Loader2, ServerCrash, User, GitBranch, Download, BotMessageSquare } from "lucide-react";
+import type { MarketplaceListing, WorkspaceData, NodeData } from '@/lib/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { motion } from 'framer-motion';
 import { ListWorkspaceDialog } from '@/components/marketplace/ListWorkspaceDialog';
-import { loadWorkspacesForOrganizationFromDB } from '@/app/actions/databaseActions';
 import { useAuth } from '@/components/auth/AuthProvider';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
-import { DndProvider } from 'react-dnd';
-import { HTML5Backend } from 'react-dnd-html5-backend';
-import Canvas from '@/components/flow-builder/Canvas';
-import { GRID_SIZE } from '@/lib/constants';
+import { FlowPreview } from '@/components/marketplace/FlowPreview';
 
 // Componente para a pré-visualização em Modal
 const ListingPreviewDialog = ({ listingId, children }: { listingId: string, children: React.ReactNode }) => {
@@ -74,14 +69,17 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
         setIsLoading(true);
         setListing(null);
         try {
-            const result = await getListingDetails(listingId);
-            if (result.success && result.data) {
-                setListing(result.data);
-                // O cálculo do zoom agora é feito no useEffect que observa a 'listing'
-            } else {
-                toast({ title: "Erro ao carregar detalhes", description: result.error, variant: "destructive" });
-                setOpen(false);
+            const response = await fetch(`/api/marketplace/listings/${listingId}`, {
+                cache: 'no-store',
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data?.error || "Não foi possível carregar os detalhes da listagem.");
             }
+            setListing(data);
+        } catch (error: any) {
+            toast({ title: "Erro ao carregar detalhes", description: error.message, variant: "destructive" });
+            setOpen(false);
         } finally {
             setIsLoading(false);
         }
@@ -103,7 +101,7 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
 
 
     const handlePan = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (e.buttons !== 1) return;
+        if ((e.buttons & 1) === 0) return;
         setCanvasOffset(prev => ({ x: prev.x + e.movementX, y: prev.y + e.movementY }));
     };
 
@@ -124,23 +122,12 @@ const ListingPreviewDialog = ({ listingId, children }: { listingId: string, chil
                             </div>
                         )}
                         {!isLoading && listing && (
-                            <Canvas
+                            <FlowPreview
                                 nodes={listing.preview_data.nodes}
                                 connections={listing.preview_data.connections}
-                                drawingLine={null}
-                                canvasOffset={canvasOffset}
                                 zoomLevel={zoomLevel}
-                                onDropNode={() => {}}
-                                onUpdateNode={() => {}}
-                                onStartConnection={() => {}}
-                                onDeleteNode={() => {}}
-                                onDeleteConnection={() => {}}
-                                onCanvasMouseDown={handlePan}
-                                highlightedConnectionId={null}
-                                setHighlightedConnectionId={() => {}}
-                                availableVariablesByNode={{}}
-                                highlightedNodeIdBySession={null}
-                                activeWorkspace={listing.preview_data as WorkspaceData}
+                                canvasOffset={canvasOffset}
+                                onPan={handlePan}
                             />
                         )}
                     </div>
@@ -285,22 +272,30 @@ export default function MarketplacePage() {
     setIsLoading(true);
     setError(null);
     try {
-        const listingsResult = await getListings();
-        if (listingsResult.success && listingsResult.data) {
-            // Convert numeric fields from string to number after fetching
-            const parsedListings = listingsResult.data.map(listing => ({
-                ...listing,
-                price: parseFloat(String(listing.price)),
-                rating: parseFloat(String(listing.rating)),
-            }));
-            setListings(parsedListings);
-        } else {
-            throw new Error(listingsResult.error || "Não foi possível carregar os fluxos do marketplace.");
+        const listingsResponse = await fetch('/api/marketplace/listings', { cache: 'no-store' });
+        const listingsPayload = await listingsResponse.json();
+        if (!listingsResponse.ok) {
+            throw new Error(listingsPayload?.error || "Não foi possível carregar os fluxos do marketplace.");
         }
 
+        const parsedListings = (Array.isArray(listingsPayload) ? listingsPayload : []).map((listing: MarketplaceListing) => ({
+            ...listing,
+            price: parseFloat(String(listing.price)),
+            rating: parseFloat(String(listing.rating)),
+        }));
+        setListings(parsedListings);
+
         if (user && currentOrganization) {
-            const workspacesResult = await loadWorkspacesForOrganizationFromDB(currentOrganization.id);
-            setUserWorkspaces(workspacesResult);
+            const workspacesResponse = await fetch(`/api/organizations/${currentOrganization.id}/workspaces`, { cache: 'no-store' });
+            if (workspacesResponse.ok) {
+                const workspacesData: WorkspaceData[] = await workspacesResponse.json();
+                setUserWorkspaces(workspacesData);
+            } else {
+                const workspaceError = await workspacesResponse.json().catch(() => ({}));
+                throw new Error(workspaceError?.error || "Não foi possível carregar seus fluxos.");
+            }
+        } else {
+            setUserWorkspaces([]);
         }
 
     } catch (e: any) {
@@ -315,7 +310,6 @@ export default function MarketplacePage() {
   }, [fetchInitialData]);
 
   return (
-    <DndProvider backend={HTML5Backend}>
         <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between space-y-2 md:space-y-0">
             <div>
@@ -368,7 +362,6 @@ export default function MarketplacePage() {
             )}
         </div>
         </div>
-    </DndProvider>
   );
 }
 
