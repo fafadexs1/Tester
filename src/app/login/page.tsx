@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, FormEvent } from 'react';
@@ -169,6 +170,7 @@ export default function LoginPage() {
                       name="password"
                       type="password"
                       required
+                      placeholder="coloque aqui sua senha"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="bg-input/80 pl-9"
