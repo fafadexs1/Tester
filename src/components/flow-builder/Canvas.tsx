@@ -16,6 +16,13 @@ import {
   OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y
 } from '@/lib/constants';
 
+const escapeCssSelector = (value: string) => {
+  if (typeof window !== 'undefined' && window.CSS && typeof window.CSS.escape === 'function') {
+    return window.CSS.escape(value);
+  }
+  return value.replace(/([ !"#$%&'()*+,.\/:;<=>?@\[\]^`{|}~\\])/g, '\\$1');
+};
+
 interface CanvasProps {
   nodes: NodeData[];
   connections: Connection[];
@@ -122,6 +129,27 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
     return `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
   }, []);
 
+  const getHandleCenterOffset = useCallback((nodeId: string, handleId: string | null, type: 'source' | 'target', currentZoom: number): number | null => {
+    if (typeof document === 'undefined') return null;
+    const escapedNodeId = escapeCssSelector(nodeId);
+    const nodeElement = document.querySelector(`[data-node-id="${escapedNodeId}"]`) as HTMLElement | null;
+    if (!nodeElement) return null;
+
+    let selector = `[data-connector="true"][data-handle-type="${type}"]`;
+    if (handleId) {
+      selector += `[data-handle-id="${escapeCssSelector(handleId)}"]`;
+    }
+
+    const handleElement = nodeElement.querySelector(selector) as HTMLElement | null;
+    if (!handleElement) return null;
+
+    const nodeRect = nodeElement.getBoundingClientRect();
+    const handleRect = handleElement.getBoundingClientRect();
+    const visualOffset = (handleRect.top - nodeRect.top) + handleRect.height / 2;
+    const safeZoom = Math.max(currentZoom, 0.001);
+    return visualOffset / safeZoom;
+  }, []);
+
   const nodeMap = useMemo(() => {
     const map = new Map<string, NodeData>();
     (nodes || []).forEach(node => map.set(node.id, node));
@@ -172,7 +200,11 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
       }
 
       let sourceHandleYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET;
-      if (sourceNode.type === 'start' && Array.isArray(sourceNode.triggers) && conn.sourceHandle) {
+      const measuredSourceOffset = getHandleCenterOffset(sourceNode.id, conn.sourceHandle ?? 'default', 'source', zoomLevel);
+
+      if (typeof measuredSourceOffset === 'number') {
+        sourceHandleYOffset = measuredSourceOffset;
+      } else if (sourceNode.type === 'start' && Array.isArray(sourceNode.triggers) && conn.sourceHandle) {
           let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
           let found = false;
 
@@ -210,8 +242,10 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
 
       const x1 = sourceNode.x + NODE_WIDTH;
       const y1 = sourceNode.y + sourceHandleYOffset;
+
+      const targetHandleYOffset = getHandleCenterOffset(targetNode.id, null, 'target', zoomLevel) ?? NODE_HEADER_CONNECTOR_Y_OFFSET;
       const x2 = targetNode.x;
-      const y2 = targetNode.y + NODE_HEADER_CONNECTOR_Y_OFFSET;
+      const y2 = targetNode.y + targetHandleYOffset;
       
       const isHighlighted = highlightedConnectionId === conn.id;
       const strokeColor = isHighlighted ? 'hsl(var(--destructive))' : 'hsl(var(--accent))';
@@ -237,7 +271,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
         </g>
       );
     })
-  ), [connections, nodeMap, highlightedConnectionId, onDeleteConnection, setHighlightedConnectionId, zoomLevel, drawBezierPath]);
+  ), [connections, nodeMap, highlightedConnectionId, onDeleteConnection, setHighlightedConnectionId, zoomLevel, drawBezierPath, getHandleCenterOffset]);
   
   const visualGridSpacing = GRID_SIZE * zoomLevel;
 

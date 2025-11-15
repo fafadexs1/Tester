@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import type {
   NodeData,
   ApiHeader,
@@ -21,6 +21,7 @@ import type {
 } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
+import { getProperty } from 'dot-prop';
 import {
   MessageSquareText, Type as InputIcon, ListChecks, Trash2, BotMessageSquare,
   ImageUp, UserPlus2, GitFork, Variable, Webhook, Timer, Settings2, Copy,
@@ -77,7 +78,18 @@ const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onS
       {Array.isArray(data) ? (
         data.map((item, index) => (
           <div key={index}>
-            <span className="text-gray-500">{index}: </span>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onSelectPath([...currentPath, String(index)].join('.'));
+              }}
+              className="text-amber-500 hover:underline cursor-pointer focus:outline-none text-left text-xs"
+              title={`Clique para selecionar o caminho: ${[...currentPath, String(index)].join('.')}`}
+            >
+              [{index}]
+            </button>
+            <span className="text-gray-500 ml-1">-</span>
             <JsonTreeView data={item} onSelectPath={onSelectPath} currentPath={[...currentPath, String(index)]} />
           </div>
         ))
@@ -108,6 +120,95 @@ const JsonTreeView = ({ data, onSelectPath, currentPath = [] }: { data: any, onS
     </div>
   );
 };
+
+type PreviewResult =
+  | { type: 'empty'; message: string }
+  | { type: 'no-sample'; message: string }
+  | { type: 'not-found'; message: string }
+  | { type: 'error'; message: string }
+  | { type: 'pending'; message: string }
+  | { type: 'success'; value: any };
+
+const convertPayloadToEditorState = (payload: any) => {
+  if (payload === null || payload === undefined) {
+    return { text: '', data: null, error: 'Payload vazio. Dispare o webhook novamente para gerar dados.' };
+  }
+  if (typeof payload === 'string') {
+    try {
+      const parsed = JSON.parse(payload);
+      return { text: JSON.stringify(parsed, null, 2), data: parsed, error: null };
+    } catch {
+      return {
+        text: payload,
+        data: null,
+        error: 'O payload carregado está em texto plano. Cole/ajuste um JSON válido para habilitar a pré-visualização.',
+      };
+    }
+  }
+  try {
+    return { text: JSON.stringify(payload, null, 2), data: payload, error: null };
+  } catch {
+    return {
+      text: String(payload),
+      data: null,
+      error: 'Não foi possível serializar o payload carregado.',
+    };
+  }
+};
+
+const describePreviewValue = (value: any) => {
+  if (Array.isArray(value)) return 'lista';
+  if (value === null) return 'nulo';
+  return typeof value;
+};
+
+const formatPreviewValue = (value: any) => {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (typeof value === 'object') {
+    try {
+      const serialized = JSON.stringify(value, null, 2);
+      return serialized.length > 600 ? `${serialized.slice(0, 600)}…` : serialized;
+    } catch {
+      return String(value);
+    }
+  }
+  const stringified = String(value);
+  return stringified.length > 600 ? `${stringified.slice(0, 600)}…` : stringified;
+};
+
+const convertIndicesToBracketNotation = (path: string) => path.replace(/\.(\d+)/g, '[$1]');
+
+const buildVariableNameFromPath = (path: string) => {
+  if (!path) return '';
+  const cleaned = path
+    .replace(/\[(\d+)\]/g, '_$1')
+    .split(/[.$]/)
+    .filter(Boolean)
+    .pop();
+  if (!cleaned) return '';
+  return cleaned.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase();
+};
+
+const getWebhookMappingPreview = (path: string, sample: any): PreviewResult => {
+  if (!path || path.trim() === '') {
+    return { type: 'empty', message: 'Informe o caminho do dado para visualizar o resultado.' };
+  }
+  if (!sample) {
+    return { type: 'no-sample', message: 'Cole ou importe um JSON de exemplo para testar este caminho.' };
+  }
+  try {
+    const value = getProperty(sample, path);
+    if (value === undefined) {
+      return { type: 'not-found', message: 'Nenhum valor localizado nesse caminho no JSON de exemplo.' };
+    }
+    return { type: 'success', value };
+  } catch (error: any) {
+    return { type: 'error', message: error?.message || 'Caminho inválido.' };
+  }
+};
+
+const API_PREVIEW_KEY_PRIMARY = '__primary__';
 
 const TextFormatToolbar = ({ fieldName, textAreaRef, onUpdate, nodeId }: { fieldName: keyof NodeData, textAreaRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement>, onUpdate: Function, nodeId: string }) => {
     const handleFormat = (formatChar: string) => {
@@ -171,8 +272,34 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const [isTestingApi, setIsTestingApi] = useState(false);
 
   const [isWebhookHistoryDialogOpen, setIsWebhookHistoryDialogOpen] = useState(false);
-  
+  const [isWebhookMappingDialogOpen, setIsWebhookMappingDialogOpen] = useState(false);
+  const [activeWebhookTriggerId, setActiveWebhookTriggerId] = useState<string | null>(null);
   const [isApiHistoryDialogOpen, setIsApiHistoryDialogOpen] = useState(false);
+  const [isApiMappingDialogOpen, setIsApiMappingDialogOpen] = useState(false);
+
+  const [webhookSampleInput, setWebhookSampleInput] = useState('');
+  const [webhookSampleData, setWebhookSampleData] = useState<any | null>(null);
+  const [webhookSampleError, setWebhookSampleError] = useState<string | null>(null);
+  const [isLoadingWebhookSample, setIsLoadingWebhookSample] = useState(false);
+  const [focusedWebhookMapping, setFocusedWebhookMapping] = useState<{ triggerId: string; mappingId: string } | null>(null);
+
+  const [apiSampleInput, setApiSampleInput] = useState('');
+  const [apiSampleData, setApiSampleData] = useState<any | null>(null);
+  const [apiSampleError, setApiSampleError] = useState<string | null>(null);
+  const [isLoadingApiSample, setIsLoadingApiSample] = useState(false);
+  const [focusedApiMappingId, setFocusedApiMappingId] = useState<string | null>(null);
+  const [apiPreviewResults, setApiPreviewResults] = useState<Record<string, PreviewResult>>({});
+
+  const selectedWebhookTriggerForBuilder = useMemo(() => {
+    if (!activeWebhookTriggerId) return null;
+    return (node.triggers || []).find(t => t.id === activeWebhookTriggerId) || null;
+  }, [activeWebhookTriggerId, node.triggers]);
+
+  const apiMappingsSignature = useMemo(() => {
+    return (node.apiResponseMappings || [])
+      .map(mapping => `${mapping.id}:${mapping.jsonPath || ''}:${mapping.extractAs || 'single'}:${mapping.itemField || ''}`)
+      .join('|');
+  }, [node.apiResponseMappings]);
 
 
   const [supabaseTables, setSupabaseTables] = useState<{ name: string }[]>([]);
@@ -688,6 +815,724 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     );
   };
 
+  const handleWebhookSampleInputChange = (value: string) => {
+    setWebhookSampleInput(value);
+    if (!value || value.trim() === '') {
+      setWebhookSampleData(null);
+      setWebhookSampleError(null);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(value);
+      setWebhookSampleData(parsed);
+      setWebhookSampleError(null);
+    } catch {
+      setWebhookSampleData(null);
+      setWebhookSampleError('JSON inválido. Verifique se o conteúdo está bem formatado.');
+    }
+  };
+
+  const handleApiSampleInputChange = (value: string) => {
+    setApiSampleInput(value);
+    if (!value || value.trim() === '') {
+      setApiSampleData(null);
+      setApiSampleError(null);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(value);
+      setApiSampleData(parsed);
+      setApiSampleError(null);
+    } catch {
+      setApiSampleData(null);
+      setApiSampleError('JSON inválido. Verifique se o conteúdo está bem formatado.');
+    }
+  };
+
+  const clearSampleEditor = (scope: 'webhook' | 'api') => {
+    if (scope === 'webhook') {
+      setWebhookSampleInput('');
+      setWebhookSampleData(null);
+      setWebhookSampleError(null);
+    } else {
+      setApiSampleInput('');
+      setApiSampleData(null);
+      setApiSampleError(null);
+    }
+  };
+
+  const applySamplePayloadFromSource = useCallback((payload: any, scope: 'webhook' | 'api') => {
+    const prepared = convertPayloadToEditorState(payload);
+    if (scope === 'webhook') {
+      setWebhookSampleInput(prepared.text);
+      setWebhookSampleData(prepared.data);
+      setWebhookSampleError(prepared.error);
+    } else {
+      setApiSampleInput(prepared.text);
+      setApiSampleData(prepared.data);
+      setApiSampleError(prepared.error);
+    }
+    return prepared.error;
+  }, []);
+
+  const handleLoadLatestWebhookSample = useCallback(async () => {
+    if (!activeWorkspace?.id) {
+      toast({
+        title: "Salve o fluxo primeiro",
+        description: "Precisamos do ID do workspace para localizar o histórico do webhook.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsLoadingWebhookSample(true);
+    try {
+      const params = new URLSearchParams({
+        workspaceId: activeWorkspace.id,
+        type: 'webhook',
+        limit: '1',
+      });
+      const response = await fetch(`/api/evolution/webhook-logs?${params.toString()}`, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error('Não foi possível buscar o último webhook.');
+      }
+      const data = await response.json();
+      const latest = Array.isArray(data) ? data[0] : null;
+      if (!latest?.payload) {
+        toast({
+          title: "Nenhum payload disponível",
+          description: "Dispare o webhook novamente para gerar logs recentes.",
+        });
+        return;
+      }
+      const errorMessage = applySamplePayloadFromSource(latest.payload, 'webhook');
+      toast({
+        title: "Payload importado",
+        description: errorMessage
+          ? "Importamos o corpo bruto, mas ele não pôde ser convertido automaticamente em JSON."
+          : "Usando o último webhook recebido para sugerir mapeamentos.",
+        variant: errorMessage ? 'destructive' : 'default',
+      });
+    } catch (error: any) {
+      toast({
+        title: "Falha ao carregar o histórico",
+        description: error?.message || 'Erro desconhecido ao buscar os logs.',
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingWebhookSample(false);
+    }
+  }, [activeWorkspace?.id, toast, applySamplePayloadFromSource]);
+
+  const handleLoadLatestApiSample = useCallback(async () => {
+    if (!activeWorkspace?.id) {
+      toast({
+        title: "Salve o fluxo primeiro",
+        description: "Precisamos do ID do workspace para localizar os logs da API.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsLoadingApiSample(true);
+    try {
+      const params = new URLSearchParams({
+        workspaceId: activeWorkspace.id,
+        nodeId: node.id,
+        limit: '1',
+      });
+      const response = await fetch(`/api/api-call-logs?${params.toString()}`, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error('Não foi possível buscar o último log de API.');
+      }
+      const data = await response.json();
+      const latest = Array.isArray(data) ? data[0] : null;
+      if (!latest?.response) {
+        toast({
+          title: "Nenhuma resposta encontrada",
+          description: "Execute o fluxo ou o teste para gerar logs desta chamada de API.",
+        });
+        return;
+      }
+      const errorMessage = applySamplePayloadFromSource(latest.response, 'api');
+      toast({
+        title: "Resposta importada",
+        description: errorMessage
+          ? "Importamos o corpo bruto, mas ele não pôde ser convertido automaticamente em JSON."
+          : "Usando o último log para sugerir caminhos.",
+        variant: errorMessage ? 'destructive' : 'default',
+      });
+    } catch (error: any) {
+      toast({
+        title: "Falha ao carregar o log da API",
+        description: error?.message || 'Erro desconhecido ao buscar os logs.',
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingApiSample(false);
+    }
+  }, [activeWorkspace?.id, node.id, toast, applySamplePayloadFromSource]);
+
+  const handleUseLastTestResponseAsSample = () => {
+    if (!testResponseData) {
+      toast({
+        title: "Nenhum teste disponível",
+        description: "Execute o teste da API para capturar uma resposta e montar os mapeamentos.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const errorMessage = applySamplePayloadFromSource(testResponseData, 'api');
+    toast({
+      title: "Resposta de teste aplicada",
+      description: errorMessage
+        ? "Usamos o corpo bruto do teste, mas não foi possível convertê-lo em JSON automaticamente."
+        : "Agora você pode clicar nos campos para preencher automaticamente os caminhos.",
+      variant: errorMessage ? 'destructive' : 'default',
+    });
+  };
+
+  const handleJsonTreeSelection = (scope: 'webhook' | 'api', rawPath: string) => {
+    const path = scope === 'api' ? convertIndicesToBracketNotation(rawPath) : rawPath;
+    if (scope === 'webhook' && focusedWebhookMapping) {
+      handleVariableMappingChange(focusedWebhookMapping.triggerId, focusedWebhookMapping.mappingId, 'jsonPath', path);
+      toast({
+        title: "Caminho aplicado",
+        description: `Atualizamos o mapeamento para "${path}".`,
+      });
+      return;
+    }
+    if (scope === 'api') {
+      if (focusedApiMappingId === '__primary__') {
+        onUpdate(node.id, { apiResponsePath: path });
+        toast({
+          title: "Caminho principal atualizado",
+          description: `Usaremos "${path}" para preencher a variável principal.`,
+        });
+        return;
+      }
+      if (focusedApiMappingId) {
+        handleApiResponseMappingChange(focusedApiMappingId, 'jsonPath', path);
+        toast({
+          title: "Expressão preenchida",
+          description: `Atualizamos a expressão JSONata para "${path}".`,
+        });
+        return;
+      }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(path)
+        .then(() => toast({ title: "Caminho copiado!", description: `Use "${path}" no mapeamento desejado.` }))
+        .catch(() => toast({ title: "Use este caminho", description: path }));
+    } else {
+      toast({ title: "Use este caminho", description: path });
+    }
+  };
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const evaluateExpressionAsync = async (expression: string | undefined): Promise<PreviewResult> => {
+      if (!expression || expression.trim() === '') {
+        return { type: 'empty', message: 'Defina a expressão JSONata para visualizar o resultado.' };
+      }
+      if (!apiSampleData) {
+        return { type: 'no-sample', message: 'Cole/importe a resposta JSON para testar esta expressão.' };
+      }
+      try {
+        const value = await jsonata(expression).evaluate(apiSampleData);
+        if (value === undefined) {
+          return { type: 'not-found', message: 'A expressão não retornou nenhum valor com o JSON atual.' };
+        }
+        return { type: 'success', value };
+      } catch (error: any) {
+        return { type: 'error', message: error?.message || 'Expressão JSONata inválida.' };
+      }
+    };
+
+    const run = async () => {
+      const nextResults: Record<string, PreviewResult> = {};
+      nextResults[API_PREVIEW_KEY_PRIMARY] = await evaluateExpressionAsync(node.apiResponsePath);
+      for (const mapping of node.apiResponseMappings || []) {
+        nextResults[mapping.id] = await evaluateExpressionAsync(mapping.jsonPath);
+      }
+      if (!isCancelled) {
+        setApiPreviewResults(nextResults);
+      }
+    };
+
+    run();
+    return () => {
+      isCancelled = true;
+    };
+  }, [apiSampleData, node.apiResponsePath, apiMappingsSignature]);
+
+  const getApiPreviewResult = (expression: string | undefined, key: string): PreviewResult => {
+    if (!expression || expression.trim() === '') {
+      return { type: 'empty', message: 'Defina a expressão JSONata para visualizar o resultado.' };
+    }
+    if (!apiSampleData) {
+      return { type: 'no-sample', message: 'Cole/importe a resposta JSON para testar esta expressão.' };
+    }
+    return apiPreviewResults[key] || { type: 'pending', message: 'Calculando pré-visualização...' };
+  };
+
+  const renderWebhookMappingBuilder = (targetTrigger: StartNodeTrigger | null) => {
+    if (!targetTrigger) {
+      return (
+        <div className="py-4 text-sm text-muted-foreground">
+          Selecione um disparador do tipo webhook para configurar os mapeamentos.
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        <div className="rounded-md border bg-muted/20 p-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold">Laboratório de Payload</p>
+              <p className="text-[11px] text-muted-foreground">Cole o body recebido ou importe o último log.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLoadLatestWebhookSample}
+                disabled={isLoadingWebhookSample}
+              >
+                {isLoadingWebhookSample ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Buscando
+                  </>
+                ) : (
+                  <>
+                    <History className="mr-1.5 h-3.5 w-3.5" />
+                    Usar último log
+                  </>
+                )}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => clearSampleEditor('webhook')}>
+                Limpar
+              </Button>
+            </div>
+          </div>
+          <Textarea
+            value={webhookSampleInput}
+            onChange={(e) => handleWebhookSampleInputChange(e.target.value)}
+            rows={4}
+            placeholder={`{
+  "data": {
+    "message": {
+      "text": "Oi, gostaria de um orçamento"
+    }
+  }
+}`}
+            className="font-mono text-xs"
+          />
+          {webhookSampleError ? (
+            <p className="text-xs text-destructive">{webhookSampleError}</p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">Clique em qualquer chave do JSON abaixo para preencher o campo selecionado.</p>
+          )}
+          <div className="border rounded-md bg-background/60">
+            {webhookSampleData ? (
+              <ScrollArea className="h-40 pr-3">
+                <JsonTreeView data={webhookSampleData} onSelectPath={(path) => handleJsonTreeSelection('webhook', path)} />
+              </ScrollArea>
+            ) : (
+              <div className="flex h-32 items-center justify-center px-4 text-center text-xs text-muted-foreground">
+                Cole um JSON real do seu webhook para habilitar o assistente de mapeamento.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {(targetTrigger.variableMappings || []).map((mapping, index) => {
+            const preview = getWebhookMappingPreview(mapping.jsonPath, webhookSampleData);
+            const suggestion = buildVariableNameFromPath(mapping.jsonPath);
+            const previewClass = preview.type === 'success'
+              ? 'border-emerald-500/60 text-foreground bg-emerald-50/30 dark:bg-emerald-500/5'
+              : preview.type === 'error'
+                ? 'border-destructive/70 text-destructive bg-destructive/5'
+                : 'text-muted-foreground bg-muted/50';
+
+            return (
+              <div key={mapping.id} className="rounded-lg border bg-background/40 p-3 shadow-inner space-y-3">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="font-medium">Mapeamento #{index + 1}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveVariableMapping(targetTrigger.id, mapping.id)}
+                    className="text-destructive hover:text-destructive/80 w-7 h-7"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <Label className="text-[11px] uppercase font-semibold">Caminho do dado</Label>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Input
+                        placeholder="Ex: data.message.text"
+                        value={mapping.jsonPath}
+                        onFocus={() => setFocusedWebhookMapping({ triggerId: targetTrigger.id, mappingId: mapping.id })}
+                        onChange={(e) => handleVariableMappingChange(targetTrigger.id, mapping.id, 'jsonPath', e.target.value)}
+                        className="text-xs h-8"
+                      />
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="icon" className="h-8 w-8" disabled={!webhookSampleData}>
+                            <MousePointerClick className="w-4 h-4" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[260px] p-2" align="end" data-no-drag="true">
+                          {webhookSampleData ? (
+                            <ScrollArea className="h-48 pr-2">
+                              <JsonTreeView
+                                data={webhookSampleData}
+                                onSelectPath={(path) => {
+                                  handleVariableMappingChange(targetTrigger.id, mapping.id, 'jsonPath', path);
+                                  setFocusedWebhookMapping({ triggerId: targetTrigger.id, mappingId: mapping.id });
+                                }}
+                              />
+                            </ScrollArea>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Cole um JSON no Laboratório para habilitar esta seleção.</p>
+                          )}
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[11px] uppercase font-semibold">Variável</Label>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Input
+                        placeholder="Ex: mensagem_usuario"
+                        value={mapping.flowVariable}
+                        onChange={(e) => handleVariableMappingChange(targetTrigger.id, mapping.id, 'flowVariable', e.target.value)}
+                        className="text-xs h-8"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!suggestion || !!(mapping.flowVariable && mapping.flowVariable.trim())}
+                        onClick={() => suggestion && handleVariableMappingChange(targetTrigger.id, mapping.id, 'flowVariable', suggestion)}
+                      >
+                        <Sparkles className="w-3.5 h-3.5 mr-1" />
+                        Sugerir
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] uppercase text-muted-foreground">
+                      <span>Pré-visualização</span>
+                      {webhookSampleData && <span>Baseado no JSON acima</span>}
+                    </div>
+                    <div className={cn("mt-1 rounded-md border px-2.5 py-2 text-xs font-mono whitespace-pre-wrap break-all", previewClass)}>
+                      {preview.type === 'success' ? (
+                        <>
+                          <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            Valor encontrado ({describePreviewValue(preview.value)})
+                          </p>
+                          <pre className="mt-1 whitespace-pre-wrap break-all text-[11px] font-mono">
+                            {formatPreviewValue(preview.value)}
+                          </pre>
+                        </>
+                      ) : (
+                        <span>{preview.message}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <Button onClick={() => handleAddVariableMapping(targetTrigger.id)} variant="outline" size="sm" className="text-xs h-8">
+          <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Mapeamento
+        </Button>
+      </div>
+    );
+  };
+
+  const renderApiMappingBuilder = () => (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label htmlFor={`${node.id}-apiResponsePath`}>Caminho do Dado Principal (JSONata ou caminho simples)</Label>
+          <div className="flex items-center gap-1.5 mt-1">
+            <Input
+              id={`${node.id}-apiResponsePath`}
+              placeholder="Ex: data.user.name"
+              value={node.apiResponsePath || ''}
+              onFocus={() => setFocusedApiMappingId('__primary__')}
+              onChange={(e) => onUpdate(node.id, { apiResponsePath: e.target.value })}
+              className="pr-8 text-sm"
+            />
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  disabled={!apiSampleData}
+                  title={apiSampleData ? 'Clique em um campo do JSON' : 'Cole uma resposta de exemplo'}
+                >
+                  <MousePointerClick className="w-4 h-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[260px] p-2" align="end" data-no-drag="true">
+                {apiSampleData ? (
+                  <ScrollArea className="h-48 pr-2">
+                    <JsonTreeView data={apiSampleData} onSelectPath={(path) => handleJsonTreeSelection('api', path)} />
+                  </ScrollArea>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Cole ou importe uma resposta para habilitar esta seleção.</p>
+                )}
+              </PopoverContent>
+            </Popover>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">Defina qual valor será salvo em <em>Salvar Resultado Principal</em>.</p>
+                    <div className="mt-2 rounded-md border bg-muted/30 px-2.5 py-2 text-xs font-mono whitespace-pre-wrap break-all min-h-[48px]">
+                      {(() => {
+                        const preview = getApiPreviewResult(node.apiResponsePath || '', API_PREVIEW_KEY_PRIMARY);
+                        if (preview.type === 'success') {
+                          return (
+                            <>
+                              <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Valor de exemplo ({describePreviewValue(preview.value)})</p>
+                              <pre className="mt-1">{formatPreviewValue(preview.value)}</pre>
+                            </>
+                          );
+                        }
+                        return <span className="text-[11px] text-muted-foreground">{preview.message}</span>;
+                      })()}
+                    </div>
+                  </div>
+        <div>
+          <Label htmlFor={`${node.id}-apioutputvar`}>Salvar Resultado Principal na Variável</Label>
+          <div className="flex items-center gap-1.5 mt-1">
+            <Input
+              id={`${node.id}-apioutputvar`}
+              placeholder="resposta_api"
+              value={node.apiOutputVariable || ''}
+              onChange={(e) => onUpdate(node.id, { apiOutputVariable: e.target.value })}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!buildVariableNameFromPath(node.apiResponsePath || '') || !!(node.apiOutputVariable && node.apiOutputVariable.trim())}
+              onClick={() => {
+                const suggestion = buildVariableNameFromPath(node.apiResponsePath || '');
+                if (suggestion) onUpdate(node.id, { apiOutputVariable: suggestion });
+              }}
+            >
+              <Sparkles className="w-3.5 h-3.5 mr-1" />
+              Sugerir
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-md border bg-muted/10 p-3 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold">Laboratório de Resposta</p>
+            <p className="text-[11px] text-muted-foreground">Cole a resposta da API, use o último log ou reaproveite o último teste.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLoadLatestApiSample}
+              disabled={isLoadingApiSample}
+            >
+              {isLoadingApiSample ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Buscando
+                </>
+              ) : (
+                <>
+                  <History className="mr-1.5 h-3.5 w-3.5" />
+                  Usar log
+                </>
+              )}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleUseLastTestResponseAsSample}>
+              <TestTube2 className="mr-1.5 h-3.5 w-3.5" /> Resposta do teste
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => clearSampleEditor('api')}>
+              Limpar
+            </Button>
+          </div>
+        </div>
+        <Textarea
+          value={apiSampleInput}
+          onChange={(e) => handleApiSampleInputChange(e.target.value)}
+          rows={4}
+          placeholder={`{
+  "data": {
+    "id": 123,
+    "user": { "name": "Ana" }
+  }
+}`}
+          className="font-mono text-xs"
+        />
+        {apiSampleError ? (
+          <p className="text-xs text-destructive">{apiSampleError}</p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">Clique no JSON abaixo para preencher qualquer campo selecionado.</p>
+        )}
+        <div className="border rounded-md bg-background/60">
+          {apiSampleData ? (
+            <ScrollArea className="h-40 pr-3">
+              <JsonTreeView data={apiSampleData} onSelectPath={(path) => handleJsonTreeSelection('api', path)} />
+            </ScrollArea>
+          ) : (
+            <div className="flex h-32 items-center justify-center px-4 text-center text-xs text-muted-foreground">
+              Cole/importe um JSON para liberar o construtor avançado de caminhos.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="pt-2 space-y-3">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs font-medium">Mapeamento de Múltiplas Variáveis</Label>
+          <p className="text-[11px] text-muted-foreground">Extraia quantos campos precisar com expressões JSONata.</p>
+        </div>
+        <div className="space-y-3">
+          {(node.apiResponseMappings || []).map((mapping, index) => {
+            const preview = getApiPreviewResult(mapping.jsonPath, mapping.id);
+            const suggestion = buildVariableNameFromPath(mapping.jsonPath);
+            const previewClass = preview.type === 'success'
+              ? 'border-emerald-500/60 text-foreground bg-emerald-50/30 dark:bg-emerald-500/5'
+              : preview.type === 'error'
+                ? 'border-destructive/70 text-destructive bg-destructive/5'
+                : 'text-muted-foreground bg-muted/50';
+
+            return (
+              <div key={mapping.id} className="rounded-lg border bg-background/40 p-3 shadow-inner space-y-3">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="font-medium">Mapeamento #{index + 1}</span>
+                  <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-destructive hover:text-destructive/80 w-7 h-7">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <Label className="text-[11px] uppercase font-semibold">Expressão JSONata</Label>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Input
+                        placeholder="Ex: data.items[0].id"
+                        value={mapping.jsonPath}
+                        onFocus={() => setFocusedApiMappingId(mapping.id)}
+                        onChange={(e) => handleApiResponseMappingChange(mapping.id, 'jsonPath', e.target.value)}
+                        className="text-xs h-8"
+                      />
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="icon" className="h-8 w-8" disabled={!apiSampleData}>
+                            <MousePointerClick className="w-4 h-4" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[260px] p-2" align="end" data-no-drag="true">
+                          {apiSampleData ? (
+                            <ScrollArea className="h-48 pr-2">
+                              <JsonTreeView
+                                data={apiSampleData}
+                                onSelectPath={(path) => {
+                                  handleApiResponseMappingChange(mapping.id, 'jsonPath', convertIndicesToBracketNotation(path));
+                                  setFocusedApiMappingId(mapping.id);
+                                }}
+                              />
+                            </ScrollArea>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Cole uma resposta para usar o seletor visual.</p>
+                          )}
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[11px] uppercase font-semibold">Variável</Label>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Input
+                        placeholder="Ex: id_usuario"
+                        value={mapping.flowVariable}
+                        onChange={(e) => handleApiResponseMappingChange(mapping.id, 'flowVariable', e.target.value)}
+                        className="text-xs h-8"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!suggestion || !!(mapping.flowVariable && mapping.flowVariable.trim())}
+                        onClick={() => suggestion && handleApiResponseMappingChange(mapping.id, 'flowVariable', suggestion)}
+                      >
+                        <Sparkles className="w-3.5 h-3.5 mr-1" />
+                        Sugerir
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div>
+                      <Label className="text-[11px] uppercase font-semibold">Extrair como</Label>
+                      <Select value={mapping.extractAs || 'single'} onValueChange={(value) => handleApiResponseMappingChange(mapping.id, 'extractAs', value)}>
+                        <SelectTrigger className="h-8 w-[110px] text-xs mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="single"><div className="flex items-center gap-1.5"><Baseline className="w-3.5 h-3.5" /><span>Valor</span></div></SelectItem>
+                          <SelectItem value="list"><div className="flex items-center gap-1.5"><List className="w-3.5 h-3.5" /><span>Lista</span></div></SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {mapping.extractAs === 'list' && (
+                      <div className="flex-1">
+                        <Label className="text-[11px] uppercase font-semibold">Campo do Item (opcional)</Label>
+                        <Input
+                          placeholder="Ex: name"
+                          value={mapping.itemField || ''}
+                          onChange={(e) => handleApiResponseMappingChange(mapping.id, 'itemField', e.target.value)}
+                          className="text-xs h-8 mt-1"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] uppercase text-muted-foreground">
+                      <span>Pré-visualização</span>
+                      {apiSampleData && <span>Baseado no JSON acima</span>}
+                    </div>
+                    <div className={cn("mt-1 rounded-md border px-2.5 py-2 text-xs font-mono whitespace-pre-wrap break-all", previewClass)}>
+                      {preview.type === 'success' ? (
+                        <>
+                          <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Valor encontrado ({describePreviewValue(preview.value)})</p>
+                          <pre className="mt-1 whitespace-pre-wrap break-all text-[11px] font-mono">{formatPreviewValue(preview.value)}</pre>
+                        </>
+                      ) : (
+                        <span>{preview.message}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <Button onClick={() => handleAddListItem('apiResponseMappings')} variant="outline" size="sm" className="text-xs h-8">
+          <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Mapeamento
+        </Button>
+      </div>
+    </div>
+  );
+
   const renderKeyValueList = (
     listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList',
     list: ApiHeader[] | ApiQueryParam[] | ApiFormDataEntry[] | undefined,
@@ -1049,27 +1894,52 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                         </Button>
                       </div>
 
-                      <div className="pt-2">
-                        <Label className="text-xs font-medium">Mapeamento de Variáveis do Webhook</Label>
-                        <div className="space-y-2 mt-1">
-                          {(trigger.variableMappings || []).map(mapping => (
-                            <div key={mapping.id} className="flex items-center space-x-1.5">
-                              <div className="relative flex-1">
-                                <Input
-                                  placeholder="Caminho (ex: data.message.text)"
-                                  value={mapping.jsonPath}
-                                  onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'jsonPath', e.target.value)}
-                                  className="h-7 text-xs pl-2 pr-7" />
-                              </div>
-                              <Input placeholder="Variável (ex: mensagem_usuario)" value={mapping.flowVariable} onChange={(e) => handleVariableMappingChange(trigger.id, mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs flex-1" />
-                              <Button variant="ghost" size="icon" onClick={() => handleRemoveVariableMapping(trigger.id, mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6"><Trash2 className="w-3.5 h-3.5" /></Button>
-                            </div>
-                          ))}
+﻿                      <div className="pt-2 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-medium">Mapeamento de Variáveis do Webhook</Label>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setActiveWebhookTriggerId(trigger.id);
+                              setIsWebhookMappingDialogOpen(true);
+                            }}
+                          >
+                            <Sparkles className="w-3.5 h-3.5 mr-1" /> Abrir Construtor
+                          </Button>
                         </div>
-                        <Button onClick={() => handleAddVariableMapping(trigger.id)} variant="outline" size="sm" className="mt-2 text-xs h-7">
-                          <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Mapeamento
-                        </Button>
+                        <div className="rounded-md border bg-muted/10 p-3 space-y-2">
+                          {(trigger.variableMappings || []).length === 0 ? (
+                            <p className="text-[12px] text-muted-foreground">Nenhum mapeamento configurado ainda.</p>
+                          ) : (
+                            <div className="space-y-2 text-xs">
+                              {(trigger.variableMappings || []).map((mapping) => (
+                                <div key={mapping.id} className="flex items-center justify-between gap-2 rounded-md border border-border/60 bg-background px-2 py-1.5">
+                                  <div>
+                                    <p className="font-semibold text-sm">{mapping.flowVariable || 'Sem nome'}</p>
+                                    <p className="text-[11px] text-muted-foreground">{mapping.jsonPath || 'Sem caminho definido'}</p>
+                                  </div>
+                                  <Button variant="ghost" size="icon" onClick={() => handleRemoveVariableMapping(trigger.id, mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            <Button onClick={() => handleAddVariableMapping(trigger.id)} variant="outline" size="sm" className="text-xs h-8">
+                              <PlusCircle className="w-3 h-3 mr-1" /> Adicionar rápido
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => {
+                              setActiveWebhookTriggerId(trigger.id);
+                              setIsWebhookMappingDialogOpen(true);
+                            }}>
+                              Detalhar no construtor
+                            </Button>
+                          </div>
+                        </div>
                       </div>
+
 
                     </div>
                   )}
@@ -1538,61 +2408,59 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   </div>
                 )}
               </TabsContent>
+
               <TabsContent value="mapping" className="mt-4 space-y-3">
-                  <div>
-                    <Label htmlFor={`${node.id}-apiResponsePath`}>Caminho do Dado Principal (opcional)</Label>
-                     <div className="relative">
-                        <Input id={`${node.id}-apiResponsePath`} placeholder="Ex: data.user.name" value={node.apiResponsePath || ''} onChange={(e) => onUpdate(node.id, { apiResponsePath: e.target.value })} className="pr-8" />
+                <div className="rounded-md border bg-muted/10 p-3 space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-sm">Resumo do Mapeamento</p>
+                      <p className="text-[11px] text-muted-foreground">Use o construtor em tela cheia para configurar com precisão.</p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">Se preenchido, extrai este dado para a variável de resultado principal.</p>
-                  </div>
-                  <div>
-                    <Label htmlFor={`${node.id}-apioutputvar`}>Salvar Resultado Principal na Variável</Label>
-                    <Input id={`${node.id}-apioutputvar`} placeholder="resposta_api" value={node.apiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { apiOutputVariable: e.target.value })} />
-                  </div>
-                  <div className="pt-2">
-                    <Label className="text-xs font-medium">Mapeamento de Múltiplas Variáveis (Opcional)</Label>
-                    <div className="space-y-2 mt-1">
-                      {(node.apiResponseMappings || []).map(mapping => (
-                        <div key={mapping.id} className="space-y-2">
-                            <div className="grid grid-cols-[1fr,1fr] gap-x-1.5">
-                                <div className="relative">
-                                    <Input
-                                    placeholder="Caminho JSON (ex: data.id)"
-                                    value={mapping.jsonPath}
-                                    onChange={(e) => handleApiResponseMappingChange(mapping.id, 'jsonPath', e.target.value)}
-                                    className="h-7 text-xs pl-2 pr-7" />
-                                </div>
-                                <Input placeholder="Variável (ex: id_usuario)" value={mapping.flowVariable} onChange={(e) => handleApiResponseMappingChange(mapping.id, 'flowVariable', e.target.value)} className="h-7 text-xs" />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Select value={mapping.extractAs || 'single'} onValueChange={(value) => handleApiResponseMappingChange(mapping.id, 'extractAs', value)}>
-                                    <SelectTrigger className="h-7 w-[90px] text-xs">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="single"><div className="flex items-center gap-1.5"><Baseline className="w-3.5 h-3.5"/><span>Valor</span></div></SelectItem>
-                                        <SelectItem value="list"><div className="flex items-center gap-1.5"><List className="w-3.5 h-3.5"/><span>Lista</span></div></SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                {mapping.extractAs === 'list' && (
-                                    <Input 
-                                    placeholder="Campo do item (opcional)" 
-                                    value={mapping.itemField || ''} 
-                                    onChange={(e) => handleApiResponseMappingChange(mapping.id, 'itemField', e.target.value)} 
-                                    className="h-7 text-xs flex-1"
-                                    />
-                                )}
-                                <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-destructive hover:text-destructive/80 w-7 h-7 ml-auto"><Trash2 className="w-3.5 h-3.5" /></Button>
-                            </div>
-                        </div>
-                      ))}
-                    </div>
-                    <Button onClick={() => handleAddListItem('apiResponseMappings')} variant="outline" size="sm" className="mt-2 text-xs h-7">
-                      <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Mapeamento
+                    <Button variant="outline" size="sm" onClick={() => setIsApiMappingDialogOpen(true)}>
+                      <Sparkles className="w-3.5 h-3.5 mr-1" /> Abrir Construtor
                     </Button>
                   </div>
+                  <div className="grid gap-2 text-[12px]">
+                    <div className="rounded border border-dashed px-2 py-1.5">
+                      <p className="font-semibold text-xs uppercase text-muted-foreground">Resultado Principal</p>
+                      <p>
+                        Caminho: <span className="font-mono">{node.apiResponsePath || '—'}</span>
+                      </p>
+                      <p>Variável: <span className="font-semibold">{node.apiOutputVariable || '—'}</span></p>
+                    </div>
+                    <div className="rounded border border-dashed px-2 py-1.5">
+                      <p className="font-semibold text-xs uppercase text-muted-foreground">Mapeamentos Extras</p>
+                      {(node.apiResponseMappings || []).length === 0 ? (
+                        <p className="text-muted-foreground">Nenhum mapeamento adicional configurado.</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {(node.apiResponseMappings || []).map((mapping) => (
+                            <div key={mapping.id} className="flex items-center justify-between gap-2 rounded border bg-background px-2 py-1">
+                              <div>
+                                <p className="font-medium text-sm">{mapping.flowVariable || 'Sem variável'}</p>
+                                <p className="text-[11px] text-muted-foreground">{mapping.jsonPath || 'Sem expressão'}</p>
+                              </div>
+                              <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => setIsApiMappingDialogOpen(true)}>
+                      Configurar agora
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => handleAddListItem('apiResponseMappings')}>
+                      <PlusCircle className="w-3 h-3 mr-1" /> Adicionar rápido
+                    </Button>
+                  </div>
+                </div>
               </TabsContent>
+
+
             </Tabs>
              <div className="flex gap-2 w-full mt-3">
                 <Button variant="outline" className="w-full" onClick={handleTestApiCall} disabled={isTestingApi}>
@@ -2268,6 +3136,22 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           workspaceId={activeWorkspace?.id || ''}
         />
       </Dialog>
+
+      {/* Webhook Mapping Builder */}
+      <Dialog open={isWebhookMappingDialogOpen} onOpenChange={(open) => {
+        setIsWebhookMappingDialogOpen(open);
+        if (!open) setActiveWebhookTriggerId(null);
+      }}>
+        <DialogContent className="sm:max-w-4xl" data-no-drag="true">
+          <DialogHeader>
+            <DialogTitle>Construtor de Mapeamento do Webhook</DialogTitle>
+            <DialogDescription>
+              Use o laboratório completo para mapear e visualizar os dados recebidos.
+            </DialogDescription>
+          </DialogHeader>
+          {renderWebhookMappingBuilder(selectedWebhookTriggerForBuilder)}
+        </DialogContent>
+      </Dialog>
       
       {/* API Call History Dialog */}
       <Dialog open={isApiHistoryDialogOpen} onOpenChange={setIsApiHistoryDialogOpen}>
@@ -2278,6 +3162,17 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             nodeId={node.id}
             nodeTitle={node.title}
         />
+      </Dialog>
+
+      {/* API Mapping Builder */}
+      <Dialog open={isApiMappingDialogOpen} onOpenChange={setIsApiMappingDialogOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto" data-no-drag="true">
+          <DialogHeader>
+            <DialogTitle>Construtor de Mapeamento da Resposta da API</DialogTitle>
+            <DialogDescription>Importe um JSON, clique nos campos e defina todas as variáveis em um único lugar.</DialogDescription>
+          </DialogHeader>
+          {renderApiMappingBuilder()}
+        </DialogContent>
       </Dialog>
 
 
