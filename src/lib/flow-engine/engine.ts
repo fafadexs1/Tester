@@ -206,6 +206,7 @@ export async function executeFlow(
   const { nodes, connections } = currentWorkspace;
   let currentNodeId = session.current_node_id;
   let shouldContinue = true;
+  let flowEnded = false;
 
   console.log(`[Flow Engine] Starting execution loop. Start Node: ${currentNodeId}`);
 
@@ -629,12 +630,13 @@ export async function executeFlow(
       }
 
       case 'end-flow': {
-        console.log(`[Flow Engine - ${session.session_id}] Reached End Flow node. Pausing session.`);
+        console.log(`[Flow Engine - ${session.session_id}] Reached End Flow node. Ending session.`);
         session.current_node_id = null;
         session.awaiting_input_type = null;
         session.awaiting_input_details = null;
-        session.flow_variables.__flowPaused = true;
+        delete session.flow_variables.__flowPaused;
         shouldContinue = false;
+        flowEnded = true;
         nextNodeId = null;
         break;
       }
@@ -649,6 +651,12 @@ export async function executeFlow(
     if (shouldContinue) {
       currentNodeId = nextNodeId;
     }
+  }
+
+  if (flowEnded) {
+    console.log(`[Flow Engine - ${session.session_id}] Flow marked as finished. Deleting session.`);
+    await deleteSessionFromDB(session.session_id);
+    return;
   }
 
   if (shouldContinue && !currentNodeId) {
