@@ -84,7 +84,7 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
 
     const sessionKeyIdentifier = loggedEntry.session_key_identifier;
     const receivedMessageText = loggedEntry.extractedMessage;
-    const flowContext = loggedEntry.flow_context;
+    const flowContext = loggedEntry.flow_context ?? loggedEntry.flowContext ?? 'evolution';
     const normalizedMessageText = normalizeIncomingMessage(receivedMessageText);
     const lowerCaseMessageText = normalizedMessageText.toLowerCase();
     
