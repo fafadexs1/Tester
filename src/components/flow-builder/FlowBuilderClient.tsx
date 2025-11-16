@@ -417,6 +417,27 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     }));
   }, [updateActiveWorkspace]);
 
+  const duplicateNode = useCallback((nodeIdToDuplicate: string) => {
+    updateActiveWorkspace(ws => {
+      const nodes = ws.nodes || [];
+      const nodeToCopy = nodes.find(node => node.id === nodeIdToDuplicate);
+      if (!nodeToCopy) return ws;
+
+      const clonedNode: NodeData = JSON.parse(JSON.stringify(nodeToCopy));
+      clonedNode.id = uuidv4();
+      const offset = GRID_SIZE * 2;
+      const baseX = typeof clonedNode.x === 'number' ? clonedNode.x : 0;
+      const baseY = typeof clonedNode.y === 'number' ? clonedNode.y : 0;
+      clonedNode.x = baseX + offset;
+      clonedNode.y = baseY + offset;
+
+      return {
+        ...ws,
+        nodes: [...nodes, clonedNode],
+      };
+    });
+  }, [updateActiveWorkspace]);
+
   const handleStartConnection = useCallback(
     (event: React.MouseEvent, fromNodeData: NodeData, sourceHandleId: string) => {
       if (!canvasRef.current) return;
@@ -667,6 +688,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
               onUpdateNode={updateNode}
               onStartConnection={handleStartConnection}
               onDeleteNode={deleteNode}
+              onDuplicateNode={duplicateNode}
               onDeleteConnection={deleteConnection}
               onCanvasMouseDown={handleCanvasMouseDownForPanning}
               highlightedConnectionId={highlightedConnectionId}

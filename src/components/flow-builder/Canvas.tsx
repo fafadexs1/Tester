@@ -33,6 +33,7 @@ interface CanvasProps {
   onUpdateNode: (id: string, changes: Partial<NodeData>) => void;
   onStartConnection: (event: React.MouseEvent, fromNodeData: NodeData, sourceHandleId?: string) => void;
   onDeleteNode: (id: string) => void;
+  onDuplicateNode: (id: string) => void;
   onDeleteConnection: (id: string) => void;
   onCanvasMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
   highlightedConnectionId: string | null;
@@ -46,7 +47,7 @@ const SVG_CANVAS_DIMENSION = 50000;
 
 const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   nodes, connections, drawingLine, canvasOffset, zoomLevel,
-  onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDeleteConnection,
+  onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDuplicateNode, onDeleteConnection,
   onCanvasMouseDown, highlightedConnectionId, setHighlightedConnectionId,
   availableVariablesByNode, highlightedNodeIdBySession, activeWorkspace
 }, ref) => {
@@ -177,6 +178,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
           onUpdate={onUpdateNode}
           onStartConnection={onStartConnection} 
           onDeleteNode={onDeleteNode}
+          onDuplicateNode={onDuplicateNode}
           availableVariables={availableVariablesByNode[node.id] || []}
           isSessionHighlighted={node.id === highlightedNodeIdBySession}
           activeWorkspace={activeWorkspace}

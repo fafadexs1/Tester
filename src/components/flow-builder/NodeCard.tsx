@@ -63,6 +63,7 @@ interface NodeCardProps {
   onUpdate: (id: string, changes: Partial<NodeData>) => void;
   onStartConnection: (event: React.MouseEvent, fromNodeData: NodeData, sourceHandleId: string) => void;
   onDeleteNode: (id: string) => void;
+  onDuplicateNode: (id: string) => void;
   availableVariables: string[];
   isSessionHighlighted?: boolean;
   activeWorkspace: WorkspaceData | undefined | null;
@@ -256,6 +257,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   onUpdate,
   onStartConnection,
   onDeleteNode,
+  onDuplicateNode,
   availableVariables,
   isSessionHighlighted,
   activeWorkspace
@@ -512,6 +514,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     if (
       target.dataset.connector === 'true' ||
       target.closest('[data-action="delete-node"]') ||
+      target.closest('[data-action="duplicate-node"]') ||
       target.closest('[data-no-drag="true"]') ||
       target.closest('[role="dialog"]') ||
       target.closest('[data-radix-popover-content]') ||
@@ -548,6 +551,11 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     e.stopPropagation();
     onDeleteNode(node.id);
   }, [node.id, onDeleteNode]);
+
+  const handleDuplicateClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDuplicateNode(node.id);
+  }, [node.id, onDuplicateNode]);
 
   const handleTriggerChange = (triggerId: string, field: keyof StartNodeTrigger, value: any) => {
     const updatedTriggers = (node.triggers || []).map(t =>
@@ -2984,6 +2992,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           const target = e.target as HTMLElement;
           if (target.dataset.connector === 'true' ||
             target.closest('[data-action="delete-node"]') ||
+            target.closest('[data-action="duplicate-node"]') ||
             target.closest('[data-no-drag="true"]') ||
             target.closest('[role="dialog"]') ||
             target.closest('[data-radix-popover-content]') ||
@@ -3091,6 +3100,17 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   </PopoverContent>
                 </Popover>
               )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleDuplicateClick}
+                className="p-0.5 text-muted-foreground hover:text-foreground w-6 h-6"
+                aria-label="Duplicar n��"
+                data-action="duplicate-node"
+                title="Duplicar bloco"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
