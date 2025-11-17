@@ -501,6 +501,15 @@ export async function executeFlow(
               if (!headers.has('Content-Type')) headers.append('Content-Type', 'application/json');
             } else if (currentNode.apiBodyType === 'raw' && currentNode.apiBodyRaw) {
               body = substituteVariablesInText(currentNode.apiBodyRaw, session.flow_variables);
+            } else if (currentNode.apiBodyType === 'form-data') {
+              const formData = new FormData();
+              (currentNode.apiBodyFormDataList || []).forEach(field => {
+                const key = substituteVariablesInText(field.key, session.flow_variables);
+                if (!key) return;
+                const value = substituteVariablesInText(field.value, session.flow_variables);
+                formData.append(key, value);
+              });
+              body = formData;
             }
           }
 
