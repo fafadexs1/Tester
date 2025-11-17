@@ -35,6 +35,11 @@ const normalizeIncomingMessage = (value: string | null | undefined): string => {
   return trimmed.slice(0, MAX_SESSION_MESSAGE_LENGTH);
 };
 
+const normalizeVariableName = (name: string | null | undefined): string => {
+  if (!name) return '';
+  return name.replace(/\{\{|\}\}/g, '').trim();
+};
+
 async function readRequestPayload(
   request: NextRequest
 ): Promise<{ parsedBody: any; rawBodyText: string | null }> {
@@ -126,11 +131,12 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
 
     if (resumeSessionId) {
       console.log(`[API Evolution Trigger] Resume call detected for session ID: ${resumeSessionId}`);
-      const sessionToResume = await loadSessionFromDB(resumeSessionId);
-      if (sessionToResume) {
-        const workspaceForResume = await loadWorkspaceFromDB(sessionToResume.workspace_id);
-        if (workspaceForResume && workspaceForResume.nodes) {
-          sessionToResume.flow_variables[sessionToResume.awaiting_input_details?.variableToSave || 'external_response_data'] = parsedBody;
+        const sessionToResume = await loadSessionFromDB(resumeSessionId);
+        if (sessionToResume) {
+          const workspaceForResume = await loadWorkspaceFromDB(sessionToResume.workspace_id);
+          if (workspaceForResume && workspaceForResume.nodes) {
+          const resumeVarName = normalizeVariableName(sessionToResume.awaiting_input_details?.variableToSave) || 'external_response_data';
+          sessionToResume.flow_variables[resumeVarName] = parsedBody;
           sessionToResume.awaiting_input_type = null;
           await executeFlow(sessionToResume, workspaceForResume);
           return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
@@ -200,7 +206,10 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
               const extracted = getProperty(responseValue, awaitingNode.apiResponsePathForValue);
               if (extracted !== undefined) textToSave = String(extracted);
             }
-            setProperty(session.flow_variables, session.awaiting_input_details.variableToSave, textToSave);
+            const targetVarName = normalizeVariableName(session.awaiting_input_details.variableToSave);
+            if (targetVarName) {
+              setProperty(session.flow_variables, targetVarName, textToSave);
+            }
             nextNodeId = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
           } else if (session.awaiting_input_type === 'option' && Array.isArray(session.awaiting_input_details.options)) {
             const options = session.awaiting_input_details.options;
@@ -226,8 +235,9 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
             }
 
             if (chosenOptionText) {
-                if (session.awaiting_input_details.variableToSave) {
-                  setProperty(session.flow_variables, session.awaiting_input_details.variableToSave, chosenOptionText);
+                const targetVarName = normalizeVariableName(session.awaiting_input_details.variableToSave);
+                if (targetVarName) {
+                  setProperty(session.flow_variables, targetVarName, chosenOptionText);
                 }
                 nextNodeId = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
                 if (!nextNodeId) {
@@ -359,7 +369,8 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
         matchingTrigger.variableMappings.forEach(mapping => {
           if (mapping.jsonPath && mapping.flowVariable) {
             const value = getProperty(payloadToUse, mapping.jsonPath);
-            if (value !== undefined) setProperty(initialVars, mapping.flowVariable, value);
+            const targetVarName = normalizeVariableName(mapping.flowVariable);
+            if (value !== undefined && targetVarName) setProperty(initialVars, targetVarName, value);
           }
         });
       }
