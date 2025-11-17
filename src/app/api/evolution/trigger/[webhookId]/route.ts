@@ -88,8 +88,16 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
     rawBody = null; // release reference as soon as possible
 
     const sessionKeyIdentifier = loggedEntry.session_key_identifier;
-    const receivedMessageText = loggedEntry.extractedMessage;
+    let receivedMessageText = loggedEntry.extractedMessage;
     const flowContext = loggedEntry.flow_context ?? loggedEntry.flowContext ?? 'evolution';
+    if (!receivedMessageText || receivedMessageText === '') {
+      receivedMessageText =
+        getProperty(parsedBody, 'message.content') ??
+        getProperty(parsedBody, 'message.body') ??
+        getProperty(parsedBody, 'message.textMessage.text') ??
+        getProperty(parsedBody, 'text') ??
+        '';
+    }
     const normalizedMessageText = normalizeIncomingMessage(receivedMessageText);
     const lowerCaseMessageText = normalizedMessageText.toLowerCase();
     
