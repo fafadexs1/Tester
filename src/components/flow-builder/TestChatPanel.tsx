@@ -17,7 +17,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
-import { getProperty } from 'dot-prop';
+import { getProperty, setProperty } from 'dot-prop';
+import jsonata from 'jsonata';
 
 
 interface Message {
@@ -33,32 +34,82 @@ interface TestChatPanelProps {
   activeWorkspace: WorkspaceData | null | undefined;
 }
 
+const renderWithLineBreaks = (value: string, keyPrefix: string) =>
+  value.split('\n').map((segment, idx, arr) => (
+    <React.Fragment key={`${keyPrefix}-${idx}`}>
+      {segment}
+      {idx < arr.length - 1 && <br />}
+    </React.Fragment>
+  ));
+
 const formatChatMessage = (text: string): React.ReactNode => {
     if (typeof text !== 'string') {
         return text;
     }
     // Regex para capturar formatação e variáveis
     const regex = /(\*.*?\*|_.*?_|~.*?~|```.*?```|\{\{.*?\}\})/g;
-    const parts = text.split(regex).filter(Boolean);
+    const segments = text.split(regex);
+    const matches = text.match(regex) || [];
 
-    return parts.map((part, index) => {
-        if (part.startsWith('*') && part.endsWith('*')) {
-            return <b key={index}>{part.slice(1, -1)}</b>;
+    const result: React.ReactNode[] = [];
+    let matchIndex = 0;
+
+    for (let i = 0; i < segments.length; i++) {
+        const plainSegment = segments[i];
+        if (plainSegment) {
+            result.push(
+              <span key={`plain-${i}`} className="whitespace-pre-wrap break-words">
+                {plainSegment}
+              </span>
+            );
         }
-        if (part.startsWith('_') && part.endsWith('_')) {
-            return <i key={index}>{part.slice(1, -1)}</i>;
+
+        const token = matches[matchIndex++];
+        if (!token) continue;
+
+        if (token.startsWith('*') && token.endsWith('*')) {
+            result.push(
+              <b key={`bold-${i}`} className="whitespace-pre-wrap break-words">
+                {token.slice(1, -1)}
+              </b>
+            );
+        } else if (token.startsWith('_') && token.endsWith('_')) {
+            result.push(
+              <i key={`italic-${i}`} className="whitespace-pre-wrap break-words">
+                {token.slice(1, -1)}
+              </i>
+            );
+        } else if (token.startsWith('~') && token.endsWith('~')) {
+            result.push(
+              <s key={`strike-${i}`} className="whitespace-pre-wrap break-words">
+                {token.slice(1, -1)}
+              </s>
+            );
+        } else if (token.startsWith('```') && token.endsWith('```')) {
+            result.push(
+              <pre
+                key={`code-${i}`}
+                className="font-mono bg-muted text-foreground p-1 rounded-sm whitespace-pre-wrap break-words text-xs"
+              >
+                {token.slice(3, -3)}
+              </pre>
+            );
+        } else if (token.startsWith('{{') && token.endsWith('}}')) {
+            result.push(
+              <span key={`var-${i}`} className="font-mono text-xs bg-muted p-1 rounded-sm text-amber-500 break-words">
+                {token}
+              </span>
+            );
+        } else {
+            result.push(
+              <span key={`text-${i}`} className="whitespace-pre-wrap break-words">
+                {token}
+              </span>
+            );
         }
-        if (part.startsWith('~') && part.endsWith('~')) {
-            return <s key={index}>{part.slice(1, -1)}</s>;
-        }
-        if (part.startsWith('```') && part.endsWith('```')) {
-            return <code key={index} className="font-mono bg-muted text-foreground p-0.5 rounded-sm">{part.slice(3, -3)}</code>;
-        }
-         if (part.startsWith('{{') && part.endsWith('}}')) {
-            return <span key={index} className="font-mono text-xs bg-muted p-1 rounded-sm text-amber-500">{part}</span>
-        }
-        return <React.Fragment key={index}>{part}</React.Fragment>;
-    });
+    }
+
+    return result;
 };
 
 
@@ -90,17 +141,64 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
   useEffect(scrollToBottom, [messages]);
 
+  const normalizeOptionsFromString = useCallback((raw: string): string[] => {
+    if (!raw) return [];
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map(item => (item === null || item === undefined ? '' : String(item)))
+            .map(item => item.trim())
+            .filter(item => item.length > 0);
+        }
+      } catch {
+        // fall back to splitting logic below
+      }
+    }
+    return raw
+      .split('\n')
+      .map(opt => opt.replace(/^[\[\s,]+|[\],\s]+$/g, '').trim())
+      .filter(opt => opt.length > 0);
+  }, []);
+
   const getNodeById = useCallback((nodeId: string): NodeData | undefined => {
     return activeWorkspace?.nodes.find(n => n.id === nodeId);
   }, [activeWorkspace]);
 
+  const normalizeHandle = (value?: string | null) => {
+    if (value === undefined || value === null) return 'default';
+    if (typeof value === 'string') return value.trim() || 'default';
+    return String(value).trim() || 'default';
+  };
+
   const findNextNodeId = useCallback((fromNodeId: string, sourceHandle?: string): string | null => {
-    console.log(`[TestChatPanel] findNextNodeId: fromNodeId=${fromNodeId}, sourceHandle=${sourceHandle}`);
-    const connection = activeWorkspace?.connections.find(
-      conn => conn.from === fromNodeId && (conn.sourceHandle === sourceHandle || (!sourceHandle && conn.sourceHandle === 'default'))
-    );
+    if (!activeWorkspace) return null;
+    const desiredHandle = normalizeHandle(sourceHandle);
+    console.log(`[TestChatPanel] findNextNodeId: fromNodeId=${fromNodeId}, desiredHandle=${desiredHandle}`);
+
+    const connection =
+      activeWorkspace.connections.find(conn => conn.from === fromNodeId && normalizeHandle(conn.sourceHandle) === desiredHandle) ??
+      (desiredHandle === 'default'
+        ? activeWorkspace.connections.find(conn => conn.from === fromNodeId && !conn.sourceHandle)
+        : null) ??
+      activeWorkspace.connections.find(conn => conn.from === fromNodeId && normalizeHandle(conn.sourceHandle) === 'default');
+
+    if (!connection) {
+      const availableHandles = activeWorkspace.connections
+        .filter(conn => conn.from === fromNodeId)
+        .map(conn => normalizeHandle(conn.sourceHandle));
+      console.warn(
+        `[TestChatPanel] No connection found from node ${fromNodeId} for handle "${desiredHandle}". Available handles: ${availableHandles.join(
+          ', '
+        ) || 'none'}.`
+      );
+      return null;
+    }
+
     console.log('[TestChatPanel] findNextNodeId: found connection', connection);
-    return connection ? connection.to : null;
+    return connection.to ?? null;
   }, [activeWorkspace]);
 
   const substituteVariables = useCallback((text: string | undefined | null, currentActiveFlowVariables: Record<string, any>): string => {
@@ -108,7 +206,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       return '';
     }
     let mutableText = String(text); 
-    const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
+    const variableRegex = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
   
     const substitutedText = mutableText.replace(variableRegex, (match, variableName) => {
       
@@ -301,7 +399,8 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       case 'option': {
         const questionText = substituteVariables(node.questionText, updatedVarsForNextNode);
         if (questionText && node.optionsList) {
-          const options = node.optionsList.split('\n').map(opt => substituteVariables(opt.trim(), updatedVarsForNextNode)).filter(opt => opt);
+          const substitutedOptions = substituteVariables(node.optionsList, updatedVarsForNextNode);
+          const options = normalizeOptionsFromString(substitutedOptions);
           setMessages(prev => [...prev, {
             id: uuidv4(),
             text: questionText,
@@ -609,9 +708,179 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         break;
       }
 
-      case 'api-call':
+      case 'api-call': {
+        const url = substituteVariables(node.apiUrl, updatedVarsForNextNode);
+        const method = node.apiMethod || 'GET';
+        if (!url) {
+          setMessages(prev => [...prev, { id: uuidv4(), text: "Erro: URL da Chamada API não configurada.", sender: 'bot' }]);
+          nextNodeId = findNextNodeId(node.id, 'default');
+          break;
+        }
+
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Processando nó: ${node.title || 'Chamada API'} (${method} ${url})...`, sender: 'bot' }]);
+
+        const headersList = (node.apiHeadersList || []).map(header => ({
+          id: header.id,
+          key: substituteVariables(header.key, updatedVarsForNextNode),
+          value: substituteVariables(header.value, updatedVarsForNextNode),
+        })).filter(h => h.key);
+
+        const queryParamsList = (node.apiQueryParamsList || []).map(param => ({
+          id: param.id,
+          key: substituteVariables(param.key, updatedVarsForNextNode),
+          value: substituteVariables(param.value, updatedVarsForNextNode),
+        })).filter(q => q.key);
+
+        const bodyDetails: any = { type: node.apiBodyType || 'none' };
+        if (node.apiBodyType === 'json' && node.apiBodyJson) {
+          bodyDetails.json = substituteVariables(node.apiBodyJson, updatedVarsForNextNode);
+        } else if (node.apiBodyType === 'raw' && node.apiBodyRaw) {
+          bodyDetails.raw = substituteVariables(node.apiBodyRaw, updatedVarsForNextNode);
+        } else if (node.apiBodyType === 'form-data' && node.apiBodyFormDataList) {
+          bodyDetails.formData = node.apiBodyFormDataList.map(entry => ({
+            id: entry.id,
+            key: substituteVariables(entry.key, updatedVarsForNextNode),
+            value: substituteVariables(entry.value, updatedVarsForNextNode),
+          })).filter(e => e.key);
+        }
+
+        const authConfig = node.apiAuthType && node.apiAuthType !== 'none'
+          ? {
+              type: node.apiAuthType,
+              bearerToken: substituteVariables(node.apiAuthBearerToken, updatedVarsForNextNode),
+              basicUser: substituteVariables(node.apiAuthBasicUser, updatedVarsForNextNode),
+              basicPassword: substituteVariables(node.apiAuthBasicPassword, updatedVarsForNextNode),
+            }
+          : { type: 'none' };
+
+        try {
+          const response = await fetch('/api/test-api-call', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url,
+              method,
+              headers: headersList,
+              queryParams: queryParamsList,
+              auth: authConfig,
+              body: bodyDetails,
+            }),
+          });
+
+          const result = await response.json();
+          if (!response.ok) {
+            setMessages(prev => [...prev, { id: uuidv4(), text: `Erro ao executar Chamada API: ${result.error || 'Falha desconhecida.'}`, sender: 'bot' }]);
+          } else {
+            const responseData = result.data;
+            const statusText = result.status ? `Status ${result.status}` : 'Resposta recebida';
+            setMessages(prev => [...prev, {
+              id: uuidv4(),
+              text: `${statusText}: ${typeof responseData === 'string' ? responseData : JSON.stringify(responseData, null, 2)}`,
+              sender: 'bot'
+            }]);
+
+            let valueForVariable = responseData;
+            if (node.apiResponsePath) {
+              try {
+                const expression = jsonata(node.apiResponsePath);
+                valueForVariable = await expression.evaluate(responseData);
+              } catch (e: any) {
+                console.error(`[TestChatPanel] Erro ao aplicar JSONata (${node.apiResponsePath}):`, e);
+              }
+            }
+
+            if (node.apiOutputVariable && node.apiOutputVariable.trim() !== '') {
+              setProperty(updatedVarsForNextNode, node.apiOutputVariable, valueForVariable);
+              setMessages(prev => [...prev, {
+                id: uuidv4(),
+                text: `Variável "${node.apiOutputVariable}" atualizada com o retorno da API.`,
+                sender: 'bot'
+              }]);
+            }
+
+            if (node.apiResponseMappings && Array.isArray(node.apiResponseMappings)) {
+              for (const mapping of node.apiResponseMappings) {
+                if (mapping.jsonPath && mapping.flowVariable) {
+                  try {
+                    const expression = jsonata(mapping.jsonPath);
+                    const extracted = await expression.evaluate(responseData);
+
+                    if (mapping.extractAs === 'list') {
+                      const rawList = Array.isArray(extracted)
+                        ? extracted
+                        : (extracted === undefined || extracted === null ? [] : [extracted]);
+
+                      const normalizedList = mapping.itemField
+                        ? rawList.map(item => {
+                            if (item === undefined || item === null) return undefined;
+                            if (typeof item === 'object') {
+                              return getProperty(item, mapping.itemField!);
+                            }
+                            return item;
+                          }).filter(item => item !== undefined && item !== null)
+                        : rawList;
+
+                      setProperty(updatedVarsForNextNode, mapping.flowVariable, normalizedList);
+                    } else {
+                      setProperty(updatedVarsForNextNode, mapping.flowVariable, extracted);
+                    }
+
+                    setMessages(prev => [...prev, {
+                      id: uuidv4(),
+                      text: `Mapeamento aplicado: "${mapping.flowVariable}" atualizado.`,
+                      sender: 'bot'
+                    }]);
+                  } catch (e: any) {
+                    console.error(`[TestChatPanel] Erro no mapeamento JSONata (${mapping.jsonPath}):`, e);
+                    setMessages(prev => [...prev, { id: uuidv4(), text: `Falha no mapeamento ${mapping.jsonPath}: ${e.message}`, sender: 'bot' }]);
+                  }
+                }
+              }
+            }
+          }
+        } catch (error: any) {
+          console.error('[TestChatPanel] Erro na chamada API:', error);
+          setMessages(prev => [...prev, { id: uuidv4(), text: `Falha ao executar a chamada API: ${error.message}`, sender: 'bot' }]);
+        }
+
+        nextNodeId = findNextNodeId(node.id, 'default');
+        break;
+      }
+
+      case 'code-execution': {
+        const varName = node.codeOutputVariable;
+        if (!node.codeSnippet || !varName) {
+          setMessages(prev => [...prev, { id: uuidv4(), text: 'Nó "Executar Código" precisa de um script e de uma variável de saída.', sender: 'bot' }]);
+          nextNodeId = findNextNodeId(node.id, 'default');
+          break;
+        }
+
+        setMessages(prev => [...prev, { id: uuidv4(), text: 'Executando código JavaScript...', sender: 'bot' }]);
+        try {
+          const response = await fetch('/api/test-code-execution', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ codeSnippet: node.codeSnippet, variables: updatedVarsForNextNode }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload?.error || 'Falha ao executar código.');
+          }
+          updatedVarsForNextNode = { ...updatedVarsForNextNode, [varName]: payload.result };
+          setMessages(prev => [...prev, {
+            id: uuidv4(),
+            text: `Código executado e variável "${varName}" atualizada.`,
+            sender: 'bot'
+          }]);
+        } catch (error: any) {
+          console.error('[TestChatPanel] Erro ao executar código:', error);
+          setMessages(prev => [...prev, { id: uuidv4(), text: `Erro ao executar código: ${error.message}`, sender: 'bot' }]);
+        }
+        nextNodeId = findNextNodeId(node.id, 'default');
+        break;
+      }
+
       case 'date-input':
-      case 'code-execution':
       case 'json-transform':
       case 'file-upload':
       case 'rating-input':
@@ -623,7 +892,6 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
         if (node.type === 'api-call') variableName = node.apiOutputVariable;
         else if (node.type === 'date-input') variableName = node.variableToSaveDate;
-        else if (node.type === 'code-execution') variableName = node.codeOutputVariable;
         else if (node.type === 'json-transform') variableName = node.jsonOutputVariable;
         else if (node.type === 'file-upload') variableName = node.fileUrlVariable;
         else if (node.type === 'rating-input') variableName = node.ratingOutputVariable;
@@ -865,11 +1133,18 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     setFlowVariables(currentVarsSnapshot); 
     activeFlowVariablesRef.current = currentVarsSnapshot; 
 
-    const nextNodeIdAfterOption = findNextNodeId(awaitingInputFor.id, optionText);
+    let nextNodeIdAfterOption = findNextNodeId(awaitingInputFor.id, optionText);
+    if (!nextNodeIdAfterOption) {
+      nextNodeIdAfterOption = findNextNodeId(awaitingInputFor.id, 'default');
+    }
+    if (!nextNodeIdAfterOption && activeWorkspace) {
+      const fallbackConn = activeWorkspace.connections.find(conn => conn.from === awaitingInputFor.id);
+      nextNodeIdAfterOption = fallbackConn?.to || null;
+    }
     console.log('[TestChatPanel] nextNodeIdAfterOption found:', nextNodeIdAfterOption);
 
     processNode(nextNodeIdAfterOption, currentVarsSnapshot);
-  }, [awaitingInputFor, awaitingInputType, isProcessingNode, findNextNodeId, processNode, setFlowVariables]);
+  }, [awaitingInputFor, awaitingInputType, isProcessingNode, findNextNodeId, processNode, setFlowVariables, activeWorkspace]);
 
 
   const handleSimulateWebhookAndStartFlow = useCallback(async () => {
@@ -904,6 +1179,21 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     handleRestartTest(); 
 
     let initialVars: Record<string, any> = { [payloadVarName]: parsedJson };
+    let triggerOverride: string | undefined = undefined;
+    const webhookTrigger = startNode.triggers?.find(t => t.type === 'webhook' && t.enabled);
+    if (webhookTrigger) {
+      triggerOverride = webhookTrigger.name;
+      if (Array.isArray(webhookTrigger.variableMappings)) {
+        for (const mapping of webhookTrigger.variableMappings) {
+          if (mapping.jsonPath && mapping.flowVariable) {
+            const value = getProperty(parsedJson, mapping.jsonPath);
+            if (value !== undefined) {
+              initialVars[mapping.flowVariable.replace(/\{\{|\}\}/g, '').trim()] = value;
+            }
+          }
+        }
+      }
+    }
 
     const messageFromJson = getProperty(parsedJson, defaultMessagePath) || 
                             getProperty(parsedJson, 'message.body') || 
@@ -931,7 +1221,10 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     setIsSimulateWebhookDialogOpen(false);
     setWebhookDialogJsonInput(''); 
 
-    await handleStartTest(undefined, initialVars);
+    if (triggerOverride) {
+      initialVars._triggerName = triggerOverride;
+    }
+    await handleStartTest(triggerOverride, initialVars);
 
   }, [activeWorkspace, webhookDialogJsonInput, handleRestartTest, handleStartTest, toast]);
 
@@ -1022,7 +1315,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
           </Button>
         </CardHeader>
         <CardContent className="flex-1 p-0 overflow-hidden">
-          <ScrollArea className="h-full p-4">
+          <ScrollArea className="h-full p-4" type="always">
             {messages.length === 0 && !isTesting && (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <MessageSquare className="w-12 h-12 text-muted-foreground mb-4" />
@@ -1047,16 +1340,17 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
               {messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
+                  className={`flex flex-col w-full ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
                 >
                   <div
-                    className={`max-w-[85%] p-2.5 rounded-lg text-sm shadow-sm break-words ${msg.sender === 'user'
+                    className={`max-w-full p-2.5 rounded-lg text-sm shadow-sm break-words ${
+                      msg.sender === 'user'
                         ? 'bg-primary text-primary-foreground rounded-br-none'
                         : 'bg-muted text-muted-foreground rounded-bl-none'
-                      }`}
-                  >
+                    }`}
+                 >
                    {typeof msg.text === 'string' ? formatChatMessage(msg.text) : msg.text}
-                  </div>
+                 </div>
                    {msg.sender === 'bot' && msg.options && msg.options.length > 0 && awaitingInputType === 'option' && (
                     <div className="mt-2.5 w-full space-y-2">
                       {msg.options.map((opt, index) => (
@@ -1074,8 +1368,8 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                 </div>
               ))}
               {isProcessingNode && messages.length > 0 && currentNodeId && (
-                <div className="flex justify-start mt-2">
-                  <div className="max-w-[85%] p-2.5 rounded-lg text-sm shadow-sm bg-muted text-muted-foreground rounded-bl-none flex items-center">
+                <div className="flex justify-start mt-2 w-full">
+                  <div className="max-w-full p-2.5 rounded-lg text-sm shadow-sm bg-muted text-muted-foreground rounded-bl-none flex items-center">
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     <span>Bot está digitando...</span>
                   </div>
@@ -1086,7 +1380,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
           </ScrollArea>
         </CardContent>
         <CardFooter className="p-4 border-t">
-          {renderChatInputArea()}
+      {renderChatInputArea()}
         </CardFooter>
       </Card>
 

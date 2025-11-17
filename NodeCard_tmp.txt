@@ -142,7 +142,7 @@ const convertPayloadToEditorState = (payload: any) => {
       return {
         text: payload,
         data: null,
-        error: 'O payload carregado est√° em texto plano. Cole/ajuste um JSON v√°lido para habilitar a pr√©-visualiza√ß√£o.',
+        error: 'O payload carregado est· em texto plano. Cole/ajuste um JSON v·lido para habilitar a prÈ-visualizaÁ„o.',
       };
     }
   }
@@ -152,7 +152,7 @@ const convertPayloadToEditorState = (payload: any) => {
     return {
       text: String(payload),
       data: null,
-      error: 'N√£o foi poss√≠vel serializar o payload carregado.',
+      error: 'N„o foi possÌvel serializar o payload carregado.',
     };
   }
 };
@@ -166,32 +166,16 @@ const describePreviewValue = (value: any) => {
 const formatPreviewValue = (value: any) => {
   if (value === null) return 'null';
   if (value === undefined) return 'undefined';
-  if (Array.isArray(value)) {
-    const serializedItems = value.map(item => {
-      if (item === null) return 'null';
-      if (item === undefined) return 'undefined';
-      if (typeof item === 'object') {
-        try {
-          return JSON.stringify(item);
-        } catch {
-          return String(item);
-        }
-      }
-      return String(item);
-    });
-    const joined = serializedItems.join('\n');
-    return joined.length > 600 ? `${joined.slice(0, 600)}‚Ä¶` : joined;
-  }
   if (typeof value === 'object') {
     try {
       const serialized = JSON.stringify(value, null, 2);
-      return serialized.length > 600 ? `${serialized.slice(0, 600)}‚Ä¶` : serialized;
+      return serialized.length > 600 ? `${serialized.slice(0, 600)}Ö` : serialized;
     } catch {
       return String(value);
     }
   }
   const stringified = String(value);
-  return stringified.length > 600 ? `${stringified.slice(0, 600)}‚Ä¶` : stringified;
+  return stringified.length > 600 ? `${stringified.slice(0, 600)}Ö` : stringified;
 };
 
 type SimpleKeyValue = { key: string; value: string };
@@ -665,7 +649,7 @@ const getWebhookMappingPreview = (path: string, sample: any): PreviewResult => {
     }
     return { type: 'success', value };
   } catch (error: any) {
-    return { type: 'error', message: error?.message || 'Caminho inv√°lido.' };
+    return { type: 'error', message: error?.message || 'Caminho inv·lido.' };
   }
 };
 
@@ -699,13 +683,13 @@ const TextFormatToolbar = ({ fieldName, textAreaRef, onUpdate, nodeId }: { field
             <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('*')} title="Negrito">
                 <Bold className="w-4 h-4" />
             </Button>
-            <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('_')} title="It√°lico">
+            <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('_')} title="It·lico">
                 <Italic className="w-4 h-4" />
             </Button>
             <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('~')} title="Riscado">
                 <Strikethrough className="w-4 h-4" />
             </Button>
-             <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('```')} title="Monoespa√ßado">
+             <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('```')} title="MonoespaÁado">
                 <Code className="w-4 h-4" />
             </Button>
         </div>
@@ -847,7 +831,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             setIsLoadingSupabaseTables(false);
           });
       } else {
-        setSupabaseSchemaError('Supabase n√£o configurado ou desabilitado. Verifique as Configura√ß√µes Globais.');
+        setSupabaseSchemaError('Supabase n„o configurado ou desabilitado. Verifique as ConfiguraÁıes Globais.');
         setSupabaseTables([]);
         setSupabaseColumns([]);
       }
@@ -890,7 +874,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
       } else {
         setSupabaseColumns([]);
-        setSupabaseSchemaError('Supabase n√£o configurado para buscar colunas.');
+        setSupabaseSchemaError('Supabase n„o configurado para buscar colunas.');
       }
     } else if (node.type.startsWith('supabase-')) {
       setSupabaseColumns([]);
@@ -923,13 +907,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
     try {
       const evoResponse = await fetch('/api/instances/evolution');
-      if (!evoResponse.ok) throw new Error('Falha ao buscar inst√¢ncias Evolution.');
+      if (!evoResponse.ok) throw new Error('Falha ao buscar inst‚ncias Evolution.');
       const evoData: EvolutionInstance[] = await evoResponse.json();
       const evoInstancesWithStatus = evoData.map(d => ({ ...d, status: 'unconfigured' as const }));
       setEvolutionInstances(evoInstancesWithStatus);
       evoInstancesWithStatus.forEach(instance => handleCheckEvolutionInstanceStatus(instance));
     } catch (error: any) {
-      toast({ title: "Erro ao Carregar Inst√¢ncias Evolution", description: error.message, variant: "destructive" });
+      toast({ title: "Erro ao Carregar Inst‚ncias Evolution", description: error.message, variant: "destructive" });
       setEvolutionInstances([]);
     } finally {
       setIsLoadingEvolutionInstances(false);
@@ -937,13 +921,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
     try {
       const cwResponse = await fetch('/api/instances/chatwoot');
-      if (!cwResponse.ok) throw new Error('Falha ao buscar inst√¢ncias Chatwoot.');
+      if (!cwResponse.ok) throw new Error('Falha ao buscar inst‚ncias Chatwoot.');
       const cwData: ChatwootInstance[] = await cwResponse.json();
       const cwInstancesWithStatus = cwData.map(d => ({ ...d, status: 'unconfigured' as const }));
       setChatwootInstances(cwInstancesWithStatus);
       cwInstancesWithStatus.forEach(instance => handleCheckChatwootInstanceStatus(instance));
     } catch (error: any) {
-      toast({ title: "Erro ao Carregar Inst√¢ncias Chatwoot", description: error.message, variant: "destructive" });
+      toast({ title: "Erro ao Carregar Inst‚ncias Chatwoot", description: error.message, variant: "destructive" });
       setChatwootInstances([]);
     } finally {
       setIsLoadingChatwootInstances(false);
@@ -951,13 +935,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     
     try {
       const dialogyResponse = await fetch('/api/instances/dialogy');
-      if (!dialogyResponse.ok) throw new Error('Falha ao buscar inst√¢ncias Dialogy.');
+      if (!dialogyResponse.ok) throw new Error('Falha ao buscar inst‚ncias Dialogy.');
       const dialogyData: DialogyInstance[] = await dialogyResponse.json();
       const dialogyInstancesWithStatus = dialogyData.map(d => ({ ...d, status: 'unconfigured' as const }));
       setDialogyInstances(dialogyInstancesWithStatus);
       dialogyInstancesWithStatus.forEach(instance => handleCheckDialogyInstanceStatus(instance));
     } catch (error: any) {
-      toast({ title: "Erro ao Carregar Inst√¢ncias Dialogy", description: error.message, variant: "destructive" });
+      toast({ title: "Erro ao Carregar Inst‚ncias Dialogy", description: error.message, variant: "destructive" });
       setDialogyInstances([]);
     } finally {
       setIsLoadingDialogyInstances(false);
@@ -1028,7 +1012,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   };
   
   const handleKeywordsChange = (triggerId: string, value: string) => {
-    // Permite v√≠rgulas, mas limpa espa√ßos extras e remove duplicados
+    // Permite vÌrgulas, mas limpa espaÁos extras e remove duplicados
     const keywords = value.split(',').map(kw => kw.trim()).filter(Boolean);
     const uniqueKeywords = Array.from(new Set(keywords));
     handleTriggerChange(triggerId, 'keyword', uniqueKeywords.join(', '));
@@ -1175,8 +1159,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const handleTestApiCall = async () => {
     if (!node.apiUrl || node.apiUrl.trim() === '' || !node.apiUrl.trim().startsWith('http')) {
       toast({
-        title: "URL da API ausente ou inv√°lida",
-        description: "Por favor, insira uma URL da API v√°lida (ex: https://api.example.com) para testar.",
+        title: "URL da API ausente ou inv·lida",
+        description: "Por favor, insira uma URL da API v·lida (ex: https://api.example.com) para testar.",
         variant: "destructive",
       });
       return;
@@ -1235,7 +1219,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               error: null,
               sessionId: null
           };
-          // N√£o aguardamos isso para n√£o bloquear a UI
+          // N„o aguardamos isso para n„o bloquear a UI
           fetch('/api/evolution/webhook-logs', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1330,7 +1314,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             size="icon"
             className={cn("absolute h-7 w-7 z-10", isTextarea ? 'top-1.5 right-1.5' : 'top-1/2 right-1 -translate-y-1/2')}
             data-no-drag="true"
-            aria-label="Inserir Vari√°vel"
+            aria-label="Inserir Vari·vel"
           >
             <Braces className="h-4 w-4" />
           </Button>
@@ -1368,7 +1352,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       setWebhookSampleError(null);
     } catch {
       setWebhookSampleData(null);
-      setWebhookSampleError('JSON inv√°lido. Verifique se o conte√∫do est√° bem formatado.');
+      setWebhookSampleError('JSON inv·lido. Verifique se o conte˙do est· bem formatado.');
     }
   };
 
@@ -1385,7 +1369,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       setApiSampleError(null);
     } catch {
       setApiSampleData(null);
-      setApiSampleError('JSON inv√°lido. Verifique se o conte√∫do est√° bem formatado.');
+      setApiSampleError('JSON inv·lido. Verifique se o conte˙do est· bem formatado.');
     }
   };
 
@@ -1419,7 +1403,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     if (!activeWorkspace?.id) {
       toast({
         title: "Salve o fluxo primeiro",
-        description: "Precisamos do ID do workspace para localizar o hist√≥rico do webhook.",
+        description: "Precisamos do ID do workspace para localizar o histÛrico do webhook.",
         variant: "destructive",
       });
       return;
@@ -1433,13 +1417,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       });
       const response = await fetch(`/api/evolution/webhook-logs?${params.toString()}`, { cache: 'no-store' });
       if (!response.ok) {
-        throw new Error('N√£o foi poss√≠vel buscar o √∫ltimo webhook.');
+        throw new Error('N„o foi possÌvel buscar o ˙ltimo webhook.');
       }
       const data = await response.json();
       const latest = Array.isArray(data) ? data[0] : null;
       if (!latest?.payload) {
         toast({
-          title: "Nenhum payload dispon√≠vel",
+          title: "Nenhum payload disponÌvel",
           description: "Dispare o webhook novamente para gerar logs recentes.",
         });
         return;
@@ -1448,13 +1432,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       toast({
         title: "Payload importado",
         description: errorMessage
-          ? "Importamos o corpo bruto, mas ele n√£o p√¥de ser convertido automaticamente em JSON."
-          : "Usando o √∫ltimo webhook recebido para sugerir mapeamentos.",
+          ? "Importamos o corpo bruto, mas ele n„o pÙde ser convertido automaticamente em JSON."
+          : "Usando o ˙ltimo webhook recebido para sugerir mapeamentos.",
         variant: errorMessage ? 'destructive' : 'default',
       });
     } catch (error: any) {
       toast({
-        title: "Falha ao carregar o hist√≥rico",
+        title: "Falha ao carregar o histÛrico",
         description: error?.message || 'Erro desconhecido ao buscar os logs.',
         variant: "destructive",
       });
@@ -1481,7 +1465,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       });
       const response = await fetch(`/api/api-call-logs?${params.toString()}`, { cache: 'no-store' });
       if (!response.ok) {
-        throw new Error('N√£o foi poss√≠vel buscar o √∫ltimo log de API.');
+        throw new Error('N„o foi possÌvel buscar o ˙ltimo log de API.');
       }
       const data = await response.json();
       const latest = Array.isArray(data) ? data[0] : null;
@@ -1496,8 +1480,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       toast({
         title: "Resposta importada",
         description: errorMessage
-          ? "Importamos o corpo bruto, mas ele n√£o p√¥de ser convertido automaticamente em JSON."
-          : "Usando o √∫ltimo log para sugerir caminhos.",
+          ? "Importamos o corpo bruto, mas ele n„o pÙde ser convertido automaticamente em JSON."
+          : "Usando o ˙ltimo log para sugerir caminhos.",
         variant: errorMessage ? 'destructive' : 'default',
       });
     } catch (error: any) {
@@ -1514,7 +1498,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const handleUseLastTestResponseAsSample = () => {
     if (!testResponseData) {
       toast({
-        title: "Nenhum teste dispon√≠vel",
+        title: "Nenhum teste disponÌvel",
         description: "Execute o teste da API para capturar uma resposta e montar os mapeamentos.",
         variant: "destructive",
       });
@@ -1524,8 +1508,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     toast({
       title: "Resposta de teste aplicada",
       description: errorMessage
-        ? "Usamos o corpo bruto do teste, mas n√£o foi poss√≠vel convert√™-lo em JSON automaticamente."
-        : "Agora voc√™ pode clicar nos campos para preencher automaticamente os caminhos.",
+        ? "Usamos o corpo bruto do teste, mas n„o foi possÌvel convertÍ-lo em JSON automaticamente."
+        : "Agora vocÍ pode clicar nos campos para preencher automaticamente os caminhos.",
       variant: errorMessage ? 'destructive' : 'default',
     });
   };
@@ -1545,15 +1529,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         onUpdate(node.id, { apiResponsePath: path });
         toast({
           title: "Caminho principal atualizado",
-          description: `Usaremos "${path}" para preencher a vari√°vel principal.`,
+          description: `Usaremos "${path}" para preencher a vari·vel principal.`,
         });
         return;
       }
       if (focusedApiMappingId) {
         handleApiResponseMappingChange(focusedApiMappingId, 'jsonPath', path);
         toast({
-          title: "Express√£o preenchida",
-          description: `Atualizamos a express√£o JSONata para "${path}".`,
+          title: "Express„o preenchida",
+          description: `Atualizamos a express„o JSONata para "${path}".`,
         });
         return;
       }
@@ -1572,19 +1556,19 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
     const evaluateExpressionAsync = async (expression: string | undefined): Promise<PreviewResult> => {
       if (!expression || expression.trim() === '') {
-        return { type: 'empty', message: 'Defina a express√£o JSONata para visualizar o resultado.' };
+        return { type: 'empty', message: 'Defina a express„o JSONata para visualizar o resultado.' };
       }
       if (!apiSampleData) {
-        return { type: 'no-sample', message: 'Cole/importe a resposta JSON para testar esta express√£o.' };
+        return { type: 'no-sample', message: 'Cole/importe a resposta JSON para testar esta express„o.' };
       }
       try {
         const value = await jsonata(expression).evaluate(apiSampleData);
         if (value === undefined) {
-          return { type: 'not-found', message: 'A express√£o n√£o retornou nenhum valor com o JSON atual.' };
+          return { type: 'not-found', message: 'A express„o n„o retornou nenhum valor com o JSON atual.' };
         }
         return { type: 'success', value };
       } catch (error: any) {
-        return { type: 'error', message: error?.message || 'Express√£o JSONata inv√°lida.' };
+        return { type: 'error', message: error?.message || 'Express„o JSONata inv·lida.' };
       }
     };
 
@@ -1605,43 +1589,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     };
   }, [apiSampleData, node.apiResponsePath, apiMappingsSignature]);
 
-  const getApiPreviewResult = (
-    expression: string | undefined,
-    key: string,
-    options?: { extractAs?: 'single' | 'list'; itemField?: string }
-  ): PreviewResult => {
+  const getApiPreviewResult = (expression: string | undefined, key: string): PreviewResult => {
     if (!expression || expression.trim() === '') {
-      return { type: 'empty', message: 'Defina a express√£o JSONata para visualizar o resultado.' };
+      return { type: 'empty', message: 'Defina a express„o JSONata para visualizar o resultado.' };
     }
     if (!apiSampleData) {
-      return { type: 'no-sample', message: 'Cole/importe a resposta JSON para testar esta express√£o.' };
+      return { type: 'no-sample', message: 'Cole/importe a resposta JSON para testar esta express„o.' };
     }
-
-    const rawResult = apiPreviewResults[key];
-    if (!rawResult || rawResult.type !== 'success') {
-      return rawResult || { type: 'pending', message: 'Calculando pr√©-visualiza√ß√£o...' };
-    }
-
-    if (options?.extractAs !== 'list' || !options.itemField) {
-      return rawResult;
-    }
-
-    const value = rawResult.value;
-    const list = Array.isArray(value)
-      ? value
-      : (value === undefined || value === null ? [] : [value]);
-
-    const plucked = list
-      .map(item => {
-        if (item === undefined || item === null) return undefined;
-        if (typeof item === 'object') {
-          return getProperty(item, options.itemField!);
-        }
-        return item;
-      })
-      .filter(item => item !== undefined && item !== null);
-
-    return { type: 'success', value: plucked };
+    return apiPreviewResults[key] || { type: 'pending', message: 'Calculando prÈ-visualizaÁ„o...' };
   };
 
   const renderWebhookMappingBuilder = (targetTrigger: StartNodeTrigger | null) => {
@@ -1658,8 +1613,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         <div className="rounded-md border bg-muted/20 p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-xs font-semibold">Laborat√≥rio de Payload</p>
-              <p className="text-[11px] text-muted-foreground">Cole o body recebido ou importe o √∫ltimo log.</p>
+              <p className="text-xs font-semibold">LaboratÛrio de Payload</p>
+              <p className="text-[11px] text-muted-foreground">Cole o body recebido ou importe o ˙ltimo log.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -1676,7 +1631,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 ) : (
                   <>
                     <History className="mr-1.5 h-3.5 w-3.5" />
-                    Usar √∫ltimo log
+                    Usar ˙ltimo log
                   </>
                 )}
               </Button>
@@ -1692,7 +1647,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             placeholder={`{
   "data": {
     "message": {
-      "text": "Oi, gostaria de um or√ßamento"
+      "text": "Oi, gostaria de um orÁamento"
     }
   }
 }`}
@@ -1768,14 +1723,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                               />
                             </ScrollArea>
                           ) : (
-                            <p className="text-xs text-muted-foreground">Cole um JSON no Laborat√≥rio para habilitar esta sele√ß√£o.</p>
+                            <p className="text-xs text-muted-foreground">Cole um JSON no LaboratÛrio para habilitar esta seleÁ„o.</p>
                           )}
                         </PopoverContent>
                       </Popover>
                     </div>
                   </div>
                   <div>
-                    <Label className="text-[11px] uppercase font-semibold">Vari√°vel</Label>
+                    <Label className="text-[11px] uppercase font-semibold">Vari·vel</Label>
                     <div className="flex items-center gap-1.5 mt-1">
                       <Input
                         placeholder="Ex: mensagem_usuario"
@@ -1797,7 +1752,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   </div>
                   <div>
                     <div className="flex items-center justify-between text-[11px] uppercase text-muted-foreground">
-                      <span>Pr√©-visualiza√ß√£o</span>
+                      <span>PrÈ-visualizaÁ„o</span>
                       {webhookSampleData && <span>Baseado no JSON acima</span>}
                     </div>
                     <div className={cn("mt-1 rounded-md border px-2.5 py-2 text-xs font-mono whitespace-pre-wrap break-all", previewClass)}>
@@ -1860,12 +1815,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     <JsonTreeView data={apiSampleData} onSelectPath={(path) => handleJsonTreeSelection('api', path)} />
                   </ScrollArea>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Cole ou importe uma resposta para habilitar esta sele√ß√£o.</p>
+                  <p className="text-xs text-muted-foreground">Cole ou importe uma resposta para habilitar esta seleÁ„o.</p>
                 )}
               </PopoverContent>
             </Popover>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">Defina qual valor ser√° salvo em <em>Salvar Resultado Principal</em>.</p>
+          <p className="text-xs text-muted-foreground mt-1">Defina qual valor ser· salvo em <em>Salvar Resultado Principal</em>.</p>
                     <div className="mt-2 rounded-md border bg-muted/30 px-2.5 py-2 text-xs font-mono whitespace-pre-wrap break-all min-h-[48px]">
                       {(() => {
                         const preview = getApiPreviewResult(node.apiResponsePath || '', API_PREVIEW_KEY_PRIMARY);
@@ -1882,7 +1837,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     </div>
                   </div>
         <div>
-          <Label htmlFor={`${node.id}-apioutputvar`}>Salvar Resultado Principal na Vari√°vel</Label>
+          <Label htmlFor={`${node.id}-apioutputvar`}>Salvar Resultado Principal na Vari·vel</Label>
           <div className="flex items-center gap-1.5 mt-1">
             <Input
               id={`${node.id}-apioutputvar`}
@@ -1910,8 +1865,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       <div className="rounded-md border bg-muted/10 p-3 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold">Laborat√≥rio de Resposta</p>
-            <p className="text-[11px] text-muted-foreground">Cole a resposta da API, use o √∫ltimo log ou reaproveite o √∫ltimo teste.</p>
+            <p className="text-xs font-semibold">LaboratÛrio de Resposta</p>
+            <p className="text-[11px] text-muted-foreground">Cole a resposta da API, use o ˙ltimo log ou reaproveite o ˙ltimo teste.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -1964,7 +1919,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             </ScrollArea>
           ) : (
             <div className="flex h-32 items-center justify-center px-4 text-center text-xs text-muted-foreground">
-              Cole/importe um JSON para liberar o construtor avan√ßado de caminhos.
+              Cole/importe um JSON para liberar o construtor avanÁado de caminhos.
             </div>
           )}
         </div>
@@ -1972,12 +1927,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
       <div className="pt-2 space-y-3">
         <div className="flex items-center justify-between">
-          <Label className="text-xs font-medium">Mapeamento de M√∫ltiplas Vari√°veis</Label>
-          <p className="text-[11px] text-muted-foreground">Extraia quantos campos precisar com express√µes JSONata.</p>
+          <Label className="text-xs font-medium">Mapeamento de M˙ltiplas Vari·veis</Label>
+          <p className="text-[11px] text-muted-foreground">Extraia quantos campos precisar com expressıes JSONata.</p>
         </div>
         <div className="space-y-3">
           {(node.apiResponseMappings || []).map((mapping, index) => {
-            const preview = getApiPreviewResult(mapping.jsonPath, mapping.id, { extractAs: mapping.extractAs, itemField: mapping.itemField });
+            const preview = getApiPreviewResult(mapping.jsonPath, mapping.id);
             const suggestion = buildVariableNameFromPath(mapping.jsonPath);
             const previewClass = preview.type === 'success'
               ? 'border-emerald-500/60 text-foreground bg-emerald-50/30 dark:bg-emerald-500/5'
@@ -1995,7 +1950,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 </div>
                 <div className="space-y-2">
                   <div>
-                    <Label className="text-[11px] uppercase font-semibold">Express√£o JSONata</Label>
+                    <Label className="text-[11px] uppercase font-semibold">Express„o JSONata</Label>
                     <div className="flex items-center gap-1.5 mt-1">
                       <Input
                         placeholder="Ex: data.items[0].id"
@@ -2029,7 +1984,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     </div>
                   </div>
                   <div>
-                    <Label className="text-[11px] uppercase font-semibold">Vari√°vel</Label>
+                    <Label className="text-[11px] uppercase font-semibold">Vari·vel</Label>
                     <div className="flex items-center gap-1.5 mt-1">
                       <Input
                         placeholder="Ex: id_usuario"
@@ -2076,7 +2031,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   </div>
                   <div>
                     <div className="flex items-center justify-between text-[11px] uppercase text-muted-foreground">
-                      <span>Pr√©-visualiza√ß√£o</span>
+                      <span>PrÈ-visualizaÁ„o</span>
                       {apiSampleData && <span>Baseado no JSON acima</span>}
                     </div>
                     <div className={cn("mt-1 rounded-md border px-2.5 py-2 text-xs font-mono whitespace-pre-wrap break-all", previewClass)}>
@@ -2171,7 +2126,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               className="pr-8"
             />
           </div>
-          <p className="text-xs text-muted-foreground mt-1">O fluxo usar√° o valor deste caminho como se fosse a resposta do usu√°rio.</p>
+          <p className="text-xs text-muted-foreground mt-1">O fluxo usar· o valor deste caminho como se fosse a resposta do usu·rio.</p>
         </div>
       )}
     </div>
@@ -2233,7 +2188,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
                 const triggerOutput = (
                      <div
-                        key={trigger.id} // Chave √∫nica para o gatilho principal
+                        key={trigger.id} // Chave ˙nica para o gatilho principal
                         className="absolute -right-2.5 z-10 flex items-center"
                         style={{ top: `${triggerY}px`, transform: 'translateY(-50%)' }}
                         title={`Gatilho: ${trigger.name}`}
@@ -2251,7 +2206,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 
                 const keywordOutputs = keywords.map((kw, kwIndex) => (
                     <div
-                        key={`${trigger.id}-${kw}`} // Chave √∫nica para cada palavra-chave
+                        key={`${trigger.id}-${kw}`} // Chave ˙nica para cada palavra-chave
                         className="absolute -right-2.5 z-10 flex items-center"
                         style={{ top: `${triggerY + 25 + (kwIndex * START_NODE_TRIGGER_SPACING_Y)}px`, transform: 'translateY(-50%)' }}
                         title={`Palavra-chave: ${kw}`}
@@ -2280,7 +2235,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             key={key}
             className="absolute -right-2.5 z-10 flex items-center"
             style={{ top: `${OPTION_NODE_HANDLE_INITIAL_Y_OFFSET + index * OPTION_NODE_HANDLE_SPACING_Y - 10}px` }}
-            title={`Op√ß√£o: ${optionText}`}
+            title={`OpÁ„o: ${optionText}`}
           >
             <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{optionText}</span>
             <div
@@ -2301,9 +2256,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       return (
         <>
           <div className="absolute -right-2.5 z-10 flex items-center" style={{ top: `${NODE_HEADER_HEIGHT_APPROX * (1 / 3) + 6 - 10}px` }}>
-            <span className="text-xs text-muted-foreground mr-2">{node.type === 'time-of-day' ? 'Dentro do Hor√°rio' : 'Verdadeiro'}</span>
+            <span className="text-xs text-muted-foreground mr-2">{node.type === 'time-of-day' ? 'Dentro do Hor·rio' : 'Verdadeiro'}</span>
             <div
-              title={node.type === 'time-of-day' ? 'Sa√≠da para "Dentro do Hor√°rio"' : 'Sa√≠da Verdadeiro'}
+              title={node.type === 'time-of-day' ? 'SaÌda para "Dentro do Hor·rio"' : 'SaÌda Verdadeiro'}
               className="w-5 h-5 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
               onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'true'); }}
               data-connector="true" data-handle-type="source" data-handle-id="true"
@@ -2312,9 +2267,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             </div>
           </div>
           <div className="absolute -right-2.5 z-10 flex items-center" style={{ top: `${NODE_HEADER_HEIGHT_APPROX * (2 / 3) + 6 - 10}px` }}>
-            <span className="text-xs text-muted-foreground mr-2">{node.type === 'time-of-day' ? 'Fora do Hor√°rio' : 'Falso'}</span>
+            <span className="text-xs text-muted-foreground mr-2">{node.type === 'time-of-day' ? 'Fora do Hor·rio' : 'Falso'}</span>
             <div
-              title={node.type === 'time-of-day' ? 'Sa√≠da para "Fora do Hor√°rio"' : 'Sa√≠da Falso'}
+              title={node.type === 'time-of-day' ? 'SaÌda para "Fora do Hor·rio"' : 'SaÌda Falso'}
               className="w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
               onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'false'); }}
               data-connector="true" data-handle-type="source" data-handle-id="false"
@@ -2355,9 +2310,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           <div
             className="absolute -right-2.5 z-10 flex items-center"
             style={{ top: `${initialY + switchCases.length * spacingY - 10}px` }}
-            title="Caso Contr√°rio"
+            title="Caso Contr·rio"
           >
-            <span className="text-xs text-muted-foreground mr-2">Caso Contr√°rio</span>
+            <span className="text-xs text-muted-foreground mr-2">Caso Contr·rio</span>
             <div
               className="w-5 h-5 bg-gray-500 hover:bg-gray-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
               onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'otherwise'); }}
@@ -2400,7 +2355,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
         return (
           <div className="space-y-3" data-no-drag="true">
-            <p className="text-xs text-muted-foreground">Configure os gatilhos que iniciam este fluxo. A ordem aqui define a prioridade de verifica√ß√£o.</p>
+            <p className="text-xs text-muted-foreground">Configure os gatilhos que iniciam este fluxo. A ordem aqui define a prioridade de verificaÁ„o.</p>
             {(node.triggers || []).map(trigger => (
               <div key={trigger.id} className="p-3 border rounded-md bg-muted/30">
                 <div className="flex items-center justify-between mb-3">
@@ -2418,7 +2373,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
                 <div className={cn("space-y-3", !trigger.enabled && "opacity-50 pointer-events-none")}>
                   <div>
-                    <Label htmlFor={`trigger-keyword-${trigger.id}`} className="text-xs font-medium">Palavras-chave de Ativa√ß√£o (separadas por v√≠rgula)</Label>
+                    <Label htmlFor={`trigger-keyword-${trigger.id}`} className="text-xs font-medium">Palavras-chave de AtivaÁ„o (separadas por vÌrgula)</Label>
                     <Input
                       id={`trigger-keyword-${trigger.id}`}
                       value={trigger.keyword || ''}
@@ -2426,13 +2381,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                       placeholder="Ex: ajuda, cardapio, saldo"
                       className="h-8 text-xs mt-1"
                     />
-                    <p className="text-xs text-muted-foreground mt-1">Se preenchido, cria sa√≠das separadas para cada palavra-chave.</p>
+                    <p className="text-xs text-muted-foreground mt-1">Se preenchido, cria saÌdas separadas para cada palavra-chave.</p>
                   </div>
 
                   {trigger.type === 'webhook' && (
                     <div className="space-y-3 pt-2 border-t">
                       <div>
-                        <Label htmlFor={`${node.id}-${trigger.id}-timeout`} className="text-xs font-medium">Tempo limite da sess√£o (segundos)</Label>
+                        <Label htmlFor={`${node.id}-${trigger.id}-timeout`} className="text-xs font-medium">Tempo limite da sess„o (segundos)</Label>
                         <Input
                           id={`${node.id}-${trigger.id}-timeout`}
                           type="number"
@@ -2441,7 +2396,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                           placeholder="0 (sem limite)"
                           className="h-8 text-xs mt-1"
                         />
-                        <p className="text-xs text-muted-foreground mt-1">Tempo de inatividade para encerrar a sess√£o. 0 para desabilitar.</p>
+                        <p className="text-xs text-muted-foreground mt-1">Tempo de inatividade para encerrar a sess„o. 0 para desabilitar.</p>
                       </div>
 
                       <div>
@@ -2452,20 +2407,20 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                             if (navigator.clipboard && navigator.clipboard.writeText) {
                               navigator.clipboard.writeText(webhookUrl).then(() => toast({ title: "URL Copiada!" })).catch(() => toast({ title: "Erro ao copiar", variant: "destructive" }));
                             } else {
-                              toast({ title: "N√£o foi poss√≠vel copiar", description: "Seu navegador n√£o suporta esta a√ß√£o ou a p√°gina n√£o √© segura (HTTPS).", variant: "destructive" });
+                              toast({ title: "N„o foi possÌvel copiar", description: "Seu navegador n„o suporta esta aÁ„o ou a p·gina n„o È segura (HTTPS).", variant: "destructive" });
                             }
                           }} title="Copiar URL">
                             <Copy className="w-3 h-3" />
                           </Button>
                         </div>
                          <Button variant="link" size="sm" className="text-xs h-auto p-0 mt-1.5 text-accent" onClick={handleOpenWebhookHistory}>
-                          <History className="w-3.5 h-3.5 mr-1" /> Ver Hist√≥rico de Webhooks
+                          <History className="w-3.5 h-3.5 mr-1" /> Ver HistÛrico de Webhooks
                         </Button>
                       </div>
 
-Ôªø                      <div className="pt-2 space-y-2">
+?                      <div className="pt-2 space-y-2">
                         <div className="flex items-center justify-between">
-                          <Label className="text-xs font-medium">Mapeamento de Vari√°veis do Webhook</Label>
+                          <Label className="text-xs font-medium">Mapeamento de Vari·veis do Webhook</Label>
                           <Button
                             variant="outline"
                             size="sm"
@@ -2497,7 +2452,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                           )}
                           <div className="flex flex-wrap items-center gap-2 pt-1">
                             <Button onClick={() => handleAddVariableMapping(trigger.id)} variant="outline" size="sm" className="text-xs h-8">
-                              <PlusCircle className="w-3 h-3 mr-1" /> Adicionar r√°pido
+                              <PlusCircle className="w-3 h-3 mr-1" /> Adicionar r·pido
                             </Button>
                             <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => {
                               setActiveWebhookTriggerId(trigger.id);
@@ -2553,7 +2508,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   <SelectTrigger id={`${node.id}-inputtype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="text">Texto</SelectItem><SelectItem value="email">E-mail</SelectItem>
-                    <SelectItem value="phone">Telefone</SelectItem><SelectItem value="number">N√∫mero</SelectItem>
+                    <SelectItem value="phone">Telefone</SelectItem><SelectItem value="number">N˙mero</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -2562,8 +2517,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             {isOptionNode && (
               <>
                 <div>
-                  <Label htmlFor={`${node.id}-optionslist`}>Op√ß√µes (uma por linha)</Label>
-                  <Textarea id={`${node.id}-optionslist`} placeholder="Op√ß√£o 1\nOp√ß√£o 2" value={node.optionsList || ''} onChange={(e) => onUpdate(node.id, { optionsList: e.target.value })} rows={3} />
+                  <Label htmlFor={`${node.id}-optionslist`}>OpÁıes (uma por linha)</Label>
+                  <Textarea id={`${node.id}-optionslist`} placeholder="OpÁ„o 1\nOpÁ„o 2" value={node.optionsList || ''} onChange={(e) => onUpdate(node.id, { optionsList: e.target.value })} rows={3} />
                 </div>
                  <div className="space-y-2 pt-2 border-t">
                     <div className="flex items-center space-x-2">
@@ -2577,19 +2532,19 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                           Usar IA para entender a resposta
                         </Label>
                     </div>
-                    <p className="text-xs text-muted-foreground">Se ativado, a IA tentar√° corresponder a resposta do usu√°rio √† op√ß√£o mais prov√°vel, em vez de exigir uma correspond√™ncia exata.</p>
+                    <p className="text-xs text-muted-foreground">Se ativado, a IA tentar· corresponder a resposta do usu·rio ‡ opÁ„o mais prov·vel, em vez de exigir uma correspondÍncia exata.</p>
                 </div>
               </>
             )}
 
             <div>
-              <Label htmlFor={`${node.id}-varsave`}>Salvar Resposta na Vari√°vel</Label>
+              <Label htmlFor={`${node.id}-varsave`}>Salvar Resposta na Vari·vel</Label>
               <Input id={`${node.id}-varsave`} placeholder="nome_da_variavel" value={node.variableToSaveResponse || node.variableToSaveChoice || ''} onChange={(e) => onUpdate(node.id, isOptionNode ? { variableToSaveChoice: e.target.value } : { variableToSaveResponse: e.target.value })} />
             </div>
 
             {renderApiResponseSettings()}
 
-            {isOptionNode && <p className="text-xs text-muted-foreground italic pt-1">Cada op√ß√£o na lista acima ter√° um conector de sa√≠da dedicado.</p>}
+            {isOptionNode && <p className="text-xs text-muted-foreground italic pt-1">Cada opÁ„o na lista acima ter· um conector de saÌda dedicado.</p>}
           </div>
         );
       }
@@ -2605,16 +2560,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                      <TextFormatToolbar fieldName="textMessage" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
                 </div>
                 <div>
-                  <Label htmlFor={`${node.id}-instance`}>Inst√¢ncia</Label>
+                  <Label htmlFor={`${node.id}-instance`}>Inst‚ncia</Label>
                   {isLoadingEvolutionInstances ? (
                     <div className="flex items-center text-sm text-muted-foreground h-10"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Carregando...</div>
                   ) : (
                     <Select onValueChange={(value) => onUpdate(node.id, { instanceName: value })} value={node.instanceName || ''}>
                       <SelectTrigger id={`${node.id}-instance`}>
-                        <SelectValue placeholder="Selecione uma inst√¢ncia..." />
+                        <SelectValue placeholder="Selecione uma inst‚ncia..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Usar Padr√£o do Fluxo</SelectItem>
+                        <SelectItem value="">Usar Padr„o do Fluxo</SelectItem>
                         {evolutionInstances.map(instance => (
                           <SelectItem key={instance.id} value={instance.name}>
                             {instance.name}
@@ -2639,16 +2594,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-instance`}>Inst√¢ncia</Label>
+              <Label htmlFor={`${node.id}-instance`}>Inst‚ncia</Label>
               {isLoadingEvolutionInstances ? (
                 <div className="flex items-center text-sm text-muted-foreground h-10"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Carregando...</div>
               ) : (
                 <Select onValueChange={(value) => onUpdate(node.id, { instanceName: value })} value={node.instanceName || ''}>
                   <SelectTrigger id={`${node.id}-instance`}>
-                    <SelectValue placeholder="Selecione uma inst√¢ncia..." />
+                    <SelectValue placeholder="Selecione uma inst‚ncia..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Usar Padr√£o do Fluxo</SelectItem>
+                    <SelectItem value="">Usar Padr„o do Fluxo</SelectItem>
                     {evolutionInstances.map(instance => (
                       <SelectItem key={instance.id} value={instance.name}>
                         {instance.name}
@@ -2670,7 +2625,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             {node.type === 'whatsapp-media' && (
               <>
                 <div>
-                  <Label htmlFor={`${node.id}-mediaurl`}>URL da M√≠dia (Ex: https://... ou {"{{url_midia}}"})</Label>
+                  <Label htmlFor={`${node.id}-mediaurl`}>URL da MÌdia (Ex: https://... ou {"{{url_midia}}"})</Label>
                   <div className="relative">
                     <Input id={`${node.id}-mediaurl`} placeholder="https://... ou {{url_midia}}" value={node.mediaUrl || ''} onChange={(e) => onUpdate(node.id, { mediaUrl: e.target.value })} className="pr-8" />
                     {renderVariableInserter('mediaUrl')}
@@ -2678,10 +2633,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 </div>
                 <div><Label htmlFor={`${node.id}-mediatype`}>Tipo</Label>
                   <Select value={node.mediaType || 'image'} onValueChange={(value) => onUpdate(node.id, { mediaType: value as NodeData['mediaType'] })}>
-                    <SelectTrigger id={`${node.id}-mediatype`}><SelectValue placeholder="Selecione o tipo de m√≠dia" /></SelectTrigger>
+                    <SelectTrigger id={`${node.id}-mediatype`}><SelectValue placeholder="Selecione o tipo de mÌdia" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="image">Imagem</SelectItem><SelectItem value="video">V√≠deo</SelectItem>
-                      <SelectItem value="document">Documento</SelectItem><SelectItem value="audio">√Åudio</SelectItem>
+                      <SelectItem value="image">Imagem</SelectItem><SelectItem value="video">VÌdeo</SelectItem>
+                      <SelectItem value="document">Documento</SelectItem><SelectItem value="audio">¡udio</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -2705,7 +2660,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor={`${node.id}-participants`}>Participantes (IDs separados por v√≠rgula, ex: 5511...,5521...)</Label>
+                  <Label htmlFor={`${node.id}-participants`}>Participantes (IDs separados por vÌrgula, ex: 5511...,5521...)</Label>
                   <div className="relative">
                     <Textarea id={`${node.id}-participants`} value={node.participants || ''} onChange={(e) => onUpdate(node.id, { participants: e.target.value })} rows={2} className="pr-8" />
                     {renderVariableInserter('participants', true)}
@@ -2728,7 +2683,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                         <SelectTrigger id={`${node.id}-condtype`}><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="string">Texto</SelectItem>
-                            <SelectItem value="number">N√∫mero</SelectItem>
+                            <SelectItem value="number">N˙mero</SelectItem>
                             <SelectItem value="boolean">Booleano</SelectItem>
                             <SelectItem value="date">Data/Hora</SelectItem>
                         </SelectContent>
@@ -2744,13 +2699,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                         <SelectContent>
                             {node.conditionDataType === 'date' ? (
                                 <>
-                                    <SelectItem value="isDateAfter">√â depois de</SelectItem>
-                                    <SelectItem value="isDateBefore">√â antes de</SelectItem>
+                                    <SelectItem value="isDateAfter">… depois de</SelectItem>
+                                    <SelectItem value="isDateBefore">… antes de</SelectItem>
                                 </>
                             ) : node.conditionDataType === 'boolean' ? (
                                 <>
-                                    <SelectItem value="isTrue">√â verdadeiro</SelectItem>
-                                    <SelectItem value="isFalse">√â falso</SelectItem>
+                                    <SelectItem value="isTrue">… verdadeiro</SelectItem>
+                                    <SelectItem value="isFalse">… falso</SelectItem>
                                 </>
                             ) : (
                                 <>
@@ -2763,20 +2718,20 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                         <SelectItem value="<=">Menor ou igual a</SelectItem>
                                     </>}
                                     {node.conditionDataType === 'string' && <>
-                                        <SelectItem value="contains">Cont√©m</SelectItem>
-                                        <SelectItem value="startsWith">Come√ßa com</SelectItem>
+                                        <SelectItem value="contains">ContÈm</SelectItem>
+                                        <SelectItem value="startsWith">ComeÁa com</SelectItem>
                                         <SelectItem value="endsWith">Termina com</SelectItem>
                                     </>}
                                 </>
                             )}
-                            <SelectItem value="isEmpty">√â vazio/nulo</SelectItem>
-                            <SelectItem value="isNotEmpty">N√£o √© vazio/nulo</SelectItem>
+                            <SelectItem value="isEmpty">… vazio/nulo</SelectItem>
+                            <SelectItem value="isNotEmpty">N„o È vazio/nulo</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-condvar`}>Vari√°vel (ex: {"{{variavel}}"})</Label>
+              <Label htmlFor={`${node.id}-condvar`}>Vari·vel (ex: {"{{variavel}}"})</Label>
               <div className="relative">
                 <Input id={`${node.id}-condvar`} placeholder="{{variavel_a_verificar}}" value={node.conditionVariable || ''} onChange={(e) => onUpdate(node.id, { conditionVariable: e.target.value })} className="pr-8" />
                 {renderVariableInserter('conditionVariable')}
@@ -2804,7 +2759,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-switchvar`}>Vari√°vel de Entrada (ex: {"{{status}}"})</Label>
+              <Label htmlFor={`${node.id}-switchvar`}>Vari·vel de Entrada (ex: {"{{status}}"})</Label>
               <div className="relative">
                 <Input
                   id={`${node.id}-switchvar`}
@@ -2817,7 +2772,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </div>
             </div>
             <div>
-              <Label>Casos de Sa√≠da</Label>
+              <Label>Casos de SaÌda</Label>
               <div className="space-y-2">
                 {(node.switchCases || []).map((caseItem, index) => (
                   <div key={caseItem.id} className="flex items-center space-x-2">
@@ -2842,14 +2797,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 <PlusCircle className="w-3.5 h-3.5 mr-1" /> Adicionar Caso
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground italic pt-1">Cada caso ter√° um conector de sa√≠da. O fluxo seguir√° para "Caso Contr√°rio" se nenhum valor corresponder.</p>
+            <p className="text-xs text-muted-foreground italic pt-1">Cada caso ter· um conector de saÌda. O fluxo seguir· para "Caso Contr·rio" se nenhum valor corresponder.</p>
           </div>
         );
       case 'set-variable':
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-varname`}>Nome da Vari√°vel</Label>
+              <Label htmlFor={`${node.id}-varname`}>Nome da Vari·vel</Label>
               <Input id={`${node.id}-varname`} placeholder="minhaVariavel" value={node.variableName || ''} onChange={(e) => onUpdate(node.id, { variableName: e.target.value })} />
             </div>
             <div>
@@ -2887,9 +2842,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-apimethod`}>M√©todo HTTP</Label>
+              <Label htmlFor={`${node.id}-apimethod`}>MÈtodo HTTP</Label>
               <Select value={node.apiMethod || 'GET'} onValueChange={(value) => onUpdate(node.id, { apiMethod: value as NodeData['apiMethod'] })}>
-                <SelectTrigger id={`${node.id}-apimethod`}><SelectValue placeholder="Selecione o m√©todo" /></SelectTrigger>
+                <SelectTrigger id={`${node.id}-apimethod`}><SelectValue placeholder="Selecione o mÈtodo" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="GET">GET</SelectItem><SelectItem value="POST">POST</SelectItem>
                   <SelectItem value="PUT">PUT</SelectItem><SelectItem value="DELETE">DELETE</SelectItem>
@@ -2908,13 +2863,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </TabsList>
               <TabsContent value="auth" className="mt-4 space-y-3">
                 <div>
-                  <Label htmlFor={`${node.id}-apiauthtype`}>Tipo de Autentica√ß√£o</Label>
+                  <Label htmlFor={`${node.id}-apiauthtype`}>Tipo de AutenticaÁ„o</Label>
                   <Select value={node.apiAuthType || 'none'} onValueChange={(value) => onUpdate(node.id, { apiAuthType: value as NodeData['apiAuthType'] })}>
                     <SelectTrigger id={`${node.id}-apiauthtype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhuma</SelectItem>
                       <SelectItem value="bearer">Bearer Token</SelectItem>
-                      <SelectItem value="basic">B√°sica (Usu√°rio/Senha)</SelectItem>
+                      <SelectItem value="basic">B·sica (Usu·rio/Senha)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -2930,9 +2885,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 {node.apiAuthType === 'basic' && (
                   <>
                     <div>
-                      <Label htmlFor={`${node.id}-apiauthbasicuser`}>Usu√°rio</Label>
+                      <Label htmlFor={`${node.id}-apiauthbasicuser`}>Usu·rio</Label>
                       <div className="relative">
-                        <Input id={`${node.id}-apiauthbasicuser`} placeholder="Nome de usu√°rio" value={node.apiAuthBasicUser || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicUser: e.target.value })} className="pr-8" />
+                        <Input id={`${node.id}-apiauthbasicuser`} placeholder="Nome de usu·rio" value={node.apiAuthBasicUser || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicUser: e.target.value })} className="pr-8" />
                         {renderVariableInserter('apiAuthBasicUser')}
                       </div>
                     </div>
@@ -2947,16 +2902,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 )}
               </TabsContent>
               <TabsContent value="headers" className="mt-4">
-                <Label>Headers da Requisi√ß√£o</Label>
+                <Label>Headers da RequisiÁ„o</Label>
                 {renderKeyValueList('apiHeadersList', node.apiHeadersList, 'Nome do Header (Ex: Content-Type)', 'Valor do Header (Ex: application/json)', 'Adicionar Header')}
               </TabsContent>
               <TabsContent value="params" className="mt-4">
-                <Label>Par√¢metros de Query (URL)</Label>
-                {renderKeyValueList('apiQueryParamsList', node.apiQueryParamsList, 'Nome do Par√¢metro', 'Valor do Par√¢metro', 'Adicionar Par√¢metro')}
+                <Label>Par‚metros de Query (URL)</Label>
+                {renderKeyValueList('apiQueryParamsList', node.apiQueryParamsList, 'Nome do Par‚metro', 'Valor do Par‚metro', 'Adicionar Par‚metro')}
               </TabsContent>
               <TabsContent value="body" className="mt-4 space-y-3">
                 <div>
-                  <Label htmlFor={`${node.id}-apibodytype`}>Tipo de Corpo da Requisi√ß√£o</Label>
+                  <Label htmlFor={`${node.id}-apibodytype`}>Tipo de Corpo da RequisiÁ„o</Label>
                   <Select value={node.apiBodyType || 'none'} onValueChange={(value) => onUpdate(node.id, { apiBodyType: value as NodeData['apiBodyType'] })}>
                     <SelectTrigger id={`${node.id}-apibodytype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                     <SelectContent>
@@ -2986,7 +2941,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   <div>
                     <Label htmlFor={`${node.id}-apibodyraw`}>Corpo Raw (Texto)</Label>
                     <div className="relative">
-                      <Textarea id={`${node.id}-apibodyraw`} placeholder="Conte√∫do do corpo em texto puro..." value={node.apiBodyRaw || ''} onChange={(e) => onUpdate(node.id, { apiBodyRaw: e.target.value })} rows={4} className="pr-8" />
+                      <Textarea id={`${node.id}-apibodyraw`} placeholder="Conte˙do do corpo em texto puro..." value={node.apiBodyRaw || ''} onChange={(e) => onUpdate(node.id, { apiBodyRaw: e.target.value })} rows={4} className="pr-8" />
                       {renderVariableInserter('apiBodyRaw', true)}
                     </div>
                   </div>
@@ -2998,7 +2953,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-semibold text-sm">Resumo do Mapeamento</p>
-                      <p className="text-[11px] text-muted-foreground">Use o construtor em tela cheia para configurar com precis√£o.</p>
+                      <p className="text-[11px] text-muted-foreground">Use o construtor em tela cheia para configurar com precis„o.</p>
                     </div>
                     <Button variant="outline" size="sm" onClick={() => setIsApiMappingDialogOpen(true)}>
                       <Sparkles className="w-3.5 h-3.5 mr-1" /> Abrir Construtor
@@ -3008,9 +2963,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     <div className="rounded border border-dashed px-2 py-1.5">
                       <p className="font-semibold text-xs uppercase text-muted-foreground">Resultado Principal</p>
                       <p>
-                        Caminho: <span className="font-mono">{node.apiResponsePath || '‚Äî'}</span>
+                        Caminho: <span className="font-mono">{node.apiResponsePath || 'ó'}</span>
                       </p>
-                      <p>Vari√°vel: <span className="font-semibold">{node.apiOutputVariable || '‚Äî'}</span></p>
+                      <p>Vari·vel: <span className="font-semibold">{node.apiOutputVariable || 'ó'}</span></p>
                     </div>
                     <div className="rounded border border-dashed px-2 py-1.5">
                       <p className="font-semibold text-xs uppercase text-muted-foreground">Mapeamentos Extras</p>
@@ -3021,8 +2976,8 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                           {(node.apiResponseMappings || []).map((mapping) => (
                             <div key={mapping.id} className="flex items-center justify-between gap-2 rounded border bg-background px-2 py-1">
                               <div>
-                                <p className="font-medium text-sm">{mapping.flowVariable || 'Sem vari√°vel'}</p>
-                                <p className="text-[11px] text-muted-foreground">{mapping.jsonPath || 'Sem express√£o'}</p>
+                                <p className="font-medium text-sm">{mapping.flowVariable || 'Sem vari·vel'}</p>
+                                <p className="text-[11px] text-muted-foreground">{mapping.jsonPath || 'Sem express„o'}</p>
                               </div>
                               <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6">
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -3038,7 +2993,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                       Configurar agora
                     </Button>
                     <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => handleAddListItem('apiResponseMappings')}>
-                      <PlusCircle className="w-3 h-3 mr-1" /> Adicionar r√°pido
+                      <PlusCircle className="w-3 h-3 mr-1" /> Adicionar r·pido
                     </Button>
                   </div>
                 </div>
@@ -3048,10 +3003,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             </Tabs>
              <div className="flex gap-2 w-full mt-3">
                 <Button variant="outline" className="w-full" onClick={handleTestApiCall} disabled={isTestingApi}>
-                  <TestTube2 className="mr-2 h-4 w-4" /> {isTestingApi ? "Testando..." : "Testar Requisi√ß√£o"}
+                  <TestTube2 className="mr-2 h-4 w-4" /> {isTestingApi ? "Testando..." : "Testar RequisiÁ„o"}
                 </Button>
                  <Button variant="outline" className="w-full" onClick={handleOpenApiHistory}>
-                    <History className="mr-2 h-4 w-4" /> Hist√≥rico
+                    <History className="mr-2 h-4 w-4" /> HistÛrico
                 </Button>
             </div>
           </div>
@@ -3059,7 +3014,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       case 'delay':
         return (
           <div data-no-drag="true">
-            <Label htmlFor={`${node.id}-delay`}>Dura√ß√£o do Atraso (em milissegundos)</Label>
+            <Label htmlFor={`${node.id}-delay`}>DuraÁ„o do Atraso (em milissegundos)</Label>
             <Input id={`${node.id}-delay`} type="number" placeholder="1000" value={node.delayDuration ?? ''} onChange={(e) => onUpdate(node.id, { delayDuration: parseInt(e.target.value, 10) || 0 })} />
           </div>
         );
@@ -3074,7 +3029,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-varsavedate`}>Salvar Data na Vari√°vel</Label>
+              <Label htmlFor={`${node.id}-varsavedate`}>Salvar Data na Vari·vel</Label>
               <Input id={`${node.id}-varsavedate`} placeholder="data_nascimento" value={node.variableToSaveDate || ''} onChange={(e) => onUpdate(node.id, { variableToSaveDate: e.target.value })} />
             </div>
             {renderApiResponseSettings()}
@@ -3093,7 +3048,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       case 'typing-emulation':
         return (
           <div data-no-drag="true">
-            <Label htmlFor={`${node.id}-typingduration`}>Dura√ß√£o da Simula√ß√£o de Digita√ß√£o (ms)</Label>
+            <Label htmlFor={`${node.id}-typingduration`}>DuraÁ„o da SimulaÁ„o de DigitaÁ„o (ms)</Label>
             <Input id={`${node.id}-typingduration`} type="number" placeholder="1500" value={node.typingDuration ?? ''} onChange={(e) => onUpdate(node.id, { typingDuration: parseInt(e.target.value, 10) || 0 })} />
           </div>
         );
@@ -3101,16 +3056,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div data-no-drag="true">
             <div className="space-y-3">
-              <div><Label htmlFor={`${node.id}-mediadisplaytype`}>Tipo de M√≠dia</Label>
+              <div><Label htmlFor={`${node.id}-mediadisplaytype`}>Tipo de MÌdia</Label>
                 <Select value={node.mediaDisplayType || 'image'} onValueChange={(value) => onUpdate(node.id, { mediaDisplayType: value as NodeData['mediaDisplayType'] })}>
                   <SelectTrigger id={`${node.id}-mediadisplaytype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="image">Imagem</SelectItem><SelectItem value="video">V√≠deo</SelectItem><SelectItem value="audio">√Åudio</SelectItem>
+                    <SelectItem value="image">Imagem</SelectItem><SelectItem value="video">VÌdeo</SelectItem><SelectItem value="audio">¡udio</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label htmlFor={`${node.id}-mediadisplayurl`}>URL da M√≠dia</Label>
+                <Label htmlFor={`${node.id}-mediadisplayurl`}>URL da MÌdia</Label>
                 <div className="relative">
                   <Input id={`${node.id}-mediadisplayurl`} placeholder="https://... ou {{url_da_imagem}}" value={node.mediaDisplayUrl || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayUrl: e.target.value })} className="pr-8" />
                   {renderVariableInserter('mediaDisplayUrl')}
@@ -3119,7 +3074,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               <div>
                 <Label htmlFor={`${node.id}-mediadisplaytext`}>Texto Alternativo/Legenda</Label>
                 <div className="relative">
-                  <Input ref={inputRef} id={`${node.id}-mediadisplaytext`} placeholder="Descri√ß√£o da m√≠dia" value={node.mediaDisplayText || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayText: e.target.value })} className="pr-8" />
+                  <Input ref={inputRef} id={`${node.id}-mediadisplaytext`} placeholder="DescriÁ„o da mÌdia" value={node.mediaDisplayText || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayText: e.target.value })} className="pr-8" />
                   {renderVariableInserter('mediaDisplayText')}
                 </div>
                 <TextFormatToolbar fieldName="mediaDisplayText" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
@@ -3132,7 +3087,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           <div data-no-drag="true">
             <Label htmlFor={`${node.id}-logmsg`}>Mensagem para Log</Label>
             <div className="relative">
-              <Textarea id={`${node.id}-logmsg`} placeholder="Ex: Status: {{input.status}}, Usu√°rio: {{user.id}}" value={node.logMessage || ''} onChange={(e) => onUpdate(node.id, { logMessage: e.target.value })} rows={2} className="pr-8" />
+              <Textarea id={`${node.id}-logmsg`} placeholder="Ex: Status: {{input.status}}, Usu·rio: {{user.id}}" value={node.logMessage || ''} onChange={(e) => onUpdate(node.id, { logMessage: e.target.value })} rows={2} className="pr-8" />
               {renderVariableInserter('logMessage', true)}
             </div>
           </div>
@@ -3141,17 +3096,17 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-codesnippet`}>Trecho de C√≥digo (JavaScript)</Label>
+              <Label htmlFor={`${node.id}-codesnippet`}>Trecho de CÛdigo (JavaScript)</Label>
               <div className="relative">
                 <Textarea id={`${node.id}-codesnippet`} placeholder="function minhaFuncao(variaveis) {&#10;  // Use variaveis.nome_da_variavel para acessar&#10;  return { resultado: 'sucesso' };&#10;}&#10;minhaFuncao(variables);" value={node.codeSnippet || ''} onChange={(e) => onUpdate(node.id, { codeSnippet: e.target.value })} rows={6} className="pr-8 font-mono text-xs" />
                 {renderVariableInserter('codeSnippet', true)}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-codeoutputvar`}>Salvar Sa√≠da (objeto) na Vari√°vel</Label>
+              <Label htmlFor={`${node.id}-codeoutputvar`}>Salvar SaÌda (objeto) na Vari·vel</Label>
               <Input id={`${node.id}-codeoutputvar`} placeholder="resultado_codigo (ex: resultado_codigo.resultado)" value={node.codeOutputVariable || ''} onChange={(e) => onUpdate(node.id, { codeOutputVariable: e.target.value })} />
             </div>
-            <p className="text-xs text-muted-foreground">Nota: O c√≥digo √© executado em um ambiente sandbox no servidor.</p>
+            <p className="text-xs text-muted-foreground">Nota: O cÛdigo È executado em um ambiente sandbox no servidor.</p>
           </div>
         );
       case 'json-transform':
@@ -3165,14 +3120,14 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-jsonata`}>Express√£o JSONata</Label>
+              <Label htmlFor={`${node.id}-jsonata`}>Express„o JSONata</Label>
               <div className="relative">
                 <Input id={`${node.id}-jsonata`} placeholder="$.chave.outraChave[0]" value={node.jsonataExpression || ''} onChange={(e) => onUpdate(node.id, { jsonataExpression: e.target.value })} className="pr-8" />
                 {renderVariableInserter('jsonataExpression')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-jsonoutputvar`}>Salvar JSON Transformado na Vari√°vel</Label>
+              <Label htmlFor={`${node.id}-jsonoutputvar`}>Salvar JSON Transformado na Vari·vel</Label>
               <Input id={`${node.id}-jsonoutputvar`} placeholder="json_transformado" value={node.jsonOutputVariable || ''} onChange={(e) => onUpdate(node.id, { jsonOutputVariable: e.target.value })} />
             </div>
           </div>
@@ -3193,11 +3148,11 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               <Input id={`${node.id}-filefilter`} placeholder="image/*, .pdf, .docx" value={node.fileTypeFilter || ''} onChange={(e) => onUpdate(node.id, { fileTypeFilter: e.target.value })} />
             </div>
             <div>
-              <Label htmlFor={`${node.id}-maxsize`}>Tam. M√°x. Arquivo (MB)</Label>
+              <Label htmlFor={`${node.id}-maxsize`}>Tam. M·x. Arquivo (MB)</Label>
               <Input id={`${node.id}-maxsize`} type="number" placeholder="5" value={node.maxFileSizeMB ?? ''} onChange={(e) => onUpdate(node.id, { maxFileSizeMB: e.target.value ? parseInt(e.target.value, 10) : undefined })} />
             </div>
             <div>
-              <Label htmlFor={`${node.id}-fileurlvar`}>Salvar URL do Arquivo na Vari√°vel</Label>
+              <Label htmlFor={`${node.id}-fileurlvar`}>Salvar URL do Arquivo na Vari·vel</Label>
               <Input id={`${node.id}-fileurlvar`} placeholder="url_do_arquivo" value={node.fileUrlVariable || ''} onChange={(e) => onUpdate(node.id, { fileUrlVariable: e.target.value })} />
             </div>
             {renderApiResponseSettings()}
@@ -3207,27 +3162,27 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div className="space-y-3" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-ratingq`}>Pergunta da Avalia√ß√£o</Label>
+              <Label htmlFor={`${node.id}-ratingq`}>Pergunta da AvaliaÁ„o</Label>
               <div className="relative">
-                <Input ref={inputRef} id={`${node.id}-ratingq`} placeholder="Como voc√™ nos avalia?" value={node.ratingQuestionText || ''} onChange={(e) => onUpdate(node.id, { ratingQuestionText: e.target.value })} className="pr-8" />
+                <Input ref={inputRef} id={`${node.id}-ratingq`} placeholder="Como vocÍ nos avalia?" value={node.ratingQuestionText || ''} onChange={(e) => onUpdate(node.id, { ratingQuestionText: e.target.value })} className="pr-8" />
                 {renderVariableInserter('ratingQuestionText')}
               </div>
               <TextFormatToolbar fieldName="ratingQuestionText" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <div>
-              <Label htmlFor={`${node.id}-maxrating`}>Avalia√ß√£o M√°xima</Label>
+              <Label htmlFor={`${node.id}-maxrating`}>AvaliaÁ„o M·xima</Label>
               <Input id={`${node.id}-maxrating`} type="number" placeholder="5" value={node.maxRatingValue ?? ''} onChange={(e) => onUpdate(node.id, { maxRatingValue: parseInt(e.target.value, 10) || 5 })} />
             </div>
-            <div><Label htmlFor={`${node.id}-ratingicon`}>√çcone de Avalia√ß√£o</Label>
+            <div><Label htmlFor={`${node.id}-ratingicon`}>Õcone de AvaliaÁ„o</Label>
               <Select value={node.ratingIconType || 'star'} onValueChange={(value) => onUpdate(node.id, { ratingIconType: value as NodeData['ratingIconType'] })}>
-                <SelectTrigger id={`${node.id}-ratingicon`}><SelectValue placeholder="Selecione o √≠cone" /></SelectTrigger>
+                <SelectTrigger id={`${node.id}-ratingicon`}><SelectValue placeholder="Selecione o Ìcone" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="star">Estrela</SelectItem><SelectItem value="heart">Cora√ß√£o</SelectItem><SelectItem value="number">N√∫mero</SelectItem>
+                  <SelectItem value="star">Estrela</SelectItem><SelectItem value="heart">CoraÁ„o</SelectItem><SelectItem value="number">N˙mero</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-ratingoutputvar`}>Salvar Avalia√ß√£o na Vari√°vel</Label>
+              <Label htmlFor={`${node.id}-ratingoutputvar`}>Salvar AvaliaÁ„o na Vari·vel</Label>
               <Input id={`${node.id}-ratingoutputvar`} placeholder="avaliacao_usuario" value={node.ratingOutputVariable || ''} onChange={(e) => onUpdate(node.id, { ratingOutputVariable: e.target.value })} />
             </div>
             {renderApiResponseSettings()}
@@ -3239,7 +3194,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <div>
               <Label htmlFor={`${node.id}-aiprompt`}>Prompt para IA</Label>
               <div className="relative">
-                <Textarea ref={textAreaRef} id={`${node.id}-aiprompt`} placeholder="Gere uma descri√ß√£o para um produto chamado {{input.nome_produto}}." value={node.aiPromptText || ''} onChange={(e) => onUpdate(node.id, { aiPromptText: e.target.value })} rows={4} className="pr-8" />
+                <Textarea ref={textAreaRef} id={`${node.id}-aiprompt`} placeholder="Gere uma descriÁ„o para um produto chamado {{input.nome_produto}}." value={node.aiPromptText || ''} onChange={(e) => onUpdate(node.id, { aiPromptText: e.target.value })} rows={4} className="pr-8" />
                 {renderVariableInserter('aiPromptText', true)}
               </div>
                <TextFormatToolbar fieldName="aiPromptText" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
@@ -3247,15 +3202,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <div>
               <Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional)</Label>
               <div className="relative">
-                <Input id={`${node.id}-aimodel`} placeholder="gemini-1.5-flash (padr√£o)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-aimodel`} placeholder="gemini-1.5-flash (padr„o)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="pr-8" />
                 {renderVariableInserter('aiModelName')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-aioutputvar`}>Salvar Resposta da IA na Vari√°vel</Label>
+              <Label htmlFor={`${node.id}-aioutputvar`}>Salvar Resposta da IA na Vari·vel</Label>
               <Input id={`${node.id}-aioutputvar`} placeholder="resposta_ia" value={node.aiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { aiOutputVariable: e.target.value })} />
             </div>
-            <p className="text-xs text-muted-foreground">Esta integra√ß√£o usa Genkit. Configure seu modelo em `src/ai/genkit.ts`.</p>
+            <p className="text-xs text-muted-foreground">Esta integraÁ„o usa Genkit. Configure seu modelo em `src/ai/genkit.ts`.</p>
           </div>
         );
       case 'send-email':
@@ -3279,7 +3234,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <div>
               <Label htmlFor={`${node.id}-emailbody`}>Corpo do E-mail (HTML ou Texto)</Label>
               <div className="relative">
-                <Textarea ref={textAreaRef} id={`${node.id}-emailbody`} placeholder="Ol√° {{input.nome_cliente}},\n\nSua mensagem aqui." value={node.emailBody || ''} onChange={(e) => onUpdate(node.id, { emailBody: e.target.value })} rows={4} className="pr-8" />
+                <Textarea ref={textAreaRef} id={`${node.id}-emailbody`} placeholder="Ol· {{input.nome_cliente}},\n\nSua mensagem aqui." value={node.emailBody || ''} onChange={(e) => onUpdate(node.id, { emailBody: e.target.value })} rows={4} className="pr-8" />
                 {renderVariableInserter('emailBody', true)}
               </div>
               <TextFormatToolbar fieldName="emailBody" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
@@ -3306,7 +3261,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             <div>
               <Label htmlFor={`${node.id}-gsheetname`}>Nome da Aba (Planilha)</Label>
               <div className="relative">
-                <Input id={`${node.id}-gsheetname`} placeholder="P√°gina1" value={node.googleSheetName || ''} onChange={(e) => onUpdate(node.id, { googleSheetName: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-gsheetname`} placeholder="P·gina1" value={node.googleSheetName || ''} onChange={(e) => onUpdate(node.id, { googleSheetName: e.target.value })} className="pr-8" />
                 {renderVariableInserter('googleSheetName')}
               </div>
             </div>
@@ -3317,7 +3272,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 {renderVariableInserter('googleSheetRowData', true)}
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">Certifique-se que a API do Google Sheets est√° habilitada e as credenciais configuradas no servidor.</p>
+            <p className="text-xs text-muted-foreground">Certifique-se que a API do Google Sheets est· habilitada e as credenciais configuradas no servidor.</p>
           </div>
         );
       case 'intelligent-agent':
@@ -3331,32 +3286,32 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-agentsystemprompt`}>Prompt do Sistema / Instru√ß√µes</Label>
+              <Label htmlFor={`${node.id}-agentsystemprompt`}>Prompt do Sistema / InstruÁıes</Label>
               <div className="relative">
-                <Textarea id={`${node.id}-agentsystemprompt`} placeholder="Voc√™ √© um assistente virtual especializado em {{area_especializacao}}." value={node.agentSystemPrompt || ''} onChange={(e) => onUpdate(node.id, { agentSystemPrompt: e.target.value })} rows={4} className="pr-8" />
+                <Textarea id={`${node.id}-agentsystemprompt`} placeholder="VocÍ È um assistente virtual especializado em {{area_especializacao}}." value={node.agentSystemPrompt || ''} onChange={(e) => onUpdate(node.id, { agentSystemPrompt: e.target.value })} rows={4} className="pr-8" />
                 {renderVariableInserter('agentSystemPrompt', true)}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-userinputvar`}>Vari√°vel com Entrada do Usu√°rio (ex: {"{{pergunta_usuario}}"})</Label>
+              <Label htmlFor={`${node.id}-userinputvar`}>Vari·vel com Entrada do Usu·rio (ex: {"{{pergunta_usuario}}"})</Label>
               <div className="relative">
                 <Input id={`${node.id}-userinputvar`} placeholder="{{pergunta_usuario}}" value={node.userInputVariable || ''} onChange={(e) => onUpdate(node.id, { userInputVariable: e.target.value })} className="pr-8" />
                 {renderVariableInserter('userInputVariable')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-agentresponsevar`}>Salvar Resposta na Vari√°vel</Label>
+              <Label htmlFor={`${node.id}-agentresponsevar`}>Salvar Resposta na Vari·vel</Label>
               <Input id={`${node.id}-agentresponsevar`} placeholder="resposta_agente" value={node.agentResponseVariable || ''} onChange={(e) => onUpdate(node.id, { agentResponseVariable: e.target.value })} />
             </div>
             <div>
               <Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional, ex: gemini-1.5-flash)</Label>
               <div className="relative">
-                <Input id={`${node.id}-aimodel`} placeholder="gemini-1.5-flash (padr√£o Genkit)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-aimodel`} placeholder="gemini-1.5-flash (padr„o Genkit)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="pr-8" />
                 {renderVariableInserter('aiModelName')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-maxturns`}>M√°x. Turnos de Conversa (opcional)</Label>
+              <Label htmlFor={`${node.id}-maxturns`}>M·x. Turnos de Conversa (opcional)</Label>
               <Input id={`${node.id}-maxturns`} type="number" placeholder="5" value={node.maxConversationTurns ?? ''} onChange={(e) => onUpdate(node.id, { maxConversationTurns: e.target.value ? parseInt(e.target.value, 10) : undefined })} />
             </div>
             <div>
@@ -3377,7 +3332,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">Este n√≥ simula uma conversa com um agente de IA. A l√≥gica real usa Genkit.</p>
+            <p className="text-xs text-muted-foreground">Este nÛ simula uma conversa com um agente de IA. A lÛgica real usa Genkit.</p>
           </div>
         );
       case 'supabase-create-row':
@@ -3395,7 +3350,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               <Label htmlFor={`${node.id}-tableName`}>Nome da Tabela Supabase</Label>
               {isLoadingSupabaseTables && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando tabelas...</div>}
               {!isLoadingSupabaseTables && supabaseSchemaError && <p className="text-xs text-destructive">{supabaseSchemaError}</p>}
-              {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tabela encontrada ou Supabase n√£o configurado/habilitado.</p>}
+              {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tabela encontrada ou Supabase n„o configurado/habilitado.</p>}
               {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length > 0 && (
                 <Select
                   value={node.supabaseTableName || ''}
@@ -3470,7 +3425,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 
             {(isReadOp || isCreateOp) && (
               <div>
-                <Label htmlFor={`${node.id}-resultVar`}>Salvar Resultado na Vari√°vel</Label>
+                <Label htmlFor={`${node.id}-resultVar`}>Salvar Resultado na Vari·vel</Label>
                 <Input
                   id={`${node.id}-resultVar`}
                   placeholder={isReadOp ? (node.supabaseResultVariable || "dados_supabase") : (node.supabaseResultVariable || "id_linha_criada_supabase")}
@@ -3479,7 +3434,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 />
               </div>
             )}
-            <p className="text-xs text-muted-foreground">Requer Supabase habilitado e configurado nas Configura√ß√µes Globais, e que as fun√ß√µes SQL `get_public_tables` e `get_table_columns` existam no seu banco.</p>
+            <p className="text-xs text-muted-foreground">Requer Supabase habilitado e configurado nas ConfiguraÁıes Globais, e que as funÁıes SQL `get_public_tables` e `get_table_columns` existam no seu banco.</p>
           </div>
         );
       }
@@ -3500,12 +3455,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-dialogycontent`}>Conte√∫do da Mensagem</Label>
+              <Label htmlFor={`${node.id}-dialogycontent`}>Conte˙do da Mensagem</Label>
               <div className="relative">
                 <Textarea
                   ref={textAreaRef}
                   id={`${node.id}-dialogycontent`}
-                  placeholder="Ol√°, {{contact_name}}!"
+                  placeholder="Ol·, {{contact_name}}!"
                   value={node.dialogyMessageContent || ''}
                   onChange={(e) => onUpdate(node.id, { dialogyMessageContent: e.target.value })}
                   rows={3}
@@ -3516,17 +3471,17 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               <TextFormatToolbar fieldName="dialogyMessageContent" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <p className="text-xs text-muted-foreground">
-              A inst√¢ncia da Dialogy a ser usada √© definida nas Configura√ß√µes do Fluxo.
+              A inst‚ncia da Dialogy a ser usada È definida nas ConfiguraÁıes do Fluxo.
             </p>
           </div>
         );
       case 'time-of-day':
         return (
           <div className="space-y-3" data-no-drag="true">
-            <p className="text-xs text-muted-foreground">Verifica se a hora atual est√° dentro do intervalo definido (inclusive).</p>
+            <p className="text-xs text-muted-foreground">Verifica se a hora atual est· dentro do intervalo definido (inclusive).</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor={`${node.id}-starttime`}>Hor√°rio de In√≠cio</Label>
+                <Label htmlFor={`${node.id}-starttime`}>Hor·rio de InÌcio</Label>
                 <Input
                   id={`${node.id}-starttime`}
                   type="time"
@@ -3535,7 +3490,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 />
               </div>
               <div>
-                <Label htmlFor={`${node.id}-endtime`}>Hor√°rio de Fim</Label>
+                <Label htmlFor={`${node.id}-endtime`}>Hor·rio de Fim</Label>
                 <Input
                   id={`${node.id}-endtime`}
                   type="time"
@@ -3547,9 +3502,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           </div>
         );
       case 'end-flow':
-        return <p className="text-sm text-muted-foreground italic">Este n√≥ encerra o fluxo.</p>;
+        return <p className="text-sm text-muted-foreground italic">Este nÛ encerra o fluxo.</p>;
       default:
-        return <p className="text-xs text-muted-foreground italic">Nenhuma configura√ß√£o para este tipo de n√≥.</p>;
+        return <p className="text-xs text-muted-foreground italic">Nenhuma configuraÁ„o para este tipo de nÛ.</p>;
     }
   };
 
@@ -3599,16 +3554,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               {node.type === 'start' && (
                 <Popover open={isIntegrationsPopoverOpen} onOpenChange={handleIntegrationsPopoverOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon" className="p-0.5 text-muted-foreground hover:text-foreground w-6 h-6" aria-label="Status das Integra√ß√µes">
+                    <Button variant="ghost" size="icon" className="p-0.5 text-muted-foreground hover:text-foreground w-6 h-6" aria-label="Status das IntegraÁıes">
                       <BotMessageSquare className="w-4 h-4" />
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-80" align="end" data-no-drag="true">
                     <div className="grid gap-4">
                       <div className="space-y-2">
-                        <h4 className="font-medium leading-none">Status das Integra√ß√µes</h4>
+                        <h4 className="font-medium leading-none">Status das IntegraÁıes</h4>
                         <p className="text-sm text-muted-foreground">
-                          Status das suas inst√¢ncias configuradas.
+                          Status das suas inst‚ncias configuradas.
                         </p>
                       </div>
                       <ScrollArea className="h-auto max-h-[200px]">
@@ -3629,7 +3584,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                 <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
                               </div>
                             )) : (
-                              <p className="text-xs text-muted-foreground text-center py-2">Nenhuma inst√¢ncia configurada.</p>
+                              <p className="text-xs text-muted-foreground text-center py-2">Nenhuma inst‚ncia configurada.</p>
                             )}
                           </div>
                           <div>
@@ -3648,7 +3603,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                 <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
                               </div>
                             )) : (
-                              <p className="text-xs text-muted-foreground text-center py-2">Nenhuma inst√¢ncia configurada.</p>
+                              <p className="text-xs text-muted-foreground text-center py-2">Nenhuma inst‚ncia configurada.</p>
                             )}
                           </div>
                            <div>
@@ -3667,7 +3622,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                                 <div className="text-xs text-muted-foreground capitalize">{instance.status}</div>
                               </div>
                             )) : (
-                              <p className="text-xs text-muted-foreground text-center py-2">Nenhuma inst√¢ncia configurada.</p>
+                              <p className="text-xs text-muted-foreground text-center py-2">Nenhuma inst‚ncia configurada.</p>
                             )}
                           </div>
                         </div>
@@ -3681,7 +3636,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 size="icon"
                 onClick={handleDuplicateClick}
                 className="p-0.5 text-muted-foreground hover:text-foreground w-6 h-6"
-                aria-label="Duplicar nÔøΩÔøΩ"
+                aria-label="Duplicar n??"
                 data-action="duplicate-node"
                 title="Duplicar bloco"
               >
@@ -3692,7 +3647,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 size="icon"
                 onClick={handleDeleteClick}
                 className="p-0.5 text-muted-foreground hover:text-destructive w-6 h-6"
-                aria-label="Excluir n√≥" data-action="delete-node"
+                aria-label="Excluir nÛ" data-action="delete-node"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </Button>
@@ -3742,7 +3697,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           <DialogHeader>
             <DialogTitle>Construtor de Mapeamento do Webhook</DialogTitle>
             <DialogDescription>
-              Use o laborat√≥rio completo para mapear e visualizar os dados recebidos.
+              Use o laboratÛrio completo para mapear e visualizar os dados recebidos.
             </DialogDescription>
           </DialogHeader>
           {renderWebhookMappingBuilder(selectedWebhookTriggerForBuilder)}
@@ -3765,7 +3720,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto" data-no-drag="true">
           <DialogHeader>
             <DialogTitle>Construtor de Mapeamento da Resposta da API</DialogTitle>
-            <DialogDescription>Importe um JSON, clique nos campos e defina todas as vari√°veis em um √∫nico lugar.</DialogDescription>
+            <DialogDescription>Importe um JSON, clique nos campos e defina todas as vari·veis em um ˙nico lugar.</DialogDescription>
           </DialogHeader>
           {renderApiMappingBuilder()}
         </DialogContent>
@@ -3858,3 +3813,4 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
 });
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;
+

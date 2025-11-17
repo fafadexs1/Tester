@@ -211,11 +211,18 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
                 if (extracted !== undefined) valueForOptionMatching = String(extracted);
             }
             const trimmedReceivedMessage = valueForOptionMatching.trim();
+            const normalizedOptionLabels = options.map(opt => opt.trim().replace(/^[\[\s,]+|[\],\s]+$/g, '').toLowerCase());
             const numericChoice = parseInt(trimmedReceivedMessage, 10);
             if (!isNaN(numericChoice) && numericChoice > 0 && numericChoice <= options.length) {
                 chosenOptionText = options[numericChoice - 1];
             } else {
-                chosenOptionText = options.find(opt => opt.toLowerCase() === trimmedReceivedMessage.toLowerCase());
+                const cleanedMessage = trimmedReceivedMessage.replace(/^[\[\s,]+|[\],\s]+$/g, '').toLowerCase();
+                const matchIndex = normalizedOptionLabels.indexOf(cleanedMessage);
+                if (matchIndex >= 0) {
+                  chosenOptionText = options[matchIndex];
+                } else {
+                  chosenOptionText = options.find(opt => opt.trim().toLowerCase() === cleanedMessage);
+                }
             }
 
             if (chosenOptionText) {
@@ -223,6 +230,13 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
                   setProperty(session.flow_variables, session.awaiting_input_details.variableToSave, chosenOptionText);
                 }
                 nextNodeId = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
+                if (!nextNodeId) {
+                  nextNodeId = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
+                }
+                if (!nextNodeId) {
+                  const fallbackConn = (workspace.connections || []).find(conn => conn.from === awaitingNode.id);
+                  nextNodeId = fallbackConn?.to || null;
+                }
             } else if (!isApiCallResponse) {
                 setProperty(session.flow_variables, '_invalidOption', true);
                 nextNodeId = awaitingNode.id;

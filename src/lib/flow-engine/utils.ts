@@ -29,6 +29,26 @@ function normalizePathExpression(rawPath: string): string {
 
 function formatEvaluatedValue(value: any, fallbackLabel?: string): string {
   if (value === undefined || value === null) return '';
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '';
+    return value
+      .map(item => {
+        if (item === undefined || item === null) return '';
+        if (typeof item === 'object') {
+          try {
+            return JSON.stringify(item, null, 2);
+          } catch (err) {
+            console.warn(`[Flow Engine] Failed to stringify array item for ${fallbackLabel || 'expression'}.`, err);
+            return '';
+          }
+        }
+        return String(item);
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
   if (typeof value === 'object') {
     try {
       return JSON.stringify(value, null, 2);

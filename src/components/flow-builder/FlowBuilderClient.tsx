@@ -51,33 +51,71 @@ const CHATWOOT_PREFILLED_VARIABLES = [
  * Extrai todas as variáveis que um nó específico define.
  * Agora é mais estrito, só adiciona se o campo existir e não for uma string vazia.
  */
+const sanitizeVariableName = (value: string | undefined): string | null => {
+    if (!value || typeof value !== 'string') return null;
+    const cleaned = value.replace(/\{\{/g, '').replace(/\}\}/g, '').trim();
+    return cleaned || null;
+};
+
 function getVariablesFromNode(node: NodeData): string[] {
     const variables: string[] = [];
 
-    // Itera sobre os campos que definem variáveis
     for (const field of VARIABLE_DEFINING_FIELDS) {
         if (Object.prototype.hasOwnProperty.call(node, field)) {
-            const varName = node[field] as string | undefined;
-            if (varName && typeof varName === 'string' && varName.trim() !== '') {
-                variables.push(varName.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
+            const varName = sanitizeVariableName(node[field] as string | undefined);
+            if (varName) {
+                variables.push(varName);
             }
         }
     }
 
-    // Lógica específica para o nó de início e seus mapeamentos de webhook
     if (node.type === 'start' && Array.isArray(node.triggers)) {
         for (const trigger of node.triggers) {
             if (trigger.type === 'webhook' && Array.isArray(trigger.variableMappings)) {
                 for (const mapping of trigger.variableMappings) {
-                    if (mapping.flowVariable && typeof mapping.flowVariable === 'string' && mapping.flowVariable.trim() !== '') {
-                        variables.push(mapping.flowVariable.trim().replace(/\{\{/g, '').replace(/\}\}/g, ''));
+                    const varName = sanitizeVariableName(mapping.flowVariable);
+                    if (varName) {
+                        variables.push(varName);
                     }
                 }
             }
         }
     }
+
+    if (node.type === 'api-call' && Array.isArray(node.apiResponseMappings)) {
+        for (const mapping of node.apiResponseMappings) {
+            const varName = sanitizeVariableName(mapping.flowVariable);
+            if (varName) {
+                variables.push(varName);
+            }
+        }
+    }
     return variables;
 }
+
+const computeBaseVariables = (workspace?: WorkspaceData | null): string[] => {
+    const vars = ['session_id', 'mensagem_whatsapp', 'webhook_payload'];
+    if (workspace?.chatwoot_enabled) {
+        vars.push(...CHATWOOT_PREFILLED_VARIABLES);
+    }
+    return vars;
+};
+
+const computeVariablesScope = (workspace: WorkspaceData, baseVars: string[]): Record<string, string[]> => {
+    const scoped: Record<string, string[]> = {};
+    if (!workspace?.nodes || !workspace.connections) return scoped;
+    const ancestorMemo = new Map<string, NodeData[]>();
+
+    for (const node of workspace.nodes) {
+        const ancestors = getAncestorsForNode(node.id, workspace.nodes, workspace.connections, ancestorMemo);
+        const ancestorVars = ancestors.flatMap(getVariablesFromNode);
+        const nodeVars = getVariablesFromNode(node);
+        const uniqueVars = Array.from(new Set([...baseVars, ...ancestorVars, ...nodeVars])).sort();
+        scoped[node.id] = uniqueVars;
+    }
+
+    return scoped;
+};
 
 /**
  * Encontra todos os nós ancestrais para um nó específico, navegando para trás no fluxo.
@@ -242,23 +280,9 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
         return;
     }
 
-    const { nodes, connections, chatwoot_enabled } = activeWorkspace;
-    const newVarsByNode: Record<string, string[]> = {};
-    const ancestorMemo = new Map<string, NodeData[]>();
-    
-    // Variáveis base que estão sempre disponíveis
-    const baseVars = ['session_id', 'mensagem_whatsapp', 'webhook_payload'];
-    if (chatwoot_enabled) {
-        baseVars.push(...CHATWOOT_PREFILLED_VARIABLES);
-    }
-
-    for (const node of nodes) {
-        const ancestors = getAncestorsForNode(node.id, nodes, connections, ancestorMemo);
-        const ancestorVars = ancestors.flatMap(getVariablesFromNode);
-        const uniqueVars = Array.from(new Set([...baseVars, ...ancestorVars])).sort();
-        newVarsByNode[node.id] = uniqueVars;
-    }
-    setAvailableVariablesByNode(newVarsByNode);
+    const baseVars = computeBaseVariables(activeWorkspace);
+    const scopedVars = computeVariablesScope(activeWorkspace, baseVars);
+    setAvailableVariablesByNode(scopedVars);
   }, [activeWorkspace]);
 
 
@@ -339,19 +363,28 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
 
   const updateActiveWorkspace = useCallback((updater: (workspace: WorkspaceData) => WorkspaceData) => {
     setActiveWorkspace(prevWorkspace => {
-        if (!prevWorkspace) {
+      if (!prevWorkspace) {
             console.warn('[FlowBuilderClient] updateActiveWorkspace called but no activeWorkspace.');
             return null;
         }
-        return updater(prevWorkspace);
+        const nextWorkspace = updater(prevWorkspace);
+        const baseVars = computeBaseVariables(nextWorkspace);
+        const newVarsByNode = computeVariablesScope(nextWorkspace, baseVars);
+        setAvailableVariablesByNode(newVarsByNode);
+        return nextWorkspace;
     });
   }, []);
 
   const handleDropNode = useCallback((item: DraggableBlockItemData, logicalDropCoords: { x: number, y: number }) => {
     let tempExistingVars: string[] = [];
     if (activeWorkspace?.nodes) {
-        const allVarsInFlow = Object.values(availableVariablesByNode).flat();
-        tempExistingVars = Array.from(new Set(allVarsInFlow));
+        const baseVars = computeBaseVariables(activeWorkspace);
+        tempExistingVars = Array.from(
+          new Set([
+            ...baseVars,
+            ...activeWorkspace.nodes.flatMap(n => getVariablesFromNode(n)),
+          ])
+        );
     }
     
     const itemDefaultDataCopy = item.defaultData ? JSON.parse(JSON.stringify(item.defaultData)) : {};
@@ -374,11 +407,12 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
         if (trigger.type === 'webhook' && Array.isArray(trigger.variableMappings)) {
             trigger.variableMappings = trigger.variableMappings.map(mapping => {
                  if (mapping.flowVariable) {
-                    const uniqueWebhookVarName = generateUniqueVariableName(mapping.flowVariable, tempExistingVars);
-                    if (uniqueWebhookVarName !== mapping.flowVariable.replace(/\{\{/g, '').replace(/\}\}/g, '').trim()) {
-                        tempExistingVars.push(uniqueWebhookVarName);
-                    }
-                    return {...mapping, flowVariable: uniqueWebhookVarName};
+            const baseName = mapping.flowVariable.replace(/\{\{/g, '').replace(/\}\}/g, '').trim();
+            const uniqueWebhookVarName = generateUniqueVariableName(baseName, tempExistingVars);
+            if (uniqueWebhookVarName !== baseName) {
+                tempExistingVars.push(uniqueWebhookVarName);
+            }
+            return {...mapping, flowVariable: uniqueWebhookVarName};
                 }
                 return mapping;
             });

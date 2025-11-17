@@ -24,6 +24,28 @@ import jsonata from 'jsonata';
 
 const CODE_EXECUTION_TIMEOUT_MS = 2000;
 
+const normalizeOptionsFromString = (raw: string): string[] => {
+  if (!raw) return [];
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map(item => (item === null || item === undefined ? '' : String(item)))
+          .map(item => item.trim())
+          .filter(item => item.length > 0);
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }
+  return raw
+    .split('\n')
+    .map(opt => opt.replace(/^[\[\s,]+|[\],\s]+$/g, '').trim())
+    .filter(opt => opt.length > 0);
+};
+
 function createSandboxConsole(sessionId: string) {
   const prefix = `[Flow Engine Code][${sessionId}]`;
   return {
@@ -258,10 +280,8 @@ export async function executeFlow(
         
         if (nodeType === 'option') {
           const q = substituteVariablesInText(currentNode.questionText, session.flow_variables);
-          const optionsList = (currentNode.optionsList || '')
-            .split('\n')
-            .map(opt => substituteVariablesInText(opt.trim(), session.flow_variables))
-            .filter(Boolean);
+          const substitutedOptions = substituteVariablesInText(currentNode.optionsList || '', session.flow_variables);
+          const optionsList = normalizeOptionsFromString(substitutedOptions);
 
           if (q && optionsList.length > 0) {
             let messageWithOptions = q + '\n\n';
@@ -507,9 +527,23 @@ export async function executeFlow(
                       try {
                           const expression = jsonata(mapping.jsonPath);
                           const extractedValue = await expression.evaluate(responseData);
-                          
-                           if (mapping.extractAs === 'list' && !Array.isArray(extractedValue)) {
-                              setProperty(session.flow_variables, mapping.flowVariable, [extractedValue]);
+
+                          if (mapping.extractAs === 'list') {
+                              const rawList = Array.isArray(extractedValue)
+                                ? extractedValue
+                                : (extractedValue === undefined || extractedValue === null ? [] : [extractedValue]);
+
+                              const normalizedList = mapping.itemField
+                                ? rawList.map(item => {
+                                    if (item === undefined || item === null) return undefined;
+                                    if (typeof item === 'object') {
+                                        return getProperty(item, mapping.itemField!);
+                                    }
+                                    return item;
+                                  }).filter(item => item !== undefined && item !== null)
+                                : rawList;
+
+                              setProperty(session.flow_variables, mapping.flowVariable, normalizedList);
                           } else {
                               setProperty(session.flow_variables, mapping.flowVariable, extractedValue);
                           }
