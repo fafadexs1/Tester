@@ -375,6 +375,77 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         }
         break;
 
+      case 'switch': {
+        const rawSwitchField = (node.switchVariable || '').toString();
+        const normalizedVarName = rawSwitchField.replace(/\{\{|\}\}/g, '').trim();
+        let actualValue: any = undefined;
+
+        if (normalizedVarName) {
+          actualValue = getProperty(updatedVarsForNextNode, normalizedVarName);
+        }
+
+        if (actualValue === undefined && rawSwitchField) {
+          actualValue = substituteVariables(node.switchVariable, updatedVarsForNextNode);
+        }
+
+        setMessages(prev => [
+          ...prev,
+          {
+            id: uuidv4(),
+            text: `Switch avaliando "${normalizedVarName || rawSwitchField}" com valor ${JSON.stringify(actualValue)}.`,
+            sender: 'bot',
+          },
+        ]);
+
+        let matchedCaseId: string | null = null;
+        let matchedCaseValue: string | null = null;
+
+        if (Array.isArray(node.switchCases)) {
+          for (const caseItem of node.switchCases) {
+            const caseValue = substituteVariables(caseItem.value, updatedVarsForNextNode);
+            if (String(actualValue) === String(caseValue)) {
+              matchedCaseId = caseItem.id;
+              matchedCaseValue = caseValue;
+              break;
+            }
+          }
+        }
+
+        if (matchedCaseId) {
+          setMessages(prev => [
+            ...prev,
+            {
+              id: uuidv4(),
+              text: `Switch encontrou correspondência com o caso "${matchedCaseValue}". Seguiremos por "${matchedCaseId}".`,
+              sender: 'bot',
+            },
+          ]);
+          nextNodeId = findNextNodeId(node.id, matchedCaseId) ?? findNextNodeId(node.id, 'default');
+        } else {
+          setMessages(prev => [
+            ...prev,
+            {
+              id: uuidv4(),
+              text: `Nenhum caso do switch correspondeu. Usando caminho 'otherwise'.`,
+              sender: 'bot',
+            },
+          ]);
+          nextNodeId = findNextNodeId(node.id, 'otherwise') ?? findNextNodeId(node.id, 'default');
+        }
+
+        if (!nextNodeId) {
+          setMessages(prev => [
+            ...prev,
+            {
+              id: uuidv4(),
+              text: `Switch sem conexões configuradas para o resultado escolhido.`,
+              sender: 'bot',
+            },
+          ]);
+        }
+        break;
+      }
+
       case 'delay':
         const duration = node.delayDuration || 1000;
         setMessages(prev => [...prev, { id: uuidv4(), text: `Aguardando ${duration / 1000} segundos...`, sender: 'bot' }]);
@@ -580,6 +651,23 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         setMessages(prev => [...prev, { id: uuidv4(), text: `(Log no console: ${logMsg})`, sender: 'bot' }]);
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
+
+      case 'dialogy-send-message': {
+        const dialogyContent = substituteVariables(node.dialogyMessageContent, updatedVarsForNextNode);
+        if (dialogyContent) {
+          setMessages(prev => [
+            ...prev,
+            { id: uuidv4(), text: `Dialogy (simulado): ${dialogyContent}`, sender: 'bot' },
+          ]);
+        } else {
+          setMessages(prev => [
+            ...prev,
+            { id: uuidv4(), text: 'Dialogy (simulado): sem conteúdo configurado.', sender: 'bot' },
+          ]);
+        }
+        nextNodeId = findNextNodeId(node.id, 'default');
+        break;
+      }
 
       case 'redirect':
         setMessages(prev => [...prev, { id: uuidv4(), text: `Simulando redirecionamento para: ${substituteVariables(node.redirectUrl, updatedVarsForNextNode)}`, sender: 'bot' }]);
