@@ -289,7 +289,10 @@ export async function executeFlow(
 
             let finalMessage = messageWithOptions.trim();
             if (session.flow_context !== 'chatwoot') {
-              finalMessage += "\nResponda com o número da opção desejada ou o texto exato da opção.";
+              finalMessage += "\nResponda com o numero da opcao desejada ou o texto exato da opcao.";
+              if (currentNode.aiEnabled) {
+                finalMessage += "\nPode responder em texto livre; vou entender sua intencao.";
+              }
             }
 
             await sendOmniChannelMessage(session, currentWorkspace, finalMessage);
@@ -297,7 +300,9 @@ export async function executeFlow(
             session.awaiting_input_details = {
               variableToSave: currentNode.variableToSaveChoice || 'last_user_choice',
               options: optionsList,
-              originalNodeId: currentNode.id
+              originalNodeId: currentNode.id,
+              aiEnabled: currentNode.aiEnabled || false,
+              aiModelName: currentNode.aiModelName
             };
             shouldContinue = false;
           } else {

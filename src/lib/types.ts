@@ -308,6 +308,8 @@ export interface FlowSession {
     variableToSave?: string; 
     options?: string[];       
     originalNodeId?: string; 
+    aiEnabled?: boolean;
+    aiModelName?: string;
   } | null;
   session_timeout_seconds?: number;
   last_interaction_at?: string | Date;

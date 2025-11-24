@@ -13,6 +13,7 @@ import {z} from 'genkit';
 const IntelligentChoiceInputSchema = z.object({
   userMessage: z.string().describe('The message sent by the user.'),
   availableChoices: z.array(z.string()).describe('The list of available options to choose from.'),
+  modelName: z.string().optional().describe('Optional model name to use for this decision.'),
 });
 export type IntelligentChoiceInput = z.infer<typeof IntelligentChoiceInputSchema>;
 
@@ -48,7 +49,7 @@ const intelligentChoiceFlow = ai.defineFlow(
     outputSchema: IntelligentChoiceOutputSchema,
   },
   async (input) => {
-    const {output} = await prompt(input);
+    const {output} = await prompt(input, { model: input.modelName });
     if (!output) {
       console.error('[intelligentChoiceFlow] LLM did not return a valid output. Returning the first available choice as a fallback.');
       return { bestChoice: input.availableChoices[0] || '' };

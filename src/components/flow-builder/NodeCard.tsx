@@ -2578,6 +2578,22 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                         </Label>
                     </div>
                     <p className="text-xs text-muted-foreground">Se ativado, a IA tentará corresponder a resposta do usuário à opção mais provável, em vez de exigir uma correspondência exata.</p>
+                    {node.aiEnabled && (
+                      <div className="space-y-1">
+                        <Label htmlFor={`${node.id}-aiModelName`}>Modelo de IA (opcional)</Label>
+                        <div className="relative">
+                          <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary pointer-events-none" />
+                          <Input
+                            id={`${node.id}-aiModelName`}
+                            placeholder="googleai/gemini-2.0-flash"
+                            value={node.aiModelName || ""}
+                            onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })}
+                            className="pl-9"
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">Deixe em branco para usar o modelo padrao configurado no servidor.</p>
+                      </div>
+                    )}
                 </div>
               </>
             )}

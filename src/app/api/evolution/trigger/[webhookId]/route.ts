@@ -13,6 +13,7 @@ import {
 import { executeFlow } from '@/lib/flow-engine/engine';
 import { storeRequestDetails } from '@/lib/flow-engine/webhook-handler';
 import { findNodeById, findNextNodeId } from '@/lib/flow-engine/utils';
+import { intelligentChoice } from '@/ai/flows/intelligent-choice-flow';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData } from '@/lib/types';
 
 // Helper function to check for nil values (null, undefined, '')
@@ -229,17 +230,37 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
             }
             const trimmedReceivedMessage = valueForOptionMatching.trim();
             const normalizedOptionLabels = options.map(opt => opt.trim().replace(/^[\[\s,]+|[\],\s]+$/g, '').toLowerCase());
-            const numericChoice = parseInt(trimmedReceivedMessage, 10);
-            if (!isNaN(numericChoice) && numericChoice > 0 && numericChoice <= options.length) {
-                chosenOptionText = options[numericChoice - 1];
-            } else {
-                const cleanedMessage = trimmedReceivedMessage.replace(/^[\[\s,]+|[\],\s]+$/g, '').toLowerCase();
-                const matchIndex = normalizedOptionLabels.indexOf(cleanedMessage);
-                if (matchIndex >= 0) {
-                  chosenOptionText = options[matchIndex];
-                } else {
-                  chosenOptionText = options.find(opt => opt.trim().toLowerCase() === cleanedMessage);
+            const aiEnabled = !!session.awaiting_input_details.aiEnabled;
+            const aiModelName = session.awaiting_input_details.aiModelName;
+
+            if (aiEnabled) {
+              try {
+                const aiResult = await intelligentChoice({
+                  userMessage: trimmedReceivedMessage,
+                  availableChoices: options,
+                  modelName: aiModelName || undefined,
+                });
+                if (aiResult?.bestChoice) {
+                  chosenOptionText = aiResult.bestChoice;
                 }
+              } catch (error) {
+                console.error('[API Evolution Trigger] intelligentChoice failed, falling back to rule-based matching.', error);
+              }
+            }
+
+            if (!chosenOptionText) {
+              const numericChoice = parseInt(trimmedReceivedMessage, 10);
+              if (!isNaN(numericChoice) && numericChoice > 0 && numericChoice <= options.length) {
+                  chosenOptionText = options[numericChoice - 1];
+              } else {
+                  const cleanedMessage = trimmedReceivedMessage.replace(/^[\[\s,]+|[\],\s]+$/g, '').toLowerCase();
+                  const matchIndex = normalizedOptionLabels.indexOf(cleanedMessage);
+                  if (matchIndex >= 0) {
+                    chosenOptionText = options[matchIndex];
+                  } else {
+                    chosenOptionText = options.find(opt => opt.trim().toLowerCase() === cleanedMessage);
+                  }
+              }
             }
 
             if (chosenOptionText) {
