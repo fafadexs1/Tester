@@ -219,7 +219,11 @@ export async function POST(request: NextRequest, { params }: { params: { webhook
             if (targetVarName) {
               setProperty(session.flow_variables, targetVarName, textToSave);
             }
-            nextNodeId = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
+            if (awaitingNode.type === 'intelligent-agent') {
+              nextNodeId = awaitingNode.id; // Mantém o agente conversando
+            } else {
+              nextNodeId = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
+            }
           } else if (session.awaiting_input_type === 'option' && Array.isArray(session.awaiting_input_details.options)) {
             const options = session.awaiting_input_details.options;
             let chosenOptionText: string | undefined = undefined;

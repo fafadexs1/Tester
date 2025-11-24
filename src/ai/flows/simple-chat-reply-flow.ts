@@ -12,6 +12,7 @@ import {z} from 'genkit';
 
 const UserMessageInputSchema = z.object({
   userMessage: z.string().describe('A mensagem enviada pelo usuário.'),
+  modelName: z.string().optional().describe('Modelo de IA a ser usado (opcional).'),
 });
 export type UserMessageInput = z.infer<typeof UserMessageInputSchema>;
 
@@ -42,7 +43,7 @@ const simpleChatReplyFlow = ai.defineFlow(
     outputSchema: SimpleChatReplyOutputSchema,
   },
   async (input) => {
-    const {output} = await prompt(input);
+    const {output} = await prompt(input, { model: input.modelName });
     if (!output) {
       // Adiciona um fallback caso a IA não retorne uma estrutura válida
       console.error('[simpleChatReplyFlow] LLM did not return a valid output structure. Returning default reply.');

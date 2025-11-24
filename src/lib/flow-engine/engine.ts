@@ -637,14 +637,17 @@ export async function executeFlow(
       case 'intelligent-agent': {
         const responseVarName = currentNode.agentResponseVariable;
         const inputVarName = currentNode.userInputVariable?.replace(/\{\{|\}\}/g, '').trim();
+        const modelName = currentNode.aiModelName;
+        const maxTurns = currentNode.maxConversationTurns ?? null;
 
         if (responseVarName && inputVarName) {
           try {
             const userInputForAgent = getProperty(session.flow_variables, inputVarName);
             if (userInputForAgent) {
-              console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: Calling simpleChatReply with input: "${userInputForAgent}"`);
-              const agentReply = await simpleChatReply({ userMessage: String(userInputForAgent) });
+              console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: Calling simpleChatReply with input: "${userInputForAgent}" (model: ${modelName || 'default'})`);
+              const agentReply = await simpleChatReply({ userMessage: String(userInputForAgent), modelName });
               setProperty(session.flow_variables, responseVarName, agentReply.botReply);
+              await sendOmniChannelMessage(session, currentWorkspace, agentReply.botReply);
             } else {
               console.warn(`[Flow Engine - ${session.session_id}] Intelligent Agent: Input variable '${inputVarName}' not found.`);
               setProperty(session.flow_variables, responseVarName, 'Error: User input not found.');
@@ -654,7 +657,26 @@ export async function executeFlow(
             setProperty(session.flow_variables, responseVarName, `Error with agent: ${e.message}`);
           }
         }
-        nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+
+        // Controle de turnos: se atingir o limite, siga o fluxo normal
+        const agentTurnKey = `_agent_turns_${currentNode.id}`;
+        const currentTurn = Number(getProperty(session.flow_variables, agentTurnKey) || 0) + 1;
+        setProperty(session.flow_variables, agentTurnKey, currentTurn);
+        if (maxTurns && currentTurn >= maxTurns) {
+          nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+          shouldContinue = true;
+          break;
+        }
+
+        // Mantém a conversa viva aguardando nova mensagem do usuário
+        session.awaiting_input_type = 'input';
+        session.awaiting_input_details = {
+          variableToSave: inputVarName,
+          originalNodeId: currentNode.id,
+        };
+        session.current_node_id = currentNode.id;
+        shouldContinue = false;
+        nextNodeId = currentNode.id;
         break;
       }
 
