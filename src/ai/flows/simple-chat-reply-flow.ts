@@ -14,6 +14,7 @@ const UserMessageInputSchema = z.object({
   userMessage: z.string().describe('A mensagem enviada pelo usuário.'),
   modelName: z.string().optional().describe('Modelo de IA a ser usado (opcional).'),
   systemPrompt: z.string().optional().describe('Instruções do sistema para orientar o tom/objetivo.'),
+  memoryContext: z.string().optional().describe('Resumo condensado de mensagens antigas para reforçar a memória.'),
   history: z
     .array(
       z.object({
@@ -39,17 +40,29 @@ const prompt = ai.definePrompt({
   name: 'simpleChatReplyPrompt',
   input: {schema: UserMessageInputSchema},
   output: {schema: SimpleChatReplyOutputSchema},
-  prompt: `{{#if systemPrompt}}
-Sistema: {{{systemPrompt}}}
+  prompt: `Você é um agente de atendimento que responde em português do Brasil com clareza e rapidez.
+{{#if systemPrompt}}
+Instruções de sistema: {{{systemPrompt}}}
+{{/if}}
+{{#if memoryContext}}
+Memória consolidada (trocas mais antigas): {{{memoryContext}}}
 {{/if}}
 {{#if history}}
-Historico recente:
+Histórico recente (ordem cronológica):
 {{#each history}}
 - {{role}}: {{{content}}}
 {{/each}}
 {{/if}}
-Mensagem do Usuario: {{{userMessage}}}
-Responda de forma natural, mantendo o contexto do historico.`,
+Mensagem atual do usuário: {{{userMessage}}}
+
+Regras de resposta:
+- Envie a resposta em até 3 mensagens curtas, separadas por linhas em branco (cada bloco será enviado como mensagem de texto).
+- Fale como um humano, de forma natural, sem parecer robô.
+- Seja proativo: pergunte os dados que faltam em um único pedido, evitando conversas picadas.
+- Mantenha acentuação e caracteres legíveis (sem códigos quebrados ou sequências estranhas).
+- Use o contexto acima para não repetir perguntas já respondidas.
+
+Entregue apenas a mensagem final para o usuário.`,
 });
 
 const simpleChatReplyFlow = ai.defineFlow(
@@ -63,7 +76,7 @@ const simpleChatReplyFlow = ai.defineFlow(
     if (!output) {
       // Adiciona um fallback caso a IA não retorne uma estrutura válida
       console.error('[simpleChatReplyFlow] LLM did not return a valid output structure. Returning default reply.');
-      return { botReply: "Desculpe, não consegui processar sua mensagem no momento." };
+      return { botReply: 'Desculpe, não consegui processar sua mensagem no momento.' };
     }
     return output;
   }

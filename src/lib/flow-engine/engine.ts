@@ -23,6 +23,91 @@ import jsonata from 'jsonata';
 
 
 const CODE_EXECUTION_TIMEOUT_MS = 2000;
+const MAX_AGENT_HISTORY_MESSAGES = 50;
+const MAX_AGENT_MEMORY_SUMMARY_CHARS = 4000;
+const MOJIBAKE_HINT_REGEX = /(Ã.|â.|�)/;
+
+type AgentHistoryEntry = { role: 'user' | 'assistant' | 'system'; content: string };
+const EXIT_INTENT_PATTERNS = [
+  'não quero', 'nao quero', 'não desejo', 'nao desejo', 'não', 'nao',
+  'encerrar', 'encerra', 'encerrando', 'encerrar atendimento', 'finalizar', 'finaliza',
+  'cancelar', 'cancelamento', 'cancela',
+  'parar', 'chega', 'sair', 'sair do atendimento', 'tchau', 'adeus', 'obrigado, mas', 'obrigada, mas'
+];
+
+const repairMojibake = (text: string): string => {
+  if (!text || !MOJIBAKE_HINT_REGEX.test(text)) return text;
+  try {
+    const candidate = Buffer.from(text, 'latin1').toString('utf8');
+    const hasReplacement = candidate.includes('�');
+    const hasPortugueseAccents = /[áàãâéêíóôõúüçÁÀÃÂÉÊÍÓÔÕÚÜÇ]/.test(candidate);
+    if (!hasReplacement && hasPortugueseAccents) {
+      return candidate;
+    }
+  } catch {
+    // ignore decoding issues
+  }
+  return text;
+};
+
+const cleanAndNormalizeText = (content: string): string => {
+  if (!content) return '';
+  let cleaned = repairMojibake(String(content));
+  cleaned = cleaned.replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+  cleaned = cleaned.replace(/[ \t]{2,}/g, ' ').replace(/\s+([,.;!?])/g, '$1').trim();
+  return cleaned.normalize('NFC');
+};
+
+const mergeMemorySummary = (currentSummary: string | undefined, addition: string): string => {
+  const sanitizedAddition = cleanAndNormalizeText(addition);
+  if (!sanitizedAddition) return currentSummary || '';
+  const merged = [currentSummary, sanitizedAddition].filter(Boolean).join(' | ');
+  return merged.length > MAX_AGENT_MEMORY_SUMMARY_CHARS
+    ? merged.slice(merged.length - MAX_AGENT_MEMORY_SUMMARY_CHARS)
+    : merged;
+};
+
+const splitIntoMessageBlocks = (text: string): string[] => {
+  const parts = cleanAndNormalizeText(text)
+    .split(/\n{2,}/)
+    .map(p => p.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) return [];
+  if (parts.length <= 3) return parts;
+
+  // Mantém os dois primeiros blocos e junta o restante para não perder conteúdo
+  const mergedTail = parts.slice(2).join(' ');
+  return [parts[0], parts[1], mergedTail];
+};
+
+const trimAndSummarizeHistory = (
+  history: AgentHistoryEntry[] | undefined,
+  memorySummary: string | undefined
+): { history: AgentHistoryEntry[]; memorySummary?: string } => {
+  if (!Array.isArray(history) || history.length === 0) {
+    return { history: [], memorySummary };
+  }
+
+  if (history.length <= MAX_AGENT_HISTORY_MESSAGES) {
+    return { history, memorySummary };
+  }
+
+  const overflow = history.slice(0, history.length - MAX_AGENT_HISTORY_MESSAGES);
+  const overflowText = overflow.map(entry => `${entry.role}: ${entry.content}`).join(' | ');
+  const mergedSummary = mergeMemorySummary(memorySummary, overflowText);
+
+  return {
+    history: history.slice(-MAX_AGENT_HISTORY_MESSAGES),
+    memorySummary: mergedSummary,
+  };
+};
+
+const detectExitIntent = (text: string): boolean => {
+  if (!text) return false;
+  const normalized = text.toLowerCase();
+  return EXIT_INTENT_PATTERNS.some(pattern => normalized.includes(pattern));
+};
 
 const normalizeOptionsFromString = (raw: string): string[] => {
   if (!raw) return [];
@@ -645,17 +730,61 @@ export async function executeFlow(
           try {
             const userInputForAgent = getProperty(session.flow_variables, inputVarName);
             if (userInputForAgent) {
-              console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: Calling simpleChatReply with input: "${userInputForAgent}" (model: ${modelName || 'default'})`);
-              const historyKey = `_agent_history_${currentNode.id}`;
-              const existingHistory = getProperty(session.flow_variables, historyKey);
-              const history = Array.isArray(existingHistory) ? existingHistory.slice(-10) : [];
-              history.push({ role: 'user', content: String(userInputForAgent) });
+              const cleanedUserInput = cleanAndNormalizeText(String(userInputForAgent));
+              console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: Calling simpleChatReply with input: "${cleanedUserInput}" (model: ${modelName || 'default'})`);
 
-              const agentReply = await simpleChatReply({ userMessage: String(userInputForAgent), modelName, systemPrompt, history });
-              setProperty(session.flow_variables, responseVarName, agentReply.botReply);
-              history.push({ role: 'assistant', content: agentReply.botReply });
+              if (detectExitIntent(cleanedUserInput)) {
+                console.log(`[Flow Engine - ${session.session_id}] Exit intent detected. Continuing flow.`);
+                setProperty(session.flow_variables, responseVarName, cleanedUserInput);
+                setProperty(session.flow_variables, `_agent_exit_intent_${currentNode.id}`, true);
+                nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+                shouldContinue = true;
+                break;
+              }
+
+              const historyKey = `_agent_history_${currentNode.id}`;
+              const historySummaryKey = `_agent_history_summary_${currentNode.id}`;
+              const existingHistory = getProperty(session.flow_variables, historyKey) as AgentHistoryEntry[] | undefined;
+              let memorySummary = getProperty(session.flow_variables, historySummaryKey) as string | undefined;
+
+              let history = Array.isArray(existingHistory)
+                ? existingHistory.map(entry => ({
+                    role: entry.role,
+                    content: cleanAndNormalizeText(String(entry.content ?? '')),
+                  }))
+                : [];
+
+              ({ history, memorySummary } = trimAndSummarizeHistory(history, memorySummary));
+
+              history.push({ role: 'user', content: cleanedUserInput });
+              ({ history, memorySummary } = trimAndSummarizeHistory(history, memorySummary));
+
+              const agentReply = await simpleChatReply({
+                userMessage: cleanedUserInput,
+                modelName,
+                systemPrompt,
+                history,
+                memoryContext: memorySummary,
+              });
+
+              const cleanedReply = cleanAndNormalizeText(agentReply.botReply);
+              const messageBlocks = splitIntoMessageBlocks(cleanedReply);
+              const replyForHistory = messageBlocks.length > 0 ? messageBlocks.join('\n\n') : cleanedReply;
+
+              setProperty(session.flow_variables, responseVarName, cleanedReply);
+
+              history.push({ role: 'assistant', content: replyForHistory });
+              ({ history, memorySummary } = trimAndSummarizeHistory(history, memorySummary));
+
               setProperty(session.flow_variables, historyKey, history);
-              await sendOmniChannelMessage(session, currentWorkspace, agentReply.botReply);
+              if (memorySummary) {
+                setProperty(session.flow_variables, historySummaryKey, memorySummary);
+              }
+
+              const blocksToSend = messageBlocks.length > 0 ? messageBlocks : [cleanedReply];
+              for (const block of blocksToSend) {
+                await sendOmniChannelMessage(session, currentWorkspace, block);
+              }
             } else {
               console.warn(`[Flow Engine - ${session.session_id}] Intelligent Agent: Input variable '${inputVarName}' not found.`);
               setProperty(session.flow_variables, responseVarName, 'Error: User input not found.');
