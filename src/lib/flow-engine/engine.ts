@@ -639,14 +639,22 @@ export async function executeFlow(
         const inputVarName = currentNode.userInputVariable?.replace(/\{\{|\}\}/g, '').trim();
         const modelName = currentNode.aiModelName;
         const maxTurns = currentNode.maxConversationTurns ?? null;
+        const systemPrompt = substituteVariablesInText(currentNode.agentSystemPrompt, session.flow_variables);
 
         if (responseVarName && inputVarName) {
           try {
             const userInputForAgent = getProperty(session.flow_variables, inputVarName);
             if (userInputForAgent) {
               console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: Calling simpleChatReply with input: "${userInputForAgent}" (model: ${modelName || 'default'})`);
-              const agentReply = await simpleChatReply({ userMessage: String(userInputForAgent), modelName });
+              const historyKey = `_agent_history_${currentNode.id}`;
+              const existingHistory = getProperty(session.flow_variables, historyKey);
+              const history = Array.isArray(existingHistory) ? existingHistory.slice(-10) : [];
+              history.push({ role: 'user', content: String(userInputForAgent) });
+
+              const agentReply = await simpleChatReply({ userMessage: String(userInputForAgent), modelName, systemPrompt, history });
               setProperty(session.flow_variables, responseVarName, agentReply.botReply);
+              history.push({ role: 'assistant', content: agentReply.botReply });
+              setProperty(session.flow_variables, historyKey, history);
               await sendOmniChannelMessage(session, currentWorkspace, agentReply.botReply);
             } else {
               console.warn(`[Flow Engine - ${session.session_id}] Intelligent Agent: Input variable '${inputVarName}' not found.`);

@@ -13,6 +13,16 @@ import {z} from 'genkit';
 const UserMessageInputSchema = z.object({
   userMessage: z.string().describe('A mensagem enviada pelo usuário.'),
   modelName: z.string().optional().describe('Modelo de IA a ser usado (opcional).'),
+  systemPrompt: z.string().optional().describe('Instruções do sistema para orientar o tom/objetivo.'),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant', 'system']).describe('Quem enviou a mensagem.'),
+        content: z.string().describe('Conteúdo da mensagem.'),
+      })
+    )
+    .optional()
+    .describe('Histórico de mensagens para dar contexto.'),
 });
 export type UserMessageInput = z.infer<typeof UserMessageInputSchema>;
 
@@ -29,11 +39,17 @@ const prompt = ai.definePrompt({
   name: 'simpleChatReplyPrompt',
   input: {schema: UserMessageInputSchema},
   output: {schema: SimpleChatReplyOutputSchema},
-  prompt: `Você é um assistente de chatbot amigável e prestativo. Responda à mensagem do usuário de forma concisa e relevante.
-
-Mensagem do Usuário: {{{userMessage}}}
-
-Resposta do Assistente:`,
+  prompt: `{{#if systemPrompt}}
+Sistema: {{{systemPrompt}}}
+{{/if}}
+{{#if history}}
+Historico recente:
+{{#each history}}
+- {{role}}: {{{content}}}
+{{/each}}
+{{/if}}
+Mensagem do Usuario: {{{userMessage}}}
+Responda de forma natural, mantendo o contexto do historico.`,
 });
 
 const simpleChatReplyFlow = ai.defineFlow(

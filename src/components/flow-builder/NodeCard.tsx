@@ -196,6 +196,139 @@ const formatPreviewValue = (value: any) => {
 
 type SimpleKeyValue = { key: string; value: string };
 
+type VariableKind = 'array' | 'object' | 'string' | 'number' | 'boolean' | 'value' | 'unknown';
+type VariableOption = { name: string; kind: VariableKind };
+
+const VARIABLE_KIND_PRIORITY: Record<VariableKind, number> = {
+  array: 4,
+  object: 3,
+  string: 2,
+  number: 2,
+  boolean: 2,
+  value: 1,
+  unknown: 0,
+};
+
+const BASE_VARIABLE_KINDS: Record<string, VariableKind> = {
+  session_id: 'string',
+  mensagem_whatsapp: 'string',
+  webhook_payload: 'object',
+  chatwoot_conversation_id: 'string',
+  chatwoot_contact_id: 'string',
+  chatwoot_account_id: 'string',
+  chatwoot_inbox_id: 'string',
+  contact_name: 'string',
+  contact_phone: 'string',
+};
+
+const normalizeVariableNameForHint = (value?: string): string | null => {
+  if (!value || typeof value !== 'string') return null;
+  const cleaned = value.replace(/\{\{|\}\}/g, '').trim();
+  return cleaned || null;
+};
+
+const toSafeJsIdentifier = (rawName: string): string => {
+  const cleaned = rawName.replace(/[^\w]/g, '_');
+  const prefixed = cleaned.match(/^[0-9]/) ? `_${cleaned}` : cleaned;
+  return prefixed || 'variavel';
+};
+
+const describeVariableKind = (kind: VariableKind): string => {
+  switch (kind) {
+    case 'array':
+      return 'lista';
+    case 'object':
+      return 'objeto';
+    case 'string':
+      return 'texto';
+    case 'number':
+      return 'número';
+    case 'boolean':
+      return 'booleano';
+    case 'value':
+      return 'valor';
+    default:
+      return 'desconhecido';
+  }
+};
+
+const buildVariableOptions = (availableVariables: string[], workspace?: WorkspaceData | null): VariableOption[] => {
+  const typeHints = new Map<string, VariableKind>();
+
+  const registerHint = (rawName: string | undefined, kind: VariableKind) => {
+    const name = normalizeVariableNameForHint(rawName);
+    if (!name) return;
+    const current = typeHints.get(name) || 'unknown';
+    if (VARIABLE_KIND_PRIORITY[kind] > VARIABLE_KIND_PRIORITY[current]) {
+      typeHints.set(name, kind);
+    }
+  };
+
+  Object.entries(BASE_VARIABLE_KINDS).forEach(([name, kind]) => typeHints.set(name, kind));
+
+  if (workspace?.nodes) {
+    workspace.nodes.forEach(node => {
+      if (node.type === 'start' && Array.isArray(node.triggers)) {
+        node.triggers.forEach(trigger => {
+          (trigger.variableMappings || []).forEach(mapping => registerHint(mapping.flowVariable, 'value'));
+        });
+      }
+
+      switch (node.type) {
+        case 'input':
+          registerHint(node.variableToSaveResponse, 'string');
+          break;
+        case 'option':
+          registerHint(node.variableToSaveChoice, 'string');
+          break;
+        case 'date-input':
+          registerHint(node.variableToSaveDate, 'string');
+          break;
+        case 'rating-input':
+          registerHint(node.ratingOutputVariable, 'number');
+          break;
+        case 'set-variable':
+          registerHint(node.variableName, 'value');
+          break;
+        case 'api-call':
+          registerHint(node.apiOutputVariable, 'object');
+          (node.apiResponseMappings || []).forEach(mapping => registerHint(mapping.flowVariable, mapping.extractAs === 'list' ? 'array' : 'value'));
+          break;
+        case 'json-transform':
+          registerHint(node.jsonOutputVariable, 'object');
+          break;
+        case 'file-upload':
+          registerHint(node.fileUrlVariable, 'string');
+          break;
+        case 'ai-text-generation':
+          registerHint(node.aiOutputVariable, 'string');
+          break;
+        case 'intelligent-agent':
+          registerHint(node.agentResponseVariable, 'string');
+          break;
+        case 'code-execution':
+          registerHint(node.codeOutputVariable, 'value');
+          break;
+        case 'supabase-read-row':
+          registerHint(node.supabaseResultVariable, 'array');
+          break;
+        case 'supabase-create-row':
+        case 'supabase-update-row':
+        case 'supabase-delete-row':
+          registerHint(node.supabaseResultVariable, 'object');
+          break;
+        default:
+          break;
+      }
+    });
+  }
+
+  return availableVariables.map(name => ({
+    name,
+    kind: typeHints.get(name) || 'unknown',
+  }));
+};
+
 interface ParsedCurlResult {
   url: string;
   method: NodeData['apiMethod'];
@@ -726,6 +859,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const isDraggingNode = useRef(false);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const codeEditorRef = useRef<HTMLTextAreaElement>(null);
 
 
   const [isTestResponseModalOpen, setIsTestResponseModalOpen] = useState(false);
@@ -765,6 +899,36 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       .map(mapping => `${mapping.id}:${mapping.jsonPath || ''}:${mapping.extractAs || 'single'}:${mapping.itemField || ''}`)
       .join('|');
   }, [node.apiResponseMappings]);
+
+  const variableOptions = useMemo(
+    () => buildVariableOptions(availableVariables, activeWorkspace),
+    [availableVariables, activeWorkspace]
+  );
+
+  const handleInsertCodeVariable = useCallback((option: VariableOption) => {
+    const accessor = `variables["${option.name}"]`;
+    let valueExpression = accessor;
+    if (option.kind === 'array') {
+      valueExpression = `Array.isArray(${accessor}) ? ${accessor} : []`;
+    } else if (option.kind === 'object') {
+      valueExpression = `${accessor} ?? {}`;
+    }
+
+    const snippet = `const ${toSafeJsIdentifier(option.name)} = ${valueExpression}; // ${describeVariableKind(option.kind)}\n`;
+    const current = node.codeSnippet || '';
+    const needsNewLine = current.length > 0 && !current.endsWith('\n');
+    const updatedSnippet = `${current}${needsNewLine ? '\n' : ''}${snippet}`;
+
+    onUpdate(node.id, { codeSnippet: updatedSnippet });
+
+    requestAnimationFrame(() => {
+      if (codeEditorRef.current) {
+        const cursor = codeEditorRef.current.value.length;
+        codeEditorRef.current.focus();
+        codeEditorRef.current.setSelectionRange(cursor, cursor);
+      }
+    });
+  }, [node.codeSnippet, node.id, onUpdate]);
 
 
   const [supabaseTables, setSupabaseTables] = useState<{ name: string }[]>([]);
@@ -3156,18 +3320,57 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       case 'code-execution':
         return (
           <div className="space-y-3" data-no-drag="true">
-            <div>
-              <Label htmlFor={`${node.id}-codesnippet`}>Trecho de Código (JavaScript)</Label>
-              <div className="relative">
-                <Textarea id={`${node.id}-codesnippet`} placeholder="function minhaFuncao(variaveis) {&#10;  // Use variaveis.nome_da_variavel para acessar&#10;  return { resultado: 'sucesso' };&#10;}&#10;minhaFuncao(variables);" value={node.codeSnippet || ''} onChange={(e) => onUpdate(node.id, { codeSnippet: e.target.value })} rows={6} className="pr-8 font-mono text-xs" />
-                {renderVariableInserter('codeSnippet', true)}
-              </div>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor={`${node.id}-codesnippet`}>Trecho de Codigo (JavaScript)</Label>
+              {variableOptions.length > 0 && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8" data-no-drag="true">
+                      <MousePointerClick className="w-3.5 h-3.5 mr-1" /> Selecionar variavel
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 p-2" align="end" data-no-drag="true">
+                    <p className="text-[11px] text-muted-foreground px-1 pb-2">Insira o valor direto do objeto variables.</p>
+                    <div className="max-h-64 overflow-y-auto space-y-1">
+                      {variableOptions.map((option) => (
+                        <Button
+                          key={option.name}
+                          variant="ghost"
+                          size="sm"
+                          className="w-full justify-between h-8 px-2"
+                          onClick={() => handleInsertCodeVariable(option)}
+                          data-no-drag="true"
+                        >
+                          <span className="truncate text-sm">{option.name}</span>
+                          <span className="text-[10px] uppercase text-muted-foreground">{describeVariableKind(option.kind)}</span>
+                        </Button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+            <div className="relative">
+              <Textarea
+                ref={codeEditorRef}
+                id={`${node.id}-codesnippet`}
+                placeholder={`function minhaFuncao(variaveis) {
+  const nome = variables["nome"];
+  return { resultado: nome };
+}
+minhaFuncao(variables);`}
+                value={node.codeSnippet || ''}
+                onChange={(e) => onUpdate(node.id, { codeSnippet: e.target.value })}
+                rows={6}
+                className="pr-8 font-mono text-xs"
+              />
+              {renderVariableInserter('codeSnippet', true)}
             </div>
             <div>
-              <Label htmlFor={`${node.id}-codeoutputvar`}>Salvar Saída (objeto) na Variável</Label>
+              <Label htmlFor={`${node.id}-codeoutputvar`}>Salvar Saida (objeto) na Variavel</Label>
               <Input id={`${node.id}-codeoutputvar`} placeholder="resultado_codigo (ex: resultado_codigo.resultado)" value={node.codeOutputVariable || ''} onChange={(e) => onUpdate(node.id, { codeOutputVariable: e.target.value })} />
             </div>
-            <p className="text-xs text-muted-foreground">Nota: O código é executado em um ambiente sandbox no servidor.</p>
+            <p className="text-xs text-muted-foreground">Nota: O codigo e executado em um ambiente sandbox no servidor. Use o objeto <code>variables[\"nome_da_variavel\"]</code> para acessar dados do fluxo.</p>
           </div>
         );
       case 'json-transform':
