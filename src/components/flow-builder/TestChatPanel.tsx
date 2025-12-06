@@ -43,73 +43,73 @@ const renderWithLineBreaks = (value: string, keyPrefix: string) =>
   ));
 
 const formatChatMessage = (text: string): React.ReactNode => {
-    if (typeof text !== 'string') {
-        return text;
-    }
-    // Regex para capturar formatação e variáveis
-    const regex = /(\*.*?\*|_.*?_|~.*?~|```.*?```|\{\{.*?\}\})/g;
-    const segments = text.split(regex);
-    const matches = text.match(regex) || [];
+  if (typeof text !== 'string') {
+    return text;
+  }
+  // Regex para capturar formatação e variáveis
+  const regex = /(\*.*?\*|_.*?_|~.*?~|```.*?```|\{\{.*?\}\})/g;
+  const segments = text.split(regex);
+  const matches = text.match(regex) || [];
 
-    const result: React.ReactNode[] = [];
-    let matchIndex = 0;
+  const result: React.ReactNode[] = [];
+  let matchIndex = 0;
 
-    for (let i = 0; i < segments.length; i++) {
-        const plainSegment = segments[i];
-        if (plainSegment) {
-            result.push(
-              <span key={`plain-${i}`} className="whitespace-pre-wrap break-words">
-                {plainSegment}
-              </span>
-            );
-        }
-
-        const token = matches[matchIndex++];
-        if (!token) continue;
-
-        if (token.startsWith('*') && token.endsWith('*')) {
-            result.push(
-              <b key={`bold-${i}`} className="whitespace-pre-wrap break-words">
-                {token.slice(1, -1)}
-              </b>
-            );
-        } else if (token.startsWith('_') && token.endsWith('_')) {
-            result.push(
-              <i key={`italic-${i}`} className="whitespace-pre-wrap break-words">
-                {token.slice(1, -1)}
-              </i>
-            );
-        } else if (token.startsWith('~') && token.endsWith('~')) {
-            result.push(
-              <s key={`strike-${i}`} className="whitespace-pre-wrap break-words">
-                {token.slice(1, -1)}
-              </s>
-            );
-        } else if (token.startsWith('```') && token.endsWith('```')) {
-            result.push(
-              <pre
-                key={`code-${i}`}
-                className="font-mono bg-muted text-foreground p-1 rounded-sm whitespace-pre-wrap break-words text-xs"
-              >
-                {token.slice(3, -3)}
-              </pre>
-            );
-        } else if (token.startsWith('{{') && token.endsWith('}}')) {
-            result.push(
-              <span key={`var-${i}`} className="font-mono text-xs bg-muted p-1 rounded-sm text-amber-500 break-words">
-                {token}
-              </span>
-            );
-        } else {
-            result.push(
-              <span key={`text-${i}`} className="whitespace-pre-wrap break-words">
-                {token}
-              </span>
-            );
-        }
+  for (let i = 0; i < segments.length; i++) {
+    const plainSegment = segments[i];
+    if (plainSegment) {
+      result.push(
+        <span key={`plain-${i}`} className="whitespace-pre-wrap break-words">
+          {plainSegment}
+        </span>
+      );
     }
 
-    return result;
+    const token = matches[matchIndex++];
+    if (!token) continue;
+
+    if (token.startsWith('*') && token.endsWith('*')) {
+      result.push(
+        <b key={`bold-${i}`} className="whitespace-pre-wrap break-words">
+          {token.slice(1, -1)}
+        </b>
+      );
+    } else if (token.startsWith('_') && token.endsWith('_')) {
+      result.push(
+        <i key={`italic-${i}`} className="whitespace-pre-wrap break-words">
+          {token.slice(1, -1)}
+        </i>
+      );
+    } else if (token.startsWith('~') && token.endsWith('~')) {
+      result.push(
+        <s key={`strike-${i}`} className="whitespace-pre-wrap break-words">
+          {token.slice(1, -1)}
+        </s>
+      );
+    } else if (token.startsWith('```') && token.endsWith('```')) {
+      result.push(
+        <pre
+          key={`code-${i}`}
+          className="font-mono bg-muted text-foreground p-1 rounded-sm whitespace-pre-wrap break-words text-xs"
+        >
+          {token.slice(3, -3)}
+        </pre>
+      );
+    } else if (token.startsWith('{{') && token.endsWith('}}')) {
+      result.push(
+        <span key={`var-${i}`} className="font-mono text-xs bg-muted p-1 rounded-sm text-amber-500 break-words">
+          {token}
+        </span>
+      );
+    } else {
+      result.push(
+        <span key={`text-${i}`} className="whitespace-pre-wrap break-words">
+          {token}
+        </span>
+      );
+    }
+  }
+
+  return result;
 };
 
 
@@ -128,7 +128,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
   const [webhookDialogJsonInput, setWebhookDialogJsonInput] = useState<string>('');
 
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
-  const activeFlowVariablesRef = useRef(flowVariables); 
+  const activeFlowVariablesRef = useRef(flowVariables);
 
   useEffect(() => {
     activeFlowVariablesRef.current = flowVariables;
@@ -205,29 +205,29 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     if (text === undefined || text === null) {
       return '';
     }
-    let mutableText = String(text); 
+    let mutableText = String(text);
     const variableRegex = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
-  
+
     const substitutedText = mutableText.replace(variableRegex, (match, variableName) => {
-      
+
       if (variableName === 'now') {
         return new Date().toISOString();
       }
 
       let value: any = getProperty(currentActiveFlowVariables, variableName);
-      
+
       if (value === undefined) {
         value = currentActiveFlowVariables[variableName];
       }
-  
+
       if (value === undefined || value === null) {
         console.warn(`[TestChatPanel] substituteVariables: Variable "{{${variableName}}}" resolved to undefined/null. Vars:`, JSON.parse(JSON.stringify(currentActiveFlowVariables)));
-        return ''; 
+        return '';
       }
       if (typeof value === 'object' || Array.isArray(value)) {
         console.log(`[TestChatPanel] substituteVariables: Variable "{{${variableName}}}" is object/array, stringifying.`);
         try {
-          return JSON.stringify(value, null, 2); 
+          return JSON.stringify(value, null, 2);
         } catch (e) {
           console.error(`[TestChatPanel] substituteVariables: Failed to stringify object/array for variable "{{${variableName}}}". Error:`, e);
           return `[Error stringifying object for ${variableName}]`;
@@ -279,8 +279,8 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     console.log(`[TestChatPanel] processNode ENTER: nodeId: ${nodeId}, receivedVars:`, JSON.parse(JSON.stringify(receivedVars)));
     setIsProcessingNode(true);
     setCurrentNodeId(nodeId);
-  
-    let activeVars = { ...receivedVars }; 
+
+    let activeVars = { ...receivedVars };
     console.log(`[TestChatPanel] processNode: effective activeVars for this node execution:`, JSON.parse(JSON.stringify(activeVars)));
 
     if (!activeWorkspace) {
@@ -325,20 +325,20 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       case 'start':
         const triggerNameToUse = updatedVarsForNextNode._triggerName || (node.triggers && node.triggers.length > 0 ? node.triggers[0].name : 'default');
         setMessages(prev => [...prev, { id: uuidv4(), text: `Iniciando fluxo a partir de: ${node.title || 'Nó de Início'} com gatilho: "${triggerNameToUse}"`, sender: 'bot' }]);
-        
+
         nextNodeId = findNextNodeId(node.id, triggerNameToUse);
         if (!nextNodeId && node.triggers && node.triggers.length > 0 && triggerNameToUse !== node.triggers[0].name) {
-             console.warn(`[TestChatPanel] Trigger "${triggerNameToUse}" not directly connected, trying first trigger "${node.triggers[0].name}" as default for webhook start.`);
-            nextNodeId = findNextNodeId(node.id, node.triggers[0].name);
+          console.warn(`[TestChatPanel] Trigger "${triggerNameToUse}" not directly connected, trying first trigger "${node.triggers[0].name}" as default for webhook start.`);
+          nextNodeId = findNextNodeId(node.id, node.triggers[0].name);
         }
-         if (!nextNodeId && (!node.triggers || node.triggers.length === 0 || triggerNameToUse !== 'default')) { 
-            console.warn(`[TestChatPanel] Trigger "${triggerNameToUse}" (or first trigger) not connected, trying 'default' output.`);
-            nextNodeId = findNextNodeId(node.id, 'default');
+        if (!nextNodeId && (!node.triggers || node.triggers.length === 0 || triggerNameToUse !== 'default')) {
+          console.warn(`[TestChatPanel] Trigger "${triggerNameToUse}" (or first trigger) not connected, trying 'default' output.`);
+          nextNodeId = findNextNodeId(node.id, 'default');
         }
 
         if (!nextNodeId) {
-            setMessages(prev => [...prev, { id: uuidv4(), text: `Nó de início (ou gatilho "${triggerNameToUse}") não tem conexões de saída.`, sender: 'bot' }]);
-            autoAdvance = false;
+          setMessages(prev => [...prev, { id: uuidv4(), text: `Nó de início (ou gatilho "${triggerNameToUse}") não tem conexões de saída.`, sender: 'bot' }]);
+          autoAdvance = false;
         }
         if (updatedVarsForNextNode._triggerName) delete updatedVarsForNextNode._triggerName;
         break;
@@ -350,9 +350,9 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         } else {
           setMessages(prev => [...prev, { id: uuidv4(), text: "(Nó de mensagem vazio ou variável não resolvida)", sender: 'bot' }]);
         }
-        
+
         if (activeWorkspace?.evolution_api_enabled) {
-          const phoneNumber = activeVars.whatsapp_sender_jid; 
+          const phoneNumber = activeVars.whatsapp_sender_jid;
           if (phoneNumber) {
             if (activeWorkspace.evolution_api_url && messageText) {
               console.log(`[TestChatPanel] Attempting to send message node text via WhatsApp to ${phoneNumber}`);
@@ -381,12 +381,12 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         const promptText = substituteVariables(node.promptText, updatedVarsForNextNode);
         if (promptText) {
           setMessages(prev => [...prev, { id: uuidv4(), text: promptText, sender: 'bot' }]);
-            if (activeWorkspace?.evolution_api_enabled) {
-                const phoneNumber = activeVars.whatsapp_sender_jid;
-                 if (phoneNumber) {
-                    // Lógica similar ao nó 'message' para enviar promptText
-                 }
+          if (activeWorkspace?.evolution_api_enabled) {
+            const phoneNumber = activeVars.whatsapp_sender_jid;
+            if (phoneNumber) {
+              // Lógica similar ao nó 'message' para enviar promptText
             }
+          }
         } else {
           setMessages(prev => [...prev, { id: uuidv4(), text: "(Nó de entrada sem pergunta ou variável não resolvida)", sender: 'bot' }]);
         }
@@ -410,7 +410,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
           if (activeWorkspace?.evolution_api_enabled) {
             const phoneNumber = activeVars.whatsapp_sender_jid;
             if (phoneNumber) {
-                // Lógica similar ao nó 'message' para enviar questionText
+              // Lógica similar ao nó 'message' para enviar questionText
             }
           }
           setAwaitingInputFor(node);
@@ -432,15 +432,15 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         let displayVarName = conditionVarField || '';
 
         if (conditionVarField) {
-            actualValue = getProperty(updatedVarsForNextNode, substituteVariables(conditionVarField, updatedVarsForNextNode).replace(/\{\{|\}\}/g, ''));
-            if(actualValue === undefined) actualValue = substituteVariables(conditionVarField, updatedVarsForNextNode); // Fallback se não for placeholder
-            displayVarName = conditionVarField;
+          actualValue = getProperty(updatedVarsForNextNode, substituteVariables(conditionVarField, updatedVarsForNextNode).replace(/\{\{|\}\}/g, ''));
+          if (actualValue === undefined) actualValue = substituteVariables(conditionVarField, updatedVarsForNextNode); // Fallback se não for placeholder
+          displayVarName = conditionVarField;
         }
 
         const valueToCompare = conditionCompareValueField
           ? substituteVariables(conditionCompareValueField, updatedVarsForNextNode)
           : undefined;
-        
+
         setMessages(prev => [...prev, { id: uuidv4(), text: `Avaliando condição: '${displayVarName}' (valor: ${JSON.stringify(actualValue)}) ${conditionOperator} '${valueToCompare === undefined ? 'N/A' : valueToCompare}'`, sender: 'bot' }]);
         console.log(`[TestChatPanel] Condition Eval: Var Field: "${conditionVarField}", Resolved Actual Value:`, actualValue, `(Type: ${typeof actualValue})`, `Operator: "${conditionOperator}", Compare Value Field: "${conditionCompareValueField}", Resolved Compare Value:`, valueToCompare, `(Type: ${typeof valueToCompare})`);
 
@@ -568,45 +568,45 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       case 'whatsapp-text':
       case 'whatsapp-media': {
         if (!activeWorkspace?.evolution_api_enabled) {
-            setMessages(prev => [...prev, { id: uuidv4(), text: "Envio WhatsApp pulado: Integração API Evolution não habilitada neste fluxo.", sender: 'bot' }]);
+          setMessages(prev => [...prev, { id: uuidv4(), text: "Envio WhatsApp pulado: Integração API Evolution não habilitada neste fluxo.", sender: 'bot' }]);
         } else {
-            setMessages(prev => [...prev, { id: uuidv4(), text: `Tentando enviar mensagem WhatsApp (${node.type})...`, sender: 'bot' }]);
-            
-            const nodeInstanceName = substituteVariables(node.instanceName, updatedVarsForNextNode);
-            const instanceNameToUse = nodeInstanceName || activeWorkspace.evolution_instance_name || 'evolution_instance';
-            
-            let recipientPhoneNumber = substituteVariables(node.phoneNumber, updatedVarsForNextNode);
-             if (!recipientPhoneNumber && updatedVarsForNextNode.whatsapp_sender_jid) {
-                 recipientPhoneNumber = updatedVarsForNextNode.whatsapp_sender_jid;
-                 console.log(`[TestChatPanel] WhatsApp: Usando whatsapp_sender_jid (${recipientPhoneNumber}) como destinatário para nó ${node.id}.`);
-            }
+          setMessages(prev => [...prev, { id: uuidv4(), text: `Tentando enviar mensagem WhatsApp (${node.type})...`, sender: 'bot' }]);
 
-            if (!activeWorkspace.evolution_api_url) {
-                setMessages(prev => [...prev, { id: uuidv4(), text: "Erro: URL base da API Evolution não configurada neste fluxo.", sender: 'bot' }]);
-            } else if (!recipientPhoneNumber) {
-                setMessages(prev => [...prev, { id: uuidv4(), text: `Erro: Número de telefone do destinatário não fornecido no nó "${node.title}" nem encontrado em whatsapp_sender_jid.`, sender: 'bot' }]);
-            } else {
-                try {
-                    const result = await sendWhatsAppMessageAction({
-                        baseUrl: activeWorkspace.evolution_api_url,
-                        apiKey: activeWorkspace.evolution_api_key || undefined,
-                        instanceName: instanceNameToUse,
-                        recipientPhoneNumber: recipientPhoneNumber,
-                        messageType: node.type === 'whatsapp-text' ? 'text' : node.mediaType || 'image',
-                        textContent: node.type === 'whatsapp-text' ? substituteVariables(node.textMessage, updatedVarsForNextNode) : undefined,
-                        mediaUrl: node.type === 'whatsapp-media' ? substituteVariables(node.mediaUrl, updatedVarsForNextNode) : undefined,
-                        caption: node.type === 'whatsapp-media' ? substituteVariables(node.caption, updatedVarsForNextNode) : undefined,
-                    });
+          const nodeInstanceName = substituteVariables(node.instanceName, updatedVarsForNextNode);
+          const instanceNameToUse = nodeInstanceName || activeWorkspace.evolution_instance_name || 'evolution_instance';
 
-                    if (result.success) {
-                        setMessages(prev => [...prev, { id: uuidv4(), text: `WhatsApp: Mensagem enviada com sucesso para ${recipientPhoneNumber} via instância ${instanceNameToUse}. (Resposta API: ${JSON.stringify(result.data)})`, sender: 'bot' }]);
-                    } else {
-                        setMessages(prev => [...prev, { id: uuidv4(), text: `WhatsApp: Erro ao enviar mensagem: ${result.error || 'Erro desconhecido'} (Detalhes: ${JSON.stringify(result.data)})`, sender: 'bot' }]);
-                    }
-                } catch (error: any) {
-                    setMessages(prev => [...prev, { id: uuidv4(), text: `WhatsApp: Exceção ao enviar mensagem: ${error.message}`, sender: 'bot' }]);
-                }
+          let recipientPhoneNumber = substituteVariables(node.phoneNumber, updatedVarsForNextNode);
+          if (!recipientPhoneNumber && updatedVarsForNextNode.whatsapp_sender_jid) {
+            recipientPhoneNumber = updatedVarsForNextNode.whatsapp_sender_jid;
+            console.log(`[TestChatPanel] WhatsApp: Usando whatsapp_sender_jid (${recipientPhoneNumber}) como destinatário para nó ${node.id}.`);
+          }
+
+          if (!activeWorkspace.evolution_api_url) {
+            setMessages(prev => [...prev, { id: uuidv4(), text: "Erro: URL base da API Evolution não configurada neste fluxo.", sender: 'bot' }]);
+          } else if (!recipientPhoneNumber) {
+            setMessages(prev => [...prev, { id: uuidv4(), text: `Erro: Número de telefone do destinatário não fornecido no nó "${node.title}" nem encontrado em whatsapp_sender_jid.`, sender: 'bot' }]);
+          } else {
+            try {
+              const result = await sendWhatsAppMessageAction({
+                baseUrl: activeWorkspace.evolution_api_url,
+                apiKey: activeWorkspace.evolution_api_key || undefined,
+                instanceName: instanceNameToUse,
+                recipientPhoneNumber: recipientPhoneNumber,
+                messageType: node.type === 'whatsapp-text' ? 'text' : node.mediaType || 'image',
+                textContent: node.type === 'whatsapp-text' ? substituteVariables(node.textMessage, updatedVarsForNextNode) : undefined,
+                mediaUrl: node.type === 'whatsapp-media' ? substituteVariables(node.mediaUrl, updatedVarsForNextNode) : undefined,
+                caption: node.type === 'whatsapp-media' ? substituteVariables(node.caption, updatedVarsForNextNode) : undefined,
+              });
+
+              if (result.success) {
+                setMessages(prev => [...prev, { id: uuidv4(), text: `WhatsApp: Mensagem enviada com sucesso para ${recipientPhoneNumber} via instância ${instanceNameToUse}. (Resposta API: ${JSON.stringify(result.data)})`, sender: 'bot' }]);
+              } else {
+                setMessages(prev => [...prev, { id: uuidv4(), text: `WhatsApp: Erro ao enviar mensagem: ${result.error || 'Erro desconhecido'} (Detalhes: ${JSON.stringify(result.data)})`, sender: 'bot' }]);
+              }
+            } catch (error: any) {
+              setMessages(prev => [...prev, { id: uuidv4(), text: `WhatsApp: Exceção ao enviar mensagem: ${error.message}`, sender: 'bot' }]);
             }
+          }
         }
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
@@ -623,8 +623,8 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         setMessages(prev => [...prev, { id: uuidv4(), text: `Executando ${node.type} no Supabase para: ${node.title || node.type}...`, sender: 'bot' }]);
         const supabase = getSupabaseClient();
         if (!supabase) {
-          autoAdvance = false; 
-          nextNodeId = null; 
+          autoAdvance = false;
+          nextNodeId = null;
           break;
         }
 
@@ -637,7 +637,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         if (!columnsToSelect && (node.type === 'supabase-read-row' || node.type === 'supabase-create-row' || node.type === 'supabase-update-row')) {
           columnsToSelect = '*';
         }
-        
+
         console.log(`[TestChatPanel] Supabase Op: ${node.type} - Table: ${tableName}, ID Col: ${idColumn}, ID Val: ${idValue}, DataJSON: ${dataJsonString}, Select: ${columnsToSelect}`);
 
         let operationSucceeded = false;
@@ -661,19 +661,19 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
             }
             const { data, error } = await query;
             if (error) throw error;
-            
+
             console.log(`[TestChatPanel] Supabase read RAW data for node ${node.id}:`, data);
             if (data && data.length > 0) {
-                if (data.length === 1 && Object.keys(data[0]).length === 1) {
-                    resultDataToSave = Object.values(data[0])[0];
-                     setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Valor lido de '${tableName}.${Object.keys(data[0])[0]}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
-                } else {
-                    resultDataToSave = data.length === 1 ? data[0] : data;
-                    setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Dados lidos da tabela '${tableName}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
-                }
+              if (data.length === 1 && Object.keys(data[0]).length === 1) {
+                resultDataToSave = Object.values(data[0])[0];
+                setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Valor lido de '${tableName}.${Object.keys(data[0])[0]}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
+              } else {
+                resultDataToSave = data.length === 1 ? data[0] : data;
+                setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Dados lidos da tabela '${tableName}': ${JSON.stringify(resultDataToSave, null, 2)}`, sender: 'bot' }]);
+              }
             } else {
-                resultDataToSave = null;
-                setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Nenhum registro encontrado na tabela '${tableName}'${idColumn && idValue ? ` com ${idColumn} = '${idValue}'` : ''}.`, sender: 'bot' }]);
+              resultDataToSave = null;
+              setMessages(prev => [...prev, { id: uuidv4(), text: `Supabase: Nenhum registro encontrado na tabela '${tableName}'${idColumn && idValue ? ` com ${idColumn} = '${idValue}'` : ''}.`, sender: 'bot' }]);
             }
             operationSucceeded = true;
           } else if (node.type === 'supabase-update-row') {
@@ -746,11 +746,11 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
         const authConfig = node.apiAuthType && node.apiAuthType !== 'none'
           ? {
-              type: node.apiAuthType,
-              bearerToken: substituteVariables(node.apiAuthBearerToken, updatedVarsForNextNode),
-              basicUser: substituteVariables(node.apiAuthBasicUser, updatedVarsForNextNode),
-              basicPassword: substituteVariables(node.apiAuthBasicPassword, updatedVarsForNextNode),
-            }
+            type: node.apiAuthType,
+            bearerToken: substituteVariables(node.apiAuthBearerToken, updatedVarsForNextNode),
+            basicUser: substituteVariables(node.apiAuthBasicUser, updatedVarsForNextNode),
+            basicPassword: substituteVariables(node.apiAuthBasicPassword, updatedVarsForNextNode),
+          }
           : { type: 'none' };
 
         try {
@@ -812,12 +812,12 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
                       const normalizedList = mapping.itemField
                         ? rawList.map(item => {
-                            if (item === undefined || item === null) return undefined;
-                            if (typeof item === 'object') {
-                              return getProperty(item, mapping.itemField!);
-                            }
-                            return item;
-                          }).filter(item => item !== undefined && item !== null)
+                          if (item === undefined || item === null) return undefined;
+                          if (typeof item === 'object') {
+                            return getProperty(item, mapping.itemField!);
+                          }
+                          return item;
+                        }).filter(item => item !== undefined && item !== null)
                         : rawList;
 
                       setProperty(updatedVarsForNextNode, mapping.flowVariable, normalizedList);
@@ -890,8 +890,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         let variableName: string | undefined = undefined;
         let simulatedValue: any = `[Valor simulado para ${node.title || node.type}]`;
 
-        if (node.type === 'api-call') variableName = node.apiOutputVariable;
-        else if (node.type === 'date-input') variableName = node.variableToSaveDate;
+        if (node.type === 'date-input') variableName = node.variableToSaveDate;
         else if (node.type === 'json-transform') variableName = node.jsonOutputVariable;
         else if (node.type === 'file-upload') variableName = node.fileUrlVariable;
         else if (node.type === 'rating-input') variableName = node.ratingOutputVariable;
@@ -951,25 +950,25 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
       case 'send-email':
       case 'google-sheets-append':
-      case 'media-display': 
+      case 'media-display':
         const mediaDisplayText = substituteVariables(node.mediaDisplayText, updatedVarsForNextNode);
-        setMessages(prev => [...prev, { 
-          id: uuidv4(), 
+        setMessages(prev => [...prev, {
+          id: uuidv4(),
           text: (
             <div>
               <p>Exibindo Mídia (simulado): {node.mediaDisplayType}</p>
               <p>URL: {substituteVariables(node.mediaDisplayUrl, updatedVarsForNextNode)}</p>
               {mediaDisplayText && <p>Legenda: {mediaDisplayText}</p>}
             </div>
-          ), 
-          sender: 'bot' 
+          ),
+          sender: 'bot'
         }]);
-          if (activeWorkspace?.evolution_api_enabled && node.type === 'media-display') { 
-            const phoneNumber = activeVars.whatsapp_sender_jid;
-            if (phoneNumber) {
-              // Logic to send media via WhatsApp, similar to whatsapp-media node
-            }
+        if (activeWorkspace?.evolution_api_enabled && node.type === 'media-display') {
+          const phoneNumber = activeVars.whatsapp_sender_jid;
+          if (phoneNumber) {
+            // Logic to send media via WhatsApp, similar to whatsapp-media node
           }
+        }
         nextNodeId = findNextNodeId(node.id, 'default');
         break;
 
@@ -988,7 +987,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
           const endDate = new Date();
           endDate.setHours(endH, endM, 0, 0);
-          
+
           if (endDate < startDate) {
             endDate.setDate(endDate.getDate() + 1);
             if (now < startDate) {
@@ -996,7 +995,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
               nowAdjusted.setDate(nowAdjusted.getDate() + 1);
               isInTimeRange = nowAdjusted >= startDate && nowAdjusted <= endDate;
             } else {
-               isInTimeRange = now >= startDate && now <= endDate;
+              isInTimeRange = now >= startDate && now <= endDate;
             }
           } else {
             isInTimeRange = now >= startDate && now <= endDate;
@@ -1006,24 +1005,24 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         nextNodeId = findNextNodeId(node.id, isInTimeRange ? 'true' : 'false');
         break;
       }
-      
+
       default:
         setMessages(prev => [...prev, { id: uuidv4(), text: `Tipo de nó "${(node as any).type}" (${(node as any).title || 'Sem título'}) não implementado no chat de teste.`, sender: 'bot' }]);
         autoAdvance = false;
-        nextNodeId = null; 
+        nextNodeId = null;
         break;
     }
 
-    setFlowVariables(updatedVarsForNextNode); 
-    activeFlowVariablesRef.current = updatedVarsForNextNode; 
+    setFlowVariables(updatedVarsForNextNode);
+    activeFlowVariablesRef.current = updatedVarsForNextNode;
 
     console.log(`[TestChatPanel] processNode EXIT: nodeId: ${node.id}. Vars passed to next step:`, JSON.parse(JSON.stringify(updatedVarsForNextNode)));
     setIsProcessingNode(false);
-    
+
     if (autoAdvance && nextNodeId) {
       await processNode(nextNodeId, updatedVarsForNextNode);
     } else if (autoAdvance && !nextNodeId && node.type !== 'end-flow' && node.type !== 'redirect') {
-      await processNode(null, updatedVarsForNextNode); 
+      await processNode(null, updatedVarsForNextNode);
     }
   }, [activeWorkspace, getNodeById, findNextNodeId, substituteVariables, handleEndChatTest, toast, setFlowVariables]);
 
@@ -1036,33 +1035,33 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       return;
     }
     console.log('[TestChatPanel] handleStartTest iniciado. ID do Workspace:', activeWorkspace.id, 'Qtd. de Nós:', activeWorkspace.nodes.length, 'Trigger Override:', triggerNameOverride, "Initial Vars Override:", initialVarsOverride);
-    
+
     const initialVars = { ...(initialVarsOverride || {}) };
 
     setMessages([]);
     setAwaitingInputFor(null);
     setAwaitingInputType('text');
     setIsTesting(true);
-    setCurrentNodeId(null); 
-    setFlowVariables(initialVars); 
+    setCurrentNodeId(null);
+    setFlowVariables(initialVars);
     activeFlowVariablesRef.current = initialVars;
 
 
     const startNode = activeWorkspace.nodes.find(n => n.type === 'start');
     if (startNode) {
       console.log('[TestChatPanel] Nó de início encontrado:', JSON.parse(JSON.stringify(startNode)));
-      
+
       let actualTriggerName = triggerNameOverride;
-      if (!actualTriggerName) { 
+      if (!actualTriggerName) {
         if (startNode.triggers && startNode.triggers.length > 0) {
-          actualTriggerName = startNode.triggers[0].name; 
+          actualTriggerName = startNode.triggers[0].name;
           console.log(`[TestChatPanel] Usando o primeiro gatilho do nó de início como padrão: "${actualTriggerName}"`);
         } else {
-          actualTriggerName = 'default'; 
+          actualTriggerName = 'default';
           console.log(`[TestChatPanel] Nó de início sem gatilhos, usando saída 'default'.`);
         }
       }
-      
+
       const varsForFirstNode = { ...initialVars, _triggerName: actualTriggerName };
       await processNode(startNode.id, varsForFirstNode);
     } else {
@@ -1092,7 +1091,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     const userMessageText = inputValue;
     setMessages(prev => [...prev, { id: uuidv4(), text: userMessageText, sender: 'user' }]);
 
-    let currentVarsSnapshot = { ...activeFlowVariablesRef.current }; 
+    let currentVarsSnapshot = { ...activeFlowVariablesRef.current };
     console.log('[TestChatPanel] awaitingInputFor (input node):', JSON.parse(JSON.stringify(awaitingInputFor)));
 
     if (awaitingInputFor.variableToSaveResponse && awaitingInputFor.variableToSaveResponse.trim() !== '') {
@@ -1100,16 +1099,16 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       console.log(`[TestChatPanel] Saving input to variable: ${varName} = ${userMessageText}`);
       currentVarsSnapshot = { ...currentVarsSnapshot, [varName]: userMessageText };
     }
-    
+
     setInputValue('');
-    setAwaitingInputFor(null); 
-    
-    setFlowVariables(currentVarsSnapshot); 
-    activeFlowVariablesRef.current = currentVarsSnapshot; 
+    setAwaitingInputFor(null);
+
+    setFlowVariables(currentVarsSnapshot);
+    activeFlowVariablesRef.current = currentVarsSnapshot;
 
     const nextNodeIdAfterInput = findNextNodeId(awaitingInputFor.id, 'default');
     console.log('[TestChatPanel] nextNodeIdAfterInput found:', nextNodeIdAfterInput);
-    
+
     processNode(nextNodeIdAfterInput, currentVarsSnapshot);
   }, [inputValue, awaitingInputFor, awaitingInputType, isProcessingNode, findNextNodeId, processNode, setFlowVariables]);
 
@@ -1127,11 +1126,11 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       currentVarsSnapshot = { ...currentVarsSnapshot, [varName]: optionText };
     }
 
-    setAwaitingInputFor(null); 
-    setAwaitingInputType('text'); 
+    setAwaitingInputFor(null);
+    setAwaitingInputType('text');
 
-    setFlowVariables(currentVarsSnapshot); 
-    activeFlowVariablesRef.current = currentVarsSnapshot; 
+    setFlowVariables(currentVarsSnapshot);
+    activeFlowVariablesRef.current = currentVarsSnapshot;
 
     let nextNodeIdAfterOption = findNextNodeId(awaitingInputFor.id, optionText);
     if (!nextNodeIdAfterOption) {
@@ -1152,17 +1151,17 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       toast({ title: "Erro", description: "Nenhum fluxo ativo para simular webhook.", variant: "destructive" });
       return;
     }
-     const startNode = activeWorkspace.nodes.find(n => n.type === 'start');
+    const startNode = activeWorkspace.nodes.find(n => n.type === 'start');
     if (!startNode) {
-        toast({ title: "Erro", description: "Nenhum Nó de Início encontrado no fluxo ativo.", variant: "destructive" });
-        return;
+      toast({ title: "Erro", description: "Nenhum Nó de Início encontrado no fluxo ativo.", variant: "destructive" });
+      return;
     }
 
     if (!webhookDialogJsonInput.trim()) {
       toast({ title: "Erro", description: "O JSON do webhook simulado não pode estar vazio.", variant: "destructive" });
       return;
     }
-    
+
     const payloadVarName = "webhook_payload"; // Default
     const messageVarName = "mensagem_whatsapp"; // Default
     const senderJidVarName = "whatsapp_sender_jid"; // Default
@@ -1176,7 +1175,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       return;
     }
 
-    handleRestartTest(); 
+    handleRestartTest();
 
     let initialVars: Record<string, any> = { [payloadVarName]: parsedJson };
     let triggerOverride: string | undefined = undefined;
@@ -1195,31 +1194,31 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       }
     }
 
-    const messageFromJson = getProperty(parsedJson, defaultMessagePath) || 
-                            getProperty(parsedJson, 'message.body') || 
-                            getProperty(parsedJson, 'message.textMessage.text') ||
-                            getProperty(parsedJson, 'text'); 
+    const messageFromJson = getProperty(parsedJson, defaultMessagePath) ||
+      getProperty(parsedJson, 'message.body') ||
+      getProperty(parsedJson, 'message.textMessage.text') ||
+      getProperty(parsedJson, 'text');
 
     if (messageFromJson !== undefined && messageFromJson !== null) {
-        initialVars[messageVarName] = typeof messageFromJson === 'string' ? messageFromJson : JSON.stringify(messageFromJson);
+      initialVars[messageVarName] = typeof messageFromJson === 'string' ? messageFromJson : JSON.stringify(messageFromJson);
     }
 
     const senderJidFromJson = getProperty(parsedJson, 'data.key.remoteJid') || getProperty(parsedJson, 'sender');
     if (senderJidFromJson) {
       initialVars[senderJidVarName] = senderJidFromJson;
     }
-    
+
     setMessages(prev => [
-        ...prev, 
-        { 
-            id: uuidv4(), 
-            text: `Webhook simulado recebido. Payload em {{${payloadVarName}}}.${initialVars[messageVarName] ? ` Msg em {{${messageVarName}}}.` : ''}${initialVars[senderJidVarName] ? ` Remetente em {{${senderJidVarName}}}.` : ''} Iniciando fluxo...`, 
-            sender: 'bot' 
-        }
+      ...prev,
+      {
+        id: uuidv4(),
+        text: `Webhook simulado recebido. Payload em {{${payloadVarName}}}.${initialVars[messageVarName] ? ` Msg em {{${messageVarName}}}.` : ''}${initialVars[senderJidVarName] ? ` Remetente em {{${senderJidVarName}}}.` : ''} Iniciando fluxo...`,
+        sender: 'bot'
+      }
     ]);
-    
+
     setIsSimulateWebhookDialogOpen(false);
-    setWebhookDialogJsonInput(''); 
+    setWebhookDialogJsonInput('');
 
     if (triggerOverride) {
       initialVars._triggerName = triggerOverride;
@@ -1231,13 +1230,13 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
   useEffect(() => {
     if (!isTesting) {
-      setWebhookDialogJsonInput(''); 
+      setWebhookDialogJsonInput('');
     }
   }, [isTesting]);
 
   useEffect(() => {
     handleRestartTest();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id]);
 
 
@@ -1290,14 +1289,14 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         >
           <LogOut className="h-4 w-4 text-destructive" />
         </Button>
-         <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsSimulateWebhookDialogOpen(true)}
-            title="Simular Novo Webhook Recebido (Durante Teste)"
-            disabled={isProcessingNode}
-          >
-            <WebhookIcon className="h-4 w-4 text-muted-foreground" />
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setIsSimulateWebhookDialogOpen(true)}
+          title="Simular Novo Webhook Recebido (Durante Teste)"
+          disabled={isProcessingNode}
+        >
+          <WebhookIcon className="h-4 w-4 text-muted-foreground" />
         </Button>
       </div>
     );
@@ -1343,15 +1342,14 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                   className={`flex flex-col w-full ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
                 >
                   <div
-                    className={`max-w-full p-2.5 rounded-lg text-sm shadow-sm break-words ${
-                      msg.sender === 'user'
+                    className={`max-w-full p-2.5 rounded-lg text-sm shadow-sm break-words ${msg.sender === 'user'
                         ? 'bg-primary text-primary-foreground rounded-br-none'
                         : 'bg-muted text-muted-foreground rounded-bl-none'
-                    }`}
-                 >
-                   {typeof msg.text === 'string' ? formatChatMessage(msg.text) : msg.text}
-                 </div>
-                   {msg.sender === 'bot' && msg.options && msg.options.length > 0 && awaitingInputType === 'option' && (
+                      }`}
+                  >
+                    {typeof msg.text === 'string' ? formatChatMessage(msg.text) : msg.text}
+                  </div>
+                  {msg.sender === 'bot' && msg.options && msg.options.length > 0 && awaitingInputType === 'option' && (
                     <div className="mt-2.5 w-full space-y-2">
                       {msg.options.map((opt, index) => (
                         <button
@@ -1380,7 +1378,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
           </ScrollArea>
         </CardContent>
         <CardFooter className="p-4 border-t">
-      {renderChatInputArea()}
+          {renderChatInputArea()}
         </CardFooter>
       </Card>
 

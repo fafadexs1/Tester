@@ -1,5 +1,5 @@
 
-'use client'; 
+'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
@@ -31,7 +31,7 @@ export default function DashboardClient({ user, initialWorkspaces }: DashboardCl
   const [workspaces, setWorkspaces] = useState<WorkspaceData[]>(initialWorkspaces);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
 
@@ -66,105 +66,116 @@ export default function DashboardClient({ user, initialWorkspaces }: DashboardCl
     }
     let counter = 1;
     while (existingNames.includes(`${defaultName} (${counter})`)) {
-        counter++;
+      counter++;
     }
     return `${defaultName} (${counter})`;
   }, [workspaces]);
 
   useEffect(() => {
     if (isCreateDialogOpen) {
-        setNewWorkspaceName(getSuggestedWorkspaceName());
+      setNewWorkspaceName(getSuggestedWorkspaceName());
     }
   }, [isCreateDialogOpen, getSuggestedWorkspaceName]);
 
   const handleCreateWorkspace = async () => {
     if (!user || !user.id || !user.current_organization_id || !newWorkspaceName.trim()) {
-        toast({
-            title: "Erro de Validação",
-            description: "O nome do fluxo não pode estar vazio e você deve estar em uma organização.",
-            variant: "destructive",
-        });
-        return;
+      toast({
+        title: "Erro de Validação",
+        description: "O nome do fluxo não pode estar vazio e você deve estar em uma organização.",
+        variant: "destructive",
+      });
+      return;
     }
     setIsCreating(true);
     try {
-        const result = await createWorkspaceAction(newWorkspaceName.trim(), user.id, user.current_organization_id);
-        if (result.success && result.workspaceId) {
-            toast({
-                title: "Fluxo Criado!",
-                description: `O fluxo "${newWorkspaceName.trim()}" foi criado com sucesso.`,
-            });
-            router.push(`/flow/${result.workspaceId}`);
-        } else {
-            toast({
-                title: "Erro ao Criar Fluxo",
-                description: result.error || "Ocorreu um erro desconhecido.",
-                variant: "destructive",
-            });
-        }
-    } catch (error: any) {
+      const result = await createWorkspaceAction(newWorkspaceName.trim(), user.id, user.current_organization_id);
+      if (result.success && result.workspaceId) {
         toast({
-            title: "Erro Inesperado",
-            description: error.message || "Ocorreu um erro no servidor.",
-            variant: "destructive",
+          title: "Fluxo Criado!",
+          description: `O fluxo "${newWorkspaceName.trim()}" foi criado com sucesso.`,
         });
+        router.push(`/flow/${result.workspaceId}`);
+      } else {
+        toast({
+          title: "Erro ao Criar Fluxo",
+          description: result.error || "Ocorreu um erro desconhecido.",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro Inesperado",
+        description: error.message || "Ocorreu um erro no servidor.",
+        variant: "destructive",
+      });
     } finally {
-        setIsCreating(false);
-        setIsCreateDialogOpen(false);
+      setIsCreating(false);
+      setIsCreateDialogOpen(false);
     }
   };
 
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-        <div className="flex items-center justify-between">
-            <div>
-                <h2 className="text-3xl font-bold tracking-tight">Meus Fluxos</h2>
-                <p className="text-muted-foreground mt-1">Gerencie, edite ou crie novas automações.</p>
+    <div className="flex-1 space-y-8 p-8 pt-10 min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-zinc-950 to-black">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h2 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-zinc-300 to-zinc-500 bg-clip-text text-transparent">
+            Meus Fluxos
+          </h2>
+          <p className="text-zinc-400 text-sm md:text-base max-w-lg">
+            Gerencie suas automações e crie novas experiências conversacionais.
+          </p>
+        </div>
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-900/20 border border-violet-500/20 transition-all duration-300 hover:scale-[1.02]">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Criar Novo Fluxo
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="bg-zinc-950/95 backdrop-blur-xl border-white/10 sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-semibold text-white">Criar Novo Fluxo</DialogTitle>
+              <DialogDescription className="text-zinc-400">
+                Dê um nome para sua nova automação. Você poderá alterá-lo depois.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-6 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="workspace-name" className="text-zinc-300">Nome do Fluxo</Label>
+                <Input
+                  id="workspace-name"
+                  value={newWorkspaceName}
+                  onChange={(e) => setNewWorkspaceName(e.target.value)}
+                  placeholder="Ex: Fluxo de Boas-vindas"
+                  className="bg-black/40 border-white/10 focus:border-violet-500/50 text-white placeholder:text-zinc-600"
+                  onKeyPress={(e) => { if (e.key === 'Enter' && !isCreating) handleCreateWorkspace() }}
+                  autoFocus
+                />
+              </div>
             </div>
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-                <DialogTrigger asChild>
-                    <Button>
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Criar Novo Fluxo
-                    </Button>
-                </DialogTrigger>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Criar Novo Fluxo</DialogTitle>
-                        <DialogDescription>
-                            Dê um nome para sua nova automação. Você poderá alterá-lo depois.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="py-4">
-                        <Label htmlFor="workspace-name">Nome do Fluxo</Label>
-                        <Input
-                            id="workspace-name"
-                            value={newWorkspaceName}
-                            onChange={(e) => setNewWorkspaceName(e.target.value)}
-                            placeholder="Ex: Fluxo de Boas-vindas"
-                            onKeyPress={(e) => { if (e.key === 'Enter' && !isCreating) handleCreateWorkspace()}}
-                        />
-                    </div>
-                    <DialogFooter>
-                        <DialogClose asChild>
-                            <Button variant="outline" disabled={isCreating}>Cancelar</Button>
-                        </DialogClose>
-                        <Button onClick={handleCreateWorkspace} disabled={isCreating}>
-                            {isCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            {isCreating ? 'Criando...' : 'Criar e Editar'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </div>
-        
-        <div className="flex-1 mt-6">
-          {isLoading ? (
-             <p className="text-muted-foreground text-center py-10">Carregando seus fluxos...</p>
-          ) : (
-             <WorkspaceList workspaces={workspaces} onWorkspacesChange={loadWorkspaces} />
-          )}
-        </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="ghost" disabled={isCreating} className="text-zinc-400 hover:text-white hover:bg-white/5">Cancelar</Button>
+              </DialogClose>
+              <Button onClick={handleCreateWorkspace} disabled={isCreating} className="bg-violet-600 hover:bg-violet-700 text-white">
+                {isCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isCreating ? 'Criando...' : 'Criar Fluxo'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="flex-1 mt-8">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
+            <p className="text-zinc-500 text-sm">Carregando seus fluxos...</p>
+          </div>
+        ) : (
+          <WorkspaceList workspaces={workspaces} onWorkspacesChange={loadWorkspaces} />
+        )}
+      </div>
     </div>
   );
 }

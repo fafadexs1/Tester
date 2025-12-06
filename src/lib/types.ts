@@ -6,18 +6,18 @@ export interface DraggableBlockItemData {
   defaultData?: Partial<NodeData>;
 }
 
-export type NodeType = 
-  | 'start' 
-  | 'message' 
-  | 'input' 
-  | 'option' 
-  | 'whatsapp-text' 
-  | 'whatsapp-media' 
+export type NodeType =
+  | 'start'
+  | 'message'
+  | 'input'
+  | 'option'
+  | 'whatsapp-text'
+  | 'whatsapp-media'
   | 'whatsapp-group'
-  | 'condition' 
+  | 'condition'
   | 'switch'
-  | 'set-variable' 
-  | 'api-call' 
+  | 'set-variable'
+  | 'api-call'
   | 'delay'
   | 'date-input'
   | 'redirect'
@@ -39,7 +39,7 @@ export type NodeType =
   | 'dialogy-send-message'
   | 'time-of-day'
   | 'end-flow';
-  
+
 
 export interface ApiHeader {
   id: string;
@@ -77,7 +77,7 @@ export interface ApiResponseMapping {
 
 export interface StartNodeTrigger {
   id: string;
-  name: string; 
+  name: string;
   type: 'manual' | 'webhook';
   enabled: boolean;
   keyword?: string; // Comma-separated keywords
@@ -96,51 +96,51 @@ export interface NodeData {
   title: string;
   x: number;
   y: number;
-  dataAiHint?: string; 
-  
+  dataAiHint?: string;
+
   // Message Node
-  text?: string; 
-  
+  text?: string;
+
   // Input Node
-  promptText?: string; 
-  inputType?: 'text' | 'email' | 'phone' | 'number'; 
+  promptText?: string;
+  inputType?: 'text' | 'email' | 'phone' | 'number';
   variableToSaveResponse?: string;
   apiResponseAsInput?: boolean;
   apiResponsePathForValue?: string;
 
   // Option Node
   questionText?: string;
-  optionsList?: string; 
+  optionsList?: string;
   variableToSaveChoice?: string;
   aiEnabled?: boolean; // Novo campo para o nó de opção
 
   // WhatsApp Nodes (can also be triggered by api-call node)
-  instanceName?: string; 
-  phoneNumber?: string; 
-  textMessage?: string; 
-  mediaUrl?: string; 
-  mediaType?: 'image' | 'video' | 'document' | 'audio'; 
-  caption?: string; 
-  groupName?: string; 
-  participants?: string; 
-  
+  instanceName?: string;
+  phoneNumber?: string;
+  textMessage?: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video' | 'document' | 'audio';
+  caption?: string;
+  groupName?: string;
+  participants?: string;
+
   // Condition Node
-  conditionVariable?: string; 
-  conditionOperator?: '==' | '!=' | '>' | '<' | '>=' | '<=' | 'contains' | 'startsWith' | 'endsWith' | 'isEmpty' | 'isNotEmpty' | 'isTrue' | 'isFalse' | 'isDateAfter' | 'isDateBefore'; 
+  conditionVariable?: string;
+  conditionOperator?: '==' | '!=' | '>' | '<' | '>=' | '<=' | 'contains' | 'startsWith' | 'endsWith' | 'isEmpty' | 'isNotEmpty' | 'isTrue' | 'isFalse' | 'isDateAfter' | 'isDateBefore';
   conditionValue?: string;
   conditionDataType?: 'string' | 'number' | 'boolean' | 'date';
-  
+
   // Switch Node
   switchVariable?: string;
   switchCases?: SwitchCase[];
 
   // Set Variable Node
-  variableName?: string; 
-  variableValue?: string; 
-  
+  variableName?: string;
+  variableValue?: string;
+
   // API Call Node
-  apiUrl?: string; 
-  apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'; 
+  apiUrl?: string;
+  apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD';
   apiAuthType?: 'none' | 'bearer' | 'basic';
   apiAuthBearerToken?: string;
   apiAuthBasicUser?: string;
@@ -148,16 +148,16 @@ export interface NodeData {
   apiHeadersList?: ApiHeader[];
   apiQueryParamsList?: ApiQueryParam[];
   apiBodyType?: 'none' | 'json' | 'form-data' | 'raw';
-  apiBodyJson?: string; 
-  apiBodyFormDataList?: ApiFormDataEntry[]; 
-  apiBodyRaw?: string; 
+  apiBodyJson?: string;
+  apiBodyFormDataList?: ApiFormDataEntry[];
+  apiBodyRaw?: string;
   apiOutputVariable?: string;
   apiResponsePath?: string;
   apiResponseMappings?: ApiResponseMapping[];
 
-  
+
   // Delay Node
-  delayDuration?: number; 
+  delayDuration?: number;
 
   // Date Input Node
   dateInputLabel?: string;
@@ -167,12 +167,12 @@ export interface NodeData {
   redirectUrl?: string;
 
   // Typing Emulation Node
-  typingDuration?: number; 
+  typingDuration?: number;
 
   // Media Display Node
   mediaDisplayType?: 'image' | 'video' | 'audio';
   mediaDisplayUrl?: string;
-  mediaDisplayText?: string; 
+  mediaDisplayText?: string;
 
   // Log Console Node
   logMessage?: string;
@@ -182,7 +182,7 @@ export interface NodeData {
   codeOutputVariable?: string;
 
   // JSON Transform Node
-  inputJson?: string; 
+  inputJson?: string;
   jsonataExpression?: string;
   jsonOutputVariable?: string;
 
@@ -200,36 +200,36 @@ export interface NodeData {
 
   // AI Text Generation Node
   aiPromptText?: string;
-  aiModelName?: string; 
+  aiModelName?: string;
   aiOutputVariable?: string;
-  
+
   // Send Email Node
   emailTo?: string;
   emailSubject?: string;
   emailBody?: string;
-  emailFrom?: string; 
+  emailFrom?: string;
 
   // Google Sheets Append Node
   googleSheetId?: string;
-  googleSheetName?: string; 
+  googleSheetName?: string;
   googleSheetRowData?: string; // JSON string of an array
 
   // Intelligent Agent Node
   agentName?: string;
   agentSystemPrompt?: string;
-  userInputVariable?: string; 
-  agentResponseVariable?: string; 
-  maxConversationTurns?: number; 
-  temperature?: number; 
+  userInputVariable?: string;
+  agentResponseVariable?: string;
+  maxConversationTurns?: number;
+  temperature?: number;
 
   // Supabase Nodes
   supabaseTableName?: string;
-  supabaseIdentifierColumn?: string; 
-  supabaseIdentifierValue?: string; 
-  supabaseDataJson?: string; 
-  supabaseColumnsToSelect?: string; 
-  supabaseResultVariable?: string; 
-  
+  supabaseIdentifierColumn?: string;
+  supabaseIdentifierValue?: string;
+  supabaseDataJson?: string;
+  supabaseColumnsToSelect?: string;
+  supabaseResultVariable?: string;
+
   // Dialogy Node
   dialogyInstanceId?: string;
   dialogyChatId?: string;
@@ -238,7 +238,7 @@ export interface NodeData {
   // Time of Day Node
   startTime?: string;
   endTime?: string;
-  
+
   // Start Node
   triggers?: StartNodeTrigger[];
 
@@ -246,14 +246,14 @@ export interface NodeData {
 
 export interface Connection {
   id: string;
-  from: string; 
-  to: string;   
-  sourceHandle?: string; 
+  from: string;
+  to: string;
+  sourceHandle?: string;
 }
 
 export interface DrawingLineData {
   fromId: string;
-  sourceHandleId: string; 
+  sourceHandleId: string;
   startX: number; // Logical X
   startY: number; // Logical Y
   currentX: number; // Logical X of mouse
@@ -270,11 +270,15 @@ export interface WorkspaceData {
   name: string;
   nodes: NodeData[];
   connections: Connection[];
-  owner_id: string; 
-  organization_id: string; 
+  owner_id: string;
+  organization_id: string;
   created_at?: string | Date;
   updated_at?: string | Date;
   evolution_instance_id?: string | null;
+  evolution_api_enabled?: boolean;
+  evolution_api_url?: string;
+  evolution_api_key?: string;
+  evolution_instance_name?: string;
   chatwoot_enabled?: boolean;
   chatwoot_instance_id?: string | null;
   dialogy_instance_id?: string | null;
@@ -299,15 +303,15 @@ export type FlowSessionAwaitingInputType = AwaitingInputNode | null;
 export type FlowContextType = 'evolution' | 'chatwoot' | 'dialogy' | 'test';
 
 export interface FlowSession {
-  session_id: string; 
+  session_id: string;
   workspace_id: string;
   current_node_id: string | null;
   flow_variables: Record<string, any>;
   awaiting_input_type: FlowSessionAwaitingInputType;
   awaiting_input_details: {
-    variableToSave?: string; 
-    options?: string[];       
-    originalNodeId?: string; 
+    variableToSave?: string;
+    options?: string[];
+    originalNodeId?: string;
     aiEnabled?: boolean;
     aiModelName?: string;
   } | null;
@@ -320,13 +324,13 @@ export interface FlowSession {
 export type UserRole = 'admin' | 'desenvolvedor' | 'Editor de Fluxo' | 'Publicador' | 'Visualizador' | 'user';
 
 export interface User {
-    id: string; // UUID
-    username: string;
-    fullName?: string;
-    email?: string;
-    role: UserRole;
-    password_hash?: string;
-    current_organization_id?: string;
+  id: string; // UUID
+  username: string;
+  fullName?: string;
+  email?: string;
+  role: UserRole;
+  password_hash?: string;
+  current_organization_id?: string;
 }
 
 export interface Organization {
@@ -338,11 +342,11 @@ export interface Organization {
 }
 
 export interface Team {
-    id: string;
-    name: string;
-    description?: string;
-    organization_id: string;
-    members: Pick<User, 'id' | 'username'>[];
+  id: string;
+  name: string;
+  description?: string;
+  organization_id: string;
+  members: Pick<User, 'id' | 'username'>[];
 }
 
 export interface OrganizationUser {
@@ -355,20 +359,20 @@ export interface OrganizationUser {
 }
 
 export interface AuditLog {
-    id: string;
-    organization_id: string;
-    user_id: string;
-    action: string;
-    details: any;
-    created_at: string | Date;
-    user?: {
-      id?: string,
-      username?: string,
-      full_name?: string | null,
-    };
-    // Adicionado para receber os dados do join
-    username?: string;
-    full_name?: string | null;
+  id: string;
+  organization_id: string;
+  user_id: string;
+  action: string;
+  details: any;
+  created_at: string | Date;
+  user?: {
+    id?: string,
+    username?: string,
+    full_name?: string | null,
+  };
+  // Adicionado para receber os dados do join
+  username?: string;
+  full_name?: string | null;
 }
 
 
@@ -397,17 +401,17 @@ export interface DialogyInstance {
 }
 
 export interface SmtpSettings {
-    id: string;
-    organization_id: string;
-    host: string;
-    port: number;
-    secure: boolean;
-    username?: string | null;
-    password?: string | null;
-    from_name?: string | null;
-    from_email?: string | null;
-    created_at: string | Date;
-    updated_at: string | Date;
+  id: string;
+  organization_id: string;
+  host: string;
+  port: number;
+  secure: boolean;
+  username?: string | null;
+  password?: string | null;
+  from_name?: string | null;
+  from_email?: string | null;
+  created_at: string | Date;
+  updated_at: string | Date;
 }
 
 // --- NEW RBAC TYPES ---
@@ -417,47 +421,47 @@ export type PermissionSubject = 'Workspace' | 'Member' | 'Billing' | 'Organizati
 export type PermissionIdentifier = string;
 
 export interface Permission {
-    id: PermissionIdentifier;
-    description: string;
-    subject: PermissionSubject;
+  id: PermissionIdentifier;
+  description: string;
+  subject: PermissionSubject;
 }
 
 export interface Role {
-    id: string; // UUID
-    organization_id: string;
-    name: string;
-    description?: string;
-    permissions: PermissionIdentifier[];
-    is_system_role?: boolean; // Para distinguir 'Admin', 'Membro' de cargos customizados
+  id: string; // UUID
+  organization_id: string;
+  name: string;
+  description?: string;
+  permissions: PermissionIdentifier[];
+  is_system_role?: boolean; // Para distinguir 'Admin', 'Membro' de cargos customizados
 }
 
 // --- Marketplace Types ---
 
 export interface MarketplaceListing {
-    id: string;
-    name: string;
-    description: string;
-    price: number;
-    creator_id: string;
-    creator_username?: string;
-    workspace_id: string;
-    preview_data: {
-        nodes: NodeData[];
-        connections: Connection[];
-    };
-    tags: string[];
-    downloads: number;
-    rating: number;
-    created_at: string | Date;
-    updated_at: string | Date;
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  creator_id: string;
+  creator_username?: string;
+  workspace_id: string;
+  preview_data: {
+    nodes: NodeData[];
+    connections: Connection[];
+  };
+  tags: string[];
+  downloads: number;
+  rating: number;
+  created_at: string | Date;
+  updated_at: string | Date;
 }
 
 export interface UserPurchase {
-    id: string;
-    user_id: string;
-    listing_id: string;
-    price_paid: number;
-    purchased_at: string | Date;
+  id: string;
+  user_id: string;
+  listing_id: string;
+  price_paid: number;
+  purchased_at: string | Date;
 }
 
 // --- Flow Log Type ---

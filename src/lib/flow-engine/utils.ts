@@ -75,6 +75,10 @@ function resolveAliasValue(expression: string, variables: Record<string, any>): 
   return { found: false };
 }
 
+export function evaluateExpression(rawExpression: string, variables: Record<string, any>) {
+  return evaluateExpressionSegment(rawExpression, variables);
+}
+
 function evaluateExpressionSegment(rawExpression: string, variables: Record<string, any>) {
   const expression = rawExpression.trim();
   if (!expression) return '';
@@ -162,7 +166,7 @@ export function coerceToDate(raw: any): Date | null {
   return null;
 }
 
-export function compareDates(a: any, b: any): {a: Date|null; b: Date|null} {
+export function compareDates(a: any, b: any): { a: Date | null; b: Date | null } {
   const da = coerceToDate(a);
   const db = coerceToDate(b);
   return { a: da, b: db };

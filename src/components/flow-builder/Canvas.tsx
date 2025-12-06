@@ -43,7 +43,7 @@ interface CanvasProps {
   activeWorkspace: WorkspaceData | undefined | null;
 }
 
-const SVG_CANVAS_DIMENSION = 50000; 
+const SVG_CANVAS_DIMENSION = 50000;
 
 const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   nodes, connections, drawingLine, canvasOffset, zoomLevel,
@@ -65,19 +65,19 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   useEffect(() => {
     zoomLevelRef.current = zoomLevel;
   }, [zoomLevel]);
-  
+
   const canvasOffsetRef = useRef(canvasOffset);
-    useEffect(() => {
-        canvasOffsetRef.current = canvasOffset;
-    }, [canvasOffset]);
+  useEffect(() => {
+    canvasOffsetRef.current = canvasOffset;
+  }, [canvasOffset]);
 
 
   const stableOnDropNode = useCallback(
     (item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
       const clientOffset = monitor.getClientOffset();
-      if (clientOffset && canvasElementRef.current) { 
+      if (clientOffset && canvasElementRef.current) {
         const canvasRect = canvasElementRef.current.getBoundingClientRect();
-        
+
         // Coordenadas do mouse relativas ao viewport
         const mouseX = clientOffset.x;
         const mouseY = clientOffset.y;
@@ -92,19 +92,19 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
 
         const logicalX = (mouseX - canvasLeft - currentOffset.x) / currentZoom;
         const logicalY = (mouseY - canvasTop - currentOffset.y) / currentZoom;
-        
+
         onDropNodeCbRef.current(item, { x: logicalX, y: logicalY });
       }
     },
-    [onDropNodeCbRef, zoomLevelRef, canvasElementRef, canvasOffsetRef] 
+    [onDropNodeCbRef, zoomLevelRef, canvasElementRef, canvasOffsetRef]
   );
 
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
     accept: ITEM_TYPE_BLOCK,
     drop: stableOnDropNode,
     collect: (monitor) => ({
-        isOver: !!monitor.isOver(),
-        canDrop: !!monitor.canDrop(),
+      isOver: !!monitor.isOver(),
+      canDrop: !!monitor.canDrop(),
     }),
   }), [stableOnDropNode]);
 
@@ -163,9 +163,9 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
       <motion.div
         key={node.id}
         className="absolute z-20"
-        style={{ 
-          left: node.x, 
-          top: node.y, 
+        style={{
+          left: node.x,
+          top: node.y,
           width: NODE_WIDTH,
         }}
         initial={{ scale: 0.9, opacity: 0 }}
@@ -176,7 +176,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
         <NodeCard
           node={node}
           onUpdate={onUpdateNode}
-          onStartConnection={onStartConnection} 
+          onStartConnection={onStartConnection}
           onDeleteNode={onDeleteNode}
           onDuplicateNode={onDuplicateNode}
           availableVariables={availableVariablesByNode[node.id] || []}
@@ -195,9 +195,9 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
       if (!sourceNode || !targetNode) {
         return null;
       }
-      
+
       if (typeof sourceNode.x !== 'number' || typeof sourceNode.y !== 'number' ||
-          typeof targetNode.x !== 'number' || typeof targetNode.y !== 'number') {   
+        typeof targetNode.x !== 'number' || typeof targetNode.y !== 'number') {
         return null;
       }
 
@@ -207,26 +207,26 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
       if (typeof measuredSourceOffset === 'number') {
         sourceHandleYOffset = measuredSourceOffset;
       } else if (sourceNode.type === 'start' && Array.isArray(sourceNode.triggers) && conn.sourceHandle) {
-          let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
-          let found = false;
+        let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
+        let found = false;
 
-          for (const trigger of sourceNode.triggers.filter(t => t.enabled)) {
-              if (trigger.name === conn.sourceHandle) {
-                  sourceHandleYOffset = yOffset;
-                  found = true;
-                  break;
-              }
-              const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
-              if (keywords.includes(conn.sourceHandle)) {
-                  const kwIndex = keywords.indexOf(conn.sourceHandle);
-                  sourceHandleYOffset = yOffset + 25 + (kwIndex * START_NODE_TRIGGER_SPACING_Y);
-                  found = true;
-                  break;
-              }
-              const triggerBlockHeight = 40 + (keywords.length * START_NODE_TRIGGER_SPACING_Y);
-              yOffset += triggerBlockHeight + 10;
+        for (const trigger of sourceNode.triggers.filter(t => t.enabled)) {
+          if (trigger.name === conn.sourceHandle) {
+            sourceHandleYOffset = yOffset;
+            found = true;
+            break;
           }
-          if (!found) sourceHandleYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET; // Fallback
+          const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
+          if (keywords.includes(conn.sourceHandle)) {
+            const kwIndex = keywords.indexOf(conn.sourceHandle);
+            sourceHandleYOffset = yOffset + 25 + (kwIndex * START_NODE_TRIGGER_SPACING_Y);
+            found = true;
+            break;
+          }
+          const triggerBlockHeight = 40 + (keywords.length * START_NODE_TRIGGER_SPACING_Y);
+          yOffset += triggerBlockHeight + 10;
+        }
+        if (!found) sourceHandleYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET; // Fallback
 
       } else if (sourceNode.type === 'option' && typeof sourceNode.optionsList === 'string' && conn.sourceHandle) {
         const options = sourceNode.optionsList.split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
@@ -236,9 +236,9 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
         }
       } else if (sourceNode.type === 'condition' || sourceNode.type === 'time-of-day') {
         if (conn.sourceHandle === 'true') {
-            sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (1/3) + 6;
+          sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (1 / 3) + 6;
         } else if (conn.sourceHandle === 'false') {
-            sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (2/3) + 6;
+          sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (2 / 3) + 6;
         }
       }
 
@@ -248,10 +248,10 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
       const targetHandleYOffset = getHandleCenterOffset(targetNode.id, null, 'target', zoomLevel) ?? NODE_HEADER_CONNECTOR_Y_OFFSET;
       const x2 = targetNode.x;
       const y2 = targetNode.y + targetHandleYOffset;
-      
+
       const isHighlighted = highlightedConnectionId === conn.id;
-      const strokeColor = isHighlighted ? 'hsl(var(--destructive))' : 'hsl(var(--accent))';
-      const baseStrokeWidth = isHighlighted ? 2.5 : 2;
+      const strokeColor = isHighlighted ? 'hsl(var(--destructive))' : 'url(#gradient-line)';
+      const baseStrokeWidth = isHighlighted ? 3 : 2;
       const calculatedStrokeWidth = Math.max(0.5, baseStrokeWidth / Math.max(zoomLevel, 0.1));
 
       return (
@@ -259,56 +259,84 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
           onClick={e => { e.stopPropagation(); onDeleteConnection(conn.id); }}
           onMouseEnter={() => setHighlightedConnectionId(conn.id)}
           onMouseLeave={() => setHighlightedConnectionId(null)}
-          style={{ cursor: 'pointer', pointerEvents: 'all' }} 
+          style={{ cursor: 'pointer', pointerEvents: 'all' }}
         >
-          <path d={drawBezierPath(x1, y1, x2, y2)} stroke="transparent" strokeWidth={Math.max(10, 12 / Math.max(zoomLevel, 0.1))} fill="none" />
+          {/* Invisible wide path for easier clicking */}
+          <path d={drawBezierPath(x1, y1, x2, y2)} stroke="transparent" strokeWidth={Math.max(15, 20 / Math.max(zoomLevel, 0.1))} fill="none" />
+
+          {/* Glow effect path */}
+          {!isHighlighted && (
+            <path
+              d={drawBezierPath(x1, y1, x2, y2)}
+              stroke="hsl(var(--primary))"
+              strokeWidth={calculatedStrokeWidth * 2}
+              strokeOpacity="0.3"
+              fill="none"
+              filter="url(#glow)"
+            />
+          )}
+
+          {/* Main path */}
           <path
             d={drawBezierPath(x1, y1, x2, y2)}
             stroke={strokeColor}
             strokeWidth={calculatedStrokeWidth}
             fill="none"
             markerEnd={isHighlighted ? "url(#arrowhead-highlight)" : "url(#arrowhead)"}
-            className="transition-colors duration-100"
+            className="transition-all duration-300"
           />
         </g>
       );
     })
+
+
   ), [connections, nodeMap, highlightedConnectionId, onDeleteConnection, setHighlightedConnectionId, zoomLevel, drawBezierPath, getHandleCenterOffset]);
-  
+
   const visualGridSpacing = GRID_SIZE * zoomLevel;
 
   return (
     <div
-      ref={canvasElementRef} 
-      className="relative flex-1 bg-background overflow-hidden select-none touch-none"
+      ref={canvasElementRef}
+      className="relative flex-1 bg-neutral-950 overflow-hidden select-none touch-none"
       onMouseDown={onCanvasMouseDown}
       style={{
         cursor: 'grab',
-        backgroundImage: `radial-gradient(hsl(var(--flow-grid-dots)) 1px, transparent 1px)`,
+        backgroundImage: `
+          linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px)
+        `,
         backgroundSize: `${visualGridSpacing}px ${visualGridSpacing}px`,
         backgroundPosition: `${canvasOffset.x % visualGridSpacing}px ${canvasOffset.y % visualGridSpacing}px`,
       }}
       tabIndex={0}
     >
-      <div 
+      <div
         ref={flowContentWrapperRef}
         id="flow-content-wrapper"
         className="absolute top-0 left-0"
         style={{
-          width: `${SVG_CANVAS_DIMENSION}px`, 
+          width: `${SVG_CANVAS_DIMENSION}px`,
           height: `${SVG_CANVAS_DIMENSION}px`,
           transformOrigin: 'top left',
           transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
         }}
       >
         <svg
-          width={SVG_CANVAS_DIMENSION} 
-          height={SVG_CANVAS_DIMENSION} 
+          width={SVG_CANVAS_DIMENSION}
+          height={SVG_CANVAS_DIMENSION}
           className="absolute top-0 left-0 pointer-events-none z-10 overflow-visible"
         >
           <defs>
+            <linearGradient id="gradient-line" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="hsl(var(--primary))" />
+              <stop offset="100%" stopColor="hsl(var(--accent))" />
+            </linearGradient>
+            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
-              <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--accent))" />
+              <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--primary))" />
             </marker>
             <marker id="arrowhead-highlight" markerWidth="10" markerHeight="7" refX="9.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
               <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--destructive))" />
@@ -323,7 +351,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
                 drawingLine.currentX,  // Já é lógico (definido no FlowBuilderClient)
                 drawingLine.currentY   // Já é lógico (definido no FlowBuilderClient)
               )}
-              stroke="hsl(var(--accent))" 
+              stroke="hsl(var(--primary))"
               strokeOpacity="0.8"
               strokeWidth={Math.max(0.5, 2.5 / Math.max(zoomLevel, 0.1))}
               fill="none"

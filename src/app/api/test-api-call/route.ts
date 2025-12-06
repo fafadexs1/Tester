@@ -5,7 +5,7 @@ import { getProperty } from 'dot-prop';
 
 interface ApiTestRequest {
   url: string;
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD';
   headers?: { id: string; key: string; value: string }[];
   queryParams?: { id: string; key: string; value: string }[];
   auth?: {
@@ -50,21 +50,21 @@ export async function POST(request: NextRequest) {
     } else if (auth?.type === 'basic' && auth.basicUser && auth.basicPassword) {
       headers.append('Authorization', `Basic ${btoa(`${auth.basicUser}:${auth.basicPassword}`)}`);
     }
-    
+
     let body: BodyInit | null = null;
     if (method !== 'GET' && method !== 'HEAD') {
-        if (requestBodyDetails?.type === 'json' && requestBodyDetails.json) {
-            body = requestBodyDetails.json;
-            if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-        } else if (requestBodyDetails?.type === 'raw' && requestBodyDetails.raw) {
-            body = requestBodyDetails.raw;
-        } else if (requestBodyDetails?.type === 'form-data' && requestBodyDetails.formData) {
-            const formData = new FormData();
-            requestBodyDetails.formData.forEach(item => {
-                if(item.key) formData.append(item.key, item.value);
-            });
-            body = formData;
-        }
+      if (requestBodyDetails?.type === 'json' && requestBodyDetails.json) {
+        body = requestBodyDetails.json;
+        if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+      } else if (requestBodyDetails?.type === 'raw' && requestBodyDetails.raw) {
+        body = requestBodyDetails.raw;
+      } else if (requestBodyDetails?.type === 'form-data' && requestBodyDetails.formData) {
+        const formData = new FormData();
+        requestBodyDetails.formData.forEach(item => {
+          if (item.key) formData.append(item.key, item.value);
+        });
+        body = formData;
+      }
     }
 
     const apiResponse = await fetch(finalUrl.toString(), {
@@ -82,10 +82,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (!apiResponse.ok) {
-        return NextResponse.json({ 
-            error: `A chamada à API falhou com status ${apiResponse.status}.`,
-            details: responseData 
-        }, { status: 400 });
+      return NextResponse.json({
+        error: `A chamada à API falhou com status ${apiResponse.status}.`,
+        details: responseData
+      }, { status: 400 });
     }
 
     return NextResponse.json({ data: responseData, status: apiResponse.status }, { status: 200 });

@@ -87,68 +87,76 @@ export default function WorkspaceList({ workspaces, onWorkspacesChange }: Worksp
                   exit="exit"
                   layout
                 >
-                  <Card 
-                    className="group flex flex-col justify-between overflow-hidden rounded-xl shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-1 border-border/60 bg-card/80 backdrop-blur-sm"
+                  <Card
+                    className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur-md shadow-lg transition-all duration-300 hover:shadow-violet-500/10 hover:border-violet-500/20 hover:-translate-y-1"
                   >
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <CardTitle className="truncate pr-4 font-semibold text-lg">{ws.name}</CardTitle>
+                    <CardHeader className="relative pb-2">
+                      <div className="absolute top-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground group-hover:text-foreground">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-white/10 rounded-full">
                               <MoreHorizontal className="h-5 w-5" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleOpenWorkspace(ws.id)}>
+                          <DropdownMenuContent align="end" className="bg-zinc-950 border-white/10 text-zinc-300">
+                            <DropdownMenuItem onClick={() => handleOpenWorkspace(ws.id)} className="focus:bg-white/5 focus:text-white cursor-pointer">
                               <Pencil className="mr-2 h-4 w-4" />
                               Editar
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setWorkspaceToDelete(ws); }} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+                            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setWorkspaceToDelete(ws); }} className="text-red-400 focus:bg-red-500/10 focus:text-red-300 cursor-pointer">
                               <Trash2 className="mr-2 h-4 w-4" />
                               Excluir
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                      <CardDescription>
-                        {`Atualizado em: ${new Date(ws.updated_at || Date.now()).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`}
+                      <div className="mb-3 h-10 w-10 rounded-lg bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center border border-white/5">
+                        <BotMessageSquare className="h-5 w-5 text-violet-400" />
+                      </div>
+                      <CardTitle className="truncate font-bold text-lg text-zinc-100 group-hover:text-violet-300 transition-colors">{ws.name}</CardTitle>
+                      <CardDescription className="text-xs text-zinc-500 font-medium">
+                        Atualizado em {new Date(ws.updated_at || Date.now()).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </CardDescription>
                     </CardHeader>
-                    <CardFooter 
-                      className="flex items-center justify-end p-4 bg-muted/20 transition-colors group-hover:bg-muted/40 cursor-pointer"
-                      onClick={() => handleOpenWorkspace(ws.id)}
+                    <CardFooter
+                      className="p-4 pt-2"
                     >
-                       <div className="flex items-center text-sm font-medium text-primary">
-                            Abrir Editor
-                            <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                        </div>
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-between bg-white/5 hover:bg-violet-500/10 hover:text-violet-300 text-zinc-400 border border-transparent hover:border-violet-500/20 transition-all group/btn"
+                        onClick={() => handleOpenWorkspace(ws.id)}
+                      >
+                        <span className="text-xs font-medium">Abrir Editor</span>
+                        <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover/btn:translate-x-1" />
+                      </Button>
                     </CardFooter>
                   </Card>
                 </motion.div>
               ))}
             </div>
           ) : (
-            <div className="col-span-full flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/30 py-24 text-center">
-                <BotMessageSquare className="w-16 h-16 text-muted-foreground/70 mb-4"/>
-                <h3 className="text-xl font-semibold">Nenhum fluxo encontrado</h3>
-                <p className="text-muted-foreground mt-2 mb-6 max-w-sm">Parece que você ainda não criou nenhum fluxo. Que tal começar agora?</p>
+            <div className="col-span-full flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/10 bg-white/5 py-24 text-center">
+              <div className="h-20 w-20 rounded-full bg-zinc-900/50 flex items-center justify-center mb-6 shadow-inner border border-white/5">
+                <BotMessageSquare className="w-10 h-10 text-zinc-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-zinc-200">Nenhum fluxo encontrado</h3>
+              <p className="text-zinc-500 mt-2 mb-8 max-w-sm text-sm">Parece que você ainda não criou nenhum fluxo. Comece agora mesmo!</p>
             </div>
           )}
         </AnimatePresence>
       </div>
 
       <AlertDialog open={!!workspaceToDelete} onOpenChange={(open) => !open && setWorkspaceToDelete(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-zinc-950 border-white/10">
           <AlertDialogHeader>
-            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação não pode ser desfeita. Isso excluirá permanentemente o fluxo <strong className="text-foreground">{workspaceToDelete?.name}</strong> e todos os seus dados.
+            <AlertDialogTitle className="text-white">Excluir Fluxo?</AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              Esta ação não pode ser desfeita. Isso excluirá permanentemente o fluxo <strong className="text-white">{workspaceToDelete?.name}</strong> e todos os seus dados.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setWorkspaceToDelete(null)}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => workspaceToDelete && handleDeleteWorkspace(workspaceToDelete.id)} className="bg-destructive hover:bg-destructive/90">
+            <AlertDialogCancel onClick={() => setWorkspaceToDelete(null)} className="bg-transparent border-white/10 text-zinc-300 hover:bg-white/5 hover:text-white">Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => workspaceToDelete && handleDeleteWorkspace(workspaceToDelete.id)} className="bg-red-600 hover:bg-red-700 text-white border-none">
               Sim, excluir
             </AlertDialogAction>
           </AlertDialogFooter>

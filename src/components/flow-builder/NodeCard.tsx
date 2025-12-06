@@ -762,11 +762,11 @@ const parseCurlCommand = (command: string): ParsedCurlResult => {
     bodyRaw,
     auth: authType
       ? {
-          type: authType,
-          bearerToken,
-          basicUser,
-          basicPassword,
-        }
+        type: authType,
+        bearerToken,
+        basicUser,
+        basicPassword,
+      }
       : undefined,
   };
 };
@@ -805,44 +805,44 @@ const getWebhookMappingPreview = (path: string, sample: any): PreviewResult => {
 const API_PREVIEW_KEY_PRIMARY = '__primary__';
 
 const TextFormatToolbar = ({ fieldName, textAreaRef, onUpdate, nodeId }: { fieldName: keyof NodeData, textAreaRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement>, onUpdate: Function, nodeId: string }) => {
-    const handleFormat = (formatChar: string) => {
-        const textarea = textAreaRef.current;
-        if (!textarea) return;
+  const handleFormat = (formatChar: string) => {
+    const textarea = textAreaRef.current;
+    if (!textarea) return;
 
-        const start = textarea.selectionStart ?? 0;
-        const end = textarea.selectionEnd ?? 0;
-        const selectedText = textarea.value.substring(start, end);
-        const newText = `${textarea.value.substring(0, start)}${formatChar}${selectedText}${formatChar}${textarea.value.substring(end)}`;
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+    const selectedText = textarea.value.substring(start, end);
+    const newText = `${textarea.value.substring(0, start)}${formatChar}${selectedText}${formatChar}${textarea.value.substring(end)}`;
 
-        onUpdate(nodeId, { [fieldName]: newText });
+    onUpdate(nodeId, { [fieldName]: newText });
 
-        // Restore focus and selection
-        setTimeout(() => {
-            textarea.focus();
-            if (selectedText) {
-                textarea.setSelectionRange(start + formatChar.length, end + formatChar.length);
-            } else {
-                textarea.setSelectionRange(start + formatChar.length, start + formatChar.length);
-            }
-        }, 0);
-    };
+    // Restore focus and selection
+    setTimeout(() => {
+      textarea.focus();
+      if (selectedText) {
+        textarea.setSelectionRange(start + formatChar.length, end + formatChar.length);
+      } else {
+        textarea.setSelectionRange(start + formatChar.length, start + formatChar.length);
+      }
+    }, 0);
+  };
 
-    return (
-        <div className="flex items-center gap-1 mt-1.5 bg-muted p-1 rounded-md" data-no-drag="true">
-            <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('*')} title="Negrito">
-                <Bold className="w-4 h-4" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('_')} title="Itálico">
-                <Italic className="w-4 h-4" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('~')} title="Riscado">
-                <Strikethrough className="w-4 h-4" />
-            </Button>
-             <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('```')} title="Monoespaçado">
-                <Code className="w-4 h-4" />
-            </Button>
-        </div>
-    );
+  return (
+    <div className="flex items-center gap-1 mt-1.5 bg-muted p-1 rounded-md" data-no-drag="true">
+      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('*')} title="Negrito">
+        <Bold className="w-4 h-4" />
+      </Button>
+      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('_')} title="Itálico">
+        <Italic className="w-4 h-4" />
+      </Button>
+      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('~')} title="Riscado">
+        <Strikethrough className="w-4 h-4" />
+      </Button>
+      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleFormat('```')} title="Monoespaçado">
+        <Code className="w-4 h-4" />
+      </Button>
+    </div>
+  );
 };
 
 const NodeCard: React.FC<NodeCardProps> = React.memo(({
@@ -860,20 +860,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const codeEditorRef = useRef<HTMLTextAreaElement>(null);
-
-
-  const [isTestResponseModalOpen, setIsTestResponseModalOpen] = useState(false);
-  const [testResponseData, setTestResponseData] = useState<any | null>(null);
-  const [testResponseError, setTestResponseError] = useState<string | null>(null);
-  const [isTestingApi, setIsTestingApi] = useState(false);
-
-  const [isWebhookHistoryDialogOpen, setIsWebhookHistoryDialogOpen] = useState(false);
-  const [isWebhookMappingDialogOpen, setIsWebhookMappingDialogOpen] = useState(false);
-  const [activeWebhookTriggerId, setActiveWebhookTriggerId] = useState<string | null>(null);
-  const [isApiHistoryDialogOpen, setIsApiHistoryDialogOpen] = useState(false);
-  const [isApiMappingDialogOpen, setIsApiMappingDialogOpen] = useState(false);
-
-  const [webhookSampleInput, setWebhookSampleInput] = useState('');
   const [webhookSampleData, setWebhookSampleData] = useState<any | null>(null);
   const [webhookSampleError, setWebhookSampleError] = useState<string | null>(null);
   const [isLoadingWebhookSample, setIsLoadingWebhookSample] = useState(false);
@@ -888,6 +874,17 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const [isCurlImportDialogOpen, setIsCurlImportDialogOpen] = useState(false);
   const [curlInput, setCurlInput] = useState('');
   const [curlImportError, setCurlImportError] = useState<string | null>(null);
+
+  const [activeWebhookTriggerId, setActiveWebhookTriggerId] = useState<string | null>(null);
+  const [isWebhookMappingDialogOpen, setIsWebhookMappingDialogOpen] = useState(false);
+  const [isTestingApi, setIsTestingApi] = useState(false);
+  const [testResponseData, setTestResponseData] = useState<any | null>(null);
+  const [testResponseError, setTestResponseError] = useState<string | null>(null);
+  const [isTestResponseModalOpen, setIsTestResponseModalOpen] = useState(false);
+  const [isApiHistoryDialogOpen, setIsApiHistoryDialogOpen] = useState(false);
+  const [isWebhookHistoryDialogOpen, setIsWebhookHistoryDialogOpen] = useState(false);
+  const [isApiMappingDialogOpen, setIsApiMappingDialogOpen] = useState(false);
+  const [webhookSampleInput, setWebhookSampleInput] = useState('');
 
   const selectedWebhookTriggerForBuilder = useMemo(() => {
     if (!activeWebhookTriggerId) return null;
@@ -1074,7 +1071,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     setChatwootInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: result.status } : i));
   }, []);
 
-   const handleCheckDialogyInstanceStatus = useCallback(async (instance: DialogyInstance) => {
+  const handleCheckDialogyInstanceStatus = useCallback(async (instance: DialogyInstance) => {
     setDialogyInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: 'connecting' } : i));
     const result = await checkDialogyInstanceStatus(instance.baseUrl, instance.apiKey);
     setDialogyInstances(prev => prev.map(i => i.id === instance.id ? { ...i, status: result.status } : i));
@@ -1112,7 +1109,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     } finally {
       setIsLoadingChatwootInstances(false);
     }
-    
+
     try {
       const dialogyResponse = await fetch('/api/instances/dialogy');
       if (!dialogyResponse.ok) throw new Error('Falha ao buscar instâncias Dialogy.');
@@ -1190,7 +1187,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     );
     onUpdate(node.id, { triggers: updatedTriggers });
   };
-  
+
   const handleKeywordsChange = (triggerId: string, value: string) => {
     // Permite vírgulas, mas limpa espaços extras e remove duplicados
     const keywords = value.split(',').map(kw => kw.trim()).filter(Boolean);
@@ -1238,10 +1235,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const handleAddListItem = (listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList' | 'apiResponseMappings') => {
     const currentList = (node[listName] as any[] || []);
     let newItem;
-    if(listName === 'apiResponseMappings') {
-        newItem = { id: uuidv4(), jsonPath: '', flowVariable: '', extractAs: 'single' };
+    if (listName === 'apiResponseMappings') {
+      newItem = { id: uuidv4(), jsonPath: '', flowVariable: '', extractAs: 'single' };
     } else {
-        newItem = { id: uuidv4(), key: '', value: '' };
+      newItem = { id: uuidv4(), key: '', value: '' };
     }
     onUpdate(node.id, { [listName]: [...currentList, newItem] });
   };
@@ -1250,13 +1247,13 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     const currentList = (node[listName] as any[] || []);
     onUpdate(node.id, { [listName]: currentList.filter(item => item.id !== itemId) });
   };
-  
+
   const handleApiResponseMappingChange = (mappingId: string, field: 'jsonPath' | 'flowVariable' | 'extractAs' | 'itemField', value: string) => {
     const currentMappings = (node.apiResponseMappings || []);
     onUpdate(node.id, {
-        apiResponseMappings: currentMappings.map(mapping => 
-            mapping.id === mappingId ? { ...mapping, [field]: value } : mapping
-        )
+      apiResponseMappings: currentMappings.map(mapping =>
+        mapping.id === mappingId ? { ...mapping, [field]: value } : mapping
+      )
     });
   };
 
@@ -1389,22 +1386,22 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       });
 
       if (activeWorkspace?.id) {
-          const logData = {
-              workspaceId: activeWorkspace.id,
-              type: 'api-call',
-              nodeId: node.id,
-              nodeTitle: node.title,
-              requestUrl: node.apiUrl,
-              response: result.data,
-              error: null,
-              sessionId: null
-          };
-          // Não aguardamos isso para não bloquear a UI
-          fetch('/api/evolution/webhook-logs', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(logData),
-          }).catch(e => console.error("Falha ao postar o log do teste de API:", e));
+        const logData = {
+          workspaceId: activeWorkspace.id,
+          type: 'api-call',
+          nodeId: node.id,
+          nodeTitle: node.title,
+          requestUrl: node.apiUrl,
+          response: result.data,
+          error: null,
+          sessionId: null
+        };
+        // Não aguardamos isso para não bloquear a UI
+        fetch('/api/evolution/webhook-logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(logData),
+        }).catch(e => console.error("Falha ao postar o log do teste de API:", e));
       }
 
     } catch (error: any) {
@@ -1419,7 +1416,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       setIsTestingApi(false);
     }
   };
-  
+
   const handleOpenApiHistory = () => {
     setIsApiHistoryDialogOpen(true);
   };
@@ -1492,21 +1489,21 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           <Button
             variant="ghost"
             size="icon"
-            className={cn("absolute h-7 w-7 z-10", isTextarea ? 'top-1.5 right-1.5' : 'top-1/2 right-1 -translate-y-1/2')}
+            className={cn("absolute h-6 w-6 z-10 text-zinc-400 hover:text-zinc-200", isTextarea ? 'top-1.5 right-1.5' : 'top-1/2 right-1 -translate-y-1/2')}
             data-no-drag="true"
             aria-label="Inserir Variável"
           >
-            <Braces className="h-4 w-4" />
+            <Braces className="h-3.5 w-3.5" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[220px] p-0" data-no-drag="true" align="end">
+        <PopoverContent className="w-[220px] p-0 bg-zinc-950 border-white/10" data-no-drag="true" align="end">
           <div className="max-h-64 overflow-y-auto">
-            <div className="p-1 text-xs">
+            <div className="p-1">
               {allVars.map((varName) => (
                 <Button
                   key={varName}
                   variant="ghost"
-                  className="w-full justify-start h-7 px-2 text-xs"
+                  className="w-full justify-start h-6 px-2 text-[10px] font-mono text-zinc-300 hover:bg-white/5 hover:text-white"
                   onClick={() => handleVariableInsert(fieldName, varName, isTextarea, isListItem, itemId, itemKeyOrValue)}
                 >
                   {varName}
@@ -1817,186 +1814,240 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       );
     }
 
+    const mappingCount = (targetTrigger.variableMappings || []).length;
+
     return (
-      <div className="space-y-3">
-        <div className="rounded-md border bg-muted/20 p-3 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-xs font-semibold">Laboratório de Payload</p>
-              <p className="text-[11px] text-muted-foreground">Cole o body recebido ou importe o último log.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleLoadLatestWebhookSample}
-                disabled={isLoadingWebhookSample}
-              >
-                {isLoadingWebhookSample ? (
-                  <>
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    Buscando
-                  </>
-                ) : (
-                  <>
-                    <History className="mr-1.5 h-3.5 w-3.5" />
-                    Usar último log
-                  </>
-                )}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => clearSampleEditor('webhook')}>
-                Limpar
-              </Button>
-            </div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs bg-black/20 border-white/10 hover:bg-white/5"
+              onClick={() => {
+                setActiveWebhookTriggerId(targetTrigger.id);
+                setIsWebhookMappingDialogOpen(true);
+              }}
+            >
+              <Settings2 className="w-3.5 h-3.5 mr-1.5" />
+              Configurar Mapeamento
+            </Button>
+            {mappingCount > 0 && (
+              <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                {mappingCount} variáveis
+              </span>
+            )}
           </div>
-          <Textarea
-            value={webhookSampleInput}
-            onChange={(e) => handleWebhookSampleInputChange(e.target.value)}
-            rows={4}
-            placeholder={`{
+        </div>
+
+        <Dialog open={isWebhookMappingDialogOpen && activeWebhookTriggerId === targetTrigger.id} onOpenChange={(open) => {
+          setIsWebhookMappingDialogOpen(open);
+          if (!open) setActiveWebhookTriggerId(null);
+        }}>
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-zinc-950 border-white/10">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-semibold">Mapeamento de Webhook</DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                Configure como os dados recebidos no webhook serão transformados em variáveis do fluxo.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="rounded-md border border-white/5 bg-black/20 p-3 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold text-zinc-300">Laboratório de Payload</p>
+                    <p className="text-[11px] text-muted-foreground">Cole o body recebido ou importe o último log.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs border-white/10 hover:bg-white/5"
+                      onClick={handleLoadLatestWebhookSample}
+                      disabled={isLoadingWebhookSample}
+                    >
+                      {isLoadingWebhookSample ? (
+                        <>
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          Buscando
+                        </>
+                      ) : (
+                        <>
+                          <History className="mr-1.5 h-3.5 w-3.5" />
+                          Usar último log
+                        </>
+                      )}
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-7 text-xs border-white/10 hover:bg-white/5" onClick={() => clearSampleEditor('webhook')}>
+                      Limpar
+                    </Button>
+                  </div>
+                </div>
+                <Textarea
+                  value={webhookSampleInput}
+                  onChange={(e) => handleWebhookSampleInputChange(e.target.value)}
+                  rows={6}
+                  placeholder={`{
   "data": {
     "message": {
       "text": "Oi, gostaria de um orçamento"
     }
   }
 }`}
-            className="font-mono text-xs"
-          />
-          {webhookSampleError ? (
-            <p className="text-xs text-destructive">{webhookSampleError}</p>
-          ) : (
-            <p className="text-[11px] text-muted-foreground">Clique em qualquer chave do JSON abaixo para preencher o campo selecionado.</p>
-          )}
-          <div className="border rounded-md bg-background/60">
-            {webhookSampleData ? (
-              <ScrollArea className="h-40 pr-3">
-                <JsonTreeView data={webhookSampleData} onSelectPath={(path) => handleJsonTreeSelection('webhook', path)} />
-              </ScrollArea>
-            ) : (
-              <div className="flex h-32 items-center justify-center px-4 text-center text-xs text-muted-foreground">
-                Cole um JSON real do seu webhook para habilitar o assistente de mapeamento.
+                  className="font-mono text-xs bg-black/40 border-white/5 focus:border-primary/50"
+                />
+                {webhookSampleError ? (
+                  <p className="text-xs text-destructive">{webhookSampleError}</p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">Clique em qualquer chave do JSON abaixo para preencher o campo selecionado.</p>
+                )}
+                <div className="border border-white/5 rounded-md bg-black/40">
+                  {webhookSampleData ? (
+                    <ScrollArea className="h-48 pr-3">
+                      <JsonTreeView data={webhookSampleData} onSelectPath={(path) => handleJsonTreeSelection('webhook', path)} />
+                    </ScrollArea>
+                  ) : (
+                    <div className="flex h-32 items-center justify-center px-4 text-center text-xs text-muted-foreground">
+                      Cole um JSON real do seu webhook para habilitar o assistente de mapeamento.
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        </div>
 
-        <div className="space-y-3">
-          {(targetTrigger.variableMappings || []).map((mapping, index) => {
-            const preview = getWebhookMappingPreview(mapping.jsonPath, webhookSampleData);
-            const suggestion = buildVariableNameFromPath(mapping.jsonPath);
-            const previewClass = preview.type === 'success'
-              ? 'border-emerald-500/60 text-foreground bg-emerald-50/30 dark:bg-emerald-500/5'
-              : preview.type === 'error'
-                ? 'border-destructive/70 text-destructive bg-destructive/5'
-                : 'text-muted-foreground bg-muted/50';
-
-            return (
-              <div key={mapping.id} className="rounded-lg border bg-background/40 p-3 shadow-inner space-y-3">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span className="font-medium">Mapeamento #{index + 1}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleRemoveVariableMapping(targetTrigger.id, mapping.id)}
-                    className="text-destructive hover:text-destructive/80 w-7 h-7"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-zinc-200">Variáveis Mapeadas</h4>
+                  <Button onClick={() => handleAddVariableMapping(targetTrigger.id)} variant="outline" size="sm" className="text-xs h-7 border-white/10 hover:bg-white/5">
+                    <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Mapeamento
                   </Button>
                 </div>
-                <div className="space-y-2">
-                  <div>
-                    <Label className="text-[11px] uppercase font-semibold">Caminho do dado</Label>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Input
-                        placeholder="Ex: data.message.text"
-                        value={mapping.jsonPath}
-                        onFocus={() => setFocusedWebhookMapping({ triggerId: targetTrigger.id, mappingId: mapping.id })}
-                        onChange={(e) => handleVariableMappingChange(targetTrigger.id, mapping.id, 'jsonPath', e.target.value)}
-                        className="text-xs h-8"
-                      />
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" size="icon" className="h-8 w-8" disabled={!webhookSampleData}>
-                            <MousePointerClick className="w-4 h-4" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[260px] p-2" align="end" data-no-drag="true">
-                          {webhookSampleData ? (
-                            <ScrollArea className="h-48 pr-2">
-                              <JsonTreeView
-                                data={webhookSampleData}
-                                onSelectPath={(path) => {
-                                  handleVariableMappingChange(targetTrigger.id, mapping.id, 'jsonPath', path);
-                                  setFocusedWebhookMapping({ triggerId: targetTrigger.id, mappingId: mapping.id });
-                                }}
-                              />
-                            </ScrollArea>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">Cole um JSON no Laboratório para habilitar esta seleção.</p>
-                          )}
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-[11px] uppercase font-semibold">Variável</Label>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Input
-                        placeholder="Ex: mensagem_usuario"
-                        value={mapping.flowVariable}
-                        onChange={(e) => handleVariableMappingChange(targetTrigger.id, mapping.id, 'flowVariable', e.target.value)}
-                        className="text-xs h-8"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={!suggestion || !!(mapping.flowVariable && mapping.flowVariable.trim())}
-                        onClick={() => suggestion && handleVariableMappingChange(targetTrigger.id, mapping.id, 'flowVariable', suggestion)}
-                      >
-                        <Sparkles className="w-3.5 h-3.5 mr-1" />
-                        Sugerir
-                      </Button>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between text-[11px] uppercase text-muted-foreground">
-                      <span>Pré-visualização</span>
-                      {webhookSampleData && <span>Baseado no JSON acima</span>}
-                    </div>
-                    <div className={cn("mt-1 rounded-md border px-2.5 py-2 text-xs font-mono whitespace-pre-wrap break-all", previewClass)}>
-                      {preview.type === 'success' ? (
-                        <>
-                          <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                            Valor encontrado ({describePreviewValue(preview.value)})
-                          </p>
-                          <pre className="mt-1 whitespace-pre-wrap break-all text-[11px] font-mono">
-                            {formatPreviewValue(preview.value)}
-                          </pre>
-                        </>
-                      ) : (
-                        <span>{preview.message}</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
 
-        <Button onClick={() => handleAddVariableMapping(targetTrigger.id)} variant="outline" size="sm" className="text-xs h-8">
-          <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Mapeamento
-        </Button>
+                {(targetTrigger.variableMappings || []).length === 0 && (
+                  <div className="text-center py-8 border border-dashed border-white/10 rounded-lg text-muted-foreground text-xs">
+                    Nenhuma variável mapeada ainda. Adicione um mapeamento para começar.
+                  </div>
+                )}
+
+                {(targetTrigger.variableMappings || []).map((mapping, index) => {
+                  const preview = getWebhookMappingPreview(mapping.jsonPath, webhookSampleData);
+                  const suggestion = buildVariableNameFromPath(mapping.jsonPath);
+                  const previewClass = preview.type === 'success'
+                    ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5'
+                    : preview.type === 'error'
+                      ? 'border-destructive/30 text-destructive bg-destructive/5'
+                      : 'text-muted-foreground bg-white/5';
+
+                  return (
+                    <div key={mapping.id} className="rounded-lg border border-white/5 bg-black/20 p-3 shadow-inner space-y-3">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span className="font-medium">Mapeamento #{index + 1}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemoveVariableMapping(targetTrigger.id, mapping.id)}
+                          className="text-zinc-500 hover:text-destructive w-7 h-7"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <Label className="text-[10px] uppercase font-semibold text-zinc-500">Caminho do dado (JSON Path)</Label>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <Input
+                              placeholder="Ex: data.message.text"
+                              value={mapping.jsonPath}
+                              onFocus={() => setFocusedWebhookMapping({ triggerId: targetTrigger.id, mappingId: mapping.id })}
+                              onChange={(e) => handleVariableMappingChange(targetTrigger.id, mapping.id, 'jsonPath', e.target.value)}
+                              className="text-xs h-8 bg-black/40 border-white/5 focus:border-primary/50"
+                            />
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-8 w-8 border-white/10 hover:bg-white/5" disabled={!webhookSampleData}>
+                                  <MousePointerClick className="w-4 h-4" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[260px] p-2" align="end" data-no-drag="true">
+                                {webhookSampleData ? (
+                                  <ScrollArea className="h-48 pr-2">
+                                    <JsonTreeView
+                                      data={webhookSampleData}
+                                      onSelectPath={(path) => {
+                                        handleVariableMappingChange(targetTrigger.id, mapping.id, 'jsonPath', path);
+                                        setFocusedWebhookMapping({ triggerId: targetTrigger.id, mappingId: mapping.id });
+                                      }}
+                                    />
+                                  </ScrollArea>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">Cole um JSON no Laboratório para habilitar esta seleção.</p>
+                                )}
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-[10px] uppercase font-semibold text-zinc-500">Nome da Variável</Label>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <Input
+                              placeholder="Ex: mensagem_usuario"
+                              value={mapping.flowVariable}
+                              onChange={(e) => handleVariableMappingChange(targetTrigger.id, mapping.id, 'flowVariable', e.target.value)}
+                              className="text-xs h-8 bg-black/40 border-white/5 focus:border-primary/50"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 border-white/10 hover:bg-white/5"
+                              disabled={!suggestion || !!(mapping.flowVariable && mapping.flowVariable.trim())}
+                              onClick={() => suggestion && handleVariableMappingChange(targetTrigger.id, mapping.id, 'flowVariable', suggestion)}
+                            >
+                              <Sparkles className="w-3.5 h-3.5 mr-1" />
+                              Sugerir
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between text-[10px] uppercase text-zinc-500 mb-1">
+                          <span>Pré-visualização</span>
+                          {webhookSampleData && <span>Baseado no JSON acima</span>}
+                        </div>
+                        <div className={cn("rounded-md border px-2.5 py-2 text-xs font-mono whitespace-pre-wrap break-all min-h-[38px] flex items-center", previewClass)}>
+                          {preview.type === 'success' ? (
+                            <div className="w-full">
+                              <p className="text-[10px] font-semibold text-emerald-400 mb-0.5">
+                                Valor encontrado ({describePreviewValue(preview.value)})
+                              </p>
+                              <div className="text-[11px] font-mono opacity-90">
+                                {formatPreviewValue(preview.value)}
+                              </div>
+                            </div>
+                          ) : (
+                            <span>{preview.message}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setIsWebhookMappingDialogOpen(false)}>Concluir</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   };
 
   const renderApiMappingBuilder = () => (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
+    <div className="space-y-2">
+      <div className="grid gap-2 sm:grid-cols-2">
         <div>
-          <Label htmlFor={`${node.id}-apiResponsePath`}>Caminho do Dado Principal (JSONata ou caminho simples)</Label>
+          <Label htmlFor={`${node.id}-apiResponsePath`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Caminho do Dado Principal</Label>
           <div className="flex items-center gap-1.5 mt-1">
             <Input
               id={`${node.id}-apiResponsePath`}
@@ -2004,18 +2055,18 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               value={node.apiResponsePath || ''}
               onFocus={() => setFocusedApiMappingId('__primary__')}
               onChange={(e) => onUpdate(node.id, { apiResponsePath: e.target.value })}
-              className="pr-8 text-sm"
+              className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50"
             />
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-7 w-7 border-white/10 hover:bg-white/5"
                   disabled={!apiSampleData}
                   title={apiSampleData ? 'Clique em um campo do JSON' : 'Cole uma resposta de exemplo'}
                 >
-                  <MousePointerClick className="w-4 h-4" />
+                  <MousePointerClick className="w-3.5 h-3.5" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[260px] p-2" align="end" data-no-drag="true">
@@ -2024,82 +2075,85 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     <JsonTreeView data={apiSampleData} onSelectPath={(path) => handleJsonTreeSelection('api', path)} />
                   </ScrollArea>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Cole ou importe uma resposta para habilitar esta seleção.</p>
+                  <p className="text-[10px] text-muted-foreground">Cole ou importe uma resposta para habilitar esta seleção.</p>
                 )}
               </PopoverContent>
             </Popover>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">Defina qual valor será salvo em <em>Salvar Resultado Principal</em>.</p>
-                    <div className="mt-2 rounded-md border bg-muted/30 px-2.5 py-2 text-xs font-mono whitespace-pre-wrap break-all min-h-[48px]">
-                      {(() => {
-                        const preview = getApiPreviewResult(node.apiResponsePath || '', API_PREVIEW_KEY_PRIMARY);
-                        if (preview.type === 'success') {
-                          return (
-                            <>
-                              <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Valor de exemplo ({describePreviewValue(preview.value)})</p>
-                              <pre className="mt-1">{formatPreviewValue(preview.value)}</pre>
-                            </>
-                          );
-                        }
-                        return <span className="text-[11px] text-muted-foreground">{preview.message}</span>;
-                      })()}
-                    </div>
-                  </div>
+          <p className="text-[10px] text-muted-foreground mt-1">Defina qual valor será salvo em <em>Salvar Resultado Principal</em>.</p>
+          <div className="mt-2 rounded-md border border-white/5 bg-black/20 px-2 py-1.5 text-[10px] font-mono whitespace-pre-wrap break-all min-h-[40px]">
+            {(() => {
+              const preview = getApiPreviewResult(node.apiResponsePath || '', API_PREVIEW_KEY_PRIMARY);
+              if (preview.type === 'success') {
+                return (
+                  <>
+                    <p className="text-[10px] font-semibold text-emerald-400">Valor de exemplo ({describePreviewValue(preview.value)})</p>
+                    <pre className="mt-1">{formatPreviewValue(preview.value)}</pre>
+                  </>
+                );
+              }
+              return <span className="text-[10px] text-muted-foreground">{preview.message}</span>;
+            })()}
+          </div>
+        </div>
         <div>
-          <Label htmlFor={`${node.id}-apioutputvar`}>Salvar Resultado Principal na Variável</Label>
+          <Label htmlFor={`${node.id}-apioutputvar`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Salvar Resultado Principal na Variável</Label>
           <div className="flex items-center gap-1.5 mt-1">
             <Input
               id={`${node.id}-apioutputvar`}
               placeholder="resposta_api"
               value={node.apiOutputVariable || ''}
               onChange={(e) => onUpdate(node.id, { apiOutputVariable: e.target.value })}
+              className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"
             />
             <Button
               type="button"
               variant="outline"
               size="sm"
+              className="h-7 text-[10px] px-2 border-white/10 hover:bg-white/5"
               disabled={!buildVariableNameFromPath(node.apiResponsePath || '') || !!(node.apiOutputVariable && node.apiOutputVariable.trim())}
               onClick={() => {
                 const suggestion = buildVariableNameFromPath(node.apiResponsePath || '');
                 if (suggestion) onUpdate(node.id, { apiOutputVariable: suggestion });
               }}
             >
-              <Sparkles className="w-3.5 h-3.5 mr-1" />
+              <Sparkles className="w-3 h-3 mr-1" />
               Sugerir
             </Button>
           </div>
         </div>
       </div>
 
-      <div className="rounded-md border bg-muted/10 p-3 space-y-2">
+      <div className="rounded-md border border-white/5 bg-black/10 p-2 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold">Laboratório de Resposta</p>
-            <p className="text-[11px] text-muted-foreground">Cole a resposta da API, use o último log ou reaproveite o último teste.</p>
+            <p className="text-[10px] font-semibold text-zinc-300">Laboratório de Resposta</p>
+            <p className="text-[10px] text-muted-foreground">Cole a resposta da API, use o último log ou reaproveite o último teste.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1">
             <Button
               variant="outline"
               size="sm"
+              className="h-6 text-[10px] px-2 border-white/10 hover:bg-white/5"
               onClick={handleLoadLatestApiSample}
               disabled={isLoadingApiSample}
             >
               {isLoadingApiSample ? (
                 <>
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                   Buscando
                 </>
               ) : (
                 <>
-                  <History className="mr-1.5 h-3.5 w-3.5" />
+                  <History className="mr-1 h-3 w-3" />
                   Usar log
                 </>
               )}
             </Button>
-            <Button variant="outline" size="sm" onClick={handleUseLastTestResponseAsSample}>
-              <TestTube2 className="mr-1.5 h-3.5 w-3.5" /> Resposta do teste
+            <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 border-white/10 hover:bg-white/5" onClick={handleUseLastTestResponseAsSample}>
+              <TestTube2 className="mr-1 h-3 w-3" /> Teste
             </Button>
-            <Button variant="outline" size="sm" onClick={() => clearSampleEditor('api')}>
+            <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 border-white/10 hover:bg-white/5" onClick={() => clearSampleEditor('api')}>
               Limpar
             </Button>
           </div>
@@ -2108,70 +2162,65 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           value={apiSampleInput}
           onChange={(e) => handleApiSampleInputChange(e.target.value)}
           rows={4}
-          placeholder={`{
-  "data": {
-    "id": 123,
-    "user": { "name": "Ana" }
-  }
-}`}
-          className="font-mono text-xs"
+          placeholder={`{ "data": { ... } }`}
+          className="font-mono text-[10px] bg-black/20 border-white/5 focus:border-primary/50 resize-none"
         />
         {apiSampleError ? (
-          <p className="text-xs text-destructive">{apiSampleError}</p>
+          <p className="text-[10px] text-destructive">{apiSampleError}</p>
         ) : (
-          <p className="text-[11px] text-muted-foreground">Clique no JSON abaixo para preencher qualquer campo selecionado.</p>
+          <p className="text-[10px] text-muted-foreground">Clique no JSON abaixo para preencher qualquer campo selecionado.</p>
         )}
-        <div className="border rounded-md bg-background/60">
+        <div className="border border-white/5 rounded-md bg-black/20">
           {apiSampleData ? (
-            <ScrollArea className="h-40 pr-3">
+            <ScrollArea className="h-32 pr-2">
               <JsonTreeView data={apiSampleData} onSelectPath={(path) => handleJsonTreeSelection('api', path)} />
             </ScrollArea>
           ) : (
-            <div className="flex h-32 items-center justify-center px-4 text-center text-xs text-muted-foreground">
+            <div className="flex h-24 items-center justify-center px-4 text-center text-[10px] text-muted-foreground">
               Cole/importe um JSON para liberar o construtor avançado de caminhos.
             </div>
           )}
         </div>
       </div>
 
-      <div className="pt-2 space-y-3">
+      <div className="pt-2 space-y-2">
         <div className="flex items-center justify-between">
-          <Label className="text-xs font-medium">Mapeamento de Múltiplas Variáveis</Label>
-          <p className="text-[11px] text-muted-foreground">Extraia quantos campos precisar com expressões JSONata.</p>
+          <Label className="text-[10px] font-medium text-zinc-400">Mapeamento de Múltiplas Variáveis</Label>
+          <p className="text-[10px] text-muted-foreground">Extraia quantos campos precisar.</p>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {(node.apiResponseMappings || []).map((mapping, index) => {
             const preview = getApiPreviewResult(mapping.jsonPath, mapping.id, { extractAs: mapping.extractAs, itemField: mapping.itemField });
             const suggestion = buildVariableNameFromPath(mapping.jsonPath);
             const previewClass = preview.type === 'success'
-              ? 'border-emerald-500/60 text-foreground bg-emerald-50/30 dark:bg-emerald-500/5'
+              ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5'
               : preview.type === 'error'
-                ? 'border-destructive/70 text-destructive bg-destructive/5'
-                : 'text-muted-foreground bg-muted/50';
+                ? 'border-destructive/30 text-destructive bg-destructive/5'
+                : 'text-muted-foreground bg-white/5';
 
             return (
-              <div key={mapping.id} className="rounded-lg border bg-background/40 p-3 shadow-inner space-y-3">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <div key={mapping.id} className="rounded-lg border border-white/5 bg-black/20 p-2 shadow-inner space-y-2">
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                   <span className="font-medium">Mapeamento #{index + 1}</span>
-                  <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-destructive hover:text-destructive/80 w-7 h-7">
-                    <Trash2 className="w-3.5 h-3.5" />
+                  <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-zinc-500 hover:text-destructive w-6 h-6">
+                    <Trash2 className="w-3 h-3" />
                   </Button>
                 </div>
                 <div className="space-y-2">
                   <div>
-                    <Label className="text-[11px] uppercase font-semibold">Expressão JSONata</Label>
+                    <Label className="text-[10px] uppercase font-semibold text-zinc-500">Expressão JSONata</Label>
                     <div className="flex items-center gap-1.5 mt-1">
                       <Input
                         placeholder="Ex: data.items[0].id"
                         value={mapping.jsonPath}
                         onFocus={() => setFocusedApiMappingId(mapping.id)}
                         onChange={(e) => handleApiResponseMappingChange(mapping.id, 'jsonPath', e.target.value)}
-                        className="text-xs h-8"
+                        className="text-xs h-7 bg-black/20 border-white/5 focus:border-primary/50"
                       />
                       <Popover>
                         <PopoverTrigger asChild>
-                          <Button variant="outline" size="icon" className="h-8 w-8" disabled={!apiSampleData}>
-                            <MousePointerClick className="w-4 h-4" />
+                          <Button variant="outline" size="icon" className="h-7 w-7 border-white/10 hover:bg-white/5" disabled={!apiSampleData}>
+                            <MousePointerClick className="w-3.5 h-3.5" />
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-[260px] p-2" align="end" data-no-drag="true">
@@ -2186,68 +2235,69 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                               />
                             </ScrollArea>
                           ) : (
-                            <p className="text-xs text-muted-foreground">Cole uma resposta para usar o seletor visual.</p>
+                            <p className="text-[10px] text-muted-foreground">Cole uma resposta para usar o seletor visual.</p>
                           )}
                         </PopoverContent>
                       </Popover>
                     </div>
                   </div>
                   <div>
-                    <Label className="text-[11px] uppercase font-semibold">Variável</Label>
+                    <Label className="text-[10px] uppercase font-semibold text-zinc-500">Variável</Label>
                     <div className="flex items-center gap-1.5 mt-1">
                       <Input
                         placeholder="Ex: id_usuario"
                         value={mapping.flowVariable}
                         onChange={(e) => handleApiResponseMappingChange(mapping.id, 'flowVariable', e.target.value)}
-                        className="text-xs h-8"
+                        className="text-xs h-7 bg-black/20 border-white/5 focus:border-primary/50"
                       />
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
+                        className="h-7 text-[10px] px-2 border-white/10 hover:bg-white/5"
                         disabled={!suggestion || !!(mapping.flowVariable && mapping.flowVariable.trim())}
                         onClick={() => suggestion && handleApiResponseMappingChange(mapping.id, 'flowVariable', suggestion)}
                       >
-                        <Sparkles className="w-3.5 h-3.5 mr-1" />
+                        <Sparkles className="w-3 h-3 mr-1" />
                         Sugerir
                       </Button>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <div>
-                      <Label className="text-[11px] uppercase font-semibold">Extrair como</Label>
+                      <Label className="text-[10px] uppercase font-semibold text-zinc-500">Extrair como</Label>
                       <Select value={mapping.extractAs || 'single'} onValueChange={(value) => handleApiResponseMappingChange(mapping.id, 'extractAs', value)}>
-                        <SelectTrigger className="h-8 w-[110px] text-xs mt-1">
+                        <SelectTrigger className="h-7 w-[100px] text-[10px] mt-1 bg-black/20 border-white/5 focus:border-primary/50">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="single"><div className="flex items-center gap-1.5"><Baseline className="w-3.5 h-3.5" /><span>Valor</span></div></SelectItem>
-                          <SelectItem value="list"><div className="flex items-center gap-1.5"><List className="w-3.5 h-3.5" /><span>Lista</span></div></SelectItem>
+                          <SelectItem value="single"><div className="flex items-center gap-1.5"><Baseline className="w-3 h-3" /><span>Valor</span></div></SelectItem>
+                          <SelectItem value="list"><div className="flex items-center gap-1.5"><List className="w-3 h-3" /><span>Lista</span></div></SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     {mapping.extractAs === 'list' && (
                       <div className="flex-1">
-                        <Label className="text-[11px] uppercase font-semibold">Campo do Item (opcional)</Label>
+                        <Label className="text-[10px] uppercase font-semibold text-zinc-500">Campo do Item</Label>
                         <Input
                           placeholder="Ex: name"
                           value={mapping.itemField || ''}
                           onChange={(e) => handleApiResponseMappingChange(mapping.id, 'itemField', e.target.value)}
-                          className="text-xs h-8 mt-1"
+                          className="text-xs h-7 mt-1 bg-black/20 border-white/5 focus:border-primary/50"
                         />
                       </div>
                     )}
                   </div>
                   <div>
-                    <div className="flex items-center justify-between text-[11px] uppercase text-muted-foreground">
+                    <div className="flex items-center justify-between text-[10px] uppercase text-muted-foreground">
                       <span>Pré-visualização</span>
                       {apiSampleData && <span>Baseado no JSON acima</span>}
                     </div>
-                    <div className={cn("mt-1 rounded-md border px-2.5 py-2 text-xs font-mono whitespace-pre-wrap break-all", previewClass)}>
+                    <div className={cn("mt-1 rounded-md border px-2 py-1.5 text-[10px] font-mono whitespace-pre-wrap break-all", previewClass)}>
                       {preview.type === 'success' ? (
                         <>
-                          <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Valor encontrado ({describePreviewValue(preview.value)})</p>
-                          <pre className="mt-1 whitespace-pre-wrap break-all text-[11px] font-mono">{formatPreviewValue(preview.value)}</pre>
+                          <p className="text-[10px] font-semibold text-emerald-400">Valor encontrado ({describePreviewValue(preview.value)})</p>
+                          <pre className="mt-1 whitespace-pre-wrap break-all text-[10px] font-mono">{formatPreviewValue(preview.value)}</pre>
                         </>
                       ) : (
                         <span>{preview.message}</span>
@@ -2259,13 +2309,12 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             );
           })}
         </div>
-        <Button onClick={() => handleAddListItem('apiResponseMappings')} variant="outline" size="sm" className="text-xs h-8">
-          <PlusCircle className="w-3 h-3 mr-1" /> Adicionar Mapeamento
+        <Button onClick={() => handleAddListItem('apiResponseMappings')} variant="outline" size="sm" className="w-full h-7 text-[10px] border-dashed border-white/10 hover:bg-white/5 text-zinc-400 hover:text-zinc-200">
+          <PlusCircle className="w-3 h-3 mr-1.5" /> Adicionar Mapeamento
         </Button>
       </div>
     </div>
   );
-
   const renderKeyValueList = (
     listName: 'apiHeadersList' | 'apiQueryParamsList' | 'apiBodyFormDataList',
     list: ApiHeader[] | ApiQueryParam[] | ApiFormDataEntry[] | undefined,
@@ -2274,15 +2323,15 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     addButtonLabel: string
   ) => {
     return (
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {(list || []).map((item) => (
-          <div key={`${listName}-item-${item.id}`} className="flex items-center space-x-2">
+          <div key={`${listName}-item-${item.id}`} className="flex items-center space-x-2 group">
             <div className="relative flex-1">
               <Input
                 placeholder={keyPlaceholder}
                 value={item.key}
                 onChange={(e) => handleListItemChange(listName, item.id, 'key', e.target.value)}
-                className="text-xs h-8 pr-8"
+                className="text-xs h-7 pr-7 bg-black/20 border-white/5 focus:border-primary/50"
               />
               {renderVariableInserter(listName, false, true, item.id, 'key')}
             </div>
@@ -2291,7 +2340,7 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 placeholder={valuePlaceholder}
                 value={item.value}
                 onChange={(e) => handleListItemChange(listName, item.id, 'value', e.target.value)}
-                className="text-xs h-8 pr-8"
+                className="text-xs h-7 pr-7 bg-black/20 border-white/5 focus:border-primary/50"
               />
               {renderVariableInserter(listName, false, true, item.id, 'value')}
             </div>
@@ -2299,43 +2348,43 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               variant="ghost"
               size="icon"
               onClick={() => handleRemoveListItem(listName, item.id)}
-              className="text-destructive hover:text-destructive/80 w-7 h-7"
-              aria-label={`Remover ${listName.replace('List', '')} item`}
+              className="text-zinc-500 hover:text-destructive hover:bg-destructive/10 w-7 h-7 opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
           </div>
         ))}
-        <Button onClick={() => handleAddListItem(listName)} variant="outline" size="sm" className="text-xs h-8">
-          <PlusCircle className="w-3.5 h-3.5 mr-1" /> {addButtonLabel}
+        <Button onClick={() => handleAddListItem(listName)} variant="outline" size="sm" className="w-full h-7 text-xs border-dashed border-white/10 hover:bg-white/5 text-zinc-400 hover:text-zinc-200">
+          <PlusCircle className="w-3 h-3 mr-1.5" /> {addButtonLabel}
         </Button>
       </div>
     );
   };
 
   const renderApiResponseSettings = () => (
-    <div className="space-y-3 pt-3 border-t">
+    <div className="space-y-2 pt-2 border-t border-white/5">
       <div className="flex items-center space-x-2">
         <Switch
           id={`${node.id}-apiResponseAsInput`}
           checked={node.apiResponseAsInput || false}
           onCheckedChange={(checked) => onUpdate(node.id, { apiResponseAsInput: checked })}
+          className="scale-75 origin-left"
         />
-        <Label htmlFor={`${node.id}-apiResponseAsInput`}>Aceitar Resposta via API</Label>
+        <Label htmlFor={`${node.id}-apiResponseAsInput`} className="text-[10px] font-medium text-zinc-400">Aceitar Resposta via API</Label>
       </div>
       {node.apiResponseAsInput && (
         <div>
-          <Label htmlFor={`${node.id}-apiResponsePathForValue`}>Caminho do Valor no JSON da API</Label>
+          <Label htmlFor={`${node.id}-apiResponsePathForValue`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Caminho do Valor no JSON</Label>
           <div className="relative">
             <Input
               id={`${node.id}-apiResponsePathForValue`}
               placeholder="Ex: data.choice"
               value={node.apiResponsePathForValue || ''}
               onChange={(e) => onUpdate(node.id, { apiResponsePathForValue: e.target.value })}
-              className="pr-8"
+              className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50"
             />
           </div>
-          <p className="text-xs text-muted-foreground mt-1">O fluxo usará o valor deste caminho como se fosse a resposta do usuário.</p>
+          <p className="text-[10px] text-muted-foreground mt-1">O fluxo usará o valor deste caminho como se fosse a resposta do usuário.</p>
         </div>
       )}
     </div>
@@ -2384,55 +2433,74 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
   const renderOutputConnectors = (): React.ReactNode => {
     if (node.type === 'end-flow') return null;
 
-    if (node.type === 'start') {
-        let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
-        
-        return (node.triggers || [])
-            .filter(t => t.enabled)
-            .flatMap((trigger) => {
-                const triggerY = yOffset;
-                const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
-                const triggerBlockHeight = 40 + (keywords.length * START_NODE_TRIGGER_SPACING_Y);
-                yOffset += triggerBlockHeight + 10; // Add some padding
+    const ConnectorDot = ({
+      onMouseDown,
+      handleId,
+      title,
+      colorClass = "bg-zinc-400 group-hover/connector:bg-primary"
+    }: {
+      onMouseDown: (e: React.MouseEvent) => void,
+      handleId: string,
+      title?: string,
+      colorClass?: string
+    }) => (
+      <div
+        className="w-3 h-3 rounded-full shadow-lg ring-2 ring-zinc-900 transition-all duration-300 group-hover/connector:w-4 group-hover/connector:h-4 group-hover/connector:ring-primary/30 cursor-crosshair"
+        onMouseDown={onMouseDown}
+        data-connector="true"
+        data-handle-type="source"
+        data-handle-id={handleId}
+        title={title}
+      >
+        <div className={cn("w-full h-full rounded-full transition-colors duration-300", colorClass)} />
+      </div>
+    );
 
-                const triggerOutput = (
-                     <div
-                        key={trigger.id} // Chave única para o gatilho principal
-                        className="absolute -right-2.5 z-10 flex items-center"
-                        style={{ top: `${triggerY}px`, transform: 'translateY(-50%)' }}
-                        title={`Gatilho: ${trigger.name}`}
-                    >
-                        <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{trigger.name}</span>
-                        <div
-                            className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-                            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
-                            data-connector="true" data-handle-type="source" data-handle-id={trigger.name}
-                        >
-                            <Hash className="w-3 h-3 text-accent-foreground" />
-                        </div>
-                    </div>
-                );
-                
-                const keywordOutputs = keywords.map((kw, kwIndex) => (
-                    <div
-                        key={`${trigger.id}-${kw}`} // Chave única para cada palavra-chave
-                        className="absolute -right-2.5 z-10 flex items-center"
-                        style={{ top: `${triggerY + 25 + (kwIndex * START_NODE_TRIGGER_SPACING_Y)}px`, transform: 'translateY(-50%)' }}
-                        title={`Palavra-chave: ${kw}`}
-                    >
-                        <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{kw}</span>
-                        <div
-                            className="w-5 h-5 bg-purple-500 hover:bg-purple-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-                            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, kw); }}
-                            data-connector="true" data-handle-type="source" data-handle-id={kw}
-                        >
-                            <KeyRound className="w-3 h-3 text-white" />
-                        </div>
-                    </div>
-                ));
-                
-                return [triggerOutput, ...keywordOutputs];
-            });
+    if (node.type === 'start') {
+      let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
+
+      return (node.triggers || [])
+        .filter(t => t.enabled)
+        .flatMap((trigger) => {
+          const triggerY = yOffset;
+          const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
+          const triggerBlockHeight = 40 + (keywords.length * START_NODE_TRIGGER_SPACING_Y);
+          yOffset += triggerBlockHeight + 10;
+
+          const triggerOutput = (
+            <div
+              key={trigger.id}
+              className="absolute -right-3 z-20 flex items-center group/connector"
+              style={{ top: `${triggerY}px`, transform: 'translateY(-50%)' }}
+              title={`Gatilho: ${trigger.name}`}
+            >
+              <span className="text-xs text-muted-foreground mr-3 opacity-0 group-hover/connector:opacity-100 transition-opacity duration-300 whitespace-nowrap">{trigger.name}</span>
+              <ConnectorDot
+                onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }}
+                handleId={trigger.name}
+                colorClass="bg-emerald-500 group-hover/connector:bg-emerald-400"
+              />
+            </div>
+          );
+
+          const keywordOutputs = keywords.map((kw, kwIndex) => (
+            <div
+              key={`${trigger.id}-${kw}`}
+              className="absolute -right-3 z-20 flex items-center group/connector"
+              style={{ top: `${triggerY + 25 + (kwIndex * START_NODE_TRIGGER_SPACING_Y)}px`, transform: 'translateY(-50%)' }}
+              title={`Palavra-chave: ${kw}`}
+            >
+              <span className="text-xs text-muted-foreground mr-3 opacity-0 group-hover/connector:opacity-100 transition-opacity duration-300 whitespace-nowrap">{kw}</span>
+              <ConnectorDot
+                onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, kw); }}
+                handleId={kw}
+                colorClass="bg-purple-500 group-hover/connector:bg-purple-400"
+              />
+            </div>
+          ));
+
+          return [triggerOutput, ...keywordOutputs];
+        });
     }
 
     if (node.type === 'option') {
@@ -2442,20 +2510,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         return (
           <div
             key={key}
-            className="absolute -right-2.5 z-10 flex items-center"
+            className="absolute -right-3 z-20 flex items-center group/connector"
             style={{ top: `${OPTION_NODE_HANDLE_INITIAL_Y_OFFSET + index * OPTION_NODE_HANDLE_SPACING_Y - 10}px` }}
             title={`Opção: ${optionText}`}
           >
-            <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">{optionText}</span>
-            <div
-              className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+            <span className="text-xs text-muted-foreground mr-3 opacity-0 group-hover/connector:opacity-100 transition-opacity duration-300 whitespace-nowrap">{optionText}</span>
+            <ConnectorDot
               onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, optionText); }}
-              data-connector="true"
-              data-handle-type="source"
-              data-handle-id={optionText}
-            >
-              <Hash className="w-3 h-3 text-accent-foreground" />
-            </div>
+              handleId={optionText}
+              colorClass="bg-blue-500 group-hover/connector:bg-blue-400"
+            />
           </div>
         );
       });
@@ -2464,27 +2528,21 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
     if (node.type === 'condition' || node.type === 'time-of-day') {
       return (
         <>
-          <div className="absolute -right-2.5 z-10 flex items-center" style={{ top: `${NODE_HEADER_HEIGHT_APPROX * (1 / 3) + 6 - 10}px` }}>
-            <span className="text-xs text-muted-foreground mr-2">{node.type === 'time-of-day' ? 'Dentro do Horário' : 'Verdadeiro'}</span>
-            <div
-              title={node.type === 'time-of-day' ? 'Saída para "Dentro do Horário"' : 'Saída Verdadeiro'}
-              className="w-5 h-5 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+          <div className="absolute -right-3 z-20 flex items-center group/connector" style={{ top: `${NODE_HEADER_HEIGHT_APPROX * (1 / 3) + 6 - 10}px` }}>
+            <span className="text-xs text-muted-foreground mr-3 opacity-0 group-hover/connector:opacity-100 transition-opacity duration-300 whitespace-nowrap">{node.type === 'time-of-day' ? 'Dentro' : 'Verdadeiro'}</span>
+            <ConnectorDot
               onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'true'); }}
-              data-connector="true" data-handle-type="source" data-handle-id="true"
-            >
-              <Hash className="w-3 h-3 text-white" />
-            </div>
+              handleId="true"
+              colorClass="bg-green-500 group-hover/connector:bg-green-400"
+            />
           </div>
-          <div className="absolute -right-2.5 z-10 flex items-center" style={{ top: `${NODE_HEADER_HEIGHT_APPROX * (2 / 3) + 6 - 10}px` }}>
-            <span className="text-xs text-muted-foreground mr-2">{node.type === 'time-of-day' ? 'Fora do Horário' : 'Falso'}</span>
-            <div
-              title={node.type === 'time-of-day' ? 'Saída para "Fora do Horário"' : 'Saída Falso'}
-              className="w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+          <div className="absolute -right-3 z-20 flex items-center group/connector" style={{ top: `${NODE_HEADER_HEIGHT_APPROX * (2 / 3) + 6 - 10}px` }}>
+            <span className="text-xs text-muted-foreground mr-3 opacity-0 group-hover/connector:opacity-100 transition-opacity duration-300 whitespace-nowrap">{node.type === 'time-of-day' ? 'Fora' : 'Falso'}</span>
+            <ConnectorDot
               onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'false'); }}
-              data-connector="true" data-handle-type="source" data-handle-id="false"
-            >
-              <Hash className="w-3 h-3 text-white" />
-            </div>
+              handleId="false"
+              colorClass="bg-red-500 group-hover/connector:bg-red-400"
+            />
           </div>
         </>
       );
@@ -2500,61 +2558,45 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
           {switchCases.map((caseItem, index) => (
             <div
               key={caseItem.id}
-              className="absolute -right-2.5 z-10 flex items-center"
+              className="absolute -right-3 z-20 flex items-center group/connector"
               style={{ top: `${initialY + index * spacingY - 10}px` }}
               title={`Caso: ${caseItem.value}`}
             >
-              <span className="text-xs text-muted-foreground mr-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">
+              <span className="text-xs text-muted-foreground mr-3 opacity-0 group-hover/connector:opacity-100 transition-opacity duration-300 whitespace-nowrap">
                 {caseItem.value || 'vazio'}
               </span>
-              <div
-                className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+              <ConnectorDot
                 onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, caseItem.id); }}
-                data-connector="true" data-handle-type="source" data-handle-id={caseItem.id}
-              >
-                <Hash className="w-3 h-3 text-accent-foreground" />
-              </div>
+                handleId={caseItem.id}
+                colorClass="bg-indigo-500 group-hover/connector:bg-indigo-400"
+              />
             </div>
           ))}
           <div
-            className="absolute -right-2.5 z-10 flex items-center"
+            className="absolute -right-3 z-20 flex items-center group/connector"
             style={{ top: `${initialY + switchCases.length * spacingY - 10}px` }}
             title="Caso Contrário"
           >
-            <span className="text-xs text-muted-foreground mr-2">Caso Contrário</span>
-            <div
-              className="w-5 h-5 bg-gray-500 hover:bg-gray-600 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-              onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'otherwise'); }}
-              data-connector="true" data-handle-type="source" data-handle-id="otherwise"
-            >
-              <Hash className="w-3 h-3 text-white" />
-            </div>
           </div>
         </>
       );
     }
 
-    if (node.type !== 'start' && node.type !== 'option' && node.type !== 'condition' && node.type !== 'end-flow' && node.type !== 'switch' && node.type !== 'time-of-day') {
-      return (
-        <div
-          className="absolute -right-2.5 z-10 flex items-center justify-center"
-          style={{
-            top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`,
-            transform: 'translateY(-50%)',
-          }}
-        >
-          <div
-            className="w-5 h-5 bg-accent hover:opacity-80 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
-            onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}
-            data-connector="true" data-handle-type="source" data-handle-id="default"
-            title="Arraste para conectar"
-          >
-            <Hash className="w-3 h-3 text-accent-foreground" />
-          </div>
-        </div>
-      );
-    }
-    return null;
+    return (
+      <div
+        className="absolute -right-3 z-20 flex items-center justify-center group/connector"
+        style={{
+          top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`,
+          transform: 'translateY(-50%)',
+        }}
+      >
+        <ConnectorDot
+          onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}
+          handleId="default"
+          title="Arraste para conectar"
+        />
+      </div>
+    );
   };
 
   const renderNodeContent = (): React.ReactNode => {
@@ -2563,120 +2605,81 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/trigger/${activeWorkspace?.id || '[ID_DO_FLUXO]'}`;
 
         return (
-          <div className="space-y-3" data-no-drag="true">
-            <p className="text-xs text-muted-foreground">Configure os gatilhos que iniciam este fluxo. A ordem aqui define a prioridade de verificação.</p>
+          <div className="space-y-2" data-no-drag="true">
+            <p className="text-[10px] text-zinc-400 leading-tight">Gatilhos de início (ordem de prioridade).</p>
             {(node.triggers || []).map(trigger => (
-              <div key={trigger.id} className="p-3 border rounded-md bg-muted/30">
-                <div className="flex items-center justify-between mb-3">
+              <div key={trigger.id} className="p-2 border border-white/5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+                <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center space-x-2">
                     <Switch
                       id={`trigger-enabled-${trigger.id}`}
                       checked={trigger.enabled}
                       onCheckedChange={(checked) => handleTriggerChange(trigger.id, 'enabled', checked)}
+                      className="scale-75 origin-left"
                     />
-                    <Label htmlFor={`trigger-enabled-${trigger.id}`} className="font-medium">{trigger.name}</Label>
-                    {trigger.type === 'webhook' && <Webhook className="w-4 h-4 text-muted-foreground" />}
-                    {trigger.type === 'manual' && <MousePointerClick className="w-4 h-4 text-muted-foreground" />}
+                    <Label htmlFor={`trigger-enabled-${trigger.id}`} className="text-xs font-medium text-zinc-200">{trigger.name}</Label>
+                    {trigger.type === 'webhook' && <Webhook className="w-3 h-3 text-zinc-500" />}
+                    {trigger.type === 'manual' && <MousePointerClick className="w-3 h-3 text-zinc-500" />}
                   </div>
                 </div>
 
-                <div className={cn("space-y-3", !trigger.enabled && "opacity-50 pointer-events-none")}>
+                <div className={cn("space-y-2", !trigger.enabled && "opacity-50 pointer-events-none")}>
                   <div>
-                    <Label htmlFor={`trigger-keyword-${trigger.id}`} className="text-xs font-medium">Palavras-chave de Ativação (separadas por vírgula)</Label>
+                    <Label htmlFor={`trigger-keyword-${trigger.id}`} className="text-[10px] font-medium text-zinc-400">Palavras-chave</Label>
                     <Input
                       id={`trigger-keyword-${trigger.id}`}
                       value={trigger.keyword || ''}
                       onChange={(e) => handleKeywordsChange(trigger.id, e.target.value)}
-                      placeholder="Ex: ajuda, cardapio, saldo"
-                      className="h-8 text-xs mt-1"
+                      placeholder="Ex: ajuda, cardapio"
+                      className="h-7 text-xs mt-0.5 bg-black/20 border-white/5 focus:border-primary/50"
                     />
-                    <p className="text-xs text-muted-foreground mt-1">Se preenchido, cria saídas separadas para cada palavra-chave.</p>
                   </div>
 
                   {trigger.type === 'webhook' && (
-                    <div className="space-y-3 pt-2 border-t">
-                      <div>
-                        <Label htmlFor={`${node.id}-${trigger.id}-timeout`} className="text-xs font-medium">Tempo limite da sessão (segundos)</Label>
-                        <Input
-                          id={`${node.id}-${trigger.id}-timeout`}
-                          type="number"
-                          value={trigger.sessionTimeoutSeconds || 0}
-                          onChange={(e) => handleTriggerChange(trigger.id, 'sessionTimeoutSeconds', parseInt(e.target.value, 10) || 0)}
-                          placeholder="0 (sem limite)"
-                          className="h-8 text-xs mt-1"
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">Tempo de inatividade para encerrar a sessão. 0 para desabilitar.</p>
-                      </div>
-
-                      <div>
-                        <Label htmlFor="webhook-url" className="text-xs font-medium">URL do Webhook (POST)</Label>
-                        <div className="flex items-center space-x-1.5 mt-1">
-                          <Input id="webhook-url" type="text" readOnly value={webhookUrl} className="bg-input/50 h-7 text-xs" />
-                          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => {
-                            if (navigator.clipboard && navigator.clipboard.writeText) {
-                              navigator.clipboard.writeText(webhookUrl).then(() => toast({ title: "URL Copiada!" })).catch(() => toast({ title: "Erro ao copiar", variant: "destructive" }));
-                            } else {
-                              toast({ title: "Não foi possível copiar", description: "Seu navegador não suporta esta ação ou a página não é segura (HTTPS).", variant: "destructive" });
-                            }
-                          }} title="Copiar URL">
-                            <Copy className="w-3 h-3" />
-                          </Button>
+                    <div className="space-y-2 pt-2 border-t border-white/5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1">
+                          <Label className="text-[10px] text-zinc-400">Timeout (s)</Label>
+                          <Input
+                            type="number"
+                            value={trigger.sessionTimeoutSeconds || 0}
+                            onChange={(e) => handleTriggerChange(trigger.id, 'sessionTimeoutSeconds', parseInt(e.target.value, 10) || 0)}
+                            className="h-6 text-xs bg-black/20 border-white/5 focus:border-primary/50"
+                          />
                         </div>
-                         <Button variant="link" size="sm" className="text-xs h-auto p-0 mt-1.5 text-accent" onClick={handleOpenWebhookHistory}>
-                          <History className="w-3.5 h-3.5 mr-1" /> Ver Histórico de Webhooks
-                        </Button>
-                      </div>
-
-﻿                      <div className="pt-2 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs font-medium">Mapeamento de Variáveis do Webhook</Label>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setActiveWebhookTriggerId(trigger.id);
-                              setIsWebhookMappingDialogOpen(true);
-                            }}
-                          >
-                            <Sparkles className="w-3.5 h-3.5 mr-1" /> Abrir Construtor
-                          </Button>
-                        </div>
-                        <div className="rounded-md border bg-muted/10 p-3 space-y-2">
-                          {(trigger.variableMappings || []).length === 0 ? (
-                            <p className="text-[12px] text-muted-foreground">Nenhum mapeamento configurado ainda.</p>
-                          ) : (
-                            <div className="space-y-2 text-xs">
-                              {(trigger.variableMappings || []).map((mapping) => (
-                                <div key={mapping.id} className="flex items-center justify-between gap-2 rounded-md border border-border/60 bg-background px-2 py-1.5">
-                                  <div>
-                                    <p className="font-semibold text-sm">{mapping.flowVariable || 'Sem nome'}</p>
-                                    <p className="text-[11px] text-muted-foreground">{mapping.jsonPath || 'Sem caminho definido'}</p>
-                                  </div>
-                                  <Button variant="ghost" size="icon" onClick={() => handleRemoveVariableMapping(trigger.id, mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6">
-                                    <Trash2 className="w-3.5 h-3.5" />
+                        <div className="flex items-end gap-1">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 border-white/10 hover:bg-white/5">
+                                <Webhook className="w-3 h-3 mr-1.5" />
+                                URL
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80 p-2" align="end" data-no-drag="true">
+                              <div className="space-y-2">
+                                <Label className="text-[10px] font-semibold">URL para Disparo Externo</Label>
+                                <div className="flex items-center space-x-1">
+                                  <Input readOnly value={webhookUrl} className="h-7 text-[10px] font-mono bg-black/20" />
+                                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { navigator.clipboard.writeText(webhookUrl); toast({ title: "Copiado!" }); }}>
+                                    <Copy className="w-3.5 h-3.5" />
                                   </Button>
                                 </div>
-                              ))}
-                            </div>
-                          )}
-                          <div className="flex flex-wrap items-center gap-2 pt-1">
-                            <Button onClick={() => handleAddVariableMapping(trigger.id)} variant="outline" size="sm" className="text-xs h-8">
-                              <PlusCircle className="w-3 h-3 mr-1" /> Adicionar rápido
-                            </Button>
-                            <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => {
-                              setActiveWebhookTriggerId(trigger.id);
-                              setIsWebhookMappingDialogOpen(true);
-                            }}>
-                              Detalhar no construtor
-                            </Button>
-                          </div>
+                                <p className="text-[10px] text-muted-foreground">Envie um POST para esta URL com um JSON no corpo.</p>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 text-zinc-400 hover:text-zinc-200" onClick={handleOpenWebhookHistory}>
+                            <History className="w-3 h-3 mr-1" /> Logs
+                          </Button>
                         </div>
                       </div>
 
-
+                      <div className="pt-2 border-t border-white/5">
+                        <Label className="text-[10px] font-medium text-zinc-400 mb-1 block">Mapeamento de Variáveis (Webhook)</Label>
+                        {renderWebhookMappingBuilder(trigger)}
+                      </div>
                     </div>
                   )}
-
                 </div>
               </div>
             ))}
@@ -2685,12 +2688,19 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       }
       case 'message':
         return (
-          <div data-no-drag="true">
+          <div data-no-drag="true" className="space-y-2">
             <div className="relative">
-              <Textarea ref={textAreaRef} placeholder="Mensagem do bot..." value={node.text || ''} onChange={(e) => onUpdate(node.id, { text: e.target.value })} className="resize-none text-sm pr-8" rows={3} />
+              <Textarea
+                ref={textAreaRef}
+                placeholder="Mensagem do bot..."
+                value={node.text || ''}
+                onChange={(e) => onUpdate(node.id, { text: e.target.value })}
+                className="resize-none text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 min-h-[80px]"
+                rows={3}
+              />
               {renderVariableInserter('text', true)}
             </div>
-             <TextFormatToolbar fieldName="text" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
+            <TextFormatToolbar fieldName="text" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
           </div>
         );
       case 'input':
@@ -2700,21 +2710,29 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         const ref = isOptionNode ? textAreaRef : textAreaRef;
 
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-prompttext`}>{isOptionNode ? 'Texto da Pergunta' : 'Texto da Pergunta'}</Label>
+              <Label htmlFor={`${node.id}-prompttext`} className="text-[10px] font-medium text-zinc-400 mb-1 block">{isOptionNode ? 'Texto da Pergunta' : 'Texto da Pergunta'}</Label>
               <div className="relative">
-                <Textarea ref={textAreaRef} id={`${node.id}-prompttext`} placeholder="Digite sua pergunta aqui..." value={node.promptText || node.questionText || ''} onChange={(e) => onUpdate(node.id, { [fieldName]: e.target.value })} rows={2} className="pr-8" />
+                <Textarea
+                  ref={textAreaRef}
+                  id={`${node.id}-prompttext`}
+                  placeholder="Digite sua pergunta aqui..."
+                  value={node.promptText || node.questionText || ''}
+                  onChange={(e) => onUpdate(node.id, { [fieldName]: e.target.value })}
+                  rows={2}
+                  className="text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 resize-none min-h-[60px]"
+                />
                 {renderVariableInserter(fieldName, true)}
               </div>
-               <TextFormatToolbar fieldName={fieldName} textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
+              <TextFormatToolbar fieldName={fieldName} textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
 
             {!isOptionNode && (
               <div>
-                <Label htmlFor={`${node.id}-inputtype`}>Tipo de Entrada</Label>
+                <Label htmlFor={`${node.id}-inputtype`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Tipo de Entrada</Label>
                 <Select value={node.inputType || 'text'} onValueChange={(value) => onUpdate(node.id, { inputType: value as NodeData['inputType'] })}>
-                  <SelectTrigger id={`${node.id}-inputtype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
+                  <SelectTrigger id={`${node.id}-inputtype`} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="text">Texto</SelectItem><SelectItem value="email">E-mail</SelectItem>
                     <SelectItem value="phone">Telefone</SelectItem><SelectItem value="number">Número</SelectItem>
@@ -2726,38 +2744,45 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             {isOptionNode && (
               <>
                 <div>
-                  <Label htmlFor={`${node.id}-optionslist`}>Opções (uma por linha)</Label>
-                  <Textarea id={`${node.id}-optionslist`} placeholder="Opção 1\nOpção 2" value={node.optionsList || ''} onChange={(e) => onUpdate(node.id, { optionsList: e.target.value })} rows={3} />
+                  <Label htmlFor={`${node.id}-optionslist`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Opções (uma por linha)</Label>
+                  <Textarea
+                    id={`${node.id}-optionslist`}
+                    placeholder="Opção 1\nOpção 2"
+                    value={node.optionsList || ''}
+                    onChange={(e) => onUpdate(node.id, { optionsList: e.target.value })}
+                    rows={3}
+                    className="text-xs bg-black/20 border-white/5 focus:border-primary/50 resize-none"
+                  />
                 </div>
-                 <div className="space-y-2 pt-2 border-t">
-                    <div className="flex items-center space-x-2">
-                        <Switch
-                        id={`${node.id}-aiEnabled`}
-                        checked={node.aiEnabled || false}
-                        onCheckedChange={(checked) => onUpdate(node.id, { aiEnabled: checked })}
+                <div className="space-y-2 pt-2 border-t border-white/5">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id={`${node.id}-aiEnabled`}
+                      checked={node.aiEnabled || false}
+                      onCheckedChange={(checked) => onUpdate(node.id, { aiEnabled: checked })}
+                      className="scale-75 origin-left"
+                    />
+                    <Label htmlFor={`${node.id}-aiEnabled`} className="flex items-center gap-1.5 text-xs text-zinc-300">
+                      <BrainIcon className="w-3.5 h-3.5 text-primary" />
+                      Usar IA para entender a resposta
+                    </Label>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 leading-tight">Se ativado, a IA tentará corresponder a resposta do usuário à opção mais provável.</p>
+                  {node.aiEnabled && (
+                    <div className="space-y-1">
+                      <Label htmlFor={`${node.id}-aiModelName`} className="text-[10px] text-zinc-400">Modelo de IA (opcional)</Label>
+                      <div className="relative">
+                        <Sparkles className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary pointer-events-none" />
+                        <Input
+                          id={`${node.id}-aiModelName`}
+                          placeholder="googleai/gemini-2.0-flash"
+                          value={node.aiModelName || ""}
+                          onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })}
+                          className="pl-8 h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"
                         />
-                        <Label htmlFor={`${node.id}-aiEnabled`} className="flex items-center gap-1.5">
-                          <BrainIcon className="w-4 h-4 text-primary" />
-                          Usar IA para entender a resposta
-                        </Label>
-                    </div>
-                    <p className="text-xs text-muted-foreground">Se ativado, a IA tentará corresponder a resposta do usuário à opção mais provável, em vez de exigir uma correspondência exata.</p>
-                    {node.aiEnabled && (
-                      <div className="space-y-1">
-                        <Label htmlFor={`${node.id}-aiModelName`}>Modelo de IA (opcional)</Label>
-                        <div className="relative">
-                          <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary pointer-events-none" />
-                          <Input
-                            id={`${node.id}-aiModelName`}
-                            placeholder="googleai/gemini-2.0-flash"
-                            value={node.aiModelName || ""}
-                            onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })}
-                            className="pl-9"
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">Deixe em branco para usar o modelo padrao configurado no servidor.</p>
                       </div>
-                    )}
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -2775,56 +2800,55 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       }
       case 'whatsapp-text':
         return (
-            <div className="space-y-3" data-no-drag="true">
-                 <div>
-                    <Label htmlFor={`${node.id}-watext`}>Mensagem</Label>
-                    <div className="relative">
-                        <Textarea ref={textAreaRef} id={`${node.id}-watext`} value={node.textMessage || ''} onChange={(e) => onUpdate(node.id, { textMessage: e.target.value })} rows={2} className="pr-8" />
-                        {renderVariableInserter('textMessage', true)}
-                    </div>
-                     <TextFormatToolbar fieldName="textMessage" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
-                </div>
-                <div>
-                  <Label htmlFor={`${node.id}-instance`}>Instância</Label>
-                  {isLoadingEvolutionInstances ? (
-                    <div className="flex items-center text-sm text-muted-foreground h-10"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Carregando...</div>
-                  ) : (
-                    <Select onValueChange={(value) => onUpdate(node.id, { instanceName: value })} value={node.instanceName || ''}>
-                      <SelectTrigger id={`${node.id}-instance`}>
-                        <SelectValue placeholder="Selecione uma instância..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">Usar Padrão do Fluxo</SelectItem>
-                        {evolutionInstances.map(instance => (
-                          <SelectItem key={instance.id} value={instance.name}>
-                            {instance.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-                 <div>
-                    <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
-                    <div className="relative">
-                      <Input id={`${node.id}-phone`} placeholder="55119... ou {{whatsapp_sender_jid}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8" />
-                      {renderVariableInserter('phoneNumber')}
-                    </div>
-                </div>
-               
+          <div className="space-y-2" data-no-drag="true">
+            <div>
+              <Label htmlFor={`${node.id}-watext`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Mensagem</Label>
+              <div className="relative">
+                <Textarea ref={textAreaRef} id={`${node.id}-watext`} value={node.textMessage || ''} onChange={(e) => onUpdate(node.id, { textMessage: e.target.value })} rows={2} className="text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 resize-none" />
+                {renderVariableInserter('textMessage', true)}
+              </div>
+              <TextFormatToolbar fieldName="textMessage" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
+            <div>
+              <Label htmlFor={`${node.id}-instance`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Instância</Label>
+              {isLoadingEvolutionInstances ? (
+                <div className="flex items-center text-xs text-muted-foreground h-7"><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Carregando...</div>
+              ) : (
+                <Select onValueChange={(value) => onUpdate(node.id, { instanceName: value })} value={node.instanceName || ''}>
+                  <SelectTrigger id={`${node.id}-instance`} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50">
+                    <SelectValue placeholder="Selecione uma instância..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Usar Padrão do Fluxo</SelectItem>
+                    {evolutionInstances.map(instance => (
+                      <SelectItem key={instance.id} value={instance.name}>
+                        {instance.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <div>
+              <Label htmlFor={`${node.id}-phone`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
+              <div className="relative">
+                <Input id={`${node.id}-phone`} placeholder="55119... ou {{whatsapp_sender_jid}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
+                {renderVariableInserter('phoneNumber')}
+              </div>
+            </div>
+          </div>
         );
       case 'whatsapp-media':
       case 'whatsapp-group':
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-instance`}>Instância</Label>
+              <Label htmlFor={`${node.id}-instance-mg`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Instância</Label>
               {isLoadingEvolutionInstances ? (
-                <div className="flex items-center text-sm text-muted-foreground h-10"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Carregando...</div>
+                <div className="flex items-center text-xs text-muted-foreground h-7"><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Carregando...</div>
               ) : (
                 <Select onValueChange={(value) => onUpdate(node.id, { instanceName: value })} value={node.instanceName || ''}>
-                  <SelectTrigger id={`${node.id}-instance`}>
+                  <SelectTrigger id={`${node.id}-instance-mg`} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50">
                     <SelectValue placeholder="Selecione uma instância..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -2840,9 +2864,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             </div>
             {node.type !== 'whatsapp-group' && (
               <div>
-                <Label htmlFor={`${node.id}-phone`}>Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
+                <Label htmlFor={`${node.id}-phone-mg`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Telefone (Ex: 55119... ou {"{{whatsapp_sender_jid}}"})</Label>
                 <div className="relative">
-                  <Input id={`${node.id}-phone`} placeholder="55119... ou {{whatsapp_sender_jid}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="pr-8" />
+                  <Input id={`${node.id}-phone-mg`} placeholder="55119... ou {{whatsapp_sender_jid}}" value={node.phoneNumber || ''} onChange={(e) => onUpdate(node.id, { phoneNumber: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                   {renderVariableInserter('phoneNumber')}
                 </div>
               </div>
@@ -2850,15 +2874,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             {node.type === 'whatsapp-media' && (
               <>
                 <div>
-                  <Label htmlFor={`${node.id}-mediaurl`}>URL da Mídia (Ex: https://... ou {"{{url_midia}}"})</Label>
+                  <Label htmlFor={`${node.id}-mediaurl`} className="text-[10px] font-medium text-zinc-400 mb-1 block">URL da Mídia</Label>
                   <div className="relative">
-                    <Input id={`${node.id}-mediaurl`} placeholder="https://... ou {{url_midia}}" value={node.mediaUrl || ''} onChange={(e) => onUpdate(node.id, { mediaUrl: e.target.value })} className="pr-8" />
+                    <Input id={`${node.id}-mediaurl`} placeholder="https://... ou {{url_midia}}" value={node.mediaUrl || ''} onChange={(e) => onUpdate(node.id, { mediaUrl: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                     {renderVariableInserter('mediaUrl')}
                   </div>
                 </div>
-                <div><Label htmlFor={`${node.id}-mediatype`}>Tipo</Label>
+                <div>
+                  <Label htmlFor={`${node.id}-mediatype`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Tipo</Label>
                   <Select value={node.mediaType || 'image'} onValueChange={(value) => onUpdate(node.id, { mediaType: value as NodeData['mediaType'] })}>
-                    <SelectTrigger id={`${node.id}-mediatype`}><SelectValue placeholder="Selecione o tipo de mídia" /></SelectTrigger>
+                    <SelectTrigger id={`${node.id}-mediatype`} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="image">Imagem</SelectItem><SelectItem value="video">Vídeo</SelectItem>
                       <SelectItem value="document">Documento</SelectItem><SelectItem value="audio">Áudio</SelectItem>
@@ -2866,9 +2891,9 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor={`${node.id}-caption`}>Legenda/Nome do Arquivo (Opcional)</Label>
+                  <Label htmlFor={`${node.id}-caption`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Legenda/Nome</Label>
                   <div className="relative">
-                    <Input ref={inputRef} id={`${node.id}-caption`} value={node.caption || ''} onChange={(e) => onUpdate(node.id, { caption: e.target.value })} className="pr-8" />
+                    <Input ref={inputRef} id={`${node.id}-caption`} value={node.caption || ''} onChange={(e) => onUpdate(node.id, { caption: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                     {renderVariableInserter('caption')}
                   </div>
                   <TextFormatToolbar fieldName="caption" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
@@ -2878,16 +2903,16 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             {node.type === 'whatsapp-group' && (
               <>
                 <div>
-                  <Label htmlFor={`${node.id}-groupname`}>Nome do Grupo</Label>
+                  <Label htmlFor={`${node.id}-groupname`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Nome do Grupo</Label>
                   <div className="relative">
-                    <Input id={`${node.id}-groupname`} value={node.groupName || ''} onChange={(e) => onUpdate(node.id, { groupName: e.target.value })} className="pr-8" />
+                    <Input id={`${node.id}-groupname`} value={node.groupName || ''} onChange={(e) => onUpdate(node.id, { groupName: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                     {renderVariableInserter('groupName')}
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor={`${node.id}-participants`}>Participantes (IDs separados por vírgula, ex: 5511...,5521...)</Label>
+                  <Label htmlFor={`${node.id}-participants`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Participantes (IDs)</Label>
                   <div className="relative">
-                    <Textarea id={`${node.id}-participants`} value={node.participants || ''} onChange={(e) => onUpdate(node.id, { participants: e.target.value })} rows={2} className="pr-8" />
+                    <Textarea id={`${node.id}-participants`} value={node.participants || ''} onChange={(e) => onUpdate(node.id, { participants: e.target.value })} rows={2} className="text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 resize-none" />
                     {renderVariableInserter('participants', true)}
                   </div>
                 </div>
@@ -2897,145 +2922,94 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         );
       case 'condition':
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div className="grid grid-cols-2 gap-2">
-                <div>
-                    <Label htmlFor={`${node.id}-condtype`}>Tipo de Dado</Label>
-                    <Select
-                        value={node.conditionDataType || 'string'}
-                        onValueChange={(value) => onUpdate(node.id, { conditionDataType: value as NodeData['conditionDataType'] })}
-                    >
-                        <SelectTrigger id={`${node.id}-condtype`}><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="string">Texto</SelectItem>
-                            <SelectItem value="number">Número</SelectItem>
-                            <SelectItem value="boolean">Booleano</SelectItem>
-                            <SelectItem value="date">Data/Hora</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div>
-                    <Label htmlFor={`${node.id}-condop`}>Operador</Label>
-                    <Select
-                        value={node.conditionOperator || '=='}
-                        onValueChange={(value) => onUpdate(node.id, { conditionOperator: value as NodeData['conditionOperator'] })}
-                    >
-                        <SelectTrigger id={`${node.id}-condop`}><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                            {node.conditionDataType === 'date' ? (
-                                <>
-                                    <SelectItem value="isDateAfter">É depois de</SelectItem>
-                                    <SelectItem value="isDateBefore">É antes de</SelectItem>
-                                </>
-                            ) : node.conditionDataType === 'boolean' ? (
-                                <>
-                                    <SelectItem value="isTrue">É verdadeiro</SelectItem>
-                                    <SelectItem value="isFalse">É falso</SelectItem>
-                                </>
-                            ) : (
-                                <>
-                                    <SelectItem value="==">Igual a</SelectItem>
-                                    <SelectItem value="!=">Diferente de</SelectItem>
-                                    {node.conditionDataType === 'number' && <>
-                                        <SelectItem value=">">Maior que</SelectItem>
-                                        <SelectItem value="<">Menor que</SelectItem>
-                                        <SelectItem value=">=">Maior ou igual a</SelectItem>
-                                        <SelectItem value="<=">Menor ou igual a</SelectItem>
-                                    </>}
-                                    {node.conditionDataType === 'string' && <>
-                                        <SelectItem value="contains">Contém</SelectItem>
-                                        <SelectItem value="startsWith">Começa com</SelectItem>
-                                        <SelectItem value="endsWith">Termina com</SelectItem>
-                                    </>}
-                                </>
-                            )}
-                            <SelectItem value="isEmpty">É vazio/nulo</SelectItem>
-                            <SelectItem value="isNotEmpty">Não é vazio/nulo</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
+              <div>
+                <Label htmlFor={`${node.id}-condtype`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Tipo de Dado</Label>
+                <Select
+                  value={node.conditionDataType || 'string'}
+                  onValueChange={(value) => onUpdate(node.id, { conditionDataType: value as NodeData['conditionDataType'] })}
+                >
+                  <SelectTrigger id={`${node.id}-condtype`} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="string">Texto</SelectItem>
+                    <SelectItem value="number">Número</SelectItem>
+                    <SelectItem value="boolean">Booleano</SelectItem>
+                    <SelectItem value="date">Data/Hora</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor={`${node.id}-condop`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Operador</Label>
+                <Select
+                  value={node.conditionOperator || '=='}
+                  onValueChange={(value) => onUpdate(node.id, { conditionOperator: value as NodeData['conditionOperator'] })}
+                >
+                  <SelectTrigger id={`${node.id}-condop`} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {node.conditionDataType === 'date' ? (
+                      <>
+                        <SelectItem value="isDateAfter">É depois de</SelectItem>
+                        <SelectItem value="isDateBefore">É antes de</SelectItem>
+                      </>
+                    ) : node.conditionDataType === 'boolean' ? (
+                      <>
+                        <SelectItem value="isTrue">É verdadeiro</SelectItem>
+                        <SelectItem value="isFalse">É falso</SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="==">Igual a</SelectItem>
+                        <SelectItem value="!=">Diferente de</SelectItem>
+                        {node.conditionDataType === 'number' && <>
+                          <SelectItem value=">">Maior que</SelectItem>
+                          <SelectItem value="<">Menor que</SelectItem>
+                          <SelectItem value=">=">Maior ou igual a</SelectItem>
+                          <SelectItem value="<=">Menor ou igual a</SelectItem>
+                        </>}
+                        {node.conditionDataType === 'string' && <>
+                          <SelectItem value="contains">Contém</SelectItem>
+                          <SelectItem value="startsWith">Começa com</SelectItem>
+                          <SelectItem value="endsWith">Termina com</SelectItem>
+                        </>}
+                      </>
+                    )}
+                    <SelectItem value="isEmpty">É vazio/nulo</SelectItem>
+                    <SelectItem value="isNotEmpty">Não é vazio/nulo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-condvar`}>Variável (ex: {"{{variavel}}"})</Label>
+              <Label htmlFor={`${node.id}-condvar`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Variável (ex: {"{{variavel}}"})</Label>
               <div className="relative">
-                <Input id={`${node.id}-condvar`} placeholder="{{variavel_a_verificar}}" value={node.conditionVariable || ''} onChange={(e) => onUpdate(node.id, { conditionVariable: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-condvar`} placeholder="{{variavel_a_verificar}}" value={node.conditionVariable || ''} onChange={(e) => onUpdate(node.id, { conditionVariable: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('conditionVariable')}
               </div>
             </div>
             {node.conditionOperator !== 'isEmpty' && node.conditionOperator !== 'isNotEmpty' && node.conditionOperator !== 'isTrue' && node.conditionOperator !== 'isFalse' && (
-                <div>
-                    <Label htmlFor={`${node.id}-condval`}>Valor para Comparar</Label>
-                    <div className="relative">
-                        <Input
-                            id={`${node.id}-condval`}
-                            placeholder="Valor, {{outra_var}} ou {{now}}"
-                            value={node.conditionValue || ''}
-                            onChange={(e) => onUpdate(node.id, { conditionValue: e.target.value })}
-                            className="pr-8"
-                        />
-                        {renderVariableInserter('conditionValue')}
-                    </div>
-                     {node.conditionDataType === 'date' && <p className="text-xs text-muted-foreground mt-1">Use `HH:mm` para horas ou `{"{{now}}"}` para a hora atual.</p>}
+              <div>
+                <Label htmlFor={`${node.id}-condval`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Valor para Comparar</Label>
+                <div className="relative">
+                  <Input id={`${node.id}-condval`} placeholder="Valor" value={node.conditionValue || ''} onChange={(e) => onUpdate(node.id, { conditionValue: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
+                  {renderVariableInserter('conditionValue')}
                 </div>
+                {node.conditionDataType === 'date' && <p className="text-[10px] text-muted-foreground mt-1">Use `HH:mm` para horas ou `{"{{now}}"}` para a hora atual.</p>}
+              </div>
             )}
-          </div>
-        );
-      case 'switch':
-        return (
-          <div className="space-y-3" data-no-drag="true">
-            <div>
-              <Label htmlFor={`${node.id}-switchvar`}>Variável de Entrada (ex: {"{{status}}"})</Label>
-              <div className="relative">
-                <Input
-                  id={`${node.id}-switchvar`}
-                  placeholder="{{status_pagamento}}"
-                  value={node.switchVariable || ''}
-                  onChange={(e) => onUpdate(node.id, { switchVariable: e.target.value })}
-                  className="pr-8"
-                />
-                {renderVariableInserter('switchVariable')}
-              </div>
-            </div>
-            <div>
-              <Label>Casos de Saída</Label>
-              <div className="space-y-2">
-                {(node.switchCases || []).map((caseItem, index) => (
-                  <div key={caseItem.id} className="flex items-center space-x-2">
-                    <Input
-                      placeholder={`Valor do Caso ${index + 1}`}
-                      value={caseItem.value}
-                      onChange={(e) => handleSwitchCaseChange(caseItem.id, e.target.value)}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveSwitchCase(caseItem.id)}
-                      className="text-destructive hover:text-destructive/80 w-8 h-8"
-                      aria-label="Remover caso"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-              <Button onClick={handleAddSwitchCase} variant="outline" size="sm" className="mt-2 text-xs h-8">
-                <PlusCircle className="w-3.5 h-3.5 mr-1" /> Adicionar Caso
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground italic pt-1">Cada caso terá um conector de saída. O fluxo seguirá para "Caso Contrário" se nenhum valor corresponder.</p>
           </div>
         );
       case 'set-variable':
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-varname`}>Nome da Variável</Label>
-              <Input id={`${node.id}-varname`} placeholder="minhaVariavel" value={node.variableName || ''} onChange={(e) => onUpdate(node.id, { variableName: e.target.value })} />
+              <Label htmlFor={`${node.id}-varname`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Nome da Variável</Label>
+              <Input id={`${node.id}-varname`} placeholder="minhaVariavel" value={node.variableName || ''} onChange={(e) => onUpdate(node.id, { variableName: e.target.value })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
             </div>
             <div>
-              <Label htmlFor={`${node.id}-varval`}>Valor (pode usar {"{{outra_var}}"})</Label>
+              <Label htmlFor={`${node.id}-varval`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Valor (pode usar {"{{outra_var}}"})</Label>
               <div className="relative">
-                <Input id={`${node.id}-varval`} placeholder="Valor ou {{outra_var}}" value={node.variableValue || ''} onChange={(e) => onUpdate(node.id, { variableValue: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-varval`} placeholder="Valor ou {{outra_var}}" value={node.variableValue || ''} onChange={(e) => onUpdate(node.id, { variableValue: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('variableValue')}
               </div>
             </div>
@@ -3043,10 +3017,10 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
         );
       case 'api-call':
         return (
-          <div className="space-y-4" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label htmlFor={`${node.id}-apiurl`}>URL da Requisicao</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <Label htmlFor={`${node.id}-apiurl`} className="text-[10px] font-medium text-zinc-400">URL da Requisicao</Label>
                 <Button
                   type="button"
                   variant="outline"
@@ -3056,20 +3030,27 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                     setIsCurlImportDialogOpen(true);
                   }}
                   data-no-drag="true"
+                  className="h-6 text-[10px] px-2 border-white/10 hover:bg-white/5"
                 >
-                  <TerminalSquare className="w-3.5 h-3.5 mr-1" />
-                  Importar via cURL
+                  <TerminalSquare className="w-3 h-3 mr-1" />
+                  Importar cURL
                 </Button>
               </div>
               <div className="relative">
-                <Input id={`${node.id}-apiurl`} placeholder="https://api.example.com/data" value={node.apiUrl || ''} onChange={(e) => onUpdate(node.id, { apiUrl: e.target.value })} className="pr-8" />
+                <Input
+                  id={`${node.id}-apiurl`}
+                  placeholder="https://api.example.com/data"
+                  value={node.apiUrl || ''}
+                  onChange={(e) => onUpdate(node.id, { apiUrl: e.target.value })}
+                  className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50"
+                />
                 {renderVariableInserter('apiUrl')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-apimethod`}>Método HTTP</Label>
+              <Label htmlFor={`${node.id}-apimethod`} className="text-[10px] font-medium text-zinc-400">Método HTTP</Label>
               <Select value={node.apiMethod || 'GET'} onValueChange={(value) => onUpdate(node.id, { apiMethod: value as NodeData['apiMethod'] })}>
-                <SelectTrigger id={`${node.id}-apimethod`}><SelectValue placeholder="Selecione o método" /></SelectTrigger>
+                <SelectTrigger id={`${node.id}-apimethod`} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"><SelectValue placeholder="Selecione o método" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="GET">GET</SelectItem><SelectItem value="POST">POST</SelectItem>
                   <SelectItem value="PUT">PUT</SelectItem><SelectItem value="DELETE">DELETE</SelectItem>
@@ -3079,18 +3060,19 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             </div>
 
             <Tabs defaultValue="auth" className="w-full">
-              <TabsList className="grid w-full grid-cols-5 text-xs h-auto">
-                  <TabsTrigger value="auth">Auth</TabsTrigger>
-                  <TabsTrigger value="headers">Headers</TabsTrigger>
-                  <TabsTrigger value="params">Query</TabsTrigger>
-                  <TabsTrigger value="body">Corpo</TabsTrigger>
-                  <TabsTrigger value="mapping">Mapeamento</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-5 h-7 p-0.5 bg-black/20">
+                <TabsTrigger value="auth" className="text-[10px] h-6 px-1 data-[state=active]:bg-white/10">Auth</TabsTrigger>
+                <TabsTrigger value="headers" className="text-[10px] h-6 px-1 data-[state=active]:bg-white/10">Headers</TabsTrigger>
+                <TabsTrigger value="params" className="text-[10px] h-6 px-1 data-[state=active]:bg-white/10">Query</TabsTrigger>
+                <TabsTrigger value="body" className="text-[10px] h-6 px-1 data-[state=active]:bg-white/10">Corpo</TabsTrigger>
+                <TabsTrigger value="mapping" className="text-[10px] h-6 px-1 data-[state=active]:bg-white/10">Map</TabsTrigger>
               </TabsList>
-              <TabsContent value="auth" className="mt-4 space-y-3">
+
+              <TabsContent value="auth" className="mt-2 space-y-2">
                 <div>
-                  <Label htmlFor={`${node.id}-apiauthtype`}>Tipo de Autenticação</Label>
+                  <Label htmlFor={`${node.id}-apiauthtype`} className="text-[10px] font-medium text-zinc-400">Tipo de Autenticação</Label>
                   <Select value={node.apiAuthType || 'none'} onValueChange={(value) => onUpdate(node.id, { apiAuthType: value as NodeData['apiAuthType'] })}>
-                    <SelectTrigger id={`${node.id}-apiauthtype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
+                    <SelectTrigger id={`${node.id}-apiauthtype`} className="h-7 text-xs bg-black/20 border-white/5"><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhuma</SelectItem>
                       <SelectItem value="bearer">Bearer Token</SelectItem>
@@ -3100,45 +3082,48 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 </div>
                 {node.apiAuthType === 'bearer' && (
                   <div>
-                    <Label htmlFor={`${node.id}-apiauthbearertoken`}>Bearer Token</Label>
+                    <Label htmlFor={`${node.id}-apiauthbearertoken`} className="text-[10px] font-medium text-zinc-400">Bearer Token</Label>
                     <div className="relative">
-                      <Input id={`${node.id}-apiauthbearertoken`} placeholder="Seu token aqui..." value={node.apiAuthBearerToken || ''} onChange={(e) => onUpdate(node.id, { apiAuthBearerToken: e.target.value })} className="pr-8" />
+                      <Input id={`${node.id}-apiauthbearertoken`} placeholder="Seu token aqui..." value={node.apiAuthBearerToken || ''} onChange={(e) => onUpdate(node.id, { apiAuthBearerToken: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5" />
                       {renderVariableInserter('apiAuthBearerToken')}
                     </div>
                   </div>
                 )}
                 {node.apiAuthType === 'basic' && (
-                  <>
+                  <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <Label htmlFor={`${node.id}-apiauthbasicuser`}>Usuário</Label>
+                      <Label htmlFor={`${node.id}-apiauthbasicuser`} className="text-[10px] font-medium text-zinc-400">Usuário</Label>
                       <div className="relative">
-                        <Input id={`${node.id}-apiauthbasicuser`} placeholder="Nome de usuário" value={node.apiAuthBasicUser || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicUser: e.target.value })} className="pr-8" />
+                        <Input id={`${node.id}-apiauthbasicuser`} placeholder="Usuário" value={node.apiAuthBasicUser || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicUser: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5" />
                         {renderVariableInserter('apiAuthBasicUser')}
                       </div>
                     </div>
                     <div>
-                      <Label htmlFor={`${node.id}-apiauthbasicpassword`}>Senha</Label>
+                      <Label htmlFor={`${node.id}-apiauthbasicpassword`} className="text-[10px] font-medium text-zinc-400">Senha</Label>
                       <div className="relative">
-                        <Input id={`${node.id}-apiauthbasicpassword`} type="password" placeholder="Senha" value={node.apiAuthBasicPassword || ''} onChange={e => onUpdate(node.id, { apiAuthBasicPassword: e.target.value })} className="pr-8" />
+                        <Input id={`${node.id}-apiauthbasicpassword`} type="password" placeholder="Senha" value={node.apiAuthBasicPassword || ''} onChange={e => onUpdate(node.id, { apiAuthBasicPassword: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5" />
                         {renderVariableInserter('apiAuthBasicPassword')}
                       </div>
                     </div>
-                  </>
+                  </div>
                 )}
               </TabsContent>
-              <TabsContent value="headers" className="mt-4">
-                <Label>Headers da Requisição</Label>
-                {renderKeyValueList('apiHeadersList', node.apiHeadersList, 'Nome do Header (Ex: Content-Type)', 'Valor do Header (Ex: application/json)', 'Adicionar Header')}
+
+              <TabsContent value="headers" className="mt-2">
+                <Label className="text-[10px] font-medium text-zinc-400 mb-1 block">Headers da Requisição</Label>
+                {renderKeyValueList('apiHeadersList', node.apiHeadersList, 'Header (Ex: Content-Type)', 'Valor', 'Add Header')}
               </TabsContent>
-              <TabsContent value="params" className="mt-4">
-                <Label>Parâmetros de Query (URL)</Label>
-                {renderKeyValueList('apiQueryParamsList', node.apiQueryParamsList, 'Nome do Parâmetro', 'Valor do Parâmetro', 'Adicionar Parâmetro')}
+
+              <TabsContent value="params" className="mt-2">
+                <Label className="text-[10px] font-medium text-zinc-400 mb-1 block">Parâmetros de Query (URL)</Label>
+                {renderKeyValueList('apiQueryParamsList', node.apiQueryParamsList, 'Parâmetro', 'Valor', 'Add Param')}
               </TabsContent>
-              <TabsContent value="body" className="mt-4 space-y-3">
+
+              <TabsContent value="body" className="mt-2 space-y-2">
                 <div>
-                  <Label htmlFor={`${node.id}-apibodytype`}>Tipo de Corpo da Requisição</Label>
+                  <Label htmlFor={`${node.id}-apibodytype`} className="text-[10px] font-medium text-zinc-400">Tipo de Corpo</Label>
                   <Select value={node.apiBodyType || 'none'} onValueChange={(value) => onUpdate(node.id, { apiBodyType: value as NodeData['apiBodyType'] })}>
-                    <SelectTrigger id={`${node.id}-apibodytype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
+                    <SelectTrigger id={`${node.id}-apibodytype`} className="h-7 text-xs bg-black/20 border-white/5"><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhum</SelectItem>
                       <SelectItem value="json">JSON</SelectItem>
@@ -3149,199 +3134,191 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
                 </div>
                 {node.apiBodyType === 'json' && (
                   <div>
-                    <Label htmlFor={`${node.id}-apibodyjson`}>Corpo JSON</Label>
+                    <Label htmlFor={`${node.id}-apibodyjson`} className="text-[10px] font-medium text-zinc-400">Corpo JSON</Label>
                     <div className="relative">
-                      <Textarea id={`${node.id}-apibodyjson`} placeholder='{ "chave": "valor" }' value={node.apiBodyJson || ''} onChange={(e) => onUpdate(node.id, { apiBodyJson: e.target.value })} rows={4} className="pr-8" />
+                      <Textarea id={`${node.id}-apibodyjson`} placeholder='{ "chave": "valor" }' value={node.apiBodyJson || ''} onChange={(e) => onUpdate(node.id, { apiBodyJson: e.target.value })} rows={4} className="text-xs font-mono bg-black/20 border-white/5 pr-7" />
                       {renderVariableInserter('apiBodyJson', true)}
                     </div>
                   </div>
                 )}
                 {node.apiBodyType === 'form-data' && (
                   <div>
-                    <Label>Campos Form-Data</Label>
-                    {renderKeyValueList('apiBodyFormDataList', node.apiBodyFormDataList, 'Nome do Campo', 'Valor do Campo', 'Adicionar Campo Form-Data')}
+                    <Label className="text-[10px] font-medium text-zinc-400 mb-1 block">Campos Form-Data</Label>
+                    {renderKeyValueList('apiBodyFormDataList', node.apiBodyFormDataList, 'Campo', 'Valor', 'Add Campo')}
                   </div>
                 )}
                 {node.apiBodyType === 'raw' && (
                   <div>
-                    <Label htmlFor={`${node.id}-apibodyraw`}>Corpo Raw (Texto)</Label>
+                    <Label htmlFor={`${node.id}-apibodyraw`} className="text-[10px] font-medium text-zinc-400">Corpo Raw</Label>
                     <div className="relative">
-                      <Textarea id={`${node.id}-apibodyraw`} placeholder="Conteúdo do corpo em texto puro..." value={node.apiBodyRaw || ''} onChange={(e) => onUpdate(node.id, { apiBodyRaw: e.target.value })} rows={4} className="pr-8" />
+                      <Textarea id={`${node.id}-apibodyraw`} placeholder="Conteúdo raw..." value={node.apiBodyRaw || ''} onChange={(e) => onUpdate(node.id, { apiBodyRaw: e.target.value })} rows={4} className="text-xs font-mono bg-black/20 border-white/5 pr-7" />
                       {renderVariableInserter('apiBodyRaw', true)}
                     </div>
                   </div>
                 )}
               </TabsContent>
 
-              <TabsContent value="mapping" className="mt-4 space-y-3">
-                <div className="rounded-md border bg-muted/10 p-3 space-y-2 text-sm">
+              <TabsContent value="mapping" className="mt-2 space-y-2">
+                <div className="rounded-md border border-white/5 bg-black/20 p-2 space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-semibold text-sm">Resumo do Mapeamento</p>
-                      <p className="text-[11px] text-muted-foreground">Use o construtor em tela cheia para configurar com precisão.</p>
+                      <p className="font-semibold text-xs text-zinc-300">Resumo do Mapeamento</p>
+                      <p className="text-[10px] text-zinc-500">Use o construtor para configurar.</p>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => setIsApiMappingDialogOpen(true)}>
-                      <Sparkles className="w-3.5 h-3.5 mr-1" /> Abrir Construtor
+                    <Button variant="outline" size="sm" onClick={() => setIsApiMappingDialogOpen(true)} className="h-6 text-[10px] border-white/10 hover:bg-white/5">
+                      <Sparkles className="w-3 h-3 mr-1" /> Construtor
                     </Button>
                   </div>
-                  <div className="grid gap-2 text-[12px]">
-                    <div className="rounded border border-dashed px-2 py-1.5">
-                      <p className="font-semibold text-xs uppercase text-muted-foreground">Resultado Principal</p>
-                      <p>
-                        Caminho: <span className="font-mono">{node.apiResponsePath || '—'}</span>
+                  <div className="grid gap-1.5">
+                    <div className="rounded border border-dashed border-white/10 px-2 py-1">
+                      <p className="font-semibold text-[10px] uppercase text-zinc-500">Resultado Principal</p>
+                      <p className="text-[11px] truncate">
+                        Path: <span className="font-mono text-zinc-300">{node.apiResponsePath || '—'}</span>
                       </p>
-                      <p>Variável: <span className="font-semibold">{node.apiOutputVariable || '—'}</span></p>
+                      <p className="text-[11px] truncate">Var: <span className="font-semibold text-zinc-300">{node.apiOutputVariable || '—'}</span></p>
                     </div>
-                    <div className="rounded border border-dashed px-2 py-1.5">
-                      <p className="font-semibold text-xs uppercase text-muted-foreground">Mapeamentos Extras</p>
-                      {(node.apiResponseMappings || []).length === 0 ? (
-                        <p className="text-muted-foreground">Nenhum mapeamento adicional configurado.</p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {(node.apiResponseMappings || []).map((mapping) => (
-                            <div key={mapping.id} className="flex items-center justify-between gap-2 rounded border bg-background px-2 py-1">
-                              <div>
-                                <p className="font-medium text-sm">{mapping.flowVariable || 'Sem variável'}</p>
-                                <p className="text-[11px] text-muted-foreground">{mapping.jsonPath || 'Sem expressão'}</p>
-                              </div>
-                              <Button variant="ghost" size="icon" onClick={() => handleRemoveListItem('apiResponseMappings', mapping.id)} className="text-destructive hover:text-destructive/80 w-6 h-6">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
+                    {(node.apiResponseMappings || []).length > 0 && (
+                      <div className="rounded border border-dashed border-white/10 px-2 py-1">
+                        <p className="font-semibold text-[10px] uppercase text-zinc-500 mb-1">Extras ({node.apiResponseMappings?.length})</p>
+                        <div className="space-y-1">
+                          {(node.apiResponseMappings || []).slice(0, 3).map((mapping) => (
+                            <div key={mapping.id} className="flex items-center justify-between gap-2 text-[10px] text-zinc-400">
+                              <span className="truncate max-w-[100px]">{mapping.flowVariable}</span>
+                              <span className="font-mono truncate max-w-[100px] opacity-70">{mapping.jsonPath}</span>
                             </div>
                           ))}
+                          {(node.apiResponseMappings?.length || 0) > 3 && <p className="text-[10px] text-zinc-500 italic">+{(node.apiResponseMappings?.length || 0) - 3} outros...</p>}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => setIsApiMappingDialogOpen(true)}>
-                      Configurar agora
-                    </Button>
-                    <Button variant="ghost" size="sm" className="text-xs h-8" onClick={() => handleAddListItem('apiResponseMappings')}>
-                      <PlusCircle className="w-3 h-3 mr-1" /> Adicionar rápido
-                    </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </TabsContent>
-
-
             </Tabs>
-             <div className="flex gap-2 w-full mt-3">
-                <Button variant="outline" className="w-full" onClick={handleTestApiCall} disabled={isTestingApi}>
-                  <TestTube2 className="mr-2 h-4 w-4" /> {isTestingApi ? "Testando..." : "Testar Requisição"}
-                </Button>
-                 <Button variant="outline" className="w-full" onClick={handleOpenApiHistory}>
-                    <History className="mr-2 h-4 w-4" /> Histórico
-                </Button>
+
+            <div className="flex gap-2 w-full mt-2">
+              <Button variant="outline" className="w-full h-7 text-xs border-white/10 hover:bg-white/5" onClick={handleTestApiCall} disabled={isTestingApi}>
+                <TestTube2 className="mr-1.5 h-3.5 w-3.5" /> {isTestingApi ? "Testando..." : "Testar"}
+              </Button>
+              <Button variant="outline" className="w-full h-7 text-xs border-white/10 hover:bg-white/5" onClick={handleOpenApiHistory}>
+                <History className="mr-1.5 h-3.5 w-3.5" /> Histórico
+              </Button>
             </div>
           </div>
         );
       case 'delay':
         return (
-          <div data-no-drag="true">
-            <Label htmlFor={`${node.id}-delay`}>Duração do Atraso (em milissegundos)</Label>
-            <Input id={`${node.id}-delay`} type="number" placeholder="1000" value={node.delayDuration ?? ''} onChange={(e) => onUpdate(node.id, { delayDuration: parseInt(e.target.value, 10) || 0 })} />
+          <div className="space-y-2" data-no-drag="true">
+            <div>
+              <Label htmlFor={`${node.id}-delay`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Duração (ms)</Label>
+              <Input id={`${node.id}-delay`} type="number" placeholder="1000" value={node.delayDuration ?? ''} onChange={(e) => onUpdate(node.id, { delayDuration: parseInt(e.target.value, 10) || 0 })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
+            </div>
           </div>
         );
       case 'date-input':
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-datelabel`}>Texto da Pergunta</Label>
+              <Label htmlFor={`${node.id}-datelabel`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Texto da Pergunta</Label>
               <div className="relative">
-                <Input ref={inputRef} id={`${node.id}-datelabel`} placeholder="Ex: Qual sua data de nascimento?" value={node.dateInputLabel || ''} onChange={(e) => onUpdate(node.id, { dateInputLabel: e.target.value })} className="pr-8" />
+                <Input ref={inputRef} id={`${node.id}-datelabel`} placeholder="Ex: Qual sua data de nascimento?" value={node.dateInputLabel || ''} onChange={(e) => onUpdate(node.id, { dateInputLabel: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('dateInputLabel')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-varsavedate`}>Salvar Data na Variável</Label>
-              <Input id={`${node.id}-varsavedate`} placeholder="data_nascimento" value={node.variableToSaveDate || ''} onChange={(e) => onUpdate(node.id, { variableToSaveDate: e.target.value })} />
+              <Label htmlFor={`${node.id}-varsavedate`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Salvar Data na Variável</Label>
+              <Input id={`${node.id}-varsavedate`} placeholder="data_nascimento" value={node.variableToSaveDate || ''} onChange={(e) => onUpdate(node.id, { variableToSaveDate: e.target.value })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
             </div>
             {renderApiResponseSettings()}
           </div>
         );
       case 'redirect':
         return (
-          <div data-no-drag="true">
-            <Label htmlFor={`${node.id}-redirecturl`}>URL para Redirecionamento</Label>
-            <div className="relative">
-              <Input id={`${node.id}-redirecturl`} placeholder="https://exemplo.com/{{id_usuario}}" value={node.redirectUrl || ''} onChange={(e) => onUpdate(node.id, { redirectUrl: e.target.value })} className="pr-8" />
-              {renderVariableInserter('redirectUrl')}
+          <div className="space-y-2" data-no-drag="true">
+            <div>
+              <Label htmlFor={`${node.id}-redirecturl`} className="text-[10px] font-medium text-zinc-400 mb-1 block">URL para Redirecionamento</Label>
+              <div className="relative">
+                <Input id={`${node.id}-redirecturl`} placeholder="https://exemplo.com/{{id_usuario}}" value={node.redirectUrl || ''} onChange={(e) => onUpdate(node.id, { redirectUrl: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
+                {renderVariableInserter('redirectUrl')}
+              </div>
             </div>
           </div>
         );
       case 'typing-emulation':
         return (
-          <div data-no-drag="true">
-            <Label htmlFor={`${node.id}-typingduration`}>Duração da Simulação de Digitação (ms)</Label>
-            <Input id={`${node.id}-typingduration`} type="number" placeholder="1500" value={node.typingDuration ?? ''} onChange={(e) => onUpdate(node.id, { typingDuration: parseInt(e.target.value, 10) || 0 })} />
+          <div className="space-y-2" data-no-drag="true">
+            <div>
+              <Label htmlFor={`${node.id}-typingduration`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Duração (ms)</Label>
+              <Input id={`${node.id}-typingduration`} type="number" placeholder="1500" value={node.typingDuration ?? ''} onChange={(e) => onUpdate(node.id, { typingDuration: parseInt(e.target.value, 10) || 0 })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
+            </div>
           </div>
         );
       case 'media-display':
         return (
-          <div data-no-drag="true">
-            <div className="space-y-3">
-              <div><Label htmlFor={`${node.id}-mediadisplaytype`}>Tipo de Mídia</Label>
-                <Select value={node.mediaDisplayType || 'image'} onValueChange={(value) => onUpdate(node.id, { mediaDisplayType: value as NodeData['mediaDisplayType'] })}>
-                  <SelectTrigger id={`${node.id}-mediadisplaytype`}><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="image">Imagem</SelectItem><SelectItem value="video">Vídeo</SelectItem><SelectItem value="audio">Áudio</SelectItem>
-                  </SelectContent>
-                </Select>
+          <div className="space-y-2" data-no-drag="true">
+            <div>
+              <Label htmlFor={`${node.id}-mediadisplaytype`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Tipo de Mídia</Label>
+              <Select value={node.mediaDisplayType || 'image'} onValueChange={(value) => onUpdate(node.id, { mediaDisplayType: value as NodeData['mediaDisplayType'] })}>
+                <SelectTrigger id={`${node.id}-mediadisplaytype`} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="image">Imagem</SelectItem><SelectItem value="video">Vídeo</SelectItem><SelectItem value="audio">Áudio</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor={`${node.id}-mediadisplayurl`} className="text-[10px] font-medium text-zinc-400 mb-1 block">URL da Mídia</Label>
+              <div className="relative">
+                <Input id={`${node.id}-mediadisplayurl`} placeholder="https://... ou {{url_da_imagem}}" value={node.mediaDisplayUrl || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayUrl: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
+                {renderVariableInserter('mediaDisplayUrl')}
               </div>
-              <div>
-                <Label htmlFor={`${node.id}-mediadisplayurl`}>URL da Mídia</Label>
-                <div className="relative">
-                  <Input id={`${node.id}-mediadisplayurl`} placeholder="https://... ou {{url_da_imagem}}" value={node.mediaDisplayUrl || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayUrl: e.target.value })} className="pr-8" />
-                  {renderVariableInserter('mediaDisplayUrl')}
-                </div>
+            </div>
+            <div>
+              <Label htmlFor={`${node.id}-mediadisplaytext`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Texto Alternativo/Legenda</Label>
+              <div className="relative">
+                <Input ref={inputRef} id={`${node.id}-mediadisplaytext`} placeholder="Descrição da mídia" value={node.mediaDisplayText || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayText: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
+                {renderVariableInserter('mediaDisplayText')}
               </div>
-              <div>
-                <Label htmlFor={`${node.id}-mediadisplaytext`}>Texto Alternativo/Legenda</Label>
-                <div className="relative">
-                  <Input ref={inputRef} id={`${node.id}-mediadisplaytext`} placeholder="Descrição da mídia" value={node.mediaDisplayText || ''} onChange={(e) => onUpdate(node.id, { mediaDisplayText: e.target.value })} className="pr-8" />
-                  {renderVariableInserter('mediaDisplayText')}
-                </div>
-                <TextFormatToolbar fieldName="mediaDisplayText" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
-              </div>
+              <TextFormatToolbar fieldName="mediaDisplayText" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
           </div>
         );
       case 'log-console':
         return (
-          <div data-no-drag="true">
-            <Label htmlFor={`${node.id}-logmsg`}>Mensagem para Log</Label>
-            <div className="relative">
-              <Textarea id={`${node.id}-logmsg`} placeholder="Ex: Status: {{input.status}}, Usuário: {{user.id}}" value={node.logMessage || ''} onChange={(e) => onUpdate(node.id, { logMessage: e.target.value })} rows={2} className="pr-8" />
-              {renderVariableInserter('logMessage', true)}
+          <div className="space-y-2" data-no-drag="true">
+            <div>
+              <Label htmlFor={`${node.id}-logmsg`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Mensagem para Log</Label>
+              <div className="relative">
+                <Textarea id={`${node.id}-logmsg`} placeholder="Ex: Status: {{input.status}}, Usuário: {{user.id}}" value={node.logMessage || ''} onChange={(e) => onUpdate(node.id, { logMessage: e.target.value })} rows={2} className="text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 resize-none" />
+                {renderVariableInserter('logMessage', true)}
+              </div>
             </div>
           </div>
         );
       case 'code-execution':
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div className="flex items-center justify-between gap-2">
-              <Label htmlFor={`${node.id}-codesnippet`}>Trecho de Codigo (JavaScript)</Label>
+              <Label htmlFor={`${node.id}-codesnippet`} className="text-[10px] font-medium text-zinc-400">Trecho de Codigo (JavaScript)</Label>
               {variableOptions.length > 0 && (
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8" data-no-drag="true">
-                      <MousePointerClick className="w-3.5 h-3.5 mr-1" /> Selecionar variavel
+                    <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 border-white/10 hover:bg-white/5" data-no-drag="true">
+                      <MousePointerClick className="w-3 h-3 mr-1" /> Selecionar variavel
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-72 p-2" align="end" data-no-drag="true">
-                    <p className="text-[11px] text-muted-foreground px-1 pb-2">Insira o valor direto do objeto variables.</p>
+                    <p className="text-[10px] text-muted-foreground px-1 pb-2">Insira o valor direto do objeto variables.</p>
                     <div className="max-h-64 overflow-y-auto space-y-1">
                       {variableOptions.map((option) => (
                         <Button
                           key={option.name}
                           variant="ghost"
                           size="sm"
-                          className="w-full justify-between h-8 px-2"
+                          className="w-full justify-between h-7 px-2 text-xs"
                           onClick={() => handleInsertCodeVariable(option)}
                           data-no-drag="true"
                         >
-                          <span className="truncate text-sm">{option.name}</span>
+                          <span className="truncate">{option.name}</span>
                           <span className="text-[10px] uppercase text-muted-foreground">{describeVariableKind(option.kind)}</span>
                         </Button>
                       ))}
@@ -3354,159 +3331,155 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
               <Textarea
                 ref={codeEditorRef}
                 id={`${node.id}-codesnippet`}
-                placeholder={`function minhaFuncao(variaveis) {
-  const nome = variables["nome"];
-  return { resultado: nome };
-}
-minhaFuncao(variables);`}
+                placeholder={`function minhaFuncao(variaveis) { ... }`}
                 value={node.codeSnippet || ''}
                 onChange={(e) => onUpdate(node.id, { codeSnippet: e.target.value })}
                 rows={6}
-                className="pr-8 font-mono text-xs"
+                className="pr-8 font-mono text-xs bg-black/20 border-white/5 focus:border-primary/50 resize-none"
               />
               {renderVariableInserter('codeSnippet', true)}
             </div>
             <div>
-              <Label htmlFor={`${node.id}-codeoutputvar`}>Salvar Saida (objeto) na Variavel</Label>
-              <Input id={`${node.id}-codeoutputvar`} placeholder="resultado_codigo (ex: resultado_codigo.resultado)" value={node.codeOutputVariable || ''} onChange={(e) => onUpdate(node.id, { codeOutputVariable: e.target.value })} />
+              <Label htmlFor={`${node.id}-codeoutputvar`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Salvar Saida (objeto) na Variavel</Label>
+              <Input id={`${node.id}-codeoutputvar`} placeholder="resultado_codigo" value={node.codeOutputVariable || ''} onChange={(e) => onUpdate(node.id, { codeOutputVariable: e.target.value })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
             </div>
-            <p className="text-xs text-muted-foreground">Nota: O codigo e executado em um ambiente sandbox no servidor. Use o objeto <code>variables[\"nome_da_variavel\"]</code> para acessar dados do fluxo.</p>
+            <p className="text-[10px] text-muted-foreground">Nota: O codigo e executado em um ambiente sandbox no servidor. Use o objeto <code>variables[\"nome_da_variavel\"]</code> para acessar dados do fluxo.</p>
           </div>
         );
       case 'json-transform':
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-inputjson`}>JSON de Entrada (objeto ou {"{{variavel}}"})</Label>
+              <Label htmlFor={`${node.id}-inputjson`} className="text-[10px] font-medium text-zinc-400 mb-1 block">JSON de Entrada</Label>
               <div className="relative">
-                <Textarea id={`${node.id}-inputjson`} placeholder='{ "chave": "valor" } ou {{dados_api}}' value={node.inputJson || ''} onChange={(e) => onUpdate(node.id, { inputJson: e.target.value })} rows={3} className="pr-8" />
+                <Textarea id={`${node.id}-inputjson`} placeholder='{ "chave": "valor" } ou {{dados_api}}' value={node.inputJson || ''} onChange={(e) => onUpdate(node.id, { inputJson: e.target.value })} rows={3} className="text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 resize-none" />
                 {renderVariableInserter('inputJson', true)}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-jsonata`}>Expressão JSONata</Label>
+              <Label htmlFor={`${node.id}-jsonata`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Expressão JSONata</Label>
               <div className="relative">
-                <Input id={`${node.id}-jsonata`} placeholder="$.chave.outraChave[0]" value={node.jsonataExpression || ''} onChange={(e) => onUpdate(node.id, { jsonataExpression: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-jsonata`} placeholder="Ex: $.chave" value={node.jsonataExpression || ''} onChange={(e) => onUpdate(node.id, { jsonataExpression: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('jsonataExpression')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-jsonoutputvar`}>Salvar JSON Transformado na Variável</Label>
-              <Input id={`${node.id}-jsonoutputvar`} placeholder="json_transformado" value={node.jsonOutputVariable || ''} onChange={(e) => onUpdate(node.id, { jsonOutputVariable: e.target.value })} />
+              <Label htmlFor={`${node.id}-jsonoutput`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Salvar Resultado na Variável</Label>
+              <Input id={`${node.id}-jsonoutput`} placeholder="resultado_json" value={node.jsonOutputVariable || ''} onChange={(e) => onUpdate(node.id, { jsonOutputVariable: e.target.value })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
             </div>
           </div>
         );
       case 'file-upload':
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-uploadprompt`}>Texto do Prompt de Upload</Label>
+              <Label htmlFor={`${node.id}-uploadprompt`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Texto do Prompt de Upload</Label>
               <div className="relative">
-                <Input ref={inputRef} id={`${node.id}-uploadprompt`} placeholder="Por favor, envie seu documento." value={node.uploadPromptText || ''} onChange={(e) => onUpdate(node.id, { uploadPromptText: e.target.value })} className="pr-8" />
+                <Input ref={inputRef} id={`${node.id}-uploadprompt`} placeholder="Por favor, envie seu documento." value={node.uploadPromptText || ''} onChange={(e) => onUpdate(node.id, { uploadPromptText: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('uploadPromptText')}
               </div>
-               <TextFormatToolbar fieldName="uploadPromptText" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
+              <TextFormatToolbar fieldName="uploadPromptText" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <div>
-              <Label htmlFor={`${node.id}-filefilter`}>Filtro de Tipo de Arquivo (ex: image/*, .pdf)</Label>
-              <Input id={`${node.id}-filefilter`} placeholder="image/*, .pdf, .docx" value={node.fileTypeFilter || ''} onChange={(e) => onUpdate(node.id, { fileTypeFilter: e.target.value })} />
+              <Label htmlFor={`${node.id}-filefilter`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Filtro de Tipo de Arquivo</Label>
+              <Input id={`${node.id}-filefilter`} placeholder="image/*, .pdf, .docx" value={node.fileTypeFilter || ''} onChange={(e) => onUpdate(node.id, { fileTypeFilter: e.target.value })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
             </div>
             <div>
-              <Label htmlFor={`${node.id}-maxsize`}>Tam. Máx. Arquivo (MB)</Label>
-              <Input id={`${node.id}-maxsize`} type="number" placeholder="5" value={node.maxFileSizeMB ?? ''} onChange={(e) => onUpdate(node.id, { maxFileSizeMB: e.target.value ? parseInt(e.target.value, 10) : undefined })} />
+              <Label htmlFor={`${node.id}-maxsize`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Tam. Máx. Arquivo (MB)</Label>
+              <Input id={`${node.id}-maxsize`} type="number" placeholder="5" value={node.maxFileSizeMB ?? ''} onChange={(e) => onUpdate(node.id, { maxFileSizeMB: e.target.value ? parseInt(e.target.value, 10) : undefined })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
             </div>
             <div>
-              <Label htmlFor={`${node.id}-fileurlvar`}>Salvar URL do Arquivo na Variável</Label>
-              <Input id={`${node.id}-fileurlvar`} placeholder="url_do_arquivo" value={node.fileUrlVariable || ''} onChange={(e) => onUpdate(node.id, { fileUrlVariable: e.target.value })} />
+              <Label htmlFor={`${node.id}-fileurlvar`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Salvar URL na Variável</Label>
+              <Input id={`${node.id}-fileurlvar`} placeholder="url_do_arquivo" value={node.fileUrlVariable || ''} onChange={(e) => onUpdate(node.id, { fileUrlVariable: e.target.value })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
             </div>
             {renderApiResponseSettings()}
           </div>
         );
       case 'rating-input':
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-ratingq`}>Pergunta da Avaliação</Label>
+              <Label htmlFor={`${node.id}-ratingq`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Pergunta da Avaliação</Label>
               <div className="relative">
-                <Input ref={inputRef} id={`${node.id}-ratingq`} placeholder="Como você nos avalia?" value={node.ratingQuestionText || ''} onChange={(e) => onUpdate(node.id, { ratingQuestionText: e.target.value })} className="pr-8" />
+                <Input ref={inputRef} id={`${node.id}-ratingq`} placeholder="Como você nos avalia?" value={node.ratingQuestionText || ''} onChange={(e) => onUpdate(node.id, { ratingQuestionText: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('ratingQuestionText')}
               </div>
               <TextFormatToolbar fieldName="ratingQuestionText" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <div>
-              <Label htmlFor={`${node.id}-maxrating`}>Avaliação Máxima</Label>
-              <Input id={`${node.id}-maxrating`} type="number" placeholder="5" value={node.maxRatingValue ?? ''} onChange={(e) => onUpdate(node.id, { maxRatingValue: parseInt(e.target.value, 10) || 5 })} />
+              <Label htmlFor={`${node.id}-maxrating`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Avaliação Máxima</Label>
+              <Input id={`${node.id}-maxrating`} type="number" placeholder="5" value={node.maxRatingValue ?? ''} onChange={(e) => onUpdate(node.id, { maxRatingValue: parseInt(e.target.value, 10) || 5 })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
             </div>
-            <div><Label htmlFor={`${node.id}-ratingicon`}>Ícone de Avaliação</Label>
+            <div><Label htmlFor={`${node.id}-ratingicon`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Ícone de Avaliação</Label>
               <Select value={node.ratingIconType || 'star'} onValueChange={(value) => onUpdate(node.id, { ratingIconType: value as NodeData['ratingIconType'] })}>
-                <SelectTrigger id={`${node.id}-ratingicon`}><SelectValue placeholder="Selecione o ícone" /></SelectTrigger>
+                <SelectTrigger id={`${node.id}-ratingicon`} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"><SelectValue placeholder="Selecione o ícone" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="star">Estrela</SelectItem><SelectItem value="heart">Coração</SelectItem><SelectItem value="number">Número</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-ratingoutputvar`}>Salvar Avaliação na Variável</Label>
-              <Input id={`${node.id}-ratingoutputvar`} placeholder="avaliacao_usuario" value={node.ratingOutputVariable || ''} onChange={(e) => onUpdate(node.id, { ratingOutputVariable: e.target.value })} />
+              <Label htmlFor={`${node.id}-ratingoutputvar`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Salvar Avaliação na Variável</Label>
+              <Input id={`${node.id}-ratingoutputvar`} placeholder="avaliacao_usuario" value={node.ratingOutputVariable || ''} onChange={(e) => onUpdate(node.id, { ratingOutputVariable: e.target.value })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
             </div>
             {renderApiResponseSettings()}
           </div>
         );
       case 'ai-text-generation':
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-aiprompt`}>Prompt para IA</Label>
+              <Label htmlFor={`${node.id}-aiprompt`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Prompt para IA</Label>
               <div className="relative">
-                <Textarea ref={textAreaRef} id={`${node.id}-aiprompt`} placeholder="Gere uma descrição para um produto chamado {{input.nome_produto}}." value={node.aiPromptText || ''} onChange={(e) => onUpdate(node.id, { aiPromptText: e.target.value })} rows={4} className="pr-8" />
+                <Textarea ref={textAreaRef} id={`${node.id}-aiprompt`} placeholder="Gere uma descrição para um produto chamado {{input.nome_produto}}." value={node.aiPromptText || ''} onChange={(e) => onUpdate(node.id, { aiPromptText: e.target.value })} rows={4} className="text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 resize-none" />
                 {renderVariableInserter('aiPromptText', true)}
               </div>
-               <TextFormatToolbar fieldName="aiPromptText" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
+              <TextFormatToolbar fieldName="aiPromptText" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <div>
-              <Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional)</Label>
+              <Label htmlFor={`${node.id}-aimodel`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Modelo de IA (opcional)</Label>
               <div className="relative">
-                <Input id={`${node.id}-aimodel`} placeholder="gemini-1.5-flash (padrão)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-aimodel`} placeholder="gemini-1.5-flash (padrão)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('aiModelName')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-aioutputvar`}>Salvar Resposta da IA na Variável</Label>
-              <Input id={`${node.id}-aioutputvar`} placeholder="resposta_ia" value={node.aiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { aiOutputVariable: e.target.value })} />
+              <Label htmlFor={`${node.id}-aioutputvar`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Salvar Resposta da IA na Variável</Label>
+              <Input id={`${node.id}-aioutputvar`} placeholder="resposta_ia" value={node.aiOutputVariable || ''} onChange={(e) => onUpdate(node.id, { aiOutputVariable: e.target.value })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
             </div>
-            <p className="text-xs text-muted-foreground">Esta integração usa Genkit. Configure seu modelo em `src/ai/genkit.ts`.</p>
+            <p className="text-[10px] text-muted-foreground">Esta integração usa Genkit. Configure seu modelo em `src/ai/genkit.ts`.</p>
           </div>
         );
       case 'send-email':
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-emailto`}>Para (E-mail ou {"{{variavel}}"})</Label>
+              <Label htmlFor={`${node.id}-emailto`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Para (E-mail ou {"{{variavel}}"})</Label>
               <div className="relative">
-                <Input id={`${node.id}-emailto`} type="email" placeholder="destinatario@exemplo.com ou {{email_cliente}}" value={node.emailTo || ''} onChange={(e) => onUpdate(node.id, { emailTo: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-emailto`} type="email" placeholder="destinatario@exemplo.com ou {{email_cliente}}" value={node.emailTo || ''} onChange={(e) => onUpdate(node.id, { emailTo: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('emailTo')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-emailsubject`}>Assunto</Label>
+              <Label htmlFor={`${node.id}-emailsubject`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Assunto</Label>
               <div className="relative">
-                <Input ref={inputRef} id={`${node.id}-emailsubject`} placeholder="Assunto do seu e-mail" value={node.emailSubject || ''} onChange={(e) => onUpdate(node.id, { emailSubject: e.target.value })} className="pr-8" />
+                <Input ref={inputRef} id={`${node.id}-emailsubject`} placeholder="Assunto do seu e-mail" value={node.emailSubject || ''} onChange={(e) => onUpdate(node.id, { emailSubject: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('emailSubject')}
               </div>
               <TextFormatToolbar fieldName="emailSubject" textAreaRef={inputRef as React.RefObject<HTMLInputElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <div>
-              <Label htmlFor={`${node.id}-emailbody`}>Corpo do E-mail (HTML ou Texto)</Label>
+              <Label htmlFor={`${node.id}-emailbody`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Corpo do E-mail (HTML ou Texto)</Label>
               <div className="relative">
-                <Textarea ref={textAreaRef} id={`${node.id}-emailbody`} placeholder="Olá {{input.nome_cliente}},\n\nSua mensagem aqui." value={node.emailBody || ''} onChange={(e) => onUpdate(node.id, { emailBody: e.target.value })} rows={4} className="pr-8" />
+                <Textarea ref={textAreaRef} id={`${node.id}-emailbody`} placeholder="Olá {{input.nome_cliente}},\n\nSua mensagem aqui." value={node.emailBody || ''} onChange={(e) => onUpdate(node.id, { emailBody: e.target.value })} rows={4} className="text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 resize-none" />
                 {renderVariableInserter('emailBody', true)}
               </div>
               <TextFormatToolbar fieldName="emailBody" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <div>
-              <Label htmlFor={`${node.id}-emailfrom`}>De (E-mail - opcional)</Label>
+              <Label htmlFor={`${node.id}-emailfrom`} className="text-[10px] font-medium text-zinc-400 mb-1 block">De (E-mail - opcional)</Label>
               <div className="relative">
-                <Input id={`${node.id}-emailfrom`} type="email" placeholder="remetente@exemplo.com" value={node.emailFrom || ''} onChange={(e) => onUpdate(node.id, { emailFrom: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-emailfrom`} type="email" placeholder="remetente@exemplo.com" value={node.emailFrom || ''} onChange={(e) => onUpdate(node.id, { emailFrom: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('emailFrom')}
               </div>
             </div>
@@ -3514,91 +3487,91 @@ minhaFuncao(variables);`}
         );
       case 'google-sheets-append':
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-gsheetid`}>ID da Planilha Google</Label>
+              <Label htmlFor={`${node.id}-gsheetid`} className="text-[10px] font-medium text-zinc-400 mb-1 block">ID da Planilha Google</Label>
               <div className="relative">
-                <Input id={`${node.id}-gsheetid`} placeholder="abc123xyz789" value={node.googleSheetId || ''} onChange={(e) => onUpdate(node.id, { googleSheetId: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-gsheetid`} placeholder="abc123xyz789" value={node.googleSheetId || ''} onChange={(e) => onUpdate(node.id, { googleSheetId: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('googleSheetId')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-gsheetname`}>Nome da Aba (Planilha)</Label>
+              <Label htmlFor={`${node.id}-gsheetname`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Nome da Aba (Planilha)</Label>
               <div className="relative">
-                <Input id={`${node.id}-gsheetname`} placeholder="Página1" value={node.googleSheetName || ''} onChange={(e) => onUpdate(node.id, { googleSheetName: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-gsheetname`} placeholder="Página1" value={node.googleSheetName || ''} onChange={(e) => onUpdate(node.id, { googleSheetName: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('googleSheetName')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-gsheetdata`}>Dados da Linha (JSON array de strings)</Label>
+              <Label htmlFor={`${node.id}-gsheetdata`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Dados da Linha (JSON array de strings)</Label>
               <div className="relative">
-                <Textarea id={`${node.id}-gsheetdata`} placeholder='["{{input.valor1}}", "{{input.valor2}}", "texto fixo"]' value={node.googleSheetRowData || ''} onChange={(e) => onUpdate(node.id, { googleSheetRowData: e.target.value })} rows={2} className="pr-8" />
+                <Textarea id={`${node.id}-gsheetdata`} placeholder='["{{input.valor1}}", "{{input.valor2}}", "texto fixo"]' value={node.googleSheetRowData || ''} onChange={(e) => onUpdate(node.id, { googleSheetRowData: e.target.value })} rows={2} className="text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 resize-none" />
                 {renderVariableInserter('googleSheetRowData', true)}
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">Certifique-se que a API do Google Sheets está habilitada e as credenciais configuradas no servidor.</p>
+            <p className="text-[10px] text-muted-foreground">Certifique-se que a API do Google Sheets está habilitada e as credenciais configuradas no servidor.</p>
           </div>
         );
       case 'intelligent-agent':
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-agentname`}>Nome do Agente</Label>
+              <Label htmlFor={`${node.id}-agentname`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Nome do Agente</Label>
               <div className="relative">
-                <Input id={`${node.id}-agentname`} placeholder="Agente de Suporte N1" value={node.agentName || ''} onChange={(e) => onUpdate(node.id, { agentName: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-agentname`} placeholder="Agente de Suporte N1" value={node.agentName || ''} onChange={(e) => onUpdate(node.id, { agentName: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('agentName')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-agentsystemprompt`}>Prompt do Sistema / Instruções</Label>
+              <Label htmlFor={`${node.id}-agentsystemprompt`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Prompt do Sistema / Instruções</Label>
               <div className="relative">
-                <Textarea id={`${node.id}-agentsystemprompt`} placeholder="Você é um assistente virtual especializado em {{area_especializacao}}." value={node.agentSystemPrompt || ''} onChange={(e) => onUpdate(node.id, { agentSystemPrompt: e.target.value })} rows={4} className="pr-8" />
+                <Textarea ref={textAreaRef} id={`${node.id}-agentsystemprompt`} placeholder="Você é um assistente virtual especializado em {{area_especializacao}}." value={node.agentSystemPrompt || ''} onChange={(e) => onUpdate(node.id, { agentSystemPrompt: e.target.value })} rows={4} className="text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 resize-none" />
                 {renderVariableInserter('agentSystemPrompt', true)}
               </div>
+              <TextFormatToolbar fieldName="agentSystemPrompt" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
             <div>
-              <Label htmlFor={`${node.id}-userinputvar`}>Variável com Entrada do Usuário (ex: {"{{pergunta_usuario}}"})</Label>
+              <Label htmlFor={`${node.id}-userinputvar`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Variável com Entrada do Usuário</Label>
               <div className="relative">
-                <Input id={`${node.id}-userinputvar`} placeholder="{{pergunta_usuario}}" value={node.userInputVariable || ''} onChange={(e) => onUpdate(node.id, { userInputVariable: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-userinputvar`} placeholder="{{pergunta_usuario}}" value={node.userInputVariable || ''} onChange={(e) => onUpdate(node.id, { userInputVariable: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('userInputVariable')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-agentresponsevar`}>Salvar Resposta na Variável</Label>
-              <Input id={`${node.id}-agentresponsevar`} placeholder="resposta_agente" value={node.agentResponseVariable || ''} onChange={(e) => onUpdate(node.id, { agentResponseVariable: e.target.value })} />
+              <Label htmlFor={`${node.id}-agentresponsevar`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Salvar Resposta na Variável</Label>
+              <Input id={`${node.id}-agentresponsevar`} placeholder="resposta_agente" value={node.agentResponseVariable || ''} onChange={(e) => onUpdate(node.id, { agentResponseVariable: e.target.value })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
             </div>
             <div>
-              <Label htmlFor={`${node.id}-aimodel`}>Modelo de IA (opcional, ex: gemini-1.5-flash)</Label>
+              <Label htmlFor={`${node.id}-aimodel`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Modelo de IA (opcional)</Label>
               <div className="relative">
-                <Input id={`${node.id}-aimodel`} placeholder="gemini-1.5-flash (padrão Genkit)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="pr-8" />
+                <Input id={`${node.id}-aimodel`} placeholder="gemini-1.5-flash (padrão Genkit)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                 {renderVariableInserter('aiModelName')}
               </div>
             </div>
-            <div>
-              <Label htmlFor={`${node.id}-maxturns`}>Máx. Turnos de Conversa (opcional)</Label>
-              <Input id={`${node.id}-maxturns`} type="number" placeholder="5" value={node.maxConversationTurns ?? ''} onChange={(e) => onUpdate(node.id, { maxConversationTurns: e.target.value ? parseInt(e.target.value, 10) : undefined })} />
-            </div>
-            <div>
-              <Label htmlFor={`${node.id}-temperature`}>Temperatura (0-1, opcional)</Label>
-              <div className="flex items-center space-x-2">
-                <Slider
-                  id={`${node.id}-temperature`}
-                  min={0} max={1} step={0.01}
-                  defaultValue={[node.temperature ?? 0.7]}
-                  onValueChange={(value) => onUpdate(node.id, { temperature: value[0] })}
-                  className="flex-1"
-                />
-                <Input
-                  type="number" min={0} max={1} step={0.01}
-                  value={node.temperature ?? 0.7}
-                  onChange={(e) => onUpdate(node.id, { temperature: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  className="w-20"
-                />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label htmlFor={`${node.id}-maxturns`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Máx. Turnos</Label>
+                <Input id={`${node.id}-maxturns`} type="number" placeholder="5" value={node.maxConversationTurns ?? ''} onChange={(e) => onUpdate(node.id, { maxConversationTurns: e.target.value ? parseInt(e.target.value, 10) : undefined })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
+              </div>
+              <div>
+                <Label htmlFor={`${node.id}-temperature`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Temperatura ({node.temperature ?? 0.7})</Label>
+                <div className="flex items-center space-x-2 h-7">
+                  <Slider
+                    id={`${node.id}-temperature`}
+                    min={0} max={1} step={0.01}
+                    defaultValue={[node.temperature ?? 0.7]}
+                    onValueChange={(value) => onUpdate(node.id, { temperature: value[0] })}
+                    className="flex-1"
+                  />
+                </div>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">Este nó simula uma conversa com um agente de IA. A lógica real usa Genkit.</p>
+            <p className="text-[10px] text-muted-foreground">Este nó simula uma conversa com um agente de IA. A lógica real usa Genkit.</p>
           </div>
         );
+      case 'supabase-create-row':
+      case 'supabase-read-row':
+      case 'supabase-update-row':
       case 'supabase-create-row':
       case 'supabase-read-row':
       case 'supabase-update-row':
@@ -3609,12 +3582,12 @@ minhaFuncao(variables);`}
         const needsDataJson = isCreateOp || node.type === 'supabase-update-row';
 
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-tableName`}>Nome da Tabela Supabase</Label>
-              {isLoadingSupabaseTables && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando tabelas...</div>}
-              {!isLoadingSupabaseTables && supabaseSchemaError && <p className="text-xs text-destructive">{supabaseSchemaError}</p>}
-              {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma tabela encontrada ou Supabase não configurado/habilitado.</p>}
+              <Label htmlFor={`${node.id}-tableName`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Nome da Tabela Supabase</Label>
+              {isLoadingSupabaseTables && <div className="flex items-center text-[10px] text-muted-foreground h-7"><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Carregando...</div>}
+              {!isLoadingSupabaseTables && supabaseSchemaError && <p className="text-[10px] text-destructive">{supabaseSchemaError}</p>}
+              {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length === 0 && <p className="text-[10px] text-muted-foreground">Nenhuma tabela encontrada.</p>}
               {!isLoadingSupabaseTables && !supabaseSchemaError && supabaseTables.length > 0 && (
                 <Select
                   value={node.supabaseTableName || ''}
@@ -3626,7 +3599,7 @@ minhaFuncao(variables);`}
                     });
                   }}
                 >
-                  <SelectTrigger id={`${node.id}-tableName`}><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
+                  <SelectTrigger id={`${node.id}-tableName`} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"><SelectValue placeholder="Selecione a Tabela" /></SelectTrigger>
                   <SelectContent>
                     {supabaseTables.map(table => <SelectItem key={table.name} value={table.name}>{table.name}</SelectItem>)}
                   </SelectContent>
@@ -3637,30 +3610,30 @@ minhaFuncao(variables);`}
             {needsIdentifier && (
               <>
                 <div>
-                  <Label htmlFor={`${node.id}-identifierCol`}>Coluna Identificadora (Filtro)</Label>
-                  {isLoadingSupabaseColumns && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carregando colunas...</div>}
-                  {!isLoadingSupabaseColumns && !node.supabaseTableName && <p className="text-xs text-muted-foreground">Selecione uma tabela para ver as colunas.</p>}
-                  {!isLoadingSupabaseColumns && node.supabaseTableName && supabaseColumns.length === 0 && !supabaseSchemaError && <p className="text-xs text-muted-foreground">Nenhuma coluna encontrada para a tabela selecionada.</p>}
+                  <Label htmlFor={`${node.id}-identifierCol`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Coluna Identificadora (Filtro)</Label>
+                  {isLoadingSupabaseColumns && <div className="flex items-center text-[10px] text-muted-foreground h-7"><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Carregando...</div>}
+                  {!isLoadingSupabaseColumns && !node.supabaseTableName && <p className="text-[10px] text-muted-foreground">Selecione uma tabela.</p>}
+                  {!isLoadingSupabaseColumns && node.supabaseTableName && supabaseColumns.length === 0 && !supabaseSchemaError && <p className="text-[10px] text-muted-foreground">Nenhuma coluna encontrada.</p>}
                   {!isLoadingSupabaseColumns && supabaseColumns.length > 0 && (
                     <Select
                       value={node.supabaseIdentifierColumn || ''}
                       onValueChange={(value) => onUpdate(node.id, { supabaseIdentifierColumn: value })}
                       disabled={!node.supabaseTableName || supabaseColumns.length === 0}
                     >
-                      <SelectTrigger id={`${node.id}-identifierCol`}>
-                        <SelectValue placeholder="Selecione a Coluna para filtrar" />
+                      <SelectTrigger id={`${node.id}-identifierCol`} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50">
+                        <SelectValue placeholder="Selecione a Coluna" />
                       </SelectTrigger>
                       <SelectContent>
                         {supabaseColumns.map(col => <SelectItem key={col.name} value={col.name}>{col.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   )}
-                  {!isLoadingSupabaseColumns && supabaseSchemaError && node.supabaseTableName && <p className="text-xs text-destructive">{supabaseSchemaError}</p>}
+                  {!isLoadingSupabaseColumns && supabaseSchemaError && node.supabaseTableName && <p className="text-[10px] text-destructive">{supabaseSchemaError}</p>}
                 </div>
                 <div>
-                  <Label htmlFor={`${node.id}-identifierVal`}>Valor do Identificador (Filtro)</Label>
+                  <Label htmlFor={`${node.id}-identifierVal`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Valor do Identificador</Label>
                   <div className="relative">
-                    <Input id={`${node.id}-identifierVal`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} className="pr-8" />
+                    <Input id={`${node.id}-identifierVal`} placeholder="123 ou {{variavel_id}}" value={node.supabaseIdentifierValue || ''} onChange={(e) => onUpdate(node.id, { supabaseIdentifierValue: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                     {renderVariableInserter('supabaseIdentifierValue')}
                   </div>
                 </div>
@@ -3669,9 +3642,9 @@ minhaFuncao(variables);`}
 
             {isReadOp && (
               <div>
-                <Label htmlFor={`${node.id}-columnsToSelectRead`}>Colunas a Selecionar (ex: *, nome, email)</Label>
+                <Label htmlFor={`${node.id}-columnsToSelectRead`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Colunas a Selecionar</Label>
                 <div className="relative">
-                  <Input id={`${node.id}-columnsToSelectRead`} placeholder="*, nome, email_principal" value={node.supabaseColumnsToSelect || '*'} onChange={(e) => onUpdate(node.id, { supabaseColumnsToSelect: e.target.value })} className="pr-8" />
+                  <Input id={`${node.id}-columnsToSelectRead`} placeholder="*, nome, email_principal" value={node.supabaseColumnsToSelect || '*'} onChange={(e) => onUpdate(node.id, { supabaseColumnsToSelect: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
                   {renderVariableInserter('supabaseColumnsToSelect')}
                 </div>
               </div>
@@ -3679,9 +3652,9 @@ minhaFuncao(variables);`}
 
             {needsDataJson && (
               <div>
-                <Label htmlFor={`${node.id}-dataJson`}>{isCreateOp ? 'Dados da Nova Linha (JSON)' : 'Dados para Atualizar (JSON)'}</Label>
+                <Label htmlFor={`${node.id}-dataJson`} className="text-[10px] font-medium text-zinc-400 mb-1 block">{isCreateOp ? 'Dados da Nova Linha (JSON)' : 'Dados para Atualizar (JSON)'}</Label>
                 <div className="relative">
-                  <Textarea id={`${node.id}-dataJson`} placeholder='{ "coluna1": "valor1", "coluna2": "{{variavel_col2}}" }' value={node.supabaseDataJson || ''} onChange={(e) => onUpdate(node.id, { supabaseDataJson: e.target.value })} rows={3} className="pr-8" />
+                  <Textarea id={`${node.id}-dataJson`} placeholder='{ "coluna1": "valor1", "coluna2": "{{variavel_col2}}" }' value={node.supabaseDataJson || ''} onChange={(e) => onUpdate(node.id, { supabaseDataJson: e.target.value })} rows={3} className="text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 resize-none" />
                   {renderVariableInserter('supabaseDataJson', true)}
                 </div>
               </div>
@@ -3689,37 +3662,38 @@ minhaFuncao(variables);`}
 
             {(isReadOp || isCreateOp) && (
               <div>
-                <Label htmlFor={`${node.id}-resultVar`}>Salvar Resultado na Variável</Label>
+                <Label htmlFor={`${node.id}-resultVar`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Salvar Resultado na Variável</Label>
                 <Input
                   id={`${node.id}-resultVar`}
-                  placeholder={isReadOp ? (node.supabaseResultVariable || "dados_supabase") : (node.supabaseResultVariable || "id_linha_criada_supabase")}
+                  placeholder="resultado_supabase"
                   value={node.supabaseResultVariable || ''}
                   onChange={(e) => onUpdate(node.id, { supabaseResultVariable: e.target.value })}
+                  className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"
                 />
               </div>
             )}
-            <p className="text-xs text-muted-foreground">Requer Supabase habilitado e configurado nas Configurações Globais, e que as funções SQL `get_public_tables` e `get_table_columns` existam no seu banco.</p>
+            <p className="text-[10px] text-muted-foreground">Requer Supabase habilitado e configurado.</p>
           </div>
         );
       }
       case 'dialogy-send-message':
         return (
-          <div className="space-y-3" data-no-drag="true">
+          <div className="space-y-2" data-no-drag="true">
             <div>
-              <Label htmlFor={`${node.id}-dialogychatid`}>Chat ID</Label>
+              <Label htmlFor={`${node.id}-dialogychatid`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Chat ID</Label>
               <div className="relative">
                 <Input
                   id={`${node.id}-dialogychatid`}
                   placeholder="{{dialogy_conversation_id}}"
                   value={node.dialogyChatId || ''}
                   onChange={(e) => onUpdate(node.id, { dialogyChatId: e.target.value })}
-                  className="pr-8"
+                  className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50"
                 />
                 {renderVariableInserter('dialogyChatId')}
               </div>
             </div>
             <div>
-              <Label htmlFor={`${node.id}-dialogycontent`}>Conteúdo da Mensagem</Label>
+              <Label htmlFor={`${node.id}-dialogycontent`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Conteúdo da Mensagem</Label>
               <div className="relative">
                 <Textarea
                   ref={textAreaRef}
@@ -3728,45 +3702,47 @@ minhaFuncao(variables);`}
                   value={node.dialogyMessageContent || ''}
                   onChange={(e) => onUpdate(node.id, { dialogyMessageContent: e.target.value })}
                   rows={3}
-                  className="pr-8"
+                  className="text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 resize-none"
                 />
                 {renderVariableInserter('dialogyMessageContent', true)}
               </div>
               <TextFormatToolbar fieldName="dialogyMessageContent" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[10px] text-muted-foreground">
               A instância da Dialogy a ser usada é definida nas Configurações do Fluxo.
             </p>
           </div>
         );
       case 'time-of-day':
         return (
-          <div className="space-y-3" data-no-drag="true">
-            <p className="text-xs text-muted-foreground">Verifica se a hora atual está dentro do intervalo definido (inclusive).</p>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2" data-no-drag="true">
+            <p className="text-[10px] text-muted-foreground">Verifica se a hora atual está dentro do intervalo.</p>
+            <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label htmlFor={`${node.id}-starttime`}>Horário de Início</Label>
+                <Label htmlFor={`${node.id}-starttime`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Início</Label>
                 <Input
                   id={`${node.id}-starttime`}
                   type="time"
                   value={node.startTime || ''}
                   onChange={(e) => onUpdate(node.id, { startTime: e.target.value })}
+                  className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"
                 />
               </div>
               <div>
-                <Label htmlFor={`${node.id}-endtime`}>Horário de Fim</Label>
+                <Label htmlFor={`${node.id}-endtime`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Fim</Label>
                 <Input
                   id={`${node.id}-endtime`}
                   type="time"
                   value={node.endTime || ''}
                   onChange={(e) => onUpdate(node.id, { endTime: e.target.value })}
+                  className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"
                 />
               </div>
             </div>
           </div>
         );
       case 'end-flow':
-        return <p className="text-sm text-muted-foreground italic">Este nó encerra o fluxo.</p>;
+        return <p className="text-[10px] text-muted-foreground italic">Este nó encerra o fluxo.</p>;
       default:
         return <p className="text-xs text-muted-foreground italic">Nenhuma configuração para este tipo de nó.</p>;
     }
@@ -3776,11 +3752,13 @@ minhaFuncao(variables);`}
     <>
       <motion.div
         className={cn(
-          "w-full cursor-default bg-card rounded-lg shadow-xl border border-border relative",
-          isSessionHighlighted && "ring-2 ring-accent ring-offset-2 ring-offset-background"
+          "w-full cursor-default rounded-xl relative group transition-all duration-300",
+          "bg-zinc-950/70 backdrop-blur-xl border border-white/5",
+          "hover:border-white/10 hover:shadow-[0_0_40px_-10px_rgba(255,255,255,0.05)]",
+          isSessionHighlighted && "ring-1 ring-primary ring-offset-1 ring-offset-background shadow-[0_0_20px_rgba(var(--primary),0.3)]"
         )}
-        whileHover={{ scale: 1.01, boxShadow: "0px 5px 25px rgba(0,0,0,0.1)" }}
-        transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+        whileHover={{ scale: 1.01, y: -1 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
         data-node-id={node.id}
         aria-labelledby={`${node.id}-title`}
         onMouseDown={(e) => {
@@ -3802,15 +3780,20 @@ minhaFuncao(variables);`}
           handleNodeMouseDown(e);
         }}
       >
-        <Card className="shadow-none border-none bg-transparent">
+        <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/5 via-transparent to-transparent opacity-100 pointer-events-none" />
+        <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none mix-blend-overlay" />
+
+        <Card className="shadow-none border-none bg-transparent relative z-10">
           <CardHeader
             onMouseDown={handleNodeMouseDown}
             data-drag-handle="true"
-            className="py-2.5 px-3.5 bg-secondary/50 rounded-t-lg flex items-center justify-between cursor-grab active:cursor-grabbing"
+            className="py-2 px-3 border-b border-white/5 flex items-center justify-between cursor-grab active:cursor-grabbing"
           >
-            <div className="flex items-center min-w-0 pointer-events-none">
-              {renderNodeIcon()}
-              <CardTitle id={`${node.id}-title`} className="ml-2 text-sm font-medium text-secondary-foreground truncate" title={node.title}>
+            <div className="flex items-center min-w-0 pointer-events-none gap-2">
+              <div className="p-1 rounded-md bg-white/5 ring-1 ring-white/10 shadow-sm">
+                {renderNodeIcon()}
+              </div>
+              <CardTitle id={`${node.id}-title`} className="text-xs font-semibold text-zinc-200 truncate tracking-tight" title={node.title}>
                 {node.title}
               </CardTitle>
             </div>
@@ -3870,7 +3853,7 @@ minhaFuncao(variables);`}
                               <p className="text-xs text-muted-foreground text-center py-2">Nenhuma instância configurada.</p>
                             )}
                           </div>
-                           <div>
+                          <div>
                             <h5 className="text-sm font-semibold mb-2 flex items-center gap-2"><Rocket className="w-4 h-4 text-orange-500" /> Dialogy</h5>
                             {isLoadingDialogyInstances ? (
                               <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
@@ -3924,17 +3907,17 @@ minhaFuncao(variables);`}
 
         {node.type !== 'start' && node.type !== 'end-flow' && (
           <div
-            className="absolute -left-2.5 z-10 flex items-center justify-center"
+            className="absolute -left-3 z-20 flex items-center justify-center group/connector"
             style={{
               top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`,
               transform: 'translateY(-50%)',
-              height: '20px',
-              width: '20px'
+              height: '24px',
+              width: '24px'
             }}
           >
             <div
               title="Conecte aqui"
-              className="w-5 h-5 bg-muted hover:bg-muted-foreground/50 rounded-full flex items-center justify-center cursor-crosshair shadow-md"
+              className="w-3 h-3 bg-zinc-400 rounded-full shadow-lg ring-2 ring-zinc-900 transition-all duration-300 group-hover/connector:w-4 group-hover/connector:h-4 group-hover/connector:bg-primary group-hover/connector:ring-primary/30 cursor-crosshair"
               data-connector="true" data-handle-type="target"
             />
           </div>
@@ -3945,8 +3928,8 @@ minhaFuncao(variables);`}
 
       {/* Webhook History Dialog */}
       <Dialog open={isWebhookHistoryDialogOpen} onOpenChange={setIsWebhookHistoryDialogOpen}>
-        <WebhookLogsViewer 
-          isOpen={isWebhookHistoryDialogOpen} 
+        <WebhookLogsViewer
+          isOpen={isWebhookHistoryDialogOpen}
           onClose={() => setIsWebhookHistoryDialogOpen(false)}
           workspaceId={activeWorkspace?.id || ''}
         />
@@ -3967,15 +3950,15 @@ minhaFuncao(variables);`}
           {renderWebhookMappingBuilder(selectedWebhookTriggerForBuilder)}
         </DialogContent>
       </Dialog>
-      
+
       {/* API Call History Dialog */}
       <Dialog open={isApiHistoryDialogOpen} onOpenChange={setIsApiHistoryDialogOpen}>
         <ApiCallLogsViewer
-            isOpen={isApiHistoryDialogOpen}
-            onClose={() => setIsApiHistoryDialogOpen(false)}
-            workspaceId={activeWorkspace?.id || ''}
-            nodeId={node.id}
-            nodeTitle={node.title}
+          isOpen={isApiHistoryDialogOpen}
+          onClose={() => setIsApiHistoryDialogOpen(false)}
+          workspaceId={activeWorkspace?.id || ''}
+          nodeId={node.id}
+          nodeTitle={node.title}
         />
       </Dialog>
 

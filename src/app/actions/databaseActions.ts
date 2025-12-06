@@ -1,7 +1,7 @@
 
 'use server';
 
-import { Pool, type QueryResult } from 'pg';
+import { Pool, type QueryResult, type QueryResultRow } from 'pg';
 import dotenv from 'dotenv';
 import type {
   WorkspaceData,
@@ -56,14 +56,14 @@ function getDbPool(): Pool {
   return pool;
 }
 
-export async function runQuery<T>(query: string, params: any[] = []): Promise<QueryResult<T>> {
+export async function runQuery<T extends QueryResultRow>(query: string, params: any[] = []): Promise<QueryResult<T & QueryResultRow>> {
   const poolInstance = getDbPool();
   const client = await poolInstance.connect();
   try {
     await client.query('BEGIN');
     const result = await client.query<T>(query, params);
     await client.query('COMMIT');
-    return result;
+    return result as unknown as QueryResult<T & QueryResultRow>;
   } catch (error: any) {
     await client.query('ROLLBACK');
     console.error(
@@ -84,7 +84,7 @@ export async function runQuery<T>(query: string, params: any[] = []): Promise<Qu
         await client.query('BEGIN');
         const result = await client.query<T>(query, params);
         await client.query('COMMIT');
-        return result;
+        return result as unknown as QueryResult<T & QueryResultRow>;
       } catch (initError: any) {
         await client.query('ROLLBACK');
         console.error(
@@ -164,7 +164,7 @@ async function initializeDatabaseSchema(): Promise<void> {
       FROM information_schema.columns
       WHERE table_name = 'users' AND column_name = 'id';
     `);
-    if (idDefaultCheck.rowCount > 0 && !idDefaultCheck.rows[0].column_default) {
+    if ((idDefaultCheck.rowCount ?? 0) > 0 && !idDefaultCheck.rows[0].column_default) {
       console.log("[DB Migration] Default value for 'users.id' is missing. Applying fix...");
       await client.query('ALTER TABLE users ALTER COLUMN id SET DEFAULT gen_random_uuid();');
       console.log("[DB Migration] Default value for 'users.id' has been set.");
@@ -175,7 +175,7 @@ async function initializeDatabaseSchema(): Promise<void> {
       SELECT 1 FROM information_schema.columns
       WHERE table_name='users' AND column_name='email';
     `);
-    if (emailColExists.rowCount === 0) {
+    if ((emailColExists.rowCount ?? 0) === 0) {
       console.log("[DB Actions] 'email' column not found in 'users' table. Adding column...");
       await client.query('ALTER TABLE users ADD COLUMN email TEXT UNIQUE;');
     }
@@ -183,7 +183,7 @@ async function initializeDatabaseSchema(): Promise<void> {
       SELECT 1 FROM information_schema.columns
       WHERE table_name='users' AND column_name='full_name';
     `);
-    if (fullNameColExists.rowCount === 0) {
+    if ((fullNameColExists.rowCount ?? 0) === 0) {
       console.log("[DB Actions] 'full_name' column not found in 'users' table. Adding column...");
       await client.query('ALTER TABLE users ADD COLUMN full_name TEXT;');
     }
@@ -203,7 +203,7 @@ async function initializeDatabaseSchema(): Promise<void> {
       SELECT 1 FROM pg_constraint
       WHERE conname = 'users_current_organization_id_fkey' AND conrelid = 'users'::regclass
     `);
-    if (fkExists.rowCount === 0) {
+    if ((fkExists.rowCount ?? 0) === 0) {
       await client.query(`
         ALTER TABLE users
         ADD CONSTRAINT users_current_organization_id_fkey
@@ -253,7 +253,7 @@ async function initializeDatabaseSchema(): Promise<void> {
       SELECT 1 FROM information_schema.columns
       WHERE table_name='organization_users' AND column_name='role'
     `);
-    if (oldRoleColInfo.rowCount > 0) {
+    if ((oldRoleColInfo.rowCount ?? 0) > 0) {
       console.log(`[DB Migration] Old 'role' column found in 'organization_users'. Migrating to 'role_id'...`);
       const newRoleIdColInfo = await client.query(`
         SELECT 1 FROM information_schema.columns
@@ -387,7 +387,7 @@ async function initializeDatabaseSchema(): Promise<void> {
       const oldOwnerColInfo = await client.query(`
         SELECT 1 FROM information_schema.columns WHERE table_name='workspaces' AND column_name='owner'
       `);
-      if (oldOwnerColInfo.rowCount > 0) {
+      if ((oldOwnerColInfo.rowCount ?? 0) > 0) {
         console.log(`[DB Actions] Found old 'owner' column. Attempting to rename to 'owner_id'...`);
         await client.query(`ALTER TABLE workspaces RENAME COLUMN owner TO owner_id;`);
         console.log(`[DB Actions] Renamed 'owner' to 'owner_id'.`);
@@ -488,7 +488,7 @@ async function initializeDatabaseSchema(): Promise<void> {
       const oldUniqueConstraint = await client.query(`
         SELECT 1 FROM pg_constraint WHERE conname = 'workspaces_owner_id_name_key'
       `);
-      if (oldUniqueConstraint.rowCount > 0) {
+      if ((oldUniqueConstraint.rowCount ?? 0) > 0) {
         await client.query(`ALTER TABLE workspaces DROP CONSTRAINT workspaces_owner_id_name_key;`);
       }
       await client.query(`ALTER TABLE workspaces ADD CONSTRAINT workspaces_organization_id_name_key UNIQUE (organization_id, name);`);
@@ -549,7 +549,7 @@ async function initializeDatabaseSchema(): Promise<void> {
         UNIQUE(user_id, listing_id)
       );
     `);
-    
+
     // NEW: Flow Logs Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS flow_logs (
@@ -591,7 +591,7 @@ async function initializeDatabaseSchema(): Promise<void> {
     }
 
     const adminRoles = await client.query<{ id: string }>(`SELECT id FROM roles WHERE name = 'Admin'`);
-    if (adminRoles.rowCount > 0) {
+    if ((adminRoles.rowCount ?? 0) > 0) {
       const allPermissionIds = permissionsToSeed.map(p => p.id);
       for (const role of adminRoles.rows) {
         for (const permId of allPermissionIds) {
@@ -1149,51 +1149,38 @@ export async function restoreWorkspaceVersion(
             SET name = $1, nodes = $2, connections = $3, updated_at = NOW()
             WHERE id = $4
             RETURNING *;
-        `;
-    const updatedWorkspaceResult = await client.query<WorkspaceData>(workspaceUpdateQuery, [
+    `;
+    const updateResult = await client.query<WorkspaceData>(workspaceUpdateQuery, [
       versionToRestore.name,
       versionToRestore.nodes,
       versionToRestore.connections,
       versionToRestore.workspace_id
     ]);
-    const updatedWorkspace = updatedWorkspaceResult.rows[0];
-    if (!updatedWorkspace) {
-      throw new Error("Falha ao atualizar o fluxo principal com os dados da versão.");
-    }
-
-    const restoreDescription = `Restaurado a partir da versão ${versionToRestore.version}.`;
-    const newVersionQuery = `
-            INSERT INTO workspace_versions (workspace_id, version, name, description, nodes, connections, created_by_id)
-            SELECT $1, COALESCE(MAX(version), 0) + 1, $2, $3, $4, $5, $6
-            FROM workspace_versions
-            WHERE workspace_id = $1;
-        `;
-    await client.query(newVersionQuery, [
-      updatedWorkspace.id,
-      updatedWorkspace.name,
-      restoreDescription,
-      updatedWorkspace.nodes,
-      updatedWorkspace.connections,
-      restoredByUserId
-    ]);
-
     await client.query('COMMIT');
-    return { success: true, workspace: updatedWorkspace };
+
+    if (updateResult.rows.length > 0) {
+      return { success: true, workspace: updateResult.rows[0] };
+    }
+    return { success: false, error: "Falha ao atualizar o workspace com a versão restaurada." };
+
   } catch (error: any) {
     if (client) await client.query('ROLLBACK');
-    console.error(`[DB Actions] Erro ao restaurar versão ${versionId}:`, error);
-    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    console.error(`[DB Actions] restoreWorkspaceVersion Error:`, error);
+    return { success: false, error: `Erro ao restaurar versão: ${error.message}` };
   } finally {
     if (client) client.release();
   }
 }
 
-// --- Flow Session Actions ---
-export async function saveSessionToDB(sessionData: FlowSession): Promise<{ success: boolean; error?: string }> {
+export async function saveSessionToDB(session: FlowSession): Promise<{ success: boolean; error?: string }> {
   try {
     const query = `
-      INSERT INTO flow_sessions (session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, session_timeout_seconds, flow_context, last_interaction_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      INSERT INTO flow_sessions (
+        session_id, workspace_id, current_node_id, flow_variables, 
+        awaiting_input_type, awaiting_input_details, session_timeout_seconds, 
+        flow_context, last_interaction_at, created_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
       ON CONFLICT (session_id) DO UPDATE
       SET workspace_id = EXCLUDED.workspace_id,
           current_node_id = EXCLUDED.current_node_id,
@@ -1204,20 +1191,21 @@ export async function saveSessionToDB(sessionData: FlowSession): Promise<{ succe
           flow_context = EXCLUDED.flow_context,
           last_interaction_at = NOW();
     `;
+
     await runQuery(query, [
-      sessionData.session_id,
-      sessionData.workspace_id,
-      sessionData.current_node_id,
-      JSON.stringify(sessionData.flow_variables || {}),
-      sessionData.awaiting_input_type,
-      sessionData.awaiting_input_details ? JSON.stringify(sessionData.awaiting_input_details) : null,
-      sessionData.session_timeout_seconds || 0,
-      sessionData.flow_context || null,
+      session.session_id,
+      session.workspace_id,
+      session.current_node_id,
+      JSON.stringify(session.flow_variables || {}),
+      session.awaiting_input_type || null,
+      JSON.stringify(session.awaiting_input_details || null),
+      session.session_timeout_seconds || 0,
+      session.flow_context || 'evolution'
     ]);
     return { success: true };
   } catch (error: any) {
-    console.error(`[DB Actions] saveSessionToDB Error for ID ${sessionData.session_id}:`, error);
-    return { success: false, error: `PG Error saving session: ${error.message}` };
+    console.error(`[DB Actions] saveSessionToDB Error:`, error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -1237,7 +1225,7 @@ export async function loadSessionFromDB(sessionId: string): Promise<FlowSession 
     }
     return null;
   } catch (error: any) {
-    console.error(`[DB Actions] loadSessionFromDB Error for ID ${sessionId}:`, error);
+    console.error(`[DB Actions] loadSessionFromDB Error for ID ${sessionId}: `, error);
     return null;
   }
 }
@@ -1245,14 +1233,14 @@ export async function loadSessionFromDB(sessionId: string): Promise<FlowSession 
 export async function deleteSessionFromDB(sessionId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const result = await runQuery('DELETE FROM flow_sessions WHERE session_id = $1', [sessionId]);
-    if (result.rowCount > 0) {
+    if ((result.rowCount ?? 0) > 0) {
       return { success: true };
     } else {
-      console.warn(`[DB Actions] deleteSessionFromDB: Session ID ${sessionId} not found for deletion.`);
+      console.warn(`[DB Actions]deleteSessionFromDB: Session ID ${sessionId} not found for deletion.`);
       return { success: true };
     }
   } catch (error: any) {
-    console.error(`[DB Actions] deleteSessionFromDB Error for ID ${sessionId}:`, error);
+    console.error(`[DB Actions] deleteSessionFromDB Error for ID ${sessionId}: `, error);
     return { success: false, error: error.message };
   }
 }
@@ -1265,21 +1253,21 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
     }
 
     const query = `
-      SELECT 
-        fs.session_id, 
-        fs.workspace_id, 
-        fs.current_node_id, 
-        fs.flow_variables, 
-        fs.awaiting_input_type, 
-        fs.awaiting_input_details, 
-        fs.session_timeout_seconds, 
-        fs.flow_context,
-        fs.created_at, 
-        fs.last_interaction_at
+    SELECT
+    fs.session_id,
+      fs.workspace_id,
+      fs.current_node_id,
+      fs.flow_variables,
+      fs.awaiting_input_type,
+      fs.awaiting_input_details,
+      fs.session_timeout_seconds,
+      fs.flow_context,
+      fs.created_at,
+      fs.last_interaction_at
       FROM flow_sessions fs
       JOIN workspaces ws ON fs.workspace_id = ws.id
       JOIN organization_users ou ON ws.organization_id = ou.organization_id
-      WHERE ou.user_id = $1::uuid
+      WHERE ou.user_id = $1:: uuid
       ORDER BY fs.last_interaction_at DESC;
     `;
     const result = await runQuery<FlowSession>(query, [ownerId]);
@@ -1290,7 +1278,7 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
       awaiting_input_details: row.awaiting_input_details || null,
     }));
   } catch (error: any) {
-    console.error(`[DB Actions] loadAllActiveSessionsFromDB Error for owner ID ${ownerId}:`, error);
+    console.error(`[DB Actions] loadAllActiveSessionsFromDB Error for owner ID ${ownerId}: `, error);
     return [];
   }
 }
@@ -1305,14 +1293,14 @@ export async function deleteAllSessionsForOwnerFromDB(ownerId: string): Promise<
       DELETE FROM flow_sessions fs
       USING workspaces ws
       JOIN organization_users ou ON ws.organization_id = ou.organization_id
-      WHERE fs.workspace_id = ws.id AND ou.user_id = $1::uuid;
+      WHERE fs.workspace_id = ws.id AND ou.user_id = $1:: uuid;
     `;
     const result = await runQuery(query, [ownerId]);
 
     console.log(`[DB Actions] Deleted ${result.rowCount} sessions for owner ID ${ownerId}.`);
-    return { success: true, count: result.rowCount };
+    return { success: true, count: result.rowCount ?? 0 };
   } catch (error: any) {
-    console.error(`[DB Actions] deleteAllSessionsForOwnerFromDB Error for owner ID ${ownerId}:`, error);
+    console.error(`[DB Actions] deleteAllSessionsForOwnerFromDB Error for owner ID ${ownerId}: `, error);
     return { success: false, error: error.message, count: 0 };
   }
 }
@@ -1335,7 +1323,7 @@ export async function getChatwootInstancesForUser(userId: string): Promise<{ dat
     };
   } catch (error: any) {
     console.error('[DB Actions] Error fetching Chatwoot instances:', error);
-    return { error: `Erro de banco de dados: ${error.message}` };
+    return { error: `Erro de banco de dados: ${error.message} ` };
   }
 }
 
@@ -1401,7 +1389,7 @@ export async function loadWorkspaceByNameFromDB(name: string, ownerId: string): 
     }
     return null;
   } catch (error: any) {
-    console.error(`[DB Actions] loadWorkspaceByNameFromDB Error for name ${name}:`, error);
+    console.error(`[DB Actions] loadWorkspaceByNameFromDB Error for name ${name}: `, error);
     return null;
   }
 }
@@ -1409,13 +1397,13 @@ export async function loadWorkspaceByNameFromDB(name: string, ownerId: string): 
 // --- Team & Member Actions ---
 export async function getUsersForOrganization(organizationId: string): Promise<OrganizationUser[]> {
   const query = `
-        SELECT 
-            u.id, 
-            u.username, 
-            u.email,
-            u.full_name,
-            r.name as role,
-            (o.owner_id = u.id) as is_owner
+    SELECT
+    u.id,
+      u.username,
+      u.email,
+      u.full_name,
+      r.name as role,
+      (o.owner_id = u.id) as is_owner
         FROM users u
         JOIN organization_users ou ON u.id = ou.user_id
         JOIN organizations o ON ou.organization_id = o.id
@@ -1430,13 +1418,13 @@ export async function getUsersForOrganization(organizationId: string): Promise<O
 export async function getTeamsForOrganization(organizationId: string): Promise<Team[]> {
   const query = `
         SELECT t.id, t.name, t.description,
-               (SELECT json_agg(json_build_object('id', u.id, 'username', u.username, 'email', u.email, 'full_name', u.full_name))
+      (SELECT json_agg(json_build_object('id', u.id, 'username', u.username, 'email', u.email, 'full_name', u.full_name))
                 FROM users u
                 JOIN team_members tm ON u.id = tm.user_id
                 WHERE tm.team_id = t.id) as members
         FROM teams t
         WHERE t.organization_id = $1
-    `;
+      `;
   const result = await runQuery<any>(query, [organizationId]);
 
   return result.rows.map(row => ({
@@ -1459,40 +1447,40 @@ export async function saveSmtpSettings(settings: Omit<SmtpSettings, 'id' | 'crea
   const { organization_id, host, port, secure, username, password, from_name, from_email } = settings;
 
   const query = `
-        INSERT INTO smtp_settings (organization_id, host, port, secure, username, password, from_name, from_email, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-        ON CONFLICT (organization_id) DO UPDATE
+        INSERT INTO smtp_settings(organization_id, host, port, secure, username, password, from_name, from_email, updated_at)
+    VALUES($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        ON CONFLICT(organization_id) DO UPDATE
         SET host = EXCLUDED.host,
-            port = EXCLUDED.port,
-            secure = EXCLUDED.secure,
-            username = EXCLUDED.username,
-            password = EXCLUDED.password,
-            from_name = EXCLUDED.from_name,
-            from_email = EXCLUDED.from_email,
-            updated_at = NOW();
+      port = EXCLUDED.port,
+      secure = EXCLUDED.secure,
+      username = EXCLUDED.username,
+      password = EXCLUDED.password,
+      from_name = EXCLUDED.from_name,
+      from_email = EXCLUDED.from_email,
+      updated_at = NOW();
     `;
   try {
     await runQuery(query, [organization_id, host, port, secure, username, password, from_name, from_email]);
     return { success: true };
   } catch (error: any) {
     console.error('[DB Actions] Error saving SMTP settings:', error);
-    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    return { success: false, error: `Erro de banco de dados: ${error.message} ` };
   }
 }
 
 // --- RBAC Actions ---
 export async function getRolesForOrganization(organizationId: string): Promise<Role[]> {
   const query = `
-        SELECT 
-          r.id, 
-          r.name, 
-          r.description,
-          r.is_system_role,
-          COALESCE(
-              (SELECT json_agg(rp.permission_id) 
+    SELECT
+    r.id,
+      r.name,
+      r.description,
+      r.is_system_role,
+      COALESCE(
+        (SELECT json_agg(rp.permission_id) 
                FROM role_permissions rp 
                WHERE rp.role_id = r.id),
-              '[]'::json
+      '[]':: json
           ) as permissions
         FROM roles r
         WHERE r.organization_id = $1
@@ -1531,7 +1519,7 @@ export async function createRole(
 
     if (permissionIds.length > 0) {
       const values = permissionIds.map(permId => `('${newRole.id}', '${permId}')`).join(',');
-      await client.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ${values}`);
+      await client.query(`INSERT INTO role_permissions(role_id, permission_id) VALUES ${values} `);
     }
 
     await client.query('COMMIT');
@@ -1544,7 +1532,7 @@ export async function createRole(
       return { success: false, error: `Um cargo com o nome "${name}" já existe.` };
     }
     console.error('[DB Actions] Erro ao criar cargo:', error);
-    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    return { success: false, error: `Erro de banco de dados: ${error.message} ` };
   } finally {
     if (client) client.release();
   }
@@ -1573,7 +1561,7 @@ export async function updateRole(
 
     if (permissionIds.length > 0) {
       const values = permissionIds.map(permId => `('${roleId}', '${permId}')`).join(',');
-      await client.query(`INSERT INTO role_permissions (role_id, permission_id) VALUES ${values}`);
+      await client.query(`INSERT INTO role_permissions(role_id, permission_id) VALUES ${values} `);
     }
 
     await client.query('COMMIT');
@@ -1586,7 +1574,7 @@ export async function updateRole(
       return { success: false, error: `Um cargo com o nome "${name}" já existe.` };
     }
     console.error('[DB Actions] Erro ao atualizar cargo:', error);
-    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    return { success: false, error: `Erro de banco de dados: ${error.message} ` };
   } finally {
     if (client) client.release();
   }
@@ -1601,7 +1589,7 @@ export async function deleteRole(roleId: string): Promise<{ success: boolean; er
     return { success: true };
   } catch (error: any) {
     console.error('[DB Actions] Erro ao excluir cargo:', error);
-    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+    return { success: false, error: `Erro de banco de dados: ${error.message} ` };
   }
 }
 
@@ -1613,7 +1601,7 @@ export async function getListings(): Promise<{ data?: MarketplaceListing[]; erro
             FROM marketplace_listings ml
             JOIN users u ON ml.creator_id = u.id
             ORDER BY ml.created_at DESC;
-        `;
+    `;
     const result = await runQuery<any>(query);
     const listings = result.rows.map(row => ({
       ...row,
@@ -1623,7 +1611,7 @@ export async function getListings(): Promise<{ data?: MarketplaceListing[]; erro
     return { data: listings };
   } catch (error: any) {
     console.error('[DB Actions] Error fetching marketplace listings:', error);
-    return { error: `Erro de banco de dados: ${error.message}` };
+    return { error: `Erro de banco de dados: ${error.message} ` };
   }
 }
 
@@ -1634,7 +1622,7 @@ export async function getListingDetails(listingId: string): Promise<{ data?: Mar
             FROM marketplace_listings ml
             JOIN users u ON ml.creator_id = u.id
             WHERE ml.id = $1;
-        `;
+    `;
     const result = await runQuery<any>(query, [listingId]);
     if (result.rows.length === 0) {
       return { error: "Fluxo não encontrado no marketplace." };
@@ -1646,7 +1634,7 @@ export async function getListingDetails(listingId: string): Promise<{ data?: Mar
     };
     return { data: listing };
   } catch (error: any) {
-    console.error(`[DB Actions] Error fetching listing details for ID ${listingId}:`, error);
-    return { error: `Erro de banco de dados: ${error.message}` };
+    console.error(`[DB Actions] Error fetching listing details for ID ${listingId}: `, error);
+    return { error: `Erro de banco de dados: ${error.message} ` };
   }
 }

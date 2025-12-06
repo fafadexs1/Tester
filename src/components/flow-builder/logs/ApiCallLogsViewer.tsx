@@ -175,7 +175,7 @@ export default function ApiCallLogsViewer({
                   </Badge>
                 </div>
 
-                {log.response && (
+                {!!log.response && (
                   <div className="mt-3">
                     <p className="text-xs font-semibold uppercase text-muted-foreground">
                       Resposta
@@ -186,7 +186,7 @@ export default function ApiCallLogsViewer({
                   </div>
                 )}
 
-                {log.error && (
+                {!!log.error && (
                   <div className="mt-3">
                     <p className="text-xs font-semibold uppercase text-destructive">
                       Erro

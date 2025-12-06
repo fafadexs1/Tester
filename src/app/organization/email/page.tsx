@@ -33,7 +33,7 @@ export default function SmtpSettingsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
-    
+
     const { register, handleSubmit, reset, setValue, getValues, trigger, formState: { errors } } = useForm<z.infer<typeof smtpSettingsSchema>>({
         resolver: zodResolver(smtpSettingsSchema),
         defaultValues: {
@@ -52,7 +52,10 @@ export default function SmtpSettingsPage() {
                     if (result.success && result.data) {
                         reset({
                             ...result.data,
-                            from_email: result.data.from_email || '', // Garante que nulo vira string vazia para o form
+                            username: result.data.username ?? undefined,
+                            password: result.data.password ?? undefined,
+                            from_name: result.data.from_name ?? undefined,
+                            from_email: result.data.from_email || '',
                         });
                     } else if (!result.success) {
                         toast({ title: 'Erro ao carregar configurações', description: result.error, variant: 'destructive' });
@@ -76,7 +79,7 @@ export default function SmtpSettingsPage() {
     const handleTestConnection = async () => {
         const isValid = await trigger();
         if (!isValid) {
-            toast({ title: 'Campos Inválidos', description: 'Por favor, corrija os erros no formulário antes de testar.', variant: 'destructive'});
+            toast({ title: 'Campos Inválidos', description: 'Por favor, corrija os erros no formulário antes de testar.', variant: 'destructive' });
             return;
         }
         setIsTesting(true);
@@ -93,14 +96,14 @@ export default function SmtpSettingsPage() {
 
     if (isLoading) {
         return (
-             <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-                 <div className="flex items-center justify-center p-10">
+            <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
+                <div className="flex items-center justify-center p-10">
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
             </div>
         );
     }
-    
+
     if (user?.role !== 'desenvolvedor') {
         return null;
     }
@@ -109,7 +112,7 @@ export default function SmtpSettingsPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="flex-1 space-y-4 p-4 md:p-8 pt-6">
             <div className="flex items-center justify-between space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight">Configurações de E-mail (SMTP)</h2>
-                 <div className="flex gap-2">
+                <div className="flex gap-2">
                     <Button type="button" variant="outline" onClick={handleTestConnection} disabled={isTesting}>
                         {isTesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <TestTube2 className="mr-2 h-4 w-4" />}
                         Testar Conexão
@@ -120,7 +123,7 @@ export default function SmtpSettingsPage() {
                     </Button>
                 </div>
             </div>
-            
+
             <Card>
                 <CardHeader>
                     <CardTitle>Configuração do Servidor SMTP</CardTitle>
@@ -135,7 +138,7 @@ export default function SmtpSettingsPage() {
                         <Input id="host" {...register("host")} placeholder="smtp.example.com" />
                         {errors.host && <p className="text-sm text-destructive">{errors.host.message}</p>}
                     </div>
-                     <div className="space-y-2">
+                    <div className="space-y-2">
                         <Label htmlFor="port">Porta</Label>
                         <Input id="port" type="number" {...register("port")} placeholder="587" />
                         {errors.port && <p className="text-sm text-destructive">{errors.port.message}</p>}
@@ -150,12 +153,12 @@ export default function SmtpSettingsPage() {
                         <Input id="password" type="password" {...register("password")} />
                         {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
                     </div>
-                     <div className="space-y-2 col-span-1 md:col-span-2">
+                    <div className="space-y-2 col-span-1 md:col-span-2">
                         <Label htmlFor="from_name">Nome do Remetente (Opcional)</Label>
                         <Input id="from_name" {...register("from_name")} placeholder="Nome da Sua Empresa" />
                         {errors.from_name && <p className="text-sm text-destructive">{errors.from_name.message}</p>}
                     </div>
-                     <div className="space-y-2 col-span-1 md:col-span-2">
+                    <div className="space-y-2 col-span-1 md:col-span-2">
                         <Label htmlFor="from_email">E-mail do Remetente (Opcional)</Label>
                         <Input id="from_email" {...register("from_email")} placeholder="nao-responda@suaempresa.com" />
                         {errors.from_email && <p className="text-sm text-destructive">{errors.from_email.message}</p>}
@@ -165,11 +168,11 @@ export default function SmtpSettingsPage() {
                         <Label htmlFor="secure">Usar Conexão Segura (SSL/TLS)</Label>
                     </div>
                 </CardContent>
-                 <CardFooter>
+                <CardFooter>
                     <p className="text-sm text-muted-foreground">
                         Após salvar, use o botão "Testar Conexão" para verificar se as credenciais estão corretas.
                     </p>
-                 </CardFooter>
+                </CardFooter>
             </Card>
         </form>
     );

@@ -172,7 +172,7 @@ export default function WebhookLogsViewer({
                 </div>
               )}
 
-              {log.payload && (
+              {!!log.payload && (
                 <div className="mt-3">
                   <p className="text-xs font-semibold uppercase text-muted-foreground">
                     Payload

@@ -67,7 +67,7 @@ export async function saveEvolutionInstanceAction(
         baseUrl: formData.get('baseUrl') as string,
         apiKey: formData.get('apiKey') as string,
     };
-    
+
     const validation = EvolutionInstanceSchema.safeParse(rawData);
 
     if (!validation.success) {
@@ -95,15 +95,15 @@ export async function saveEvolutionInstanceAction(
                 [user.id, name, baseUrl, apiKey || '']
             );
         }
-        
+
         if (result.rows.length > 0) {
             const dbRow = result.rows[0];
             const instance: EvolutionInstance = {
-                 id: dbRow.id,
-                 name: dbRow.name,
-                 baseUrl: dbRow.base_url,
-                 apiKey: dbRow.api_key,
-                 status: 'unconfigured'
+                id: dbRow.id,
+                name: dbRow.name,
+                baseUrl: dbRow.base_url,
+                apiKey: dbRow.api_key,
+                status: 'unconfigured'
             };
             return { success: true, instance: instance };
         } else {
@@ -122,7 +122,7 @@ export async function deleteEvolutionInstanceAction(instanceId: string): Promise
     if (!user || !user.id) {
         return { success: false, error: 'Usuário não autenticado.' };
     }
-     if (!instanceId) {
+    if (!instanceId) {
         return { success: false, error: 'ID da instância não fornecido.' };
     }
 
@@ -132,7 +132,7 @@ export async function deleteEvolutionInstanceAction(instanceId: string): Promise
             [instanceId, user.id]
         );
 
-        if (result.rowCount > 0) {
+        if ((result.rowCount ?? 0) > 0) {
             return { success: true };
         } else {
             return { success: false, error: 'Instância não encontrada ou você não tem permissão para excluí-la.' };
@@ -185,7 +185,7 @@ export async function saveChatwootInstanceAction(
         baseUrl: formData.get('baseUrl') as string,
         apiAccessToken: formData.get('apiAccessToken') as string,
     };
-    
+
     const validation = ChatwootInstanceSchema.safeParse(rawData);
 
     if (!validation.success) {
@@ -213,15 +213,15 @@ export async function saveChatwootInstanceAction(
                 [user.id, name, baseUrl, apiAccessToken]
             );
         }
-        
+
         if (result.rows.length > 0) {
             const dbRow = result.rows[0];
             const instance: ChatwootInstance = {
-                 id: dbRow.id,
-                 name: dbRow.name,
-                 baseUrl: dbRow.base_url,
-                 apiAccessToken: dbRow.api_access_token,
-                 status: 'unconfigured'
+                id: dbRow.id,
+                name: dbRow.name,
+                baseUrl: dbRow.base_url,
+                apiAccessToken: dbRow.api_access_token,
+                status: 'unconfigured'
             };
             return { success: true, instance: instance };
         } else {
@@ -240,7 +240,7 @@ export async function deleteChatwootInstanceAction(instanceId: string): Promise<
     if (!user || !user.id) {
         return { success: false, error: 'Usuário não autenticado.' };
     }
-     if (!instanceId) {
+    if (!instanceId) {
         return { success: false, error: 'ID da instância Chatwoot não fornecido.' };
     }
 
@@ -250,7 +250,7 @@ export async function deleteChatwootInstanceAction(instanceId: string): Promise<
             [instanceId, user.id]
         );
 
-        if (result.rowCount > 0) {
+        if ((result.rowCount ?? 0) > 0) {
             return { success: true };
         } else {
             return { success: false, error: 'Instância Chatwoot não encontrada ou você não tem permissão para excluí-la.' };
@@ -302,7 +302,7 @@ export async function saveDialogyInstanceAction(
         baseUrl: formData.get('baseUrl') as string,
         apiKey: formData.get('apiKey') as string,
     };
-    
+
     const validation = DialogyInstanceSchema.safeParse(rawData);
 
     if (!validation.success) {
@@ -330,15 +330,15 @@ export async function saveDialogyInstanceAction(
                 [user.id, name, baseUrl, apiKey]
             );
         }
-        
+
         if (result.rows.length > 0) {
             const dbRow = result.rows[0];
             const instance: DialogyInstance = {
-                 id: dbRow.id,
-                 name: dbRow.name,
-                 baseUrl: dbRow.base_url,
-                 apiKey: dbRow.api_key,
-                 status: 'unconfigured'
+                id: dbRow.id,
+                name: dbRow.name,
+                baseUrl: dbRow.base_url,
+                apiKey: dbRow.api_key,
+                status: 'unconfigured'
             };
             return { success: true, instance: instance };
         } else {
@@ -357,7 +357,7 @@ export async function deleteDialogyInstanceAction(instanceId: string): Promise<{
     if (!user || !user.id) {
         return { success: false, error: 'Usuário não autenticado.' };
     }
-     if (!instanceId) {
+    if (!instanceId) {
         return { success: false, error: 'ID da instância Dialogy não fornecido.' };
     }
 
@@ -367,7 +367,7 @@ export async function deleteDialogyInstanceAction(instanceId: string): Promise<{
             [instanceId, user.id]
         );
 
-        if (result.rowCount > 0) {
+        if ((result.rowCount ?? 0) > 0) {
             return { success: true };
         } else {
             return { success: false, error: 'Instância Dialogy não encontrada ou você não tem permissão para excluí-la.' };

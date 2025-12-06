@@ -8,8 +8,9 @@ interface RouteParams {
   organizationId: string;
 }
 
-export async function GET(_request: NextRequest, context: { params: RouteParams }) {
-  const organizationId = context.params?.organizationId;
+export async function GET(_request: NextRequest, context: { params: Promise<RouteParams> }) {
+  const params = await context.params;
+  const organizationId = params?.organizationId;
   if (!organizationId) {
     return NextResponse.json({ error: "ID da organização é obrigatório." }, { status: 400 });
   }

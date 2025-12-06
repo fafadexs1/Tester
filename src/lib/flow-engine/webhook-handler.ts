@@ -59,14 +59,14 @@ export async function storeRequestDetails(
   request: NextRequest,
   parsedPayload: any,
   rawBodyText: string | null,
-  webhookId: string, 
-  workspaceExists: boolean 
+  webhookId: string,
+  workspaceExists: boolean
 ): Promise<any> {
   const currentTimestamp = new Date().toISOString();
   let extractedMessage: string | null = null;
   const headers = Object.fromEntries(request.headers.entries());
   const headersForLog = filterHeadersForLog(headers);
-  const ip = request.ip || (headers['x-forwarded-for'] as any) || 'unknown IP';
+  const ip = (request as any).ip || (headers['x-forwarded-for'] as any) || 'unknown IP';
 
   let sessionKeyIdentifier: string | null = null;
   let flowContext: FlowContextType = 'evolution';
@@ -92,13 +92,13 @@ export async function storeRequestDetails(
     } else if (dialogyEvent === 'message.created' && dialogyConversationId) {
       flowContext = 'dialogy';
       sessionKeyIdentifier = `dialogy_conv_${dialogyConversationId}`;
-      extractedMessage = getProperty(actualPayloadToExtractFrom, 'message.content', '').trim();
+      extractedMessage = String(getProperty(actualPayloadToExtractFrom, 'message.content', '') || '').trim();
     } else if (evolutionSenderJid) {
       flowContext = 'evolution';
       sessionKeyIdentifier = `evolution_jid_${evolutionSenderJid}`;
       const commonMessagePaths = ['data.message.conversation', 'message.conversation', 'message.body', 'message.textMessage.text', 'text', 'data.message.extendedTextMessage.text'];
       for (const path of commonMessagePaths) {
-        const msg = getProperty(actualPayloadToExtractFrom, path);
+        const msg = getProperty(actualPayloadToExtractFrom, path) as string | undefined;
         if (typeof msg === 'string' && msg.trim() !== '') {
           extractedMessage = msg.trim();
           break;
@@ -129,16 +129,16 @@ export async function storeRequestDetails(
         payload: payloadSnapshotForLog
       }
     };
-    
+
     try {
       await saveFlowLog(logEntry);
-    } catch(e) {
+    } catch (e) {
       console.error("[Webhook Handler] Failed to save webhook log to DB:", e);
     }
   } else {
     console.warn(`[Webhook Handler] Workspace with ID "${webhookId}" not found. Skipping log save.`);
   }
-  
+
   return {
     method: request.method,
     url: request.url,

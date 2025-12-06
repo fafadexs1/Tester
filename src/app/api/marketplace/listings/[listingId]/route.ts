@@ -7,8 +7,9 @@ interface RouteParams {
   listingId: string;
 }
 
-export async function GET(_request: NextRequest, context: { params: RouteParams }) {
-  const listingId = context.params?.listingId;
+export async function GET(_request: NextRequest, context: { params: Promise<RouteParams> }) {
+  const params = await context.params;
+  const listingId = params?.listingId;
 
   if (!listingId) {
     return NextResponse.json({ error: "ID da listagem não informado." }, { status: 400 });

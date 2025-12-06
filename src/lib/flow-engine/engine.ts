@@ -18,7 +18,7 @@ import type { NodeData, Connection, FlowSession, WorkspaceData, ApiResponseMappi
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 import { intelligentChoice } from '@/ai/flows/intelligent-choice-flow';
-import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates } from './utils';
+import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates, evaluateExpression } from './utils';
 import jsonata from 'jsonata';
 
 
@@ -218,11 +218,11 @@ async function sendOmniChannelMessage(
   content: string
 ): Promise<void> {
   if (!content) return;
-  
+
   const ctx = session.flow_context || (
     session.session_id.startsWith('dialogy_conv_') ? 'dialogy' :
-    session.session_id.startsWith('chatwoot_conv_') ? 'chatwoot' :
-    'evolution'
+      session.session_id.startsWith('chatwoot_conv_') ? 'chatwoot' :
+        'evolution'
   );
 
   console.log(`[sendOmniChannelMessage] Initiating send for session ${session.session_id} with context ${ctx}`);
@@ -239,16 +239,16 @@ async function sendOmniChannelMessage(
       const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
       if (dialogyInstance) {
         console.log(`[sendOmniChannelMessage] Roteando para Dialogy (chatId=${chatId})`);
-        await sendDialogyMessageAction({ 
-          baseUrl: dialogyInstance.baseUrl, 
-          apiKey: dialogyInstance.apiKey, 
-          chatId: String(chatId), 
-          content 
+        await sendDialogyMessageAction({
+          baseUrl: dialogyInstance.baseUrl,
+          apiKey: dialogyInstance.apiKey,
+          chatId: String(chatId),
+          content
         });
-        return; 
+        return;
       } else {
-         console.error(`[sendOmniChannelMessage] Instância Dialogy ${workspace.dialogy_instance_id} não encontrada na base.`);
-         return;
+        console.error(`[sendOmniChannelMessage] Instância Dialogy ${workspace.dialogy_instance_id} não encontrada na base.`);
+        return;
       }
     }
     console.error(`[sendOmniChannelMessage] Falha ao enviar pela Dialogy. Instância (${workspace.dialogy_instance_id}) ou Chat ID (${chatId}) ausente.`);
@@ -262,37 +262,37 @@ async function sendOmniChannelMessage(
       const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
       if (chatwootInstance) {
         console.log(`[sendOmniChannelMessage] Roteando para Chatwoot (conv=${conversationId})`);
-        await sendChatwootMessageAction({ 
-          baseUrl: chatwootInstance.baseUrl, 
-          apiAccessToken: chatwootInstance.apiAccessToken, 
-          accountId: Number(accountId), 
-          conversationId: Number(conversationId), 
-          content 
+        await sendChatwootMessageAction({
+          baseUrl: chatwootInstance.baseUrl,
+          apiAccessToken: chatwootInstance.apiAccessToken,
+          accountId: Number(accountId),
+          conversationId: Number(conversationId),
+          content
         });
         return;
       }
     }
-     console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Chatwoot. Instância, Account ID ou Conversation ID ausente.`);
+    console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Chatwoot. Instância, Account ID ou Conversation ID ausente.`);
     return;
   }
-  
+
   // Se não for nenhum dos contextos acima, assume-se Evolution/WhatsApp como padrão
   const recipientPhoneNumber = session.flow_variables.whatsapp_sender_jid || session.session_id.split('@@')[0].replace('evolution_jid_', '');
   const evoWorkspace = workspace; // Usa o workspace já carregado
 
   if (evoWorkspace && evoWorkspace.evolution_instance_id && recipientPhoneNumber) {
-      // Aqui, precisamos buscar os detalhes da instância evolution a partir do ID
-      const evoDetails = await loadWorkspaceFromDB(evoWorkspace.id); // Esta chamada parece incorreta, deveria ser uma busca de instância
-      // A lógica para buscar detalhes da instância precisa ser revista
-      console.error(`[sendOmniChannelMessage] Lógica para buscar detalhes da instância Evolution precisa de revisão. Assumindo que o workspace tem os detalhes.`);
-      // Assumindo por enquanto que o workspace tem os detalhes necessários, o que não é o caso ideal
-      // Em uma refatoração futura, loadEvolutionInstanceFromDB(evoWorkspace.evolution_instance_id) seria o correto.
-      
-      console.log(`[sendOmniChannelMessage] Roteando para Evolution (jid=${recipientPhoneNumber})`);
-      // A ação de envio de mensagem do Evolution precisa da URL base e API key, que não estão diretamente no objeto workspace.
-      // Esta parte da lógica está quebrada e precisa ser consertada no futuro.
-      // Por agora, vamos pular o envio se não tivermos os detalhes.
-      console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Evolution. A lógica para obter detalhes da instância (URL, API Key) a partir do workspace precisa ser implementada.`);
+    // Aqui, precisamos buscar os detalhes da instância evolution a partir do ID
+    const evoDetails = await loadWorkspaceFromDB(evoWorkspace.id); // Esta chamada parece incorreta, deveria ser uma busca de instância
+    // A lógica para buscar detalhes da instância precisa ser revista
+    console.error(`[sendOmniChannelMessage] Lógica para buscar detalhes da instância Evolution precisa de revisão. Assumindo que o workspace tem os detalhes.`);
+    // Assumindo por enquanto que o workspace tem os detalhes necessários, o que não é o caso ideal
+    // Em uma refatoração futura, loadEvolutionInstanceFromDB(evoWorkspace.evolution_instance_id) seria o correto.
+
+    console.log(`[sendOmniChannelMessage] Roteando para Evolution (jid=${recipientPhoneNumber})`);
+    // A ação de envio de mensagem do Evolution precisa da URL base e API key, que não estão diretamente no objeto workspace.
+    // Esta parte da lógica está quebrada e precisa ser consertada no futuro.
+    // Por agora, vamos pular o envio se não tivermos os detalhes.
+    console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Evolution. A lógica para obter detalhes da instância (URL, API Key) a partir do workspace precisa ser implementada.`);
   } else {
     console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Evolution. Instância (${evoWorkspace?.evolution_instance_id}) ou JID do destinatário (${recipientPhoneNumber}) ausente.`);
   }
@@ -303,7 +303,7 @@ export async function executeFlow(
   session: FlowSession,
   workspace: WorkspaceData | null
 ): Promise<void> {
-  
+
   let currentWorkspace = workspace;
   if (!currentWorkspace || !currentWorkspace.id || !currentWorkspace.nodes || !currentWorkspace.connections) {
     console.error(`[Flow Engine] FATAL: Invalid workspace object provided. Aborting execution for session ${session.session_id}.`);
@@ -334,7 +334,7 @@ export async function executeFlow(
       .toString()
       .trim()
       .toLowerCase()
-      .replace(/[\u2010-\u2015\u2212]/g, '-'); 
+      .replace(/[\u2010-\u2015\u2212]/g, '-');
 
     switch (nodeType) {
       case 'start': {
@@ -357,12 +357,12 @@ export async function executeFlow(
       case 'rating-input':
       case 'option': {
         if (getProperty(session.flow_variables, '_invalidOption') === true) {
-            await sendOmniChannelMessage(session, currentWorkspace, "Opção inválida. Por favor, tente novamente.");
-            delete session.flow_variables['_invalidOption']; 
-            shouldContinue = false; 
-            break;
+          await sendOmniChannelMessage(session, currentWorkspace, "Opção inválida. Por favor, tente novamente.");
+          delete session.flow_variables['_invalidOption'];
+          shouldContinue = false;
+          break;
         }
-        
+
         if (nodeType === 'option') {
           const q = substituteVariablesInText(currentNode.questionText, session.flow_variables);
           const substitutedOptions = substituteVariablesInText(currentNode.optionsList || '', session.flow_variables);
@@ -396,9 +396,9 @@ export async function executeFlow(
         } else {
           const promptFieldName =
             nodeType === 'input' ? 'promptText' :
-            nodeType === 'date-input' ? 'dateInputLabel' :
-            nodeType === 'file-upload' ? 'uploadPromptText' :
-            'ratingQuestionText';
+              nodeType === 'date-input' ? 'dateInputLabel' :
+                nodeType === 'file-upload' ? 'uploadPromptText' :
+                  'ratingQuestionText';
 
           const promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
           if (promptText) await sendOmniChannelMessage(session, currentWorkspace, promptText);
@@ -421,49 +421,49 @@ export async function executeFlow(
       case 'condition': {
         let conditionMet = false;
         const op = (currentNode.conditionOperator || '').toString().trim().toLowerCase();
-        
+
         const varPath = currentNode.conditionVariable?.replace(/\{\{|\}\}/g, '').trim();
         let rawValA = varPath ? getProperty(session.flow_variables, varPath) : currentNode.conditionVariable;
         if (rawValA === undefined) rawValA = currentNode.conditionVariable;
-        
+
         const rawValB = substituteVariablesInText(currentNode.conditionValue, session.flow_variables);
-        
+
         const isDateOp = op === 'isdateafter' || op === 'isdatebefore';
         const dataType = (currentNode.conditionDataType || 'string').toString().toLowerCase();
-        
+
         const parseValue = (v: any) => {
           if (isDateOp || dataType === 'date') {
-              return coerceToDate(v) ?? v;
+            return coerceToDate(v) ?? v;
           }
           if (dataType === 'number') {
             const num = parseFloat(String(v));
             return isNaN(num) ? v : num;
           }
           if (dataType === 'boolean') {
-              if (String(v).toLowerCase() === 'true') return true;
-              if (String(v).toLowerCase() === 'false') return false;
-              return v;
+            if (String(v).toLowerCase() === 'true') return true;
+            if (String(v).toLowerCase() === 'false') return false;
+            return v;
           }
-          return v; 
+          return v;
         };
 
         const valA: any = parseValue(rawValA);
         const valB: any = parseValue(rawValB);
 
         switch (op) {
-          case '==':          conditionMet = (valA as any) == (valB as any); break;
-          case '!=':          conditionMet = (valA as any) != (valB as any); break;
-          case '>':           conditionMet = (valA as any) >  (valB as any); break;
-          case '<':           conditionMet = (valA as any) <  (valB as any); break;
-          case '>=':          conditionMet = (valA as any) >= (valB as any); break;
-          case '<=':          conditionMet = (valA as any) <= (valB as any); break;
-          case 'contains':    conditionMet = String(valA ?? '').toLowerCase().includes(String(valB ?? '').toLowerCase()); break;
-          case 'startswith':  conditionMet = String(valA ?? '').toLowerCase().startsWith(String(valB ?? '').toLowerCase()); break;
-          case 'endswith':    conditionMet = String(valA ?? '').toLowerCase().endsWith(String(valB ?? '').toLowerCase()); break;
-          case 'isempty':     conditionMet = valA === undefined || valA === null || String(valA).trim() === ''; break;
-          case 'isnotempty':  conditionMet = !(valA === undefined || valA === null || String(valA).trim() === ''); break;
-          case 'istrue':      conditionMet = valA === true || String(valA).toLowerCase() === 'true'; break;
-          case 'isfalse':     conditionMet = valA === false || String(valA).toLowerCase() === 'false'; break;
+          case '==': conditionMet = (valA as any) == (valB as any); break;
+          case '!=': conditionMet = (valA as any) != (valB as any); break;
+          case '>': conditionMet = (valA as any) > (valB as any); break;
+          case '<': conditionMet = (valA as any) < (valB as any); break;
+          case '>=': conditionMet = (valA as any) >= (valB as any); break;
+          case '<=': conditionMet = (valA as any) <= (valB as any); break;
+          case 'contains': conditionMet = String(valA ?? '').toLowerCase().includes(String(valB ?? '').toLowerCase()); break;
+          case 'startswith': conditionMet = String(valA ?? '').toLowerCase().startsWith(String(valB ?? '').toLowerCase()); break;
+          case 'endswith': conditionMet = String(valA ?? '').toLowerCase().endsWith(String(valB ?? '').toLowerCase()); break;
+          case 'isempty': conditionMet = valA === undefined || valA === null || String(valA).trim() === ''; break;
+          case 'isnotempty': conditionMet = !(valA === undefined || valA === null || String(valA).trim() === ''); break;
+          case 'istrue': conditionMet = valA === true || String(valA).toLowerCase() === 'true'; break;
+          case 'isfalse': conditionMet = valA === false || String(valA).toLowerCase() === 'false'; break;
           case 'isdateafter': {
             const { a, b } = compareDates(valA, valB);
             conditionMet = !!(a && b && a.getTime() > b.getTime());
@@ -482,29 +482,29 @@ export async function executeFlow(
         nextNodeId = findNextNodeId(currentNode.id, conditionMet ? 'true' : 'false', connections);
         break;
       }
-      
+
       case 'time-of-day': {
         let isInTimeRange = false;
         try {
           const now = new Date();
-      
+
           const startTimeStr = (currentNode.startTime ?? '').toString().trim();
           const endTimeStr = (currentNode.endTime ?? '').toString().trim();
-      
+
           if (startTimeStr && endTimeStr && /^\d{2}:\d{2}(?::\d{2})?$/.test(startTimeStr) && /^\d{2}:\d{2}(?::\d{2})?$/.test(endTimeStr)) {
             const parseHM = (s: string) => {
-              const [h, m, s2 = '0'] = s.split(':').map(Number);
+              const [h, m, s2 = 0] = s.split(':').map(Number);
               return { h, m, s: s2 };
             };
             const { h: sh, m: sm, s: ss } = parseHM(startTimeStr);
             const { h: eh, m: em, s: es } = parseHM(endTimeStr);
-      
+
             const startDate = new Date();
             startDate.setHours(sh, sm, ss, 0);
-      
+
             const endDate = new Date();
             endDate.setHours(eh, em, es, 0);
-      
+
             if (endDate.getTime() <= startDate.getTime()) {
               isInTimeRange = (now.getTime() >= startDate.getTime()) || (now.getTime() <= endDate.getTime());
             } else {
@@ -514,20 +514,21 @@ export async function executeFlow(
             console.warn(`[Flow Engine - ${session.session_id}] time-of-day: horários inválidos ou ausentes (start="${startTimeStr}" end="${endTimeStr}"). Considerando fora do intervalo.`);
             isInTimeRange = false;
           }
-      
+
           console.log(`[Flow Engine - ${session.session_id}] Time of Day Check: ${currentNode.startTime}-${currentNode.endTime}. Now: ${now.toLocaleTimeString()}. In range: ${isInTimeRange}`);
         } catch (err: any) {
           console.error(`[Flow Engine - ${session.session_id}] Time of Day Error:`, err);
           isInTimeRange = false;
         }
-      
+
         nextNodeId = findNextNodeId(currentNode.id, isInTimeRange ? 'true' : 'false', connections);
         break;
       }
-      
+
       case 'switch': {
         const switchVarName = currentNode.switchVariable?.replace(/\{\{|\}\}/g, '').trim();
-        const switchActualValue = switchVarName ? getProperty(session.flow_variables, switchVarName) : undefined;
+
+        const switchActualValue = switchVarName ? evaluateExpression(switchVarName, session.flow_variables) : undefined;
         let matchedCase = false;
 
         if (Array.isArray(currentNode.switchCases)) {
@@ -614,44 +615,44 @@ export async function executeFlow(
           if (varName) {
             let valueToSave = responseData;
             if (currentNode.apiResponsePath) {
-                const expression = jsonata(currentNode.apiResponsePath);
-                valueToSave = await expression.evaluate(responseData);
+              const expression = jsonata(currentNode.apiResponsePath);
+              valueToSave = await expression.evaluate(responseData);
             }
             setProperty(session.flow_variables, varName, valueToSave);
           }
-          
+
           if (currentNode.apiResponseMappings && Array.isArray(currentNode.apiResponseMappings)) {
-              for (const mapping of currentNode.apiResponseMappings) {
-                  if (mapping.jsonPath && mapping.flowVariable) {
-                      try {
-                          const expression = jsonata(mapping.jsonPath);
-                          const extractedValue = await expression.evaluate(responseData);
+            for (const mapping of currentNode.apiResponseMappings) {
+              if (mapping.jsonPath && mapping.flowVariable) {
+                try {
+                  const expression = jsonata(mapping.jsonPath);
+                  const extractedValue = await expression.evaluate(responseData);
 
-                          if (mapping.extractAs === 'list') {
-                              const rawList = Array.isArray(extractedValue)
-                                ? extractedValue
-                                : (extractedValue === undefined || extractedValue === null ? [] : [extractedValue]);
+                  if (mapping.extractAs === 'list') {
+                    const rawList = Array.isArray(extractedValue)
+                      ? extractedValue
+                      : (extractedValue === undefined || extractedValue === null ? [] : [extractedValue]);
 
-                              const normalizedList = mapping.itemField
-                                ? rawList.map(item => {
-                                    if (item === undefined || item === null) return undefined;
-                                    if (typeof item === 'object') {
-                                        return getProperty(item, mapping.itemField!);
-                                    }
-                                    return item;
-                                  }).filter(item => item !== undefined && item !== null)
-                                : rawList;
+                    const normalizedList = mapping.itemField
+                      ? rawList.map(item => {
+                        if (item === undefined || item === null) return undefined;
+                        if (typeof item === 'object') {
+                          return getProperty(item, mapping.itemField!);
+                        }
+                        return item;
+                      }).filter(item => item !== undefined && item !== null)
+                      : rawList;
 
-                              setProperty(session.flow_variables, mapping.flowVariable, normalizedList);
-                          } else {
-                              setProperty(session.flow_variables, mapping.flowVariable, extractedValue);
-                          }
-                          console.log(`[Flow Engine] API Mapping: Set '${mapping.flowVariable}' from path '${mapping.jsonPath}'`);
-                      } catch (e: any) {
-                          console.error(`[Flow Engine] Error evaluating JSONata expression '${mapping.jsonPath}':`, e.message);
-                      }
+                    setProperty(session.flow_variables, mapping.flowVariable, normalizedList);
+                  } else {
+                    setProperty(session.flow_variables, mapping.flowVariable, extractedValue);
                   }
+                  console.log(`[Flow Engine] API Mapping: Set '${mapping.flowVariable}' from path '${mapping.jsonPath}'`);
+                } catch (e: any) {
+                  console.error(`[Flow Engine] Error evaluating JSONata expression '${mapping.jsonPath}':`, e.message);
+                }
               }
+            }
           }
 
         } catch (error: any) {
@@ -661,25 +662,25 @@ export async function executeFlow(
             setProperty(session.flow_variables, varName, errorData);
           }
         } finally {
-            const logEntry: Omit<FlowLog, 'id'> = {
-              workspace_id: currentWorkspace.id,
-              log_type: 'api-call',
-              session_id: session.session_id,
-              timestamp: new Date().toISOString(),
-              details: {
-                nodeId: currentNode.id,
-                nodeTitle: currentNode.title,
-                requestUrl: url,
-                response: responseData,
-                error: errorData,
-              }
-            };
-            saveFlowLog(logEntry).catch(e => console.error("[Flow Engine] Failed to save API log to DB:", e));
+          const logEntry: Omit<FlowLog, 'id'> = {
+            workspace_id: currentWorkspace.id,
+            log_type: 'api-call',
+            session_id: session.session_id,
+            timestamp: new Date().toISOString(),
+            details: {
+              nodeId: currentNode.id,
+              nodeTitle: currentNode.title,
+              requestUrl: url,
+              response: responseData,
+              error: errorData,
+            }
+          };
+          saveFlowLog(logEntry).catch(e => console.error("[Flow Engine] Failed to save API log to DB:", e));
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
-      
+
       case 'code-execution': {
         const varName = currentNode.codeOutputVariable;
         if (currentNode.codeSnippet && varName) {
@@ -700,7 +701,7 @@ export async function executeFlow(
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
-      }      
+      }
 
       case 'ai-text-generation': {
         const varName = currentNode.aiOutputVariable;
@@ -749,9 +750,9 @@ export async function executeFlow(
 
               let history = Array.isArray(existingHistory)
                 ? existingHistory.map(entry => ({
-                    role: entry.role,
-                    content: cleanAndNormalizeText(String(entry.content ?? '')),
-                  }))
+                  role: entry.role,
+                  content: cleanAndNormalizeText(String(entry.content ?? '')),
+                }))
                 : [];
 
               ({ history, memorySummary } = trimAndSummarizeHistory(history, memorySummary));
@@ -828,7 +829,7 @@ export async function executeFlow(
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
-      
+
       case 'dialogy-send-message': {
         const content = substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables);
         await sendOmniChannelMessage(session, currentWorkspace, content);
