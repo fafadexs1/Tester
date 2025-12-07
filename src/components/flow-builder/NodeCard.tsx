@@ -845,6 +845,38 @@ const TextFormatToolbar = ({ fieldName, textAreaRef, onUpdate, nodeId }: { field
   );
 };
 
+const arePropsEqual = (prevProps: NodeCardProps, nextProps: NodeCardProps) => {
+  // Checks if activeWorkspace changed BUT ignores it if nodes/vars are same
+  // This is critical for performance during drag
+  if (prevProps.isSessionHighlighted !== nextProps.isSessionHighlighted) return false;
+
+  const prevNode = prevProps.node;
+  const nextNode = nextProps.node;
+
+  if (prevNode.id !== nextNode.id) return false;
+  if (prevNode.type !== nextNode.type) return false;
+
+  // If exact same object ref, it's equal
+  if (prevNode === nextNode && prevProps.availableVariables === nextProps.availableVariables) return true;
+
+  // Manual shallow compare excluding x/y
+  const keys = new Set([...Object.keys(prevNode), ...Object.keys(nextNode)]);
+  for (const key of keys) {
+    if (key === 'x' || key === 'y') continue;
+    // @ts-ignore
+    if (prevNode[key] !== nextNode[key]) return false;
+  }
+
+  if (prevProps.availableVariables !== nextProps.availableVariables) {
+    if (prevProps.availableVariables.length !== nextProps.availableVariables.length) return false;
+    for (let i = 0; i < prevProps.availableVariables.length; i++) {
+      if (prevProps.availableVariables[i] !== nextProps.availableVariables[i]) return false;
+    }
+  }
+
+  return true;
+};
+
 const NodeCard: React.FC<NodeCardProps> = React.memo(({
   node,
   onUpdate,
@@ -3425,6 +3457,49 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
             {renderApiResponseSettings()}
           </div>
         );
+      case 'switch':
+        return (
+          <div className="space-y-2" data-no-drag="true">
+            <div>
+              <Label htmlFor={`${node.id}-condvar-switch`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Variável a Avaliar</Label>
+              <div className="relative">
+                <Input id={`${node.id}-condvar-switch`} placeholder="{{variavel}}" value={node.switchVariable || ''} onChange={(e) => onUpdate(node.id, { switchVariable: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
+                {renderVariableInserter('switchVariable')}
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pt-2 border-t border-white/5">
+              <Label className="text-[10px] font-medium text-zinc-400">Casos (Caminhos)</Label>
+              {(node.switchCases || []).map((caseItem, index) => (
+                <div key={caseItem.id} className="flex items-center space-x-2 group">
+                  <div className="relative flex-1">
+                    <Input
+                      placeholder={`Valor ${index + 1}`}
+                      value={caseItem.value}
+                      onChange={(e) => handleSwitchCaseChange(caseItem.id, e.target.value)}
+                      className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => handleRemoveSwitchCase(caseItem.id)}
+                    variant="ghost"
+                    size="icon"
+                    className="text-zinc-500 hover:text-destructive hover:bg-destructive/10 w-7 h-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ))}
+              <Button onClick={handleAddSwitchCase} variant="outline" size="sm" className="w-full h-7 text-xs border-dashed border-white/10 hover:bg-white/5 text-zinc-400 hover:text-zinc-200">
+                <PlusCircle className="w-3 h-3 mr-1.5" /> Adicionar Caso
+              </Button>
+            </div>
+
+            <p className="text-[10px] text-muted-foreground italic pt-1">
+              Se nenhum caso corresponder, o fluxo seguirá pelo conector "padrão".
+            </p>
+          </div>
+        );
       case 'ai-text-generation':
         return (
           <div className="space-y-2" data-no-drag="true">
@@ -4057,6 +4132,6 @@ const NodeCard: React.FC<NodeCardProps> = React.memo(({
       )}
     </>
   );
-});
+}, arePropsEqual);
 NodeCard.displayName = 'NodeCard';
 export default NodeCard;

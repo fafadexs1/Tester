@@ -224,8 +224,13 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         console.warn(`[TestChatPanel] substituteVariables: Variable "{{${variableName}}}" resolved to undefined/null. Vars:`, JSON.parse(JSON.stringify(currentActiveFlowVariables)));
         return '';
       }
-      if (typeof value === 'object' || Array.isArray(value)) {
-        console.log(`[TestChatPanel] substituteVariables: Variable "{{${variableName}}}" is object/array, stringifying.`);
+      if (Array.isArray(value)) {
+        console.log(`[TestChatPanel] substituteVariables: Variable "{{${variableName}}}" is array, joining items.`);
+        return value.map(v => (typeof v === 'object' ? JSON.stringify(v) : String(v))).join(', ');
+      }
+
+      if (typeof value === 'object') {
+        console.log(`[TestChatPanel] substituteVariables: Variable "{{${variableName}}}" is object, stringifying.`);
         try {
           return JSON.stringify(value, null, 2);
         } catch (e) {
@@ -1343,8 +1348,8 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                 >
                   <div
                     className={`max-w-full p-2.5 rounded-lg text-sm shadow-sm break-words ${msg.sender === 'user'
-                        ? 'bg-primary text-primary-foreground rounded-br-none'
-                        : 'bg-muted text-muted-foreground rounded-bl-none'
+                      ? 'bg-primary text-primary-foreground rounded-br-none'
+                      : 'bg-muted text-muted-foreground rounded-bl-none'
                       }`}
                   >
                     {typeof msg.text === 'string' ? formatChatMessage(msg.text) : msg.text}

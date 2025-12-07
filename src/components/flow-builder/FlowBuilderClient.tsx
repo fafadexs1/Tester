@@ -243,7 +243,14 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const [isChatPanelOpen, setIsChatPanelOpen] = useState(true);
   const [hasMounted, setHasMounted] = useState(false);
 
-  const [availableVariablesByNode, setAvailableVariablesByNode] = useState<Record<string, string[]>>({});
+  const [availableVariablesByNode, setAvailableVariablesByNode] = useState<Record<string, string[]>>(() => {
+    if (initialWorkspace) {
+      const cleaned = cleanLoadedWorkspace(initialWorkspace);
+      const base = computeBaseVariables(cleaned);
+      return computeVariablesScope(cleaned, base);
+    }
+    return {};
+  });
 
   useEffect(() => {
     drawingLineRef.current = drawingLine;
@@ -273,17 +280,9 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const currentNodes = activeWorkspace?.nodes || [];
   const currentConnections = activeWorkspace?.connections || [];
 
-  // Recalcula o escopo de variáveis sempre que o fluxo mudar
-  useEffect(() => {
-    if (!activeWorkspace || !activeWorkspace.nodes) {
-      setAvailableVariablesByNode({});
-      return;
-    }
+  // Removed redundant useEffect to prevent double variable scope calculation
+  // Variable scope is now managed by updateActiveWorkspace and loadWorkspace
 
-    const baseVars = computeBaseVariables(activeWorkspace);
-    const scopedVars = computeVariablesScope(activeWorkspace, baseVars);
-    setAvailableVariablesByNode(scopedVars);
-  }, [activeWorkspace]);
 
 
   const toggleChatPanel = useCallback(() => {
@@ -305,7 +304,13 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
       const dbWorkspace = await loadWorkspaceFromDB(workspaceId);
       if (dbWorkspace) {
         // Limpa os dados do workspace carregado antes de setar no estado
-        setActiveWorkspace(cleanLoadedWorkspace(dbWorkspace));
+        const cleanedWs = cleanLoadedWorkspace(dbWorkspace);
+        setActiveWorkspace(cleanedWs);
+
+        // Initial variable calculation
+        const baseVars = computeBaseVariables(cleanedWs);
+        const scopedVars = computeVariablesScope(cleanedWs, baseVars);
+        setAvailableVariablesByNode(scopedVars);
       } else {
         toast({ title: "Erro de Carregamento", description: "O fluxo solicitado não foi encontrado.", variant: "destructive" });
         router.push('/');
@@ -361,16 +366,20 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     setHighlightedNodeIdBySession(null);
   }, [loadWorkspace, toast]);
 
-  const updateActiveWorkspace = useCallback((updater: (workspace: WorkspaceData) => WorkspaceData) => {
+  const updateActiveWorkspace = useCallback((updater: (workspace: WorkspaceData) => WorkspaceData, skipVarRecalc: boolean = false) => {
     setActiveWorkspace(prevWorkspace => {
       if (!prevWorkspace) {
         console.warn('[FlowBuilderClient] updateActiveWorkspace called but no activeWorkspace.');
         return null;
       }
       const nextWorkspace = updater(prevWorkspace);
-      const baseVars = computeBaseVariables(nextWorkspace);
-      const newVarsByNode = computeVariablesScope(nextWorkspace, baseVars);
-      setAvailableVariablesByNode(newVarsByNode);
+
+      if (!skipVarRecalc) {
+        const baseVars = computeBaseVariables(nextWorkspace);
+        const newVarsByNode = computeVariablesScope(nextWorkspace, baseVars);
+        setAvailableVariablesByNode(newVarsByNode);
+      }
+
       return nextWorkspace;
     });
   }, []);
@@ -437,10 +446,11 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   }, [activeWorkspace, updateActiveWorkspace, availableVariablesByNode]);
 
   const updateNode = useCallback((id: string, changes: Partial<NodeData>) => {
+    const isPositionOnly = Object.keys(changes).every(key => key === 'x' || key === 'y');
     updateActiveWorkspace(ws => ({
       ...ws,
       nodes: (ws.nodes || []).map(n => (n.id === id ? { ...n, ...changes } : n)),
-    }));
+    }), isPositionOnly);
   }, [updateActiveWorkspace]);
 
   const deleteNode = useCallback((nodeIdToDelete: string) => {

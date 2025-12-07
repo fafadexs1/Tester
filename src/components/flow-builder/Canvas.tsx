@@ -130,25 +130,9 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
     return `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
   }, []);
 
-  const getHandleCenterOffset = useCallback((nodeId: string, handleId: string | null, type: 'source' | 'target', currentZoom: number): number | null => {
-    if (typeof document === 'undefined') return null;
-    const escapedNodeId = escapeCssSelector(nodeId);
-    const nodeElement = document.querySelector(`[data-node-id="${escapedNodeId}"]`) as HTMLElement | null;
-    if (!nodeElement) return null;
-
-    let selector = `[data-connector="true"][data-handle-type="${type}"]`;
-    if (handleId) {
-      selector += `[data-handle-id="${escapeCssSelector(handleId)}"]`;
-    }
-
-    const handleElement = nodeElement.querySelector(selector) as HTMLElement | null;
-    if (!handleElement) return null;
-
-    const nodeRect = nodeElement.getBoundingClientRect();
-    const handleRect = handleElement.getBoundingClientRect();
-    const visualOffset = (handleRect.top - nodeRect.top) + handleRect.height / 2;
-    const safeZoom = Math.max(currentZoom, 0.001);
-    return visualOffset / safeZoom;
+  const getHandleCenterOffset = useCallback((_nodeId: string, _handleId: string | null, _type: 'source' | 'target', _currentZoom: number): number | null => {
+    // Deprecated: pure math calculation is now used for better performance
+    return null;
   }, []);
 
   const nodeMap = useMemo(() => {
@@ -202,11 +186,9 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
       }
 
       let sourceHandleYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET;
-      const measuredSourceOffset = getHandleCenterOffset(sourceNode.id, conn.sourceHandle ?? 'default', 'source', zoomLevel);
 
-      if (typeof measuredSourceOffset === 'number') {
-        sourceHandleYOffset = measuredSourceOffset;
-      } else if (sourceNode.type === 'start' && Array.isArray(sourceNode.triggers) && conn.sourceHandle) {
+      // Pure math calculation for source handle position
+      if (sourceNode.type === 'start' && Array.isArray(sourceNode.triggers) && conn.sourceHandle) {
         let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
         let found = false;
 
@@ -240,12 +222,26 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
         } else if (conn.sourceHandle === 'false') {
           sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (2 / 3) + 6;
         }
+      } else if (sourceNode.type === 'switch') {
+        const switchCases = sourceNode.switchCases || [];
+        const initialY = 65;
+        const spacingY = 30;
+
+        if (conn.sourceHandle && conn.sourceHandle !== 'default') {
+          const caseIndex = switchCases.findIndex(c => c.id === conn.sourceHandle);
+          if (caseIndex !== -1) {
+            sourceHandleYOffset = initialY + (caseIndex * spacingY);
+          }
+        } else {
+          // Default/Else case
+          sourceHandleYOffset = initialY + (switchCases.length * spacingY);
+        }
       }
 
       const x1 = sourceNode.x + NODE_WIDTH;
       const y1 = sourceNode.y + sourceHandleYOffset;
 
-      const targetHandleYOffset = getHandleCenterOffset(targetNode.id, null, 'target', zoomLevel) ?? NODE_HEADER_CONNECTOR_Y_OFFSET;
+      const targetHandleYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET;
       const x2 = targetNode.x;
       const y2 = targetNode.y + targetHandleYOffset;
 
