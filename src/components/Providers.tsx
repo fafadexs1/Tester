@@ -3,8 +3,9 @@
 
 import { Suspense } from 'react';
 import { AuthProvider } from '@/components/auth/AuthProvider';
-import { Toaster } from '@/components/ui/toaster';
-import { Loader2 } from 'lucide-react';
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Loader2 } from "lucide-react";
+import { Toaster } from "@/components/ui/toaster";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -14,7 +15,9 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       </div>
     }>
       <AuthProvider>
-        {children}
+        <TooltipProvider delayDuration={0}>
+          {children}
+        </TooltipProvider>
       </AuthProvider>
       <Toaster />
     </Suspense>
