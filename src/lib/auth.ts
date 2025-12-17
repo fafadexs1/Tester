@@ -34,11 +34,12 @@ export async function createSession(user: User) {
 
   cookieStore.set(SESSION_COOKIE_NAME, sessionValue, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: true, // REQUIRED for sameSite: 'none'
+    sameSite: 'none', // REQUIRED for iframe cross-domain
     maxAge: 60 * 60 * 24, // 24 horas
     path: '/',
   });
-   console.log(`[auth.ts] Cookie de sessão criado para o usuário: ${user.username}, ID: ${user.id}, role: ${user.role}, org: ${user.current_organization_id}`);
+  console.log(`[auth.ts] Cookie de sessão criado para o usuário: ${user.username}, ID: ${user.id}, role: ${user.role}, org: ${user.current_organization_id}`);
 }
 
 export async function deleteSession() {
