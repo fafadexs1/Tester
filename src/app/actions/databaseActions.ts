@@ -1638,3 +1638,16 @@ export async function getListingDetails(listingId: string): Promise<{ data?: Mar
     return { error: `Erro de banco de dados: ${error.message} ` };
   }
 }
+
+// --- SSO Queries ---
+export async function findUserByEmail(email: string): Promise<User | null> {
+  const result = await runQuery<User>(
+    'SELECT id, username, email, full_name, role, password_hash, current_organization_id FROM users WHERE email = $1',
+    [email]
+  );
+  if (result.rows.length > 0) {
+    return result.rows[0];
+  }
+  return null;
+}
+

@@ -2,7 +2,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { User, Organization } from '@/lib/types';
 import { loginAction, logoutAction, registerAction } from '@/app/actions/authActions';
 import { getCurrentUser } from '@/lib/auth';
@@ -15,7 +15,7 @@ interface AuthContextType {
   organizations: Organization[];
   currentOrganization: (Organization & { is_owner: boolean }) | null;
   login: (formData: FormData) => Promise<{ success: boolean; error?: string; user?: User }>;
-  logout: () => void; 
+  logout: () => void;
   register: (formData: FormData) => Promise<{ success: boolean; error?: string; user?: User }>;
   setCurrentOrganization: (org: Organization) => void;
   refreshAuth: () => Promise<void>;
@@ -69,17 +69,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetchUserAndOrgs();
   }, [fetchUserAndOrgs]);
 
+  // --- SSO Logic Start ---
+  const searchParams = useSearchParams();
+  const [isProcessingSSO, setIsProcessingSSO] = useState(false);
+
   useEffect(() => {
-    if (loading) return;
+    const authParam = searchParams.get('auth');
+    // Check if we have an auth param.
+    // Proceed if:
+    // 1. We are not currently processing SSO.
+    // 2. AND (We are not logged in OR The logged-in user is different from the param user)
+    // We need to decode first to check the email mismatch, so we move logic inside.
+
+    if (authParam && !isProcessingSSO) {
+
+      async function runSSO() {
+        try {
+          const decoded = JSON.parse(atob(decodeURIComponent(authParam!)));
+          const { user: incomingUser } = decoded;
+
+          // If we are already logged in, check if it's the same user
+          if (user && incomingUser && user.email === incomingUser.email) {
+            // Already logged in as the correct user.
+            // Just clean the URL if needed.
+            const newUrl = new URL(window.location.href);
+            if (newUrl.searchParams.has('auth')) {
+              newUrl.searchParams.delete('auth');
+              window.history.replaceState({}, '', newUrl.toString());
+            }
+            return;
+          }
+
+          if (incomingUser) {
+            setIsProcessingSSO(true);
+            console.log('[AuthProvider] Auth param detected. Attempting SSO for:', incomingUser.email);
+
+            const { ssoLoginAction } = await import('@/app/actions/authActions');
+            const result = await ssoLoginAction(incomingUser);
+
+            if (result.success && result.user) {
+              console.log('[AuthProvider] SSO Success:', result.user.username);
+              await fetchUserAndOrgs(); // Refetch new session
+
+              const newUrl = new URL(window.location.href);
+              newUrl.searchParams.delete('auth');
+              window.history.replaceState({}, '', newUrl.toString());
+            } else {
+              console.error('[AuthProvider] SSO Failed:', result.error);
+            }
+          }
+        } catch (err) {
+          console.error('[AuthProvider] SSO Error:', err);
+        } finally {
+          setIsProcessingSSO(false);
+        }
+      }
+      runSSO();
+    }
+  }, [searchParams, user, isProcessingSSO, fetchUserAndOrgs]);
+  // --- SSO Logic End ---
+
+  useEffect(() => {
+    if (loading || isProcessingSSO) return; // Wait for SSO
 
     const isAuthPage = pathname === '/login';
 
     if (user && isAuthPage) {
       router.push('/');
     } else if (!user && !isAuthPage && pathname !== '/logout') {
-      router.push('/login');
+      // PRESERVE QUERY PARAMS on redirect
+      const currentSearch = searchParams.toString();
+      const nextUrl = currentSearch ? `/login?${currentSearch}` : '/login';
+      router.push(nextUrl);
     }
-  }, [user, loading, pathname, router]);
+  }, [user, loading, pathname, router, isProcessingSSO, searchParams]);
 
   const login = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
     const result = await loginAction(formData);
@@ -100,50 +163,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     router.push('/logout');
   }, [router]);
-  
+
   const handleSetCurrentOrg = (org: Organization) => {
-     if(user) {
-         setCurrentOrganization({ ...org, is_owner: org.owner_id === user.id });
-     }
+    if (user) {
+      setCurrentOrganization({ ...org, is_owner: org.owner_id === user.id });
+    }
   };
 
-  const value = { 
-      user, 
-      loading, 
-      login, 
-      logout, 
-      register, 
-      organizations, 
-      currentOrganization,
-      setCurrentOrganization: handleSetCurrentOrg,
-      refreshAuth: fetchUserAndOrgs,
+  const value = {
+    user,
+    loading,
+    login,
+    logout,
+    register,
+    organizations,
+    currentOrganization,
+    setCurrentOrganization: handleSetCurrentOrg,
+    refreshAuth: fetchUserAndOrgs,
   };
-  
+
   if (loading) {
-     return (
-         <div className="flex h-screen w-full items-center justify-center bg-background">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            <span className="ml-4 text-muted-foreground">Verificando sessão...</span>
-        </div>
-      );
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <span className="ml-4 text-muted-foreground">Verificando sessão...</span>
+      </div>
+    );
   }
-  
+
   if (!user && !['/login', '/logout'].includes(pathname)) {
-     return (
-         <div className="flex h-screen w-full items-center justify-center bg-background">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            <span className="ml-4 text-muted-foreground">Redirecionando para o login...</span>
-        </div>
-      );
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <span className="ml-4 text-muted-foreground">Redirecionando para o login...</span>
+      </div>
+    );
   }
 
   if (user && pathname === '/login') {
-     return (
-         <div className="flex h-screen w-full items-center justify-center bg-background">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            <span className="ml-4 text-muted-foreground">Redirecionando para o dashboard...</span>
-        </div>
-      );
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <span className="ml-4 text-muted-foreground">Redirecionando para o dashboard...</span>
+      </div>
+    );
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

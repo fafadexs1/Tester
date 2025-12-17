@@ -4,7 +4,7 @@
 import { createSession, deleteSession } from '@/lib/auth';
 import type { User, Organization } from '@/lib/types';
 import { cookies } from 'next/headers';
-import { findUserByUsername, createUser, createOrganization, getOrganizationsForUser, setCurrentOrganizationForUser, createAuditLog, getUserById } from './databaseActions';
+import { findUserByUsername, findUserByEmail, createUser, createOrganization, getOrganizationsForUser, setCurrentOrganizationForUser, createAuditLog, getUserById } from './databaseActions';
 
 // Simulação de hashing de senha. Em um app real, use uma biblioteca como bcrypt.
 // AVISO: NÃO USE ISTO EM PRODUÇÃO.
@@ -159,5 +159,66 @@ export async function refreshUserSessionAction(userId: string): Promise<{ succes
         return { success: true, user };
     } catch (error: any) {
         return { success: false, error: `Erro ao atualizar a sessão: ${error.message}` };
+    }
+}
+
+export async function ssoLoginAction(ssoUser: any): Promise<{ success: boolean; error?: string; user?: User }> {
+    console.log('[authActions.ts] ssoLoginAction: Iniciando SSO...', ssoUser.email);
+
+    if (!ssoUser || !ssoUser.email) {
+        return { success: false, error: "Dados de SSO inválidos." };
+    }
+
+    try {
+        let dbUser = await findUserByEmail(ssoUser.email);
+
+        if (!dbUser) {
+            console.log(`[authActions.ts] Usuário SSO não encontrado. Criando novo usuário para ${ssoUser.email}...`);
+            // Create user if not exists
+            const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+            const passwordHash = simpleHash(randomPassword);
+
+            let username = ssoUser.email.split('@')[0];
+            const userCheck = await findUserByUsername(username);
+            if (userCheck) {
+                username = `${username}_${Math.floor(Math.random() * 1000)}`;
+            }
+
+            const fullName = ssoUser.full_name || ssoUser.user_metadata?.full_name || username;
+
+            const createResult = await createUser(username, passwordHash, fullName, ssoUser.email, 'user');
+            if (createResult.success && createResult.user) {
+                dbUser = createResult.user;
+
+                const orgResult = await createOrganization(`Organização de ${username}`, dbUser.id);
+                if (orgResult.success && orgResult.organization) {
+                    await setCurrentOrganizationForUser(dbUser.id, orgResult.organization.id);
+                    dbUser.current_organization_id = orgResult.organization.id;
+                }
+            } else {
+                return { success: false, error: "Falha ao criar usuário via SSO." };
+            }
+        }
+
+        if (dbUser) {
+            if (!dbUser.current_organization_id) {
+                const organizations = await getOrganizationsForUser(dbUser.id);
+                if (organizations.length > 0) {
+                    dbUser.current_organization_id = organizations[0].id;
+                    await setCurrentOrganizationForUser(dbUser.id, organizations[0].id);
+                }
+            }
+
+            await createSession(dbUser);
+            await createAuditLog(dbUser.id, dbUser.current_organization_id || null, 'user_login_sso');
+            console.log(`[authActions.ts] SSO Login bem-sucedido para: ${dbUser.username}`);
+            return { success: true, user: dbUser };
+        }
+
+        return { success: false, error: "Erro desconhecido no SSO." };
+
+    } catch (error: any) {
+        console.error("[authActions.ts] ssoLoginAction Error:", error);
+        return { success: false, error: error.message };
     }
 }

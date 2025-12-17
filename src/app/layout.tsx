@@ -5,6 +5,9 @@ import { cn } from "@/lib/utils";
 import Providers from '@/components/Providers';
 import AppShell from '@/components/AppShell';
 
+// AuthListener import removed
+
+
 const fontSans = FontSans({
     subsets: ["latin"],
     variable: "--font-sans",
