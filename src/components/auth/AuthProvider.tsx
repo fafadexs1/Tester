@@ -85,7 +85,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       async function runSSO() {
         try {
-          const decoded = JSON.parse(atob(decodeURIComponent(authParam!)));
+          // Unicode-safe Decoding
+          // Sender: encodeURIComponent -> btoa -> encodeURIComponent (query)
+          // Receiver:
+          // 1. decodeURIComponent (query) -> btoa string
+          // 2. atob() -> encodedURIComponent string
+          // 3. decodeURIComponent() -> JSON string
+
+          // Note: searchParams.get() already does one level of decoding for the component,
+          // but depending on how it was passed, safe decoding is best.
+          const base64 = decodeURIComponent(authParam!);
+          const uriEncoded = atob(base64);
+          const jsonStr = decodeURIComponent(uriEncoded);
+
+          const decoded = JSON.parse(jsonStr);
           const { user: incomingUser } = decoded;
 
           // If we are already logged in, check if it's the same user
