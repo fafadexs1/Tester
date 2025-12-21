@@ -170,14 +170,16 @@ const OrgNav = () => {
             </SidebarMenuSub>
           )}
         </SidebarMenuItem>
-        <SidebarMenuItem>
-          <Link href="/organization/billing" passHref>
-            <SidebarMenuButton isActive={pathname === '/organization/billing'} tooltip="Billing e Assinatura" className={menuItemClass}>
-              <CreditCard className={iconClass(pathname === '/organization/billing')} />
-              <span>Billing e Assinatura</span>
-            </SidebarMenuButton>
-          </Link>
-        </SidebarMenuItem>
+        {user?.role !== 'user' && (
+          <SidebarMenuItem>
+            <Link href="/organization/billing" passHref>
+              <SidebarMenuButton isActive={pathname === '/organization/billing'} tooltip="Billing e Assinatura" className={menuItemClass}>
+                <CreditCard className={iconClass(pathname === '/organization/billing')} />
+                <span>Billing e Assinatura</span>
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+        )}
         <SidebarMenuItem>
           <Link href="/organization/audit" passHref>
             <SidebarMenuButton isActive={pathname === '/organization/audit'} tooltip="Logs de Auditoria" className={menuItemClass}>
@@ -325,12 +327,14 @@ const OrganizationSwitcher = () => {
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator className="bg-white/10" />
-            <DialogTrigger asChild>
-              <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="focus:bg-white/5 focus:text-white cursor-pointer text-violet-400 focus:text-violet-300">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Criar nova organização
-              </DropdownMenuItem>
-            </DialogTrigger>
+            {user?.role !== 'user' && (
+              <DialogTrigger asChild>
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="focus:bg-white/5 focus:text-white cursor-pointer text-violet-400 focus:text-violet-300">
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Criar nova organização
+                </DropdownMenuItem>
+              </DialogTrigger>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         <DialogContent className="bg-zinc-950 border-white/10 text-zinc-200">
@@ -432,10 +436,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 Configurações
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-white/10" />
-              <DropdownMenuItem onClick={logout} className="text-red-400 focus:bg-red-500/10 focus:text-red-300 cursor-pointer py-2">
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Sair</span>
-              </DropdownMenuItem>
+              {user?.role !== 'user' && (
+                <DropdownMenuItem onClick={logout} className="text-red-400 focus:bg-red-500/10 focus:text-red-300 cursor-pointer py-2">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sair</span>
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </SidebarFooter>

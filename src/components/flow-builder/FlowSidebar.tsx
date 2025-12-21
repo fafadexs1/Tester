@@ -67,6 +67,7 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
       title: "Inteligência Artificial",
       blocks: [
         { type: "ai-text-generation", label: "Gerar Texto com IA", icon: <Sparkles {...iconProps} className="text-rose-500" />, description: "Usa Genkit para gerar conteúdo.", defaultData: { aiPromptText: 'Resuma o seguinte texto: {{input.texto_longo}}', aiOutputVariable: 'texto_resumido_ia' } },
+        { type: "intention-router", label: "Roteador de Intenção", icon: <BrainCircuit {...iconProps} className="text-indigo-400" />, description: "Roteia o fluxo baseado na intenção do usuário (IA)", defaultData: { intents: [{ id: uuidv4(), label: 'Vendas', description: 'Usuário quer comprar algo' }] } },
         { type: "intelligent-agent", label: "Agente Inteligente", icon: <BrainCircuit {...iconProps} className="text-sky-500" />, description: "Cria um assistente conversacional.", defaultData: { agentName: 'Agente de Suporte', agentSystemPrompt: 'Você é um agente de suporte virtual. Ajude o usuário com suas dúvidas.', userInputVariable: '{{pergunta_do_usuario}}', agentResponseVariable: 'resposta_do_agente', aiModelName: 'gemini-pro', maxConversationTurns: 5, temperature: 0.7, } }
       ]
     },

@@ -30,6 +30,13 @@ export async function loginAction(formData: FormData): Promise<{ success: boolea
             return { success: false, error: "Usuário ou senha inválidos." };
         }
 
+        // Verify status with Dialogy (Security Check)
+        const { checkDialogyAccess } = await import('@/lib/auth-check');
+        const access = await checkDialogyAccess(dbUser.email);
+        if (!access.allowed) {
+            return { success: false, error: access.reason || "Acesso suspenso ou cancelado no Dialogy." };
+        }
+
         // A verificação de senha real deve ser feita com uma biblioteca como bcrypt no futuro.
         const passwordMatches = verifyPassword(password, dbUser.password_hash || '');
         if (!passwordMatches) {
@@ -168,6 +175,14 @@ export async function ssoLoginAction(ssoUser: any): Promise<{ success: boolean; 
     if (!ssoUser || !ssoUser.email) {
         return { success: false, error: "Dados de SSO inválidos." };
     }
+
+    // Verify status with Dialogy (Security Check)
+    const { checkDialogyAccess } = await import('@/lib/auth-check');
+    const access = await checkDialogyAccess(ssoUser.email);
+    if (!access.allowed) {
+        return { success: false, error: access.reason || "Acesso suspenso ou cancelado no Dialogy." };
+    }
+
 
     try {
         let dbUser = await findUserByEmail(ssoUser.email);

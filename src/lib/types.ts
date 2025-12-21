@@ -38,6 +38,7 @@ export type NodeType =
   | 'supabase-delete-row'
   | 'dialogy-send-message'
   | 'time-of-day'
+  | 'intention-router'
   | 'end-flow';
 
 
@@ -107,12 +108,15 @@ export interface NodeData {
   variableToSaveResponse?: string;
   apiResponseAsInput?: boolean;
   apiResponsePathForValue?: string;
+  inputValidationType?: 'none' | 'email' | 'cpf' | 'cnpj' | 'phone' | 'number' | 'date' | 'custom-regex';
+  customRegex?: string;
 
   // Option Node
   questionText?: string;
   optionsList?: string;
   variableToSaveChoice?: string;
-  aiEnabled?: boolean; // Novo campo para o nó de opção
+  aiEnabled?: boolean;
+  options?: { id: string; value: string; }[];
 
   // WhatsApp Nodes (can also be triggered by api-call node)
   instanceName?: string;
@@ -209,6 +213,10 @@ export interface NodeData {
   emailBody?: string;
   emailFrom?: string;
 
+
+  // Time Of Day Node
+  timezone?: string;
+
   // Google Sheets Append Node
   googleSheetId?: string;
   googleSheetName?: string;
@@ -242,6 +250,8 @@ export interface NodeData {
   // Start Node
   triggers?: StartNodeTrigger[];
 
+  // Intention Router Node
+  intents?: { id: string; label: string; description: string }[];
 }
 
 export interface Connection {
@@ -310,7 +320,7 @@ export interface FlowSession {
   awaiting_input_type: FlowSessionAwaitingInputType;
   awaiting_input_details: {
     variableToSave?: string;
-    options?: string[];
+    options?: (string | { id: string; value: string })[];
     originalNodeId?: string;
     aiEnabled?: boolean;
     aiModelName?: string;

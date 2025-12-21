@@ -40,6 +40,10 @@ export async function createOrganizationAction(formData: FormData): Promise<{ su
         return { success: false, error: "O nome da organização é obrigatório." };
     }
 
+    if (user.role === 'user') {
+        return { success: false, error: "Seu nível de acesso não permite criar novas organizações." };
+    }
+
     const result = await createOrgDbAction(name.trim(), user.id);
 
     if (result.success && result.organization) {
@@ -47,7 +51,7 @@ export async function createOrganizationAction(formData: FormData): Promise<{ su
         await setCurrentOrganizationForUser(user.id, result.organization.id);
         // Atualiza a sessão do usuário com o novo current_organization_id
         await refreshUserSessionAction(user.id);
-        
+
         revalidatePath('/organization/members');
         revalidatePath('/');
     }
@@ -80,7 +84,7 @@ export async function updateOrganizationAction(formData: FormData): Promise<{ su
         await refreshUserSessionAction(user.id);
         revalidatePath('/organization/general');
     }
-    
+
     return result;
 }
 
@@ -130,7 +134,7 @@ export async function getTeamsForOrganizationAction(organizationId: string): Pro
             ORDER BY t.name;
         `;
         const result = await runQuery<any>(query, [organizationId]);
-        
+
         // Rows are already processed by COALESCE in SQL
         const teams: Team[] = result.rows;
         return { success: true, data: teams };
@@ -154,7 +158,7 @@ export async function createTeamAction(formData: FormData): Promise<{ success: b
     if (!teamName) {
         return { success: false, error: "O nome do time é obrigatório." };
     }
-    
+
     try {
         const teamResult = await runQuery<{ id: string }>(
             'INSERT INTO teams (name, description, organization_id) VALUES ($1, $2, $3) RETURNING id',
@@ -166,15 +170,15 @@ export async function createTeamAction(formData: FormData): Promise<{ success: b
             let valuesString = '';
             const queryParams: any[] = [newTeamId, organizationId];
             for (let i = 0; i < memberIds.length; i++) {
-                valuesString += `($1, $2, $${i+3})${i === memberIds.length - 1 ? '' : ','}`;
+                valuesString += `($1, $2, $${i + 3})${i === memberIds.length - 1 ? '' : ','}`;
                 queryParams.push(memberIds[i]);
             }
-            
-            if(memberIds.length > 0) {
-               await runQuery(
-                  `INSERT INTO team_members (team_id, organization_id, user_id) VALUES ${valuesString}`,
-                  queryParams
-               );
+
+            if (memberIds.length > 0) {
+                await runQuery(
+                    `INSERT INTO team_members (team_id, organization_id, user_id) VALUES ${valuesString}`,
+                    queryParams
+                );
             }
         }
 
@@ -198,7 +202,7 @@ export async function inviteUserToOrganizationAction(formData: FormData): Promis
     if (!currentUser || !organizationId) {
         return { success: false, error: "Usuário não autenticado ou organização não selecionada." };
     }
-     if (!usernameToInvite || !roleId) {
+    if (!usernameToInvite || !roleId) {
         return { success: false, error: "Nome de usuário e cargo são obrigatórios." };
     }
 
@@ -213,12 +217,12 @@ export async function inviteUserToOrganizationAction(formData: FormData): Promis
             'INSERT INTO organization_users (user_id, organization_id, role_id) VALUES ($1, $2, $3) ON CONFLICT (user_id, organization_id) DO UPDATE SET role_id = EXCLUDED.role_id',
             [userToInvite.id, organizationId, roleId]
         );
-        
+
         revalidatePath('/organization/members');
         return { success: true };
 
     } catch (error: any) {
-         if (error.code === '23505') { // unique_violation, though handled by ON CONFLICT
+        if (error.code === '23505') { // unique_violation, though handled by ON CONFLICT
             return { success: false, error: `O usuário "${usernameToInvite}" já pertence a esta organização.` };
         }
         console.error('[OrganizationActions] Erro ao convidar usuário:', error);
@@ -283,7 +287,7 @@ export async function updateRoleAction(formData: FormData): Promise<{ success: b
     const permissionIds = formData.getAll('permissions') as string[];
 
     if (!roleId || !name) return { success: false, error: "ID e nome do cargo são obrigatórios." };
-    
+
     const result = await updateRole(roleId, name, description, permissionIds);
     if (result.success) {
         revalidatePath('/organization/members');
@@ -296,7 +300,7 @@ export async function deleteRoleAction(roleId: string): Promise<{ success: boole
     if (!user?.current_organization_id) return { success: false, error: "Usuário não autenticado." };
 
     const result = await deleteRole(roleId);
-     if (result.success) {
+    if (result.success) {
         revalidatePath('/organization/members');
     }
     return result;
@@ -311,15 +315,15 @@ export async function deleteOrganizationAction(organizationId: string): Promise<
     // Security check: Verify the user is the owner of the organization
     const orgs = await getOrganizationsForUser(user.id);
     const orgToDelete = orgs.find(org => org.id === organizationId);
-    
+
     if (!orgToDelete) {
         return { success: false, error: "Organização não encontrada ou você não tem permissão para excluí-la." };
     }
-    
+
     if (orgToDelete.owner_id !== user.id) {
         return { success: false, error: "Apenas o proprietário pode excluir a organização." };
     }
-    
+
     // Check if user is trying to delete their last organization
     if (orgs.length <= 1) {
         return { success: false, error: "Você não pode excluir sua única organização." };

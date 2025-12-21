@@ -13,7 +13,7 @@ import {
 import { executeFlow } from '@/lib/flow-engine/engine';
 import { storeRequestDetails } from '@/lib/flow-engine/webhook-handler';
 import { findNodeById, findNextNodeId } from '@/lib/flow-engine/utils';
-import { intelligentChoice } from '@/ai/flows/intelligent-choice-flow';
+import { classifyIntent } from '@/ai/flows/intention-classification-flow';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData } from '@/lib/types';
 
 // Helper function to check for nil values (null, undefined, '')
@@ -229,54 +229,94 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               nextNodeId = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
             }
           } else if (session.awaiting_input_type === 'option' && Array.isArray(session.awaiting_input_details.options)) {
-            const options = session.awaiting_input_details.options;
+            const options = session.awaiting_input_details.options; // Can be string[] or {id, value}[]
+
+            let chosenOptionId: string | undefined = undefined;
             let chosenOptionText: string | undefined = undefined;
+
             let valueForOptionMatching = String(responseValue);
             if (isApiCallResponse && awaitingNode.apiResponsePathForValue) {
               const extracted = getProperty(responseValue, awaitingNode.apiResponsePathForValue);
               if (extracted !== undefined) valueForOptionMatching = String(extracted);
             }
             const trimmedReceivedMessage = valueForOptionMatching.trim();
-            const normalizedOptionLabels = options.map(opt => opt.trim().replace(/^[\[\s,]+|[\],\s]+$/g, '').toLowerCase());
+
+            // Helper to get text from option
+            const getOptText = (opt: any) => typeof opt === 'string' ? opt : opt.value;
+            const getOptId = (opt: any) => typeof opt === 'string' ? opt : opt.id;
+
+            const normalizedOptionLabels = options.map(opt => getOptText(opt).trim().replace(/^[\[\s,]+|[\],\s]+$/g, '').toLowerCase());
             const aiEnabled = !!session.awaiting_input_details.aiEnabled;
             const aiModelName = session.awaiting_input_details.aiModelName;
 
             if (aiEnabled) {
               try {
-                const aiResult = await intelligentChoice({
+                const intents = options.map((opt: any) => ({
+                  id: getOptId(opt),
+                  label: getOptText(opt) || 'Option',
+                  description: getOptText(opt) || ''
+                }));
+
+                const aiResult = await classifyIntent({
                   userMessage: trimmedReceivedMessage,
-                  availableChoices: options,
+                  intents: intents,
                   modelName: aiModelName || undefined,
                 });
-                if (aiResult?.bestChoice) {
-                  chosenOptionText = aiResult.bestChoice;
+
+                if (aiResult.matchedIntentId) {
+                  const match = options.find((o: any) => getOptId(o) === aiResult.matchedIntentId);
+                  if (match) {
+                    chosenOptionText = getOptText(match);
+                    chosenOptionId = getOptId(match);
+                  }
                 }
               } catch (error) {
-                console.error('[API Evolution Trigger] intelligentChoice failed, falling back to rule-based matching.', error);
+                console.error('[API Evolution Trigger] classifyIntent failed, falling back to rule-based matching.', error);
               }
             }
 
-            if (!chosenOptionText) {
-              const numericChoice = parseInt(trimmedReceivedMessage, 10);
-              if (!isNaN(numericChoice) && numericChoice > 0 && numericChoice <= options.length) {
-                chosenOptionText = options[numericChoice - 1];
-              } else {
+            if (!chosenOptionId) {
+              let isNumberMatch = false;
+              if (/^\d+$/.test(trimmedReceivedMessage)) {
+                const numericChoice = parseInt(trimmedReceivedMessage, 10);
+                if (!isNaN(numericChoice) && numericChoice > 0 && numericChoice <= options.length) {
+                  const match = options[numericChoice - 1];
+                  chosenOptionText = getOptText(match);
+                  chosenOptionId = getOptId(match);
+                  isNumberMatch = true;
+                }
+              }
+
+              if (!isNumberMatch) {
                 const cleanedMessage = trimmedReceivedMessage.replace(/^[\[\s,]+|[\],\s]+$/g, '').toLowerCase();
                 const matchIndex = normalizedOptionLabels.indexOf(cleanedMessage);
                 if (matchIndex >= 0) {
-                  chosenOptionText = options[matchIndex];
+                  const match = options[matchIndex];
+                  chosenOptionText = getOptText(match);
+                  chosenOptionId = getOptId(match);
                 } else {
-                  chosenOptionText = options.find(opt => opt.trim().toLowerCase() === cleanedMessage);
+                  const match = options.find((opt: any) => getOptText(opt).trim().toLowerCase() === cleanedMessage);
+                  if (match) {
+                    chosenOptionText = getOptText(match);
+                    chosenOptionId = getOptId(match);
+                  }
                 }
               }
             }
 
-            if (chosenOptionText) {
+            if (chosenOptionId) {
               const targetVarName = normalizeVariableName(session.awaiting_input_details.variableToSave);
               if (targetVarName) {
-                setProperty(session.flow_variables, targetVarName, chosenOptionText);
+                setProperty(session.flow_variables, targetVarName, chosenOptionText); // Save the TEXT (human readable)
               }
-              nextNodeId = findNextNodeId(awaitingNode.id, chosenOptionText, workspace.connections || []);
+              // Route using ID (for new nodes) or Text (legacy)
+              nextNodeId = findNextNodeId(awaitingNode.id, chosenOptionId, workspace.connections || []);
+
+              // Fallback for legacy connections that might still be using value as handle?
+              if (!nextNodeId && chosenOptionId !== chosenOptionText) {
+                nextNodeId = findNextNodeId(awaitingNode.id, chosenOptionText!, workspace.connections || []);
+              }
+
               if (!nextNodeId) {
                 nextNodeId = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
               }

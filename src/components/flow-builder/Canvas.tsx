@@ -41,6 +41,12 @@ interface CanvasProps {
   availableVariablesByNode: Record<string, string[]>;
   highlightedNodeIdBySession: string | null;
   activeWorkspace: WorkspaceData | undefined | null;
+  // New selection & drag props
+  selectedNodeIds: string[];
+  onSelectNode: (id: string, shiftKey: boolean) => void;
+  onNodeDragStart: (e: React.MouseEvent, id: string) => void;
+  onUpdatePosition: (id: string, x: number, y: number) => void;
+  onEndConnection: (e: React.MouseEvent, node: NodeData) => void;
 }
 
 const SVG_CANVAS_DIMENSION = 50000;
@@ -49,7 +55,8 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   nodes, connections, drawingLine, canvasOffset, zoomLevel,
   onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDuplicateNode, onDeleteConnection,
   onCanvasMouseDown, highlightedConnectionId, setHighlightedConnectionId,
-  availableVariablesByNode, highlightedNodeIdBySession, activeWorkspace
+  availableVariablesByNode, highlightedNodeIdBySession, activeWorkspace,
+  selectedNodeIds, onSelectNode, onNodeDragStart, onUpdatePosition, onEndConnection
 }, ref) => {
   const localCanvasRef = useRef<HTMLDivElement>(null);
   const flowContentWrapperRef = useRef<HTMLDivElement>(null);
@@ -130,9 +137,37 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
     return `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
   }, []);
 
-  const getHandleCenterOffset = useCallback((_nodeId: string, _handleId: string | null, _type: 'source' | 'target', _currentZoom: number): number | null => {
-    // Deprecated: pure math calculation is now used for better performance
-    return null;
+  const getHandleCenterOffset = useCallback((nodeId: string, handleId: string | null, _type: 'source' | 'target', currentZoom: number): number | null => {
+    // DOM-based lookup for accurate handle positioning
+    try {
+      if (!handleId) return null;
+      if (typeof document === 'undefined') return null;
+
+      const nodeEl = document.querySelector(`[data-node-id="${nodeId}"]`);
+      if (!nodeEl) return null;
+
+      // Search for specific handle within the node
+      let handleEl = nodeEl.querySelector(`[data-handle-id="${handleId}"]`);
+
+      if (!handleEl) return null;
+
+      const nodeRect = nodeEl.getBoundingClientRect();
+      const handleRect = handleEl.getBoundingClientRect();
+
+      // Calculate relative position from top of node content
+      // Note: node.y corresponds to the top of the nodeCard element (nodeEl).
+      // Difference in pixels = handleRect.top - nodeRect.top.
+      // Divide by zoom to get logical pixels.
+      // Add half height to center it.
+
+      const relativeTop = (handleRect.top - nodeRect.top) / currentZoom;
+      const relativeCenter = relativeTop + (handleRect.height / currentZoom / 2);
+
+      return relativeCenter;
+
+    } catch (e) {
+      return null;
+    }
   }, []);
 
   const nodeMap = useMemo(() => {
@@ -159,17 +194,23 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
       >
         <NodeCard
           node={node}
-          onUpdate={onUpdateNode}
+          onUpdateNode={onUpdateNode}
           onStartConnection={onStartConnection}
           onDeleteNode={onDeleteNode}
           onDuplicateNode={onDuplicateNode}
           availableVariables={availableVariablesByNode[node.id] || []}
-          isSessionHighlighted={node.id === highlightedNodeIdBySession}
           activeWorkspace={activeWorkspace}
+
+          // Passing new props
+          isSelected={selectedNodeIds.includes(node.id)}
+          onSelect={onSelectNode}
+          onDragStart={onNodeDragStart}
+          onUpdatePosition={onUpdatePosition}
+          onEndConnection={onEndConnection}
         />
       </motion.div>
     ))
-  ), [nodes, onUpdateNode, onStartConnection, onDeleteNode, availableVariablesByNode, highlightedNodeIdBySession, activeWorkspace]);
+  ), [nodes, onUpdateNode, onStartConnection, onDeleteNode, onDuplicateNode, availableVariablesByNode, highlightedNodeIdBySession, activeWorkspace, selectedNodeIds, onSelectNode, onNodeDragStart, onUpdatePosition, onEndConnection]);
 
   const renderedConnections = useMemo(() => (
     (connections || []).map((conn) => {
@@ -187,8 +228,11 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
 
       let sourceHandleYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET;
 
-      // Pure math calculation for source handle position
-      if (sourceNode.type === 'start' && Array.isArray(sourceNode.triggers) && conn.sourceHandle) {
+      // Try accurate DOM lookup first
+      const domOffset = getHandleCenterOffset(sourceNode.id, conn.sourceHandle || 'default', 'source', zoomLevel);
+      if (domOffset !== null) {
+        sourceHandleYOffset = domOffset;
+      } else if (sourceNode.type === 'start' && Array.isArray(sourceNode.triggers) && conn.sourceHandle) {
         let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
         let found = false;
 
@@ -210,22 +254,58 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
         }
         if (!found) sourceHandleYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET; // Fallback
 
-      } else if (sourceNode.type === 'option' && typeof sourceNode.optionsList === 'string' && conn.sourceHandle) {
-        const options = sourceNode.optionsList.split('\n').map(opt => opt.trim()).filter(opt => opt !== '');
-        const optionIndex = options.indexOf(conn.sourceHandle);
-        if (optionIndex !== -1) {
-          sourceHandleYOffset = OPTION_NODE_HANDLE_INITIAL_Y_OFFSET + (optionIndex * OPTION_NODE_HANDLE_SPACING_Y);
+      } else if (sourceNode.type === 'option') {
+        // New logic for array-based options
+        const options = sourceNode.options || [];
+        // Legacy string fallback
+        const paramsOptions = typeof sourceNode.optionsList === 'string'
+          ? sourceNode.optionsList.split('\n').map((opt, i) => ({ id: "", value: opt.trim() })) // simplified
+          : [];
+
+        // Use array options if present, otherwise legacy
+        const effectiveOptions = options.length > 0 ? options : paramsOptions;
+
+        // Layout estimation:
+        // Header: 40px
+        // Prompt+Toolbar: ~110px
+        // "Opções": ~20px
+        // Start ~170px
+        const initialY = 175;
+        const spacingY = 44;
+
+        if (conn.sourceHandle) {
+          // Try finding by ID first (new way)
+          let index = effectiveOptions.findIndex(o => o.id === conn.sourceHandle);
+          // If not found, try by value (legacy/string way)
+          if (index === -1) {
+            // For legacy string list, sourceHandle is the value itself
+            index = effectiveOptions.findIndex(o => o.value === conn.sourceHandle);
+          }
+
+          if (index !== -1) {
+            sourceHandleYOffset = initialY + (index * spacingY);
+          }
         }
+
       } else if (sourceNode.type === 'condition' || sourceNode.type === 'time-of-day') {
         if (conn.sourceHandle === 'true') {
-          sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (1 / 3) + 6;
+          sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (1 / 3) + 6 + 100; // Adjusted for content height
         } else if (conn.sourceHandle === 'false') {
-          sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (2 / 3) + 6;
+          sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (2 / 3) + 6 + 100;
         }
+        // Condition layout: Variables input (~80px) -> True/False handles. 
+        // Handles are distinct blocks. 
+        // Actually, ConditionNode.tsx shows a different layout. 
+        // It's safer to stick to roughly middle if we can't be precise, 
+        // OR inspect ConditionNode again. 
+        // Let's use a standard offset + spacing.
+        sourceHandleYOffset = conn.sourceHandle === 'true' ? 140 : 180;
+
       } else if (sourceNode.type === 'switch') {
         const switchCases = sourceNode.switchCases || [];
-        const initialY = 65;
-        const spacingY = 30;
+        // Layout: Variable input (~80px) -> "Casos" (~20px) -> Loop
+        const initialY = 145;
+        const spacingY = 44;
 
         if (conn.sourceHandle && conn.sourceHandle !== 'default') {
           const caseIndex = switchCases.findIndex(c => c.id === conn.sourceHandle);
@@ -234,7 +314,27 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
           }
         } else {
           // Default/Else case
-          sourceHandleYOffset = initialY + (switchCases.length * spacingY);
+          // It's after the list.
+          sourceHandleYOffset = initialY + (switchCases.length * spacingY) + 40; // Extra spacing for label
+        }
+
+      } else if (sourceNode.type === 'intention-router') {
+        const intents = sourceNode.intents || [];
+        // Layout: Desc (~80px) -> List
+        const initialY = 140;
+        const spacingY = 125; // Each intent block is tall
+
+        if (conn.sourceHandle && conn.sourceHandle !== 'default') {
+          const index = intents.findIndex(i => i.id === conn.sourceHandle);
+          if (index !== -1) {
+            sourceHandleYOffset = initialY + (index * spacingY) + 50; // Handle is largely centered in block?
+            // In IntentionRouterNode, output handle is "top-1/2" of the intent block.
+            // Intent block ~120px? 
+            // Let's say center is +60px from start of block.
+          }
+        } else {
+          // Fallback
+          sourceHandleYOffset = initialY + (intents.length * spacingY) + 40;
         }
       }
 

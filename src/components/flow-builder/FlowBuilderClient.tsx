@@ -228,10 +228,18 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const [highlightedConnectionId, setHighlightedConnectionId] = useState<string | null>(null);
   const [highlightedNodeIdBySession, setHighlightedNodeIdBySession] = useState<string | null>(null);
 
+  // Selection State
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+
   const [canvasOffset, setCanvasOffset] = useState<CanvasOffset>({ x: GRID_SIZE * 2, y: GRID_SIZE * 2 });
   const [zoomLevel, setZoomLevel] = useState(1);
 
   const isPanning = useRef(false);
+  const isDraggingNode = useRef(false);
+  const draggedNodeId = useRef<string | null>(null);
+  const dragStartMousePosition = useRef({ x: 0, y: 0 });
+  const initialNodePosition = useRef({ x: 0, y: 0 });
+
   const panStartMousePosition = useRef({ x: 0, y: 0 });
   const initialCanvasOffsetOnPanStart = useRef<CanvasOffset>({ x: 0, y: 0 });
 
@@ -522,14 +530,43 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   );
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Only pan if clicking strictly on the canvas background/wrapper, not on nodes
     if (canvasRef.current && (e.target === canvasRef.current || (e.target as HTMLElement).id === 'flow-content-wrapper')) {
       isPanning.current = true;
       panStartMousePosition.current = { x: e.clientX, y: e.clientY };
       initialCanvasOffsetOnPanStart.current = { ...canvasOffsetCbRef.current };
       if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
       setHighlightedNodeIdBySession(null);
+      // Clear selection when clicking canvas
+      setSelectedNodeIds([]);
     }
   }, []);
+
+  const handleNodeDragStart = useCallback((e: React.MouseEvent, nodeId: string) => {
+    e.stopPropagation();
+    isDraggingNode.current = true;
+    draggedNodeId.current = nodeId;
+    dragStartMousePosition.current = { x: e.clientX, y: e.clientY };
+
+    // Find initial position
+    const node = activeWorkspace?.nodes.find(n => n.id === nodeId);
+    if (node) {
+      initialNodePosition.current = { x: node.x, y: node.y };
+    }
+  }, [activeWorkspace]);
+
+  const handleSelectNode = useCallback((id: string, shiftKey: boolean) => {
+    setSelectedNodeIds(prev => {
+      if (shiftKey) {
+        return prev.includes(id) ? prev.filter(nid => nid !== id) : [...prev, id];
+      }
+      return [id];
+    });
+  }, []);
+
+  const handleUpdateNodePosition = useCallback((id: string, x: number, y: number) => {
+    updateNode(id, { x, y });
+  }, [updateNode]);
 
   const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
@@ -539,6 +576,15 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
         x: initialCanvasOffsetOnPanStart.current.x + dx,
         y: initialCanvasOffsetOnPanStart.current.y + dy,
       });
+    } else if (isDraggingNode.current && draggedNodeId.current) {
+      const dx = (e.clientX - dragStartMousePosition.current.x) / zoomLevelCbRef.current;
+      const dy = (e.clientY - dragStartMousePosition.current.y) / zoomLevelCbRef.current;
+
+      const newX = Math.round((initialNodePosition.current.x + dx) / GRID_SIZE) * GRID_SIZE;
+      const newY = Math.round((initialNodePosition.current.y + dy) / GRID_SIZE) * GRID_SIZE;
+
+      updateNode(draggedNodeId.current, { x: newX, y: newY });
+
     } else if (drawingLineRef.current && canvasRef.current) {
       const canvasRect = canvasRef.current.getBoundingClientRect();
       const currentCanvasOffset = canvasOffsetCbRef.current;
@@ -559,12 +605,15 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
         };
       });
     }
-  }, []);
+  }, [updateNode]);
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
       isPanning.current = false;
       if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
+    } else if (isDraggingNode.current) {
+      isDraggingNode.current = false;
+      draggedNodeId.current = null;
     } else if (drawingLineRef.current) {
       const targetElement = document.elementFromPoint(e.clientX, e.clientY);
       const targetHandleElement = targetElement?.closest('[data-handle-type="target"]');
@@ -740,6 +789,11 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
               availableVariablesByNode={availableVariablesByNode}
               highlightedNodeIdBySession={highlightedNodeIdBySession}
               activeWorkspace={activeWorkspace}
+              selectedNodeIds={selectedNodeIds}
+              onSelectNode={handleSelectNode}
+              onNodeDragStart={handleNodeDragStart}
+              onUpdatePosition={handleUpdateNodePosition}
+              onEndConnection={(e: React.MouseEvent, node: NodeData) => { /* Handle connection end if needed logic here, mostly handled by mouseUp global */ }}
             />
           </div>
           {hasMounted && isChatPanelOpen && (

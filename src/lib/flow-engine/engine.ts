@@ -18,6 +18,7 @@ import type { NodeData, Connection, FlowSession, WorkspaceData, ApiResponseMappi
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 import { intelligentChoice } from '@/ai/flows/intelligent-choice-flow';
+import { classifyIntent } from '@/ai/flows/intention-classification-flow';
 import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates, evaluateExpression } from './utils';
 import jsonata from 'jsonata';
 
@@ -125,10 +126,29 @@ const normalizeOptionsFromString = (raw: string): string[] => {
       // ignore parse errors
     }
   }
-  return raw
-    .split('\n')
+  const lines = raw
+    .split(/\r?\n/)
     .map(opt => opt.replace(/^[\[\s,]+|[\],\s]+$/g, '').trim())
     .filter(opt => opt.length > 0);
+
+  if (lines.length > 1) return lines;
+
+  const validLine = lines[0];
+  if (!validLine) return [];
+
+  if (validLine.includes('\\n')) {
+    return validLine.split('\\n').map(s => s.trim()).filter(Boolean);
+  }
+
+  if (validLine.includes(',')) {
+    return validLine.split(',').map(s => s.trim()).filter(Boolean);
+  }
+
+  if (/^[\w\d.-]+(\s+[\w\d.-]+)+$/.test(validLine)) {
+    return validLine.split(/\s+/).map(s => s.trim()).filter(Boolean);
+  }
+
+  return [validLine];
 };
 
 function createSandboxConsole(sessionId: string) {
@@ -365,12 +385,30 @@ export async function executeFlow(
 
         if (nodeType === 'option') {
           const q = substituteVariablesInText(currentNode.questionText, session.flow_variables);
-          const substitutedOptions = substituteVariablesInText(currentNode.optionsList || '', session.flow_variables);
-          const optionsList = normalizeOptionsFromString(substitutedOptions);
+
+          let optionsList: Array<string | { id: string; value: string }> = [];
+          // New structured options
+          if (Array.isArray(currentNode.options) && currentNode.options.length > 0) {
+            optionsList = currentNode.options.flatMap(opt => {
+              const val = substituteVariablesInText(opt.value, session.flow_variables);
+              const splitVals = normalizeOptionsFromString(val);
+              if (splitVals.length > 1) {
+                return splitVals.map((v, i) => ({ id: `${opt.id}_${i}`, value: v }));
+              }
+              return [{ id: opt.id, value: val }];
+            });
+          } else {
+            // Legacy string-based options
+            const substitutedOptions = substituteVariablesInText(currentNode.optionsList || '', session.flow_variables);
+            optionsList = normalizeOptionsFromString(substitutedOptions);
+          }
 
           if (q && optionsList.length > 0) {
             let messageWithOptions = q + '\n\n';
-            optionsList.forEach((opt, index) => { messageWithOptions += `${index + 1}. ${opt}\n`; });
+            optionsList.forEach((opt, index) => {
+              const text = typeof opt === 'string' ? opt : opt.value;
+              messageWithOptions += `${index + 1}. ${text}\n`;
+            });
 
             let finalMessage = messageWithOptions.trim();
             if (session.flow_context !== 'chatwoot') {
@@ -834,6 +872,42 @@ export async function executeFlow(
         const content = substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables);
         await sendOmniChannelMessage(session, currentWorkspace, content);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+        break;
+      }
+
+      case 'intention-router': {
+        const userMessage = getProperty(session.flow_variables, 'last_user_input') || getProperty(session.flow_variables, 'last_user_choice');
+        const intents = currentNode.intents;
+
+        if (!userMessage || !Array.isArray(intents) || intents.length === 0) {
+          console.warn(`[Flow Engine - ${session.session_id}] Intention Router: Missing user message or intents definition.`);
+          nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+          break;
+        }
+
+        console.log(`[Flow Engine - ${session.session_id}] Classifying intent for message: "${userMessage}" against ${intents.length} intents.`);
+
+        try {
+          const classification = await classifyIntent({
+            userMessage: String(userMessage),
+            intents: intents,
+            modelName: 'googleai/gemini-2.0-flash' // Could be made configurable later
+          });
+
+          if (classification.matchedIntentId) {
+            console.log(`[Flow Engine] Intent Matched: ${classification.matchedIntentId} (Confidence: ${classification.confidence})`);
+            nextNodeId = findNextNodeId(currentNode.id, classification.matchedIntentId, connections);
+
+            // Saving result to variables for debugging or usage
+            setProperty(session.flow_variables, `_intent_result_${currentNode.id}`, classification);
+          } else {
+            console.log(`[Flow Engine] No intent matched. Reasoning: ${classification.reasoning}`);
+            nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+          }
+        } catch (error) {
+          console.error(`[Flow Engine] Intention Classification Failed:`, error);
+          nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+        }
         break;
       }
 

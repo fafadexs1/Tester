@@ -18,6 +18,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
 import { getProperty, setProperty } from 'dot-prop';
+import { classifyIntent } from '@/ai/flows/intention-classification-flow';
 import jsonata from 'jsonata';
 
 
@@ -25,7 +26,9 @@ interface Message {
   id: string;
   text: string | React.ReactNode;
   sender: 'user' | 'bot';
-  options?: string[];
+  options?: (string | { id: string; value: string })[];
+  // New property to store the chosen option's ID for user messages
+  chosenOptionId?: string;
 }
 
 type AwaitingInputType = 'text' | 'option';
@@ -126,6 +129,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
   const [isSimulateWebhookDialogOpen, setIsSimulateWebhookDialogOpen] = useState(false);
   const [webhookDialogJsonInput, setWebhookDialogJsonInput] = useState<string>('');
+  const [currentOptions, setCurrentOptions] = useState<any[]>([]);
 
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const activeFlowVariablesRef = useRef(flowVariables);
@@ -157,10 +161,35 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         // fall back to splitting logic below
       }
     }
-    return raw
-      .split('\n')
+    const lines = raw.split(/\r?\n/)
       .map(opt => opt.replace(/^[\[\s,]+|[\],\s]+$/g, '').trim())
       .filter(opt => opt.length > 0);
+
+    if (lines.length > 1) {
+      return lines;
+    }
+
+    // If only one line, try other separators
+    const validLine = lines[0];
+    if (!validLine) return [];
+
+    // Check for literal escaped newlines (e.g. "1\n2")
+    if (validLine.includes('\\n')) {
+      return validLine.split('\\n').map(s => s.trim()).filter(Boolean);
+    }
+
+    // Comma separated
+    if (validLine.includes(',')) {
+      return validLine.split(',').map(s => s.trim()).filter(Boolean);
+    }
+
+    // Space separated IDs (numbers, alphanumeric, dots)
+    // Matches "1 10091" or "1.0 2.0"
+    if (/^[\w\d.-]+(\s+[\w\d.-]+)+$/.test(validLine)) {
+      return validLine.split(/\s+/).map(s => s.trim()).filter(Boolean);
+    }
+
+    return [validLine];
   }, []);
 
   const getNodeById = useCallback((nodeId: string): NodeData | undefined => {
@@ -226,7 +255,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       }
       if (Array.isArray(value)) {
         console.log(`[TestChatPanel] substituteVariables: Variable "{{${variableName}}}" is array, joining items.`);
-        return value.map(v => (typeof v === 'object' ? JSON.stringify(v) : String(v))).join(', ');
+        return value.map(v => (typeof v === 'object' ? JSON.stringify(v) : String(v))).join('\n');
       }
 
       if (typeof value === 'object') {
@@ -403,14 +432,28 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
       case 'option': {
         const questionText = substituteVariables(node.questionText, updatedVarsForNextNode);
-        if (questionText && node.optionsList) {
+
+        let optionsList: (string | { id: string; value: string })[] = [];
+        if (Array.isArray(node.options) && node.options.length > 0) {
+          optionsList = node.options.flatMap(opt => {
+            const val = substituteVariables(opt.value, updatedVarsForNextNode);
+            const splitVals = normalizeOptionsFromString(val);
+            if (splitVals.length > 1) {
+              return splitVals.map((v, i) => ({ id: `${opt.id}_${i}`, value: v }));
+            }
+            return [{ id: opt.id, value: val }];
+          });
+        } else {
           const substitutedOptions = substituteVariables(node.optionsList, updatedVarsForNextNode);
-          const options = normalizeOptionsFromString(substitutedOptions);
+          optionsList = normalizeOptionsFromString(substitutedOptions);
+        }
+
+        if (questionText && optionsList.length > 0) {
           setMessages(prev => [...prev, {
             id: uuidv4(),
             text: questionText,
             sender: 'bot',
-            options: options
+            options: optionsList
           }]);
           if (activeWorkspace?.evolution_api_enabled) {
             const phoneNumber = activeVars.whatsapp_sender_jid;
@@ -418,6 +461,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
               // Lógica similar ao nó 'message' para enviar questionText
             }
           }
+          setCurrentOptions(optionsList);
           setAwaitingInputFor(node);
           setAwaitingInputType('option');
         } else {
@@ -1086,46 +1130,21 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     setFlowVariables({});
     activeFlowVariablesRef.current = {};
     setIsProcessingNode(false);
+    setCurrentOptions([]);
   }, []);
 
-  const handleSendMessage = useCallback(async () => {
-    if (inputValue.trim() === '' || !awaitingInputFor || awaitingInputType !== 'text' || isProcessingNode) {
-      return;
-    }
-    console.log('[TestChatPanel] handleSendMessage triggered.');
-    const userMessageText = inputValue;
-    setMessages(prev => [...prev, { id: uuidv4(), text: userMessageText, sender: 'user' }]);
+  const handleOptionClick = useCallback(async (option: string | { id: string; value: string }) => {
+    // Note: checks removed here to allow calling from handleSendMessage
+    // if (!awaitingInputFor || awaitingInputType !== 'option' || isProcessingNode) return;
 
-    let currentVarsSnapshot = { ...activeFlowVariablesRef.current };
-    console.log('[TestChatPanel] awaitingInputFor (input node):', JSON.parse(JSON.stringify(awaitingInputFor)));
+    const optionText = typeof option === 'string' ? option : option.value;
+    const optionId = typeof option === 'string' ? option : option.id;
 
-    if (awaitingInputFor.variableToSaveResponse && awaitingInputFor.variableToSaveResponse.trim() !== '') {
-      const varName = awaitingInputFor.variableToSaveResponse as string;
-      console.log(`[TestChatPanel] Saving input to variable: ${varName} = ${userMessageText}`);
-      currentVarsSnapshot = { ...currentVarsSnapshot, [varName]: userMessageText };
-    }
-
-    setInputValue('');
-    setAwaitingInputFor(null);
-
-    setFlowVariables(currentVarsSnapshot);
-    activeFlowVariablesRef.current = currentVarsSnapshot;
-
-    const nextNodeIdAfterInput = findNextNodeId(awaitingInputFor.id, 'default');
-    console.log('[TestChatPanel] nextNodeIdAfterInput found:', nextNodeIdAfterInput);
-
-    processNode(nextNodeIdAfterInput, currentVarsSnapshot);
-  }, [inputValue, awaitingInputFor, awaitingInputType, isProcessingNode, findNextNodeId, processNode, setFlowVariables]);
-
-  const handleOptionClick = useCallback(async (optionText: string) => {
-    if (!awaitingInputFor || awaitingInputType !== 'option' || isProcessingNode) {
-      return;
-    }
-    console.log('[TestChatPanel] handleOptionClick triggered. Option chosen:', optionText);
+    console.log('[TestChatPanel] handleOptionClick triggered. Option chosen:', optionText, 'ID:', optionId);
     setMessages(prev => [...prev, { id: uuidv4(), text: `Você escolheu: ${optionText}`, sender: 'user' }]);
 
     let currentVarsSnapshot = { ...activeFlowVariablesRef.current };
-    if (awaitingInputFor.variableToSaveChoice && awaitingInputFor.variableToSaveChoice.trim() !== '') {
+    if (awaitingInputFor?.variableToSaveChoice && awaitingInputFor.variableToSaveChoice.trim() !== '') {
       const varName = awaitingInputFor.variableToSaveChoice as string;
       console.log(`[TestChatPanel] Saving choice to variable: ${varName} = ${optionText}`);
       currentVarsSnapshot = { ...currentVarsSnapshot, [varName]: optionText };
@@ -1137,18 +1156,119 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     setFlowVariables(currentVarsSnapshot);
     activeFlowVariablesRef.current = currentVarsSnapshot;
 
-    let nextNodeIdAfterOption = findNextNodeId(awaitingInputFor.id, optionText);
+    // Use ID for routing if available, otherwise text
+    let nextNodeIdAfterOption = findNextNodeId(awaitingInputFor?.id || '', optionId);
+
+    // Fallback: checks if there's a connection matching the text if ID failed (legacy support)
+    if (!nextNodeIdAfterOption && optionId !== optionText) {
+      nextNodeIdAfterOption = findNextNodeId(awaitingInputFor?.id || '', optionText);
+    }
+
     if (!nextNodeIdAfterOption) {
-      nextNodeIdAfterOption = findNextNodeId(awaitingInputFor.id, 'default');
+      nextNodeIdAfterOption = findNextNodeId(awaitingInputFor?.id || '', 'default');
     }
     if (!nextNodeIdAfterOption && activeWorkspace) {
-      const fallbackConn = activeWorkspace.connections.find(conn => conn.from === awaitingInputFor.id);
+      const fallbackConn = activeWorkspace.connections.find(conn => conn.from === awaitingInputFor?.id);
       nextNodeIdAfterOption = fallbackConn?.to || null;
     }
     console.log('[TestChatPanel] nextNodeIdAfterOption found:', nextNodeIdAfterOption);
 
     processNode(nextNodeIdAfterOption, currentVarsSnapshot);
   }, [awaitingInputFor, awaitingInputType, isProcessingNode, findNextNodeId, processNode, setFlowVariables, activeWorkspace]);
+
+  const handleSendMessage = useCallback(async () => {
+    if (inputValue.trim() === '' || !awaitingInputFor || isProcessingNode) {
+      return;
+    }
+    const userMessageText = inputValue.trim();
+
+    // Retrieve fresh node data to ensure we have the latest settings (e.g. aiEnabled toggled during test)
+    const freshNode = activeWorkspace?.nodes.find(n => n.id === awaitingInputFor.id) || awaitingInputFor;
+
+    if (awaitingInputType === 'text') {
+      console.log('[TestChatPanel] handleSendMessage (Text Input) triggered.');
+      setMessages(prev => [...prev, { id: uuidv4(), text: userMessageText, sender: 'user' }]);
+
+      let currentVarsSnapshot = { ...activeFlowVariablesRef.current };
+      if (freshNode.variableToSaveResponse && freshNode.variableToSaveResponse.trim() !== '') {
+        const varName = freshNode.variableToSaveResponse as string;
+        currentVarsSnapshot = { ...currentVarsSnapshot, [varName]: userMessageText };
+      }
+
+      setInputValue('');
+      setAwaitingInputFor(null);
+      setFlowVariables(currentVarsSnapshot);
+      activeFlowVariablesRef.current = currentVarsSnapshot;
+
+      const nextNodeIdAfterInput = findNextNodeId(awaitingInputFor.id, 'default');
+      processNode(nextNodeIdAfterInput, currentVarsSnapshot);
+    }
+    else if (awaitingInputType === 'option') {
+      console.log('[TestChatPanel] handleSendMessage (Option Input) triggered.');
+      // Don't show user message yet, handleOptionClick will do it if successful? 
+      // Actually handleOptionClick adds "Você escolheu: ...". 
+      // If we type "I want X", we should probably show the user typed matching "X".
+      // Let's show the user input first.
+      setMessages(prev => [...prev, { id: uuidv4(), text: userMessageText, sender: 'user' }]);
+      setInputValue('');
+
+      // 1. Try Number Match (Strict)
+      if (/^\d+$/.test(userMessageText)) {
+        const indexMatch = parseInt(userMessageText);
+        if (!isNaN(indexMatch) && indexMatch >= 1 && indexMatch <= currentOptions.length) {
+          await handleOptionClick(currentOptions[indexMatch - 1]);
+          return;
+        }
+      }
+
+      // 2. Try Exact Text Match
+      const textMatch = currentOptions.find(opt => {
+        const val = typeof opt === 'string' ? opt : opt.value;
+        return val.toLowerCase() === userMessageText.toLowerCase();
+      });
+      if (textMatch) {
+        await handleOptionClick(textMatch);
+        return;
+      }
+
+      // 3. Try AI Match
+      if (freshNode.aiEnabled) {
+        setMessages(prev => [...prev, { id: uuidv4(), text: "Analisando sua resposta com IA...", sender: 'bot' }]);
+
+        const intents = currentOptions.map(opt => {
+          const val = typeof opt === 'string' ? opt : opt.value;
+          const id = typeof opt === 'string' ? opt : opt.id;
+          return { id, label: val, description: val };
+        });
+
+        try {
+          const aiResult = await classifyIntent({
+            userMessage: userMessageText,
+            intents,
+            modelName: freshNode.aiModelName
+          });
+
+          if (aiResult.matchedIntentId) {
+            const matchedOpt = currentOptions.find(opt => (typeof opt === 'string' ? opt : opt.id) === aiResult.matchedIntentId);
+            if (matchedOpt) {
+              // Remove the "Analyzing..." message? Or just append result.
+              setMessages(prev => [...prev, { id: uuidv4(), text: `(IA) Entendi que você quis dizer "${typeof matchedOpt === 'string' ? matchedOpt : matchedOpt.value}".`, sender: 'bot' }]);
+              await handleOptionClick(matchedOpt);
+              return;
+            }
+          }
+        } catch (err) {
+          console.error("AI Classification failed", err);
+        }
+
+        setMessages(prev => [...prev, { id: uuidv4(), text: "Não entendi sua escolha. Por favor, tente novamente ou digite o número da opção.", sender: 'bot' }]);
+        return;
+      }
+
+      setMessages(prev => [...prev, { id: uuidv4(), text: "Opção inválida. Digite o número ou o texto da opção.", sender: 'bot' }]);
+    }
+
+  }, [inputValue, awaitingInputFor, awaitingInputType, isProcessingNode, findNextNodeId, processNode, setFlowVariables, handleOptionClick, currentOptions]);
 
 
   const handleSimulateWebhookAndStartFlow = useCallback(async () => {
@@ -1269,16 +1389,16 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       <div className="flex w-full items-center space-x-2">
         <Input
           type="text"
-          placeholder={awaitingInputType === 'text' && awaitingInputFor ? "Digite sua resposta..." : (awaitingInputType === 'option' ? "Escolha uma opção acima..." : "Aguardando...")}
+          placeholder={awaitingInputType === 'text' ? "Digite sua resposta..." : (awaitingInputType === 'option' ? "Digite o número, texto ou intenção..." : "Aguardando...")}
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
-          onKeyPress={(e) => { if (e.key === 'Enter' && awaitingInputType === 'text' && inputValue.trim() !== '' && !isProcessingNode) handleSendMessage(); }}
+          onKeyPress={(e) => { if (e.key === 'Enter' && inputValue.trim() !== '' && !isProcessingNode && (awaitingInputType === 'text' || awaitingInputType === 'option')) handleSendMessage(); }}
           className="flex-1"
-          disabled={!isTesting || awaitingInputType !== 'text' || isProcessingNode}
+          disabled={!isTesting || isProcessingNode || (awaitingInputType !== 'text' && awaitingInputType !== 'option')}
         />
         <Button
           onClick={handleSendMessage}
-          disabled={!isTesting || !inputValue.trim() || awaitingInputType !== 'text' || isProcessingNode}
+          disabled={!isTesting || !inputValue.trim() || isProcessingNode || (awaitingInputType !== 'text' && awaitingInputType !== 'option')}
           size="icon"
           aria-label="Enviar"
         >
@@ -1356,16 +1476,19 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                   </div>
                   {msg.sender === 'bot' && msg.options && msg.options.length > 0 && awaitingInputType === 'option' && (
                     <div className="mt-2.5 w-full space-y-2">
-                      {msg.options.map((opt, index) => (
-                        <button
-                          key={index} // Changed from opt to index to avoid duplicate keys if options are identical
-                          onClick={() => handleOptionClick(opt)}
-                          disabled={isProcessingNode || awaitingInputFor?.type !== 'option'}
-                          className="w-full text-left p-3 rounded-lg border bg-background hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <span className="font-medium">{index + 1}.</span> {opt}
-                        </button>
-                      ))}
+                      {msg.options.map((opt, index) => {
+                        const text = typeof opt === 'string' ? opt : opt.value;
+                        return (
+                          <button
+                            key={index} // Changed from opt to index to avoid duplicate keys if options are identical
+                            onClick={() => handleOptionClick(opt)}
+                            disabled={isProcessingNode || awaitingInputFor?.type !== 'option'}
+                            className="w-full text-left p-3 rounded-lg border bg-background hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="font-medium">{index + 1}.</span> {text}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
