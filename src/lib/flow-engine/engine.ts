@@ -144,7 +144,7 @@ const normalizeOptionsFromString = (raw: string): string[] => {
     return validLine.split(',').map(s => s.trim()).filter(Boolean);
   }
 
-  if (/^[\w\d.-]+(\s+[\w\d.-]+)+$/.test(validLine)) {
+  if (/^[\d.-]+(\s+[\d.-]+)+$/.test(validLine)) {
     return validLine.split(/\s+/).map(s => s.trim()).filter(Boolean);
   }
 
@@ -391,9 +391,11 @@ export async function executeFlow(
           if (Array.isArray(currentNode.options) && currentNode.options.length > 0) {
             optionsList = currentNode.options.flatMap(opt => {
               const val = substituteVariablesInText(opt.value, session.flow_variables);
-              const splitVals = normalizeOptionsFromString(val);
-              if (splitVals.length > 1) {
-                return splitVals.map((v, i) => ({ id: `${opt.id}_${i}`, value: v }));
+              if (opt.value && opt.value.includes('{{')) {
+                const splitVals = normalizeOptionsFromString(val);
+                if (splitVals.length > 1) {
+                  return splitVals.map((v, i) => ({ id: `${opt.id}_${i}`, value: v }));
+                }
               }
               return [{ id: opt.id, value: val }];
             });

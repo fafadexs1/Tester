@@ -183,9 +183,9 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       return validLine.split(',').map(s => s.trim()).filter(Boolean);
     }
 
-    // Space separated IDs (numbers, alphanumeric, dots)
-    // Matches "1 10091" or "1.0 2.0"
-    if (/^[\w\d.-]+(\s+[\w\d.-]+)+$/.test(validLine)) {
+    // Space separated IDs (numeric only, e.g. "1 10091")
+    // Prevents splitting "Tentar Novamente"
+    if (/^[\d.-]+(\s+[\d.-]+)+$/.test(validLine)) {
       return validLine.split(/\s+/).map(s => s.trim()).filter(Boolean);
     }
 
@@ -437,9 +437,12 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         if (Array.isArray(node.options) && node.options.length > 0) {
           optionsList = node.options.flatMap(opt => {
             const val = substituteVariables(opt.value, updatedVarsForNextNode);
-            const splitVals = normalizeOptionsFromString(val);
-            if (splitVals.length > 1) {
-              return splitVals.map((v, i) => ({ id: `${opt.id}_${i}`, value: v }));
+            // Only split if variable was present
+            if (opt.value && opt.value.includes('{{')) {
+              const splitVals = normalizeOptionsFromString(val);
+              if (splitVals.length > 1) {
+                return splitVals.map((v, i) => ({ id: `${opt.id}_${i}`, value: v }));
+              }
             }
             return [{ id: opt.id, value: val }];
           });
