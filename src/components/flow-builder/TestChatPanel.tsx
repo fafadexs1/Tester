@@ -899,6 +899,30 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         break;
       }
 
+      case 'capability': {
+        const capabilityLabel = node.capabilityName || node.title || 'Capacidade MCP';
+        setMessages(prev => [...prev, { id: uuidv4(), text: `Executando capacidade: ${capabilityLabel} (simulacao).`, sender: 'bot' }]);
+
+        if (node.capabilityInputJson && node.capabilityInputJson.trim() !== '') {
+          const resolvedInput = substituteVariables(node.capabilityInputJson, updatedVarsForNextNode);
+          setMessages(prev => [...prev, { id: uuidv4(), text: `Input enviado: ${resolvedInput}`, sender: 'bot' }]);
+        }
+
+        const outputSample = node.capabilityContract?.outputSample;
+        if (node.capabilityOutputVariable && node.capabilityOutputVariable.trim() !== '') {
+          const varName = node.capabilityOutputVariable;
+          const outputValue = outputSample ?? {
+            status: 'simulado',
+            capability: node.capabilityName || node.capabilityId || 'capability'
+          };
+          updatedVarsForNextNode = { ...updatedVarsForNextNode, [varName]: outputValue };
+          setMessages(prev => [...prev, { id: uuidv4(), text: `Variavel "${varName}" definida com resultado simulado.`, sender: 'bot' }]);
+        }
+
+        nextNodeId = findNextNodeId(node.id, 'default');
+        break;
+      }
+
       case 'code-execution': {
         const varName = node.codeOutputVariable;
         if (!node.codeSnippet || !varName) {

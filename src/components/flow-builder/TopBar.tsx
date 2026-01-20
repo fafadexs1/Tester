@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import {
   Save, Undo2, Zap, UserCircle, Settings, LogOut, CreditCard,
   Database, ChevronDown, PlugZap, BotMessageSquare, Rocket, PanelRightOpen, PanelRightClose, KeyRound, Copy, FileJson2,
-  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut, Trash2, Home, ChevronsLeft, CircleDot, Circle, Cloud, CloudOff, Loader2, PlusCircle, Shield, MessageCircle, History, GitCommit
+  TerminalSquare, ListOrdered, RefreshCw, AlertCircle, FileText, Webhook as WebhookIcon, Users, Target, ZoomIn, ZoomOut, Trash2, Home, ChevronsLeft, CircleDot, Circle, Cloud, CloudOff, Loader2, PlusCircle, Shield, MessageCircle, History, GitCommit, Download, Upload
 } from 'lucide-react';
 import {
   Dialog,
@@ -61,6 +61,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { exportFlow, importFlow } from '@/components/flow-builder/utils/exportImportUtils';
 
 
 interface TopBarProps {
@@ -91,23 +92,23 @@ const TopBar: React.FC<TopBarProps> = ({
   const { toast } = useToast();
   const { user, logout } = useAuth();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-  
+
   const [isSessionsDialogOpen, setIsSessionsDialogOpen] = useState(false);
   const [activeSessions, setActiveSessions] = useState<FlowSession[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [selectedSessionVariables, setSelectedSessionVariables] = useState<Record<string, any> | null>(null);
   const [isSessionVariablesModalOpen, setIsSessionVariablesModalOpen] = useState(false);
-  
+
   const [nexusFlowAppBaseUrl, setNexusFlowAppBaseUrl] = useState('');
-  
+
   const [isInstanceManagerOpen, setIsInstanceManagerOpen] = useState(false);
   const [instanceManagerTab, setInstanceManagerTab] = useState('evolution');
 
   const [evolutionInstances, setEvolutionInstances] = useState<EvolutionInstance[]>([]);
   const [isLoadingEvolutionInstances, setIsLoadingEvolutionInstances] = useState(false);
   const [editingEvolutionInstance, setEditingEvolutionInstance] = useState<EvolutionInstance | null>(null);
-  
+
   const [chatwootInstances, setChatwootInstances] = useState<ChatwootInstance[]>([]);
   const [isLoadingChatwootInstances, setIsLoadingChatwootInstances] = useState(false);
   const [editingChatwootInstance, setEditingChatwootInstance] = useState<ChatwootInstance | null>(null);
@@ -127,23 +128,59 @@ const TopBar: React.FC<TopBarProps> = ({
     setIsLoadingHistory(true);
     const result = await getWorkspaceVersionsAction(activeWorkspace.id);
     if (result.data) {
-        setHistory(result.data);
+      setHistory(result.data);
     } else {
-        toast({ title: "Erro ao buscar histórico", description: result.error, variant: "destructive" });
+      toast({ title: "Erro ao buscar histórico", description: result.error, variant: "destructive" });
     }
     setIsLoadingHistory(false);
   }, [activeWorkspace?.id, toast]);
+
+
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleExportFlow = () => {
+    if (!activeWorkspace) return;
+    try {
+      exportFlow(activeWorkspace);
+      toast({ title: "Fluxo Exportado", description: "O download do arquivo JSON foi iniciado." });
+    } catch (error: any) {
+      toast({ title: "Erro na Exportação", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Reset input value to allow selecting the same file again
+    event.target.value = '';
+
+    const confirmed = window.confirm("Importar um fluxo substituirá todas as alterações atuais. Deseja continuar?");
+
+    if (confirmed && activeWorkspace) {
+      try {
+        await importFlow(file, onUpdateWorkspace);
+        toast({ title: "Fluxo Importado", description: "O fluxo foi carregado com sucesso." });
+      } catch (error: any) {
+        toast({ title: "Erro na Importação", description: error.message, variant: "destructive" });
+      }
+    }
+  };
 
   const handleOpenHistoryDialog = () => {
     fetchWorkspaceHistory();
     setIsHistoryDialogOpen(true);
   };
-  
+
   const handleRestoreVersion = async (versionId: number) => {
     if (!user) return;
     const result = await restoreWorkspaceVersionAction(versionId);
     if (result.success) {
-      toast({ title: "Fluxo Restaurado", description: "O fluxo será recarregado para a versão selecionada."});
+      toast({ title: "Fluxo Restaurado", description: "O fluxo será recarregado para a versão selecionada." });
       onDiscardChanges(); // This reloads the workspace from DB
       setIsHistoryDialogOpen(false);
     } else {
@@ -193,20 +230,20 @@ const TopBar: React.FC<TopBarProps> = ({
   const fetchDialogyInstances = useCallback(async () => {
     setIsLoadingDialogyInstances(true);
     try {
-        const result = await getDialogyInstancesForUserAction();
-        if (result && result.error) { 
-            throw new Error(result.error);
-        }
-        setDialogyInstances(result?.data || []);
-        return result?.data || [];
+      const result = await getDialogyInstancesForUserAction();
+      if (result && result.error) {
+        throw new Error(result.error);
+      }
+      setDialogyInstances(result?.data || []);
+      return result?.data || [];
     } catch (error: any) {
-        toast({ title: "Erro ao Carregar Instâncias Dialogy", description: error.message, variant: "destructive" });
-        setDialogyInstances([]);
-        return [];
+      toast({ title: "Erro ao Carregar Instâncias Dialogy", description: error.message, variant: "destructive" });
+      setDialogyInstances([]);
+      return [];
     } finally {
-        setIsLoadingDialogyInstances(false);
+      setIsLoadingDialogyInstances(false);
     }
-}, [toast]);
+  }, [toast]);
 
   const handleOpenSettings = useCallback(async () => {
     setIsSettingsDialogOpen(true);
@@ -228,51 +265,51 @@ const TopBar: React.FC<TopBarProps> = ({
 
 
   const handleSaveEvolutionInstance = async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      const formData = new FormData(event.currentTarget);
-      const result = await saveEvolutionInstanceAction(formData);
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const result = await saveEvolutionInstanceAction(formData);
 
-      if (result.success) {
-          toast({ title: "Sucesso!", description: "Instância da API Evolution salva." });
-          setEditingEvolutionInstance(null);
-          await fetchEvolutionInstances();
-      } else {
-          toast({ title: "Erro", description: result.error || "Falha ao salvar instância.", variant: "destructive" });
-      }
+    if (result.success) {
+      toast({ title: "Sucesso!", description: "Instância da API Evolution salva." });
+      setEditingEvolutionInstance(null);
+      await fetchEvolutionInstances();
+    } else {
+      toast({ title: "Erro", description: result.error || "Falha ao salvar instância.", variant: "destructive" });
+    }
   };
 
   const handleDeleteEvolutionInstance = async (instanceId: string) => {
-      const result = await deleteEvolutionInstanceAction(instanceId);
-      if (result.success) {
-          toast({ title: "Sucesso!", description: "Instância da API Evolution excluída." });
-          await fetchEvolutionInstances();
-      } else {
-          toast({ title: "Erro", description: result.error || "Falha ao excluir instância.", variant: "destructive" });
-      }
+    const result = await deleteEvolutionInstanceAction(instanceId);
+    if (result.success) {
+      toast({ title: "Sucesso!", description: "Instância da API Evolution excluída." });
+      await fetchEvolutionInstances();
+    } else {
+      toast({ title: "Erro", description: result.error || "Falha ao excluir instância.", variant: "destructive" });
+    }
   };
 
   const handleSaveChatwootInstance = async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      const formData = new FormData(event.currentTarget);
-      const result = await saveChatwootInstanceAction(formData);
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const result = await saveChatwootInstanceAction(formData);
 
-      if (result.success) {
-          toast({ title: "Sucesso!", description: "Instância do Chatwoot salva." });
-          setEditingChatwootInstance(null);
-          await fetchChatwootInstances();
-      } else {
-          toast({ title: "Erro", description: result.error || "Falha ao salvar instância.", variant: "destructive" });
-      }
+    if (result.success) {
+      toast({ title: "Sucesso!", description: "Instância do Chatwoot salva." });
+      setEditingChatwootInstance(null);
+      await fetchChatwootInstances();
+    } else {
+      toast({ title: "Erro", description: result.error || "Falha ao salvar instância.", variant: "destructive" });
+    }
   };
 
   const handleDeleteChatwootInstance = async (instanceId: string) => {
-      const result = await deleteChatwootInstanceAction(instanceId);
-      if (result.success) {
-          toast({ title: "Sucesso!", description: "Instância do Chatwoot excluída." });
-          await fetchChatwootInstances();
-      } else {
-          toast({ title: "Erro", description: result.error || "Falha ao excluir instância.", variant: "destructive" });
-      }
+    const result = await deleteChatwootInstanceAction(instanceId);
+    if (result.success) {
+      toast({ title: "Sucesso!", description: "Instância do Chatwoot excluída." });
+      await fetchChatwootInstances();
+    } else {
+      toast({ title: "Erro", description: result.error || "Falha ao excluir instância.", variant: "destructive" });
+    }
   };
 
   const handleSaveDialogyInstance = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -281,22 +318,22 @@ const TopBar: React.FC<TopBarProps> = ({
     const result = await saveDialogyInstanceAction(formData);
 
     if (result.success) {
-        toast({ title: "Sucesso!", description: "Instância da Dialogy salva." });
-        setEditingDialogyInstance(null);
-        await fetchDialogyInstances();
+      toast({ title: "Sucesso!", description: "Instância da Dialogy salva." });
+      setEditingDialogyInstance(null);
+      await fetchDialogyInstances();
     } else {
-        toast({ title: "Erro", description: result.error || "Falha ao salvar instância.", variant: "destructive" });
+      toast({ title: "Erro", description: result.error || "Falha ao salvar instância.", variant: "destructive" });
     }
   };
 
   const handleDeleteDialogyInstance = async (instanceId: string) => {
-      const result = await deleteDialogyInstanceAction(instanceId);
-      if (result.success) {
-          toast({ title: "Sucesso!", description: "Instância da Dialogy excluída." });
-          await fetchDialogyInstances();
-      } else {
-          toast({ title: "Erro", description: result.error || "Falha ao excluir instância.", variant: "destructive" });
-      }
+    const result = await deleteDialogyInstanceAction(instanceId);
+    if (result.success) {
+      toast({ title: "Sucesso!", description: "Instância da Dialogy excluída." });
+      await fetchDialogyInstances();
+    } else {
+      toast({ title: "Erro", description: result.error || "Falha ao excluir instância.", variant: "destructive" });
+    }
   };
 
 
@@ -339,7 +376,7 @@ const TopBar: React.FC<TopBarProps> = ({
         title: "Sessão Encerrada",
         description: `A sessão ${sessionId} foi encerrada com sucesso.`,
       });
-      fetchActiveSessions(); 
+      fetchActiveSessions();
     } catch (error: any) {
       toast({
         title: "Erro ao Encerrar Sessão",
@@ -351,24 +388,24 @@ const TopBar: React.FC<TopBarProps> = ({
 
   const handleDeleteAllSessions = async () => {
     try {
-        const response = await fetch(`/api/sessions/active`, {
-            method: 'DELETE',
-        });
-        const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.error || 'Falha ao encerrar todas as sessões');
-        }
-        toast({
-            title: "Sessões Encerradas",
-            description: result.message || "Todas as sessões ativas foram encerradas.",
-        });
-        fetchActiveSessions();
+      const response = await fetch(`/api/sessions/active`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Falha ao encerrar todas as sessões');
+      }
+      toast({
+        title: "Sessões Encerradas",
+        description: result.message || "Todas as sessões ativas foram encerradas.",
+      });
+      fetchActiveSessions();
     } catch (error: any) {
-        toast({
-            title: "Erro ao Encerrar Sessões",
-            description: error.message,
-            variant: "destructive",
-        });
+      toast({
+        title: "Erro ao Encerrar Sessões",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -394,41 +431,41 @@ const TopBar: React.FC<TopBarProps> = ({
     setSelectedSessionVariables(variables);
     setIsSessionVariablesModalOpen(true);
   };
-  
+
   const handleGoToNodeInFlow = (session: FlowSession) => {
-      const nodeIdToGo = session.current_node_id || session.awaiting_input_details?.originalNodeId;
-  
-      if (session.workspace_id !== activeWorkspace?.id) {
-          toast({
-              title: "Ação Interrompida",
-              description: "Esta sessão pertence a um fluxo diferente do que está aberto.",
-              variant: "destructive"
-          });
-          return;
-      }
-      
-      if (nodeIdToGo) {
-          onHighlightNode(nodeIdToGo);
-          setIsSessionsDialogOpen(false);
-      } else {
-          toast({
-              title: "Sessão Pausada",
-              description: "A sessão foi pausada em um ponto sem nó ativo. Não é possível pular para o nó.",
-              variant: "default"
-          });
-      }
+    const nodeIdToGo = session.current_node_id || session.awaiting_input_details?.originalNodeId;
+
+    if (session.workspace_id !== activeWorkspace?.id) {
+      toast({
+        title: "Ação Interrompida",
+        description: "Esta sessão pertence a um fluxo diferente do que está aberto.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (nodeIdToGo) {
+      onHighlightNode(nodeIdToGo);
+      setIsSessionsDialogOpen(false);
+    } else {
+      toast({
+        title: "Sessão Pausada",
+        description: "A sessão foi pausada em um ponto sem nó ativo. Não é possível pular para o nó.",
+        variant: "default"
+      });
+    }
   };
 
   return (
     <>
       <header className="flex items-center justify-between h-16 px-4 md:px-6 border-b bg-card text-card-foreground shadow-sm shrink-0">
         <div className="flex items-center gap-3">
-            <Link href="/" className='flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors'>
-                <ChevronsLeft className='w-5 h-5' />
-                <Home className="w-5 h-5" />
-            </Link>
+          <Link href="/" className='flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors'>
+            <ChevronsLeft className='w-5 h-5' />
+            <Home className="w-5 h-5" />
+          </Link>
           <div className='w-px h-6 bg-border mx-2'></div>
-          <Input 
+          <Input
             className="text-lg font-semibold tracking-tight text-foreground whitespace-nowrap bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto"
             value={workspaceName}
             onChange={(e) => onUpdateWorkspace({ name: e.target.value })}
@@ -437,16 +474,45 @@ const TopBar: React.FC<TopBarProps> = ({
           />
         </div>
 
+
         <div className="flex items-center gap-1 md:gap-2">
-           <div className="flex items-center gap-1 ml-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept=".json"
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 hidden md:inline-flex"
+            onClick={handleExportFlow}
+            title="Exportar Fluxo (JSON)"
+            disabled={!activeWorkspace}
+          >
+            <Download className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 hidden md:inline-flex"
+            onClick={handleImportClick}
+            title="Importar Fluxo (JSON)"
+            disabled={!activeWorkspace}
+          >
+            <Upload className="h-4 w-4" />
+          </Button>
+
+          <div className="flex items-center gap-1 ml-2">
             <Button onClick={() => onZoom('out')} variant="outline" size="icon" className="h-9 w-9">
               <ZoomOut className="h-4 w-4" />
               <span className="sr-only">Diminuir Zoom</span>
             </Button>
-            <Button 
-              onClick={() => onZoom('reset')} 
-              variant="outline" 
-              size="sm" 
+            <Button
+              onClick={() => onZoom('reset')}
+              variant="outline"
+              size="sm"
               className="h-9 px-2 text-xs w-[60px]"
               title="Resetar Zoom"
             >
@@ -457,16 +523,16 @@ const TopBar: React.FC<TopBarProps> = ({
               <span className="sr-only">Aumentar Zoom</span>
             </Button>
           </div>
-          
-           <Button
+
+          <Button
             onClick={handleOpenHistoryDialog}
             variant="outline"
             size="icon"
             className="h-9 w-9"
             aria-label="Histórico de Versões"
-            >
-             <History className="h-4 w-4" />
-           </Button>
+          >
+            <History className="h-4 w-4" />
+          </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -486,7 +552,7 @@ const TopBar: React.FC<TopBarProps> = ({
                 <Users className="mr-2 h-4 w-4" />
                 <span>Sessões Ativas</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => { console.log("Frontend logs can be viewed in the browser's developer console (F12)."); toast({title: "Logs do Frontend", description: "Logs de erro e de depuração do frontend podem ser vistos no console do seu navegador (geralmente F12)."}); }}>
+              <DropdownMenuItem onSelect={() => { console.log("Frontend logs can be viewed in the browser's developer console (F12)."); toast({ title: "Logs do Frontend", description: "Logs de erro e de depuração do frontend podem ser vistos no console do seu navegador (geralmente F12)." }); }}>
                 <FileText className="mr-2 h-4 w-4" />
                 <span>Logs da Aplicação</span>
               </DropdownMenuItem>
@@ -527,8 +593,8 @@ const TopBar: React.FC<TopBarProps> = ({
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full ml-1 md:ml-2 h-9 w-9">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="https://placehold.co/40x40.png?text=UE" alt={user?.username} data-ai-hint="user avatar"/>
-                  <AvatarFallback>{user?.username?.substring(0,2).toUpperCase() || 'U'}</AvatarFallback>
+                  <AvatarImage src="https://placehold.co/40x40.png?text=UE" alt={user?.username} data-ai-hint="user avatar" />
+                  <AvatarFallback>{user?.username?.substring(0, 2).toUpperCase() || 'U'}</AvatarFallback>
                 </Avatar>
                 <span className="sr-only">Abrir menu do usuário</span>
               </Button>
@@ -538,8 +604,8 @@ const TopBar: React.FC<TopBarProps> = ({
               <DropdownMenuSeparator />
               <Link href="/profile" passHref>
                 <DropdownMenuItem>
-                    <UserCircle className="mr-2 h-4 w-4" />
-                    <span>Perfil</span>
+                  <UserCircle className="mr-2 h-4 w-4" />
+                  <span>Perfil</span>
                 </DropdownMenuItem>
               </Link>
               <DropdownMenuItem onSelect={handleOpenSettings}>
@@ -548,10 +614,10 @@ const TopBar: React.FC<TopBarProps> = ({
               </DropdownMenuItem>
               {user?.role === 'desenvolvedor' && (
                 <Link href="/admin" passHref>
-                    <DropdownMenuItem>
-                        <Shield className="mr-2 h-4 w-4" />
-                        <span>Administração</span>
-                    </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Shield className="mr-2 h-4 w-4" />
+                    <span>Administração</span>
+                  </DropdownMenuItem>
                 </Link>
               )}
               <DropdownMenuItem onSelect={handleOpenInstanceManager}>
@@ -566,103 +632,103 @@ const TopBar: React.FC<TopBarProps> = ({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </header>
-      
+      </header >
+
       {/* Save Dialog */}
-      <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
+      < Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen} >
         <DialogContent>
-            <DialogHeader>
+          <DialogHeader>
             <DialogTitle>Salvar Versão do Fluxo</DialogTitle>
             <DialogDescription>
-                Adicione uma breve descrição para esta versão. Isso ajudará você a identificar esta alteração no futuro.
+              Adicione uma breve descrição para esta versão. Isso ajudará você a identificar esta alteração no futuro.
             </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
+          </DialogHeader>
+          <div className="py-4">
             <Label htmlFor="save-description">Descrição (Opcional)</Label>
             <Textarea
-                id="save-description"
-                value={saveDescription}
-                onChange={(e) => setSaveDescription(e.target.value)}
-                placeholder="Ex: Adicionado nó de boas-vindas"
+              id="save-description"
+              value={saveDescription}
+              onChange={(e) => setSaveDescription(e.target.value)}
+              placeholder="Ex: Adicionado nó de boas-vindas"
             />
-            </div>
-            <DialogFooter>
+          </div>
+          <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onSaveWorkspaces(null)}>Salvar sem Descrição</Button>
             <Button type="button" onClick={handleSaveWithDescription}>Salvar Versão</Button>
-            </DialogFooter>
+          </DialogFooter>
         </DialogContent>
-      </Dialog>
-      
+      </Dialog >
+
       {/* History Dialog */}
-        <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
-            <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col">
-                <DialogHeader>
-                    <DialogTitle>Histórico de Versões: {workspaceName}</DialogTitle>
-                    <DialogDescription>
-                        Visualize e restaure versões anteriores do seu fluxo de trabalho.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="flex-1 overflow-hidden">
-                    {isLoadingHistory ? (
-                         <div className="flex justify-center items-center h-full"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
-                    ) : history.length === 0 ? (
-                        <div className="text-center text-muted-foreground py-10">Nenhuma versão anterior encontrada.</div>
-                    ) : (
-                        <ScrollArea className="h-full">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Versão</TableHead>
-                                        <TableHead>Descrição</TableHead>
-                                        <TableHead>Salvo Por</TableHead>
-                                        <TableHead>Data</TableHead>
-                                        <TableHead className="text-right">Ações</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {history.map(v => (
-                                        <TableRow key={v.id}>
-                                            <TableCell className="font-bold">v{v.version}</TableCell>
-                                            <TableCell className="text-muted-foreground italic">{v.description || 'Nenhuma descrição'}</TableCell>
-                                            <TableCell>{v.created_by_username || 'Usuário desconhecido'}</TableCell>
-                                            <TableCell title={new Date(v.created_at).toLocaleString()}>{formatDistanceToNow(new Date(v.created_at), { addSuffix: true, locale: ptBR })}</TableCell>
-                                            <TableCell className="text-right">
-                                                 <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                         <Button variant="outline" size="sm" disabled={v.version === history[0].version}>
-                                                            <Undo2 className="mr-2 h-3.5 w-3.5" /> Restaurar
-                                                        </Button>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle>Restaurar para a Versão {v.version}?</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                Suas alterações atuais não salvas serão perdidas. O fluxo será revertido para o estado da versão {v.version}. Uma nova versão "Restaurado da v{v.version}" será criada.
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                            <AlertDialogAction onClick={() => handleRestoreVersion(v.id)}>Sim, Restaurar</AlertDialogAction>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </ScrollArea>
-                    )}
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsHistoryDialogOpen(false)}>Fechar</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+      < Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen} >
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Histórico de Versões: {workspaceName}</DialogTitle>
+            <DialogDescription>
+              Visualize e restaure versões anteriores do seu fluxo de trabalho.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            {isLoadingHistory ? (
+              <div className="flex justify-center items-center h-full"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
+            ) : history.length === 0 ? (
+              <div className="text-center text-muted-foreground py-10">Nenhuma versão anterior encontrada.</div>
+            ) : (
+              <ScrollArea className="h-full">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Versão</TableHead>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Salvo Por</TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {history.map(v => (
+                      <TableRow key={v.id}>
+                        <TableCell className="font-bold">v{v.version}</TableCell>
+                        <TableCell className="text-muted-foreground italic">{v.description || 'Nenhuma descrição'}</TableCell>
+                        <TableCell>{v.created_by_username || 'Usuário desconhecido'}</TableCell>
+                        <TableCell title={new Date(v.created_at).toLocaleString()}>{formatDistanceToNow(new Date(v.created_at), { addSuffix: true, locale: ptBR })}</TableCell>
+                        <TableCell className="text-right">
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="outline" size="sm" disabled={v.version === history[0].version}>
+                                <Undo2 className="mr-2 h-3.5 w-3.5" /> Restaurar
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Restaurar para a Versão {v.version}?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Suas alterações atuais não salvas serão perdidas. O fluxo será revertido para o estado da versão {v.version}. Uma nova versão "Restaurado da v{v.version}" será criada.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleRestoreVersion(v.id)}>Sim, Restaurar</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsHistoryDialogOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog >
 
 
       {/* Workspace Settings Dialog */}
-      <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
+      < Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen} >
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Configurações do Fluxo: {workspaceName}</DialogTitle>
@@ -671,90 +737,90 @@ const TopBar: React.FC<TopBarProps> = ({
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-             <Accordion type="single" collapsible className="w-full" defaultValue="evolution-api">
+            <Accordion type="single" collapsible className="w-full" defaultValue="evolution-api">
               <AccordionItem value="evolution-api">
-                  <AccordionTrigger className="font-semibold text-base py-3">
+                <AccordionTrigger className="font-semibold text-base py-3">
                   <div className="flex items-center gap-3">
-                      <BotMessageSquare className="w-6 h-6 text-teal-500" />
-                      API Evolution (WhatsApp)
+                    <BotMessageSquare className="w-6 h-6 text-teal-500" />
+                    API Evolution (WhatsApp)
                   </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="pt-4 space-y-4">
+                </AccordionTrigger>
+                <AccordionContent className="pt-4 space-y-4">
                   <div className="space-y-3">
                     <div>
-                        <Label htmlFor="evolution_instance_id">Instância da API Evolution</Label>
-                        <Select
-                          value={activeWorkspace?.evolution_instance_id || 'none'}
-                          onValueChange={(value) => onUpdateWorkspace({ evolution_instance_id: value === 'none' ? undefined : value })}
-                        >
-                          <SelectTrigger id="evolution_instance_id">
-                            <SelectValue placeholder="Nenhuma instância selecionada" />
-                          </SelectTrigger>
-                          <SelectContent>
-                             <SelectItem value="none">
-                                <em>Nenhuma</em>
-                              </SelectItem>
-                            {evolutionInstances.map(instance => (
-                              <SelectItem key={instance.id} value={instance.id}>
-                                {instance.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                         <p className="text-xs text-muted-foreground mt-1.5">
-                          Precisa adicionar ou alterar uma instância?
-                          <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => { setIsSettingsDialogOpen(false); handleOpenInstanceManager(); }}>
-                            Gerenciar Instâncias
-                          </Button>
-                        </p>
-                      </div>
+                      <Label htmlFor="evolution_instance_id">Instância da API Evolution</Label>
+                      <Select
+                        value={activeWorkspace?.evolution_instance_id || 'none'}
+                        onValueChange={(value) => onUpdateWorkspace({ evolution_instance_id: value === 'none' ? undefined : value })}
+                      >
+                        <SelectTrigger id="evolution_instance_id">
+                          <SelectValue placeholder="Nenhuma instância selecionada" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">
+                            <em>Nenhuma</em>
+                          </SelectItem>
+                          {evolutionInstances.map(instance => (
+                            <SelectItem key={instance.id} value={instance.id}>
+                              {instance.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        Precisa adicionar ou alterar uma instância?
+                        <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-1" onClick={() => { setIsSettingsDialogOpen(false); handleOpenInstanceManager(); }}>
+                          Gerenciar Instâncias
+                        </Button>
+                      </p>
+                    </div>
                   </div>
-                  </AccordionContent>
+                </AccordionContent>
               </AccordionItem>
               <AccordionItem value="chatwoot">
-                  <AccordionTrigger className="font-semibold text-base py-3">
+                <AccordionTrigger className="font-semibold text-base py-3">
                   <div className="flex items-center gap-3">
-                      <MessageCircle className="w-6 h-6 text-blue-500" />
-                      Chatwoot
+                    <MessageCircle className="w-6 h-6 text-blue-500" />
+                    Chatwoot
                   </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="pt-4 space-y-4">
-                     <div className="flex items-center space-x-2">
-                        <Switch
-                          id="chatwoot-enabled"
-                          checked={activeWorkspace?.chatwoot_enabled || false}
-                          onCheckedChange={(checked) => onUpdateWorkspace({ chatwoot_enabled: checked })}
-                        />
-                        <Label htmlFor="chatwoot-enabled">Habilitar Detecção de Webhook Chatwoot</Label>
-                    </div>
-                     <p className="text-xs text-muted-foreground">
-                        Habilite para que o sistema identifique webhooks do Chatwoot e injete variáveis como `chatwoot_conversation_id` no fluxo.
+                </AccordionTrigger>
+                <AccordionContent className="pt-4 space-y-4">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="chatwoot-enabled"
+                      checked={activeWorkspace?.chatwoot_enabled || false}
+                      onCheckedChange={(checked) => onUpdateWorkspace({ chatwoot_enabled: checked })}
+                    />
+                    <Label htmlFor="chatwoot-enabled">Habilitar Detecção de Webhook Chatwoot</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Habilite para que o sistema identifique webhooks do Chatwoot e injete variáveis como `chatwoot_conversation_id` no fluxo.
+                  </p>
+                  <div className="space-y-3">
+                    <Label htmlFor="chatwoot_instance_id">Instância do Chatwoot para Respostas</Label>
+                    <Select
+                      value={activeWorkspace?.chatwoot_instance_id || 'none'}
+                      onValueChange={(value) => onUpdateWorkspace({ chatwoot_instance_id: value === 'none' ? undefined : value })}
+                    >
+                      <SelectTrigger id="chatwoot_instance_id">
+                        <SelectValue placeholder="Nenhuma instância selecionada" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">
+                          <em>Nenhuma (não responderá no Chatwoot)</em>
+                        </SelectItem>
+                        {chatwootInstances.map(instance => (
+                          <SelectItem key={instance.id} value={instance.id}>
+                            {instance.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      Selecione uma instância para que nós como "Exibir Texto" possam responder diretamente na conversa do Chatwoot.
                     </p>
-                    <div className="space-y-3">
-                      <Label htmlFor="chatwoot_instance_id">Instância do Chatwoot para Respostas</Label>
-                       <Select
-                          value={activeWorkspace?.chatwoot_instance_id || 'none'}
-                          onValueChange={(value) => onUpdateWorkspace({ chatwoot_instance_id: value === 'none' ? undefined : value })}
-                        >
-                          <SelectTrigger id="chatwoot_instance_id">
-                            <SelectValue placeholder="Nenhuma instância selecionada" />
-                          </SelectTrigger>
-                          <SelectContent>
-                             <SelectItem value="none">
-                                <em>Nenhuma (não responderá no Chatwoot)</em>
-                              </SelectItem>
-                            {chatwootInstances.map(instance => (
-                              <SelectItem key={instance.id} value={instance.id}>
-                                {instance.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground mt-1.5">
-                         Selecione uma instância para que nós como "Exibir Texto" possam responder diretamente na conversa do Chatwoot.
-                        </p>
-                    </div>
-                  </AccordionContent>
+                  </div>
+                </AccordionContent>
               </AccordionItem>
               <AccordionItem value="dialogy">
                 <AccordionTrigger className="font-semibold text-base py-3">
@@ -774,9 +840,9 @@ const TopBar: React.FC<TopBarProps> = ({
                         <SelectValue placeholder="Nenhuma instância selecionada" />
                       </SelectTrigger>
                       <SelectContent>
-                          <SelectItem value="none">
-                            <em>Nenhuma</em>
-                          </SelectItem>
+                        <SelectItem value="none">
+                          <em>Nenhuma</em>
+                        </SelectItem>
                         {dialogyInstances.map(instance => (
                           <SelectItem key={instance.id} value={instance.id}>
                             {instance.name}
@@ -803,236 +869,236 @@ const TopBar: React.FC<TopBarProps> = ({
             </DialogClose>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-      
+      </Dialog >
+
       {/* Instance Management Dialog */}
-      <Dialog open={isInstanceManagerOpen} onOpenChange={setIsInstanceManagerOpen}>
+      < Dialog open={isInstanceManagerOpen} onOpenChange={setIsInstanceManagerOpen} >
         <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
-            <DialogHeader>
-              <DialogTitle>Gerenciar Instâncias de Integração</DialogTitle>
-              <DialogDescription>
-                Adicione e configure suas conexões com a API Evolution, Chatwoot e Dialogy.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex-1 overflow-hidden mt-2">
-                <Tabs value={instanceManagerTab} onValueChange={setInstanceManagerTab} className="flex flex-col h-full">
-                    <TabsList className="self-start">
-                        <TabsTrigger value="evolution">API Evolution</TabsTrigger>
-                        <TabsTrigger value="chatwoot">Chatwoot</TabsTrigger>
-                        <TabsTrigger value="dialogy">Dialogy</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="evolution" className="flex-1 overflow-y-auto pr-2 -mr-2 mt-2">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Instâncias da API Evolution</CardTitle>
-                                <CardDescription>Gerencie suas conexões com a API do WhatsApp.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {editingEvolutionInstance ? (
-                                    <form onSubmit={handleSaveEvolutionInstance} key={editingEvolutionInstance.id || 'new-evo'} className="p-4 border rounded-lg space-y-3">
-                                        <h3 className="font-semibold">{editingEvolutionInstance.id ? 'Editando Instância' : 'Nova Instância'}</h3>
-                                        <input type="hidden" name="id" value={editingEvolutionInstance.id || ''} />
-                                        <div>
-                                            <Label htmlFor="evo-name">Nome</Label>
-                                            <Input id="evo-name" name="name" defaultValue={editingEvolutionInstance.name} required />
-                                        </div>
-                                        <div>
-                                            <Label htmlFor="evo-baseUrl">URL Base</Label>
-                                            <Input id="evo-baseUrl" name="baseUrl" defaultValue={editingEvolutionInstance.baseUrl} placeholder="http://localhost:8080" required />
-                                        </div>
-                                        <div>
-                                            <Label htmlFor="evo-apiKey">API Key (Opcional)</Label>
-                                            <Input id="evo-apiKey" name="apiKey" defaultValue={editingEvolutionInstance.apiKey} />
-                                        </div>
-                                        <div className="flex justify-end gap-2">
-                                            <Button type="button" variant="ghost" onClick={() => setEditingEvolutionInstance(null)}>Cancelar</Button>
-                                            <Button type="submit">Salvar</Button>
-                                        </div>
-                                    </form>
-                                ) : (
-                                    <Button onClick={() => setEditingEvolutionInstance({ id: '', name: '', baseUrl: '', apiKey: '', status: 'unconfigured' })}>
-                                        <PlusCircle className="mr-2" /> Adicionar Instância Evolution
-                                    </Button>
-                                )}
-                                 <ScrollArea className="h-64">
-                                    <Table>
-                                        <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>URL</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-                                        <TableBody>
-                                            {evolutionInstances.map(instance => (
-                                                <TableRow key={instance.id}>
-                                                    <TableCell>{instance.name}</TableCell>
-                                                    <TableCell>{instance.baseUrl}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <Button variant="ghost" size="sm" onClick={() => setEditingEvolutionInstance(instance)}>Editar</Button>
-                                                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteEvolutionInstance(instance.id)}>Excluir</Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </ScrollArea>
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-                    <TabsContent value="chatwoot" className="flex-1 overflow-y-auto pr-2 -mr-2 mt-2">
-                        <Card>
-                             <CardHeader>
-                                <CardTitle>Instâncias do Chatwoot</CardTitle>
-                                <CardDescription>Gerencie suas conexões com a API do Chatwoot.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {editingChatwootInstance ? (
-                                    <form onSubmit={handleSaveChatwootInstance} key={editingChatwootInstance.id || 'new-cw'} className="p-4 border rounded-lg space-y-3">
-                                        <h3 className="font-semibold">{editingChatwootInstance.id ? 'Editando Instância' : 'Nova Instância'}</h3>
-                                        <input type="hidden" name="id" value={editingChatwootInstance.id || ''} />
-                                        <div>
-                                            <Label htmlFor="cw-name">Nome</Label>
-                                            <Input id="cw-name" name="name" defaultValue={editingChatwootInstance.name} required />
-                                        </div>
-                                        <div>
-                                            <Label htmlFor="cw-baseUrl">URL da Instância Chatwoot</Label>
-                                            <Input id="cw-baseUrl" name="baseUrl" defaultValue={editingChatwootInstance.baseUrl} placeholder="https://app.chatwoot.com" required />
-                                        </div>
-                                        <div>
-                                            <Label htmlFor="cw-apiAccessToken">Token de Acesso da API (Agente)</Label>
-                                            <Input id="cw-apiAccessToken" name="apiAccessToken" defaultValue={editingChatwootInstance.apiAccessToken} required />
-                                        </div>
-                                        <div className="flex justify-end gap-2">
-                                            <Button type="button" variant="ghost" onClick={() => setEditingChatwootInstance(null)}>Cancelar</Button>
-                                            <Button type="submit">Salvar</Button>
-                                        </div>
-                                    </form>
-                                ) : (
-                                    <Button onClick={() => setEditingChatwootInstance({ id: '', name: '', baseUrl: '', apiAccessToken: '', status: 'unconfigured' })}>
-                                        <PlusCircle className="mr-2" /> Adicionar Instância Chatwoot
-                                    </Button>
-                                )}
-                                 <ScrollArea className="h-64">
-                                    <Table>
-                                        <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>URL</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-                                        <TableBody>
-                                            {chatwootInstances.map(instance => (
-                                                <TableRow key={instance.id}>
-                                                    <TableCell>{instance.name}</TableCell>
-                                                    <TableCell>{instance.baseUrl}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <Button variant="ghost" size="sm" onClick={() => setEditingChatwootInstance(instance)}>Editar</Button>
-                                                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteChatwootInstance(instance.id)}>Excluir</Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </ScrollArea>
-                            </CardContent>
-                             <CardFooter>
-                                <p className="text-xs text-muted-foreground">O token de acesso pode ser encontrado no seu Perfil {'>'} Configurações dentro do Chatwoot.</p>
-                            </CardFooter>
-                        </Card>
-                    </TabsContent>
-                    <TabsContent value="dialogy" className="flex-1 overflow-y-auto pr-2 -mr-2 mt-2">
-                        <Card>
-                             <CardHeader>
-                                <CardTitle>Instâncias da Dialogy</CardTitle>
-                                <CardDescription>Gerencie suas conexões com a API da Dialogy.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {editingDialogyInstance ? (
-                                    <form onSubmit={handleSaveDialogyInstance} key={editingDialogyInstance.id || 'new-dgy'} className="p-4 border rounded-lg space-y-3">
-                                        <h3 className="font-semibold">{editingDialogyInstance.id ? 'Editando Instância' : 'Nova Instância'}</h3>
-                                        <input type="hidden" name="id" value={editingDialogyInstance.id || ''} />
-                                        <div>
-                                            <Label htmlFor="dgy-name">Nome</Label>
-                                            <Input id="dgy-name" name="name" defaultValue={editingDialogyInstance.name} required />
-                                        </div>
-                                        <div>
-                                            <Label htmlFor="dgy-baseUrl">URL da Instância Dialogy</Label>
-                                            <Input id="dgy-baseUrl" name="baseUrl" defaultValue={editingDialogyInstance.baseUrl} placeholder="https://api.dialogy.com.br" required />
-                                        </div>
-                                        <div>
-                                            <Label htmlFor="dgy-apiKey">API Key (Authorization Token)</Label>
-                                            <Input id="dgy-apiKey" name="apiKey" defaultValue={editingDialogyInstance.apiKey} required />
-                                        </div>
-                                        <div className="flex justify-end gap-2">
-                                            <Button type="button" variant="ghost" onClick={() => setEditingDialogyInstance(null)}>Cancelar</Button>
-                                            <Button type="submit">Salvar</Button>
-                                        </div>
-                                    </form>
-                                ) : (
-                                    <Button onClick={() => setEditingDialogyInstance({ id: '', name: '', baseUrl: '', apiKey: '', status: 'unconfigured' })}>
-                                        <PlusCircle className="mr-2" /> Adicionar Instância Dialogy
-                                    </Button>
-                                )}
-                                 <ScrollArea className="h-64">
-                                    <Table>
-                                        <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>URL</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-                                        <TableBody>
-                                            {dialogyInstances.map(instance => (
-                                                <TableRow key={instance.id}>
-                                                    <TableCell>{instance.name}</TableCell>
-                                                    <TableCell>{instance.baseUrl}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <Button variant="ghost" size="sm" onClick={() => setEditingDialogyInstance(instance)}>Editar</Button>
-                                                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteDialogyInstance(instance.id)}>Excluir</Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </ScrollArea>
-                            </CardContent>
-                             <CardFooter>
-                                <p className="text-xs text-muted-foreground">O token de autorização é fornecido no painel da sua conta Dialogy.</p>
-                            </CardFooter>
-                        </Card>
-                    </TabsContent>
-                </Tabs>
-            </div>
-            <DialogFooter>
-                <DialogClose asChild><Button type="button" variant="secondary" onClick={() => { setIsInstanceManagerOpen(false); }}>Fechar</Button></DialogClose>
-            </DialogFooter>
+          <DialogHeader>
+            <DialogTitle>Gerenciar Instâncias de Integração</DialogTitle>
+            <DialogDescription>
+              Adicione e configure suas conexões com a API Evolution, Chatwoot e Dialogy.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden mt-2">
+            <Tabs value={instanceManagerTab} onValueChange={setInstanceManagerTab} className="flex flex-col h-full">
+              <TabsList className="self-start">
+                <TabsTrigger value="evolution">API Evolution</TabsTrigger>
+                <TabsTrigger value="chatwoot">Chatwoot</TabsTrigger>
+                <TabsTrigger value="dialogy">Dialogy</TabsTrigger>
+              </TabsList>
+              <TabsContent value="evolution" className="flex-1 overflow-y-auto pr-2 -mr-2 mt-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Instâncias da API Evolution</CardTitle>
+                    <CardDescription>Gerencie suas conexões com a API do WhatsApp.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {editingEvolutionInstance ? (
+                      <form onSubmit={handleSaveEvolutionInstance} key={editingEvolutionInstance.id || 'new-evo'} className="p-4 border rounded-lg space-y-3">
+                        <h3 className="font-semibold">{editingEvolutionInstance.id ? 'Editando Instância' : 'Nova Instância'}</h3>
+                        <input type="hidden" name="id" value={editingEvolutionInstance.id || ''} />
+                        <div>
+                          <Label htmlFor="evo-name">Nome</Label>
+                          <Input id="evo-name" name="name" defaultValue={editingEvolutionInstance.name} required />
+                        </div>
+                        <div>
+                          <Label htmlFor="evo-baseUrl">URL Base</Label>
+                          <Input id="evo-baseUrl" name="baseUrl" defaultValue={editingEvolutionInstance.baseUrl} placeholder="http://localhost:8080" required />
+                        </div>
+                        <div>
+                          <Label htmlFor="evo-apiKey">API Key (Opcional)</Label>
+                          <Input id="evo-apiKey" name="apiKey" defaultValue={editingEvolutionInstance.apiKey} />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button type="button" variant="ghost" onClick={() => setEditingEvolutionInstance(null)}>Cancelar</Button>
+                          <Button type="submit">Salvar</Button>
+                        </div>
+                      </form>
+                    ) : (
+                      <Button onClick={() => setEditingEvolutionInstance({ id: '', name: '', baseUrl: '', apiKey: '', status: 'unconfigured' })}>
+                        <PlusCircle className="mr-2" /> Adicionar Instância Evolution
+                      </Button>
+                    )}
+                    <ScrollArea className="h-64">
+                      <Table>
+                        <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>URL</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                        <TableBody>
+                          {evolutionInstances.map(instance => (
+                            <TableRow key={instance.id}>
+                              <TableCell>{instance.name}</TableCell>
+                              <TableCell>{instance.baseUrl}</TableCell>
+                              <TableCell className="text-right">
+                                <Button variant="ghost" size="sm" onClick={() => setEditingEvolutionInstance(instance)}>Editar</Button>
+                                <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteEvolutionInstance(instance.id)}>Excluir</Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              <TabsContent value="chatwoot" className="flex-1 overflow-y-auto pr-2 -mr-2 mt-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Instâncias do Chatwoot</CardTitle>
+                    <CardDescription>Gerencie suas conexões com a API do Chatwoot.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {editingChatwootInstance ? (
+                      <form onSubmit={handleSaveChatwootInstance} key={editingChatwootInstance.id || 'new-cw'} className="p-4 border rounded-lg space-y-3">
+                        <h3 className="font-semibold">{editingChatwootInstance.id ? 'Editando Instância' : 'Nova Instância'}</h3>
+                        <input type="hidden" name="id" value={editingChatwootInstance.id || ''} />
+                        <div>
+                          <Label htmlFor="cw-name">Nome</Label>
+                          <Input id="cw-name" name="name" defaultValue={editingChatwootInstance.name} required />
+                        </div>
+                        <div>
+                          <Label htmlFor="cw-baseUrl">URL da Instância Chatwoot</Label>
+                          <Input id="cw-baseUrl" name="baseUrl" defaultValue={editingChatwootInstance.baseUrl} placeholder="https://app.chatwoot.com" required />
+                        </div>
+                        <div>
+                          <Label htmlFor="cw-apiAccessToken">Token de Acesso da API (Agente)</Label>
+                          <Input id="cw-apiAccessToken" name="apiAccessToken" defaultValue={editingChatwootInstance.apiAccessToken} required />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button type="button" variant="ghost" onClick={() => setEditingChatwootInstance(null)}>Cancelar</Button>
+                          <Button type="submit">Salvar</Button>
+                        </div>
+                      </form>
+                    ) : (
+                      <Button onClick={() => setEditingChatwootInstance({ id: '', name: '', baseUrl: '', apiAccessToken: '', status: 'unconfigured' })}>
+                        <PlusCircle className="mr-2" /> Adicionar Instância Chatwoot
+                      </Button>
+                    )}
+                    <ScrollArea className="h-64">
+                      <Table>
+                        <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>URL</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                        <TableBody>
+                          {chatwootInstances.map(instance => (
+                            <TableRow key={instance.id}>
+                              <TableCell>{instance.name}</TableCell>
+                              <TableCell>{instance.baseUrl}</TableCell>
+                              <TableCell className="text-right">
+                                <Button variant="ghost" size="sm" onClick={() => setEditingChatwootInstance(instance)}>Editar</Button>
+                                <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteChatwootInstance(instance.id)}>Excluir</Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </CardContent>
+                  <CardFooter>
+                    <p className="text-xs text-muted-foreground">O token de acesso pode ser encontrado no seu Perfil {'>'} Configurações dentro do Chatwoot.</p>
+                  </CardFooter>
+                </Card>
+              </TabsContent>
+              <TabsContent value="dialogy" className="flex-1 overflow-y-auto pr-2 -mr-2 mt-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Instâncias da Dialogy</CardTitle>
+                    <CardDescription>Gerencie suas conexões com a API da Dialogy.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {editingDialogyInstance ? (
+                      <form onSubmit={handleSaveDialogyInstance} key={editingDialogyInstance.id || 'new-dgy'} className="p-4 border rounded-lg space-y-3">
+                        <h3 className="font-semibold">{editingDialogyInstance.id ? 'Editando Instância' : 'Nova Instância'}</h3>
+                        <input type="hidden" name="id" value={editingDialogyInstance.id || ''} />
+                        <div>
+                          <Label htmlFor="dgy-name">Nome</Label>
+                          <Input id="dgy-name" name="name" defaultValue={editingDialogyInstance.name} required />
+                        </div>
+                        <div>
+                          <Label htmlFor="dgy-baseUrl">URL da Instância Dialogy</Label>
+                          <Input id="dgy-baseUrl" name="baseUrl" defaultValue={editingDialogyInstance.baseUrl} placeholder="https://api.dialogy.com.br" required />
+                        </div>
+                        <div>
+                          <Label htmlFor="dgy-apiKey">API Key (Authorization Token)</Label>
+                          <Input id="dgy-apiKey" name="apiKey" defaultValue={editingDialogyInstance.apiKey} required />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button type="button" variant="ghost" onClick={() => setEditingDialogyInstance(null)}>Cancelar</Button>
+                          <Button type="submit">Salvar</Button>
+                        </div>
+                      </form>
+                    ) : (
+                      <Button onClick={() => setEditingDialogyInstance({ id: '', name: '', baseUrl: '', apiKey: '', status: 'unconfigured' })}>
+                        <PlusCircle className="mr-2" /> Adicionar Instância Dialogy
+                      </Button>
+                    )}
+                    <ScrollArea className="h-64">
+                      <Table>
+                        <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>URL</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                        <TableBody>
+                          {dialogyInstances.map(instance => (
+                            <TableRow key={instance.id}>
+                              <TableCell>{instance.name}</TableCell>
+                              <TableCell>{instance.baseUrl}</TableCell>
+                              <TableCell className="text-right">
+                                <Button variant="ghost" size="sm" onClick={() => setEditingDialogyInstance(instance)}>Editar</Button>
+                                <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteDialogyInstance(instance.id)}>Excluir</Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </CardContent>
+                  <CardFooter>
+                    <p className="text-xs text-muted-foreground">O token de autorização é fornecido no painel da sua conta Dialogy.</p>
+                  </CardFooter>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button type="button" variant="secondary" onClick={() => { setIsInstanceManagerOpen(false); }}>Fechar</Button></DialogClose>
+          </DialogFooter>
         </DialogContent>
-      </Dialog>
-      
+      </Dialog >
+
       {/* Sessions Dialog */}
-      <Dialog open={isSessionsDialogOpen} onOpenChange={setIsSessionsDialogOpen}>
+      < Dialog open={isSessionsDialogOpen} onOpenChange={setIsSessionsDialogOpen} >
         <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl max-h-[85vh] flex flex-col">
           <DialogHeader>
-             <div className="flex items-center justify-between">
-                <div>
-                  <DialogTitle>Sessões Ativas</DialogTitle>
-                  <DialogDescription>
-                    Lista de conversas e fluxos atualmente ativos no banco de dados.
-                  </DialogDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button onClick={fetchActiveSessions} variant="outline" size="sm" className="h-9" disabled={isLoadingSessions}>
-                      <RefreshCw className={cn("mr-2 h-4 w-4", isLoadingSessions && "animate-spin")} />
-                      {isLoadingSessions ? "Atualizando..." : "Atualizar"}
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Sessões Ativas</DialogTitle>
+                <DialogDescription>
+                  Lista de conversas e fluxos atualmente ativos no banco de dados.
+                </DialogDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button onClick={fetchActiveSessions} variant="outline" size="sm" className="h-9" disabled={isLoadingSessions}>
+                  <RefreshCw className={cn("mr-2 h-4 w-4", isLoadingSessions && "animate-spin")} />
+                  {isLoadingSessions ? "Atualizando..." : "Atualizar"}
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm" className="h-9" disabled={isLoadingSessions || activeSessions.length === 0}>
+                      <Trash2 className="mr-2 h-4 w-4" /> Encerrar Todas
                     </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm" className="h-9" disabled={isLoadingSessions || activeSessions.length === 0}>
-                           <Trash2 className="mr-2 h-4 w-4" /> Encerrar Todas
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Encerrar Todas as Sessões?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Esta ação não pode ser desfeita. Isso encerrará permanentemente todas as sessões de fluxo ativas para sua conta.
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleDeleteAllSessions} className="bg-destructive hover:bg-destructive/90">
-                              Sim, encerrar todas
-                            </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                </div>
-             </div>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Encerrar Todas as Sessões?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta ação não pode ser desfeita. Isso encerrará permanentemente todas as sessões de fluxo ativas para sua conta.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDeleteAllSessions} className="bg-destructive hover:bg-destructive/90">
+                        Sim, encerrar todas
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </div>
           </DialogHeader>
           <div className="flex-1 overflow-hidden flex flex-col py-4">
             {isLoadingSessions && <div className="flex justify-center items-center h-full"><Loader2 className="w-8 w-8 animate-spin text-muted-foreground" /></div>}
@@ -1043,75 +1109,75 @@ const TopBar: React.FC<TopBarProps> = ({
             {!isLoadingSessions && activeSessions.length > 0 && (
               <ScrollArea className="flex-1 -m-3">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-3">
-                    {activeSessions.map((session) => (
-                      <Card key={session.session_id} className="flex flex-col">
-                        <CardHeader>
-                            <CardTitle className="flex items-center justify-between">
-                                <span className="truncate font-mono text-base" title={session.session_id}>
-                                    {session.session_id.split('@@')[0]}
-                                </span>
-                                <span className={cn("flex items-center gap-1.5 text-xs font-normal", getSessionStatus(session).color.replace('bg-', 'text-'))}>
-                                  <span className={cn("w-2 h-2 rounded-full", getSessionStatus(session).color)} />
-                                  {getSessionStatus(session).text}
-                                </span>
-                            </CardTitle>
-                            <CardDescription className="text-xs truncate" title={session.workspace_id}>
-                                Fluxo: {session.workspace_id}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-2 text-sm flex-grow">
-                           <div>
-                                <p className="font-medium text-muted-foreground text-xs">Nó Atual</p>
-                                <p className="font-mono text-xs truncate" title={session.current_node_id || session.awaiting_input_details?.originalNodeId || 'N/A'}>
-                                  {session.current_node_id || session.awaiting_input_details?.originalNodeId || 'Nenhum (Pausado)'}
-                                </p>
-                           </div>
-                           <div>
-                                <p className="font-medium text-muted-foreground text-xs">Última Interação</p>
-                                <p className="text-xs">{session.last_interaction_at ? new Date(session.last_interaction_at).toLocaleString() : 'N/A'}</p>
-                           </div>
-                        </CardContent>
-                        <CardFooter className="flex justify-end space-x-2 border-t pt-4">
-                           <Button variant="outline" size="sm" onClick={() => handleViewSessionVariables(session.flow_variables)}>
-                                <FileJson2 className="mr-1.5 h-4 w-4" /> Variáveis
-                           </Button>
-                           <Button variant="outline" size="sm" onClick={() => handleGoToNodeInFlow(session)}>
-                                <Target className="mr-1.5 h-4 w-4" /> Ir para Nó
-                           </Button>
-                           <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="destructive" size="icon">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Encerrar Sessão?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Tem certeza que deseja encerrar a sessão para <strong className='break-all font-mono'>{session.session_id.split('@@')[0]}</strong>? Esta ação não pode ser interrompido para este usuário.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteSession(session.session_id)}>Encerrar</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </CardFooter>
-                      </Card>
-                    ))}
+                  {activeSessions.map((session) => (
+                    <Card key={session.session_id} className="flex flex-col">
+                      <CardHeader>
+                        <CardTitle className="flex items-center justify-between">
+                          <span className="truncate font-mono text-base" title={session.session_id}>
+                            {session.session_id.split('@@')[0]}
+                          </span>
+                          <span className={cn("flex items-center gap-1.5 text-xs font-normal", getSessionStatus(session).color.replace('bg-', 'text-'))}>
+                            <span className={cn("w-2 h-2 rounded-full", getSessionStatus(session).color)} />
+                            {getSessionStatus(session).text}
+                          </span>
+                        </CardTitle>
+                        <CardDescription className="text-xs truncate" title={session.workspace_id}>
+                          Fluxo: {session.workspace_id}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-sm flex-grow">
+                        <div>
+                          <p className="font-medium text-muted-foreground text-xs">Nó Atual</p>
+                          <p className="font-mono text-xs truncate" title={session.current_node_id || session.awaiting_input_details?.originalNodeId || 'N/A'}>
+                            {session.current_node_id || session.awaiting_input_details?.originalNodeId || 'Nenhum (Pausado)'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-medium text-muted-foreground text-xs">Última Interação</p>
+                          <p className="text-xs">{session.last_interaction_at ? new Date(session.last_interaction_at).toLocaleString() : 'N/A'}</p>
+                        </div>
+                      </CardContent>
+                      <CardFooter className="flex justify-end space-x-2 border-t pt-4">
+                        <Button variant="outline" size="sm" onClick={() => handleViewSessionVariables(session.flow_variables)}>
+                          <FileJson2 className="mr-1.5 h-4 w-4" /> Variáveis
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => handleGoToNodeInFlow(session)}>
+                          <Target className="mr-1.5 h-4 w-4" /> Ir para Nó
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="icon">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Encerrar Sessão?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Tem certeza que deseja encerrar a sessão para <strong className='break-all font-mono'>{session.session_id.split('@@')[0]}</strong>? Esta ação não pode ser interrompido para este usuário.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeleteSession(session.session_id)}>Encerrar</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </CardFooter>
+                    </Card>
+                  ))}
                 </div>
               </ScrollArea>
             )}
           </div>
-           <DialogFooter>
+          <DialogFooter>
             <Button variant="outline" onClick={() => setIsSessionsDialogOpen(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
-       {/* Session Variables Modal */}
-      <Dialog open={isSessionVariablesModalOpen} onOpenChange={setIsSessionVariablesModalOpen}>
+      {/* Session Variables Modal */}
+      < Dialog open={isSessionVariablesModalOpen} onOpenChange={setIsSessionVariablesModalOpen} >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Variáveis da Sessão</DialogTitle>
@@ -1127,7 +1193,7 @@ const TopBar: React.FC<TopBarProps> = ({
             </DialogClose>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog >
     </>
   );
 };

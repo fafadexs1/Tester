@@ -13,10 +13,14 @@ import {
   loadDialogyInstanceFromDB,
   saveFlowLog,
   loadWorkspaceFromDB,
+  getCapabilityById,
+  getCapabilitiesForWorkspace,
 } from '@/app/actions/databaseActions';
+import { executeCapability } from '@/lib/capability-executor';
 import type { NodeData, Connection, FlowSession, WorkspaceData, ApiResponseMapping, FlowLog } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
+import { agenticFlow } from '@/ai/flows/agentic-flow';
 import { intelligentChoice } from '@/ai/flows/intelligent-choice-flow';
 import { classifyIntent } from '@/ai/flows/intention-classification-flow';
 import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates, evaluateExpression } from './utils';
@@ -721,6 +725,48 @@ export async function executeFlow(
         break;
       }
 
+      case 'capability': {
+        const outputVar = currentNode.capabilityOutputVariable;
+        const capId = currentNode.capabilityId;
+
+        if (capId) {
+          try {
+            // Fetch fresh capability data to get execution_config
+            const capResult = await getCapabilityById(capId);
+            if (capResult.data) {
+              const capability = capResult.data;
+              console.log(`[Flow Engine] Executing capability ${capability.slug} (${capability.id})`);
+
+              // PASS ALL VARIABLES AS INPUT (Naive approach for now)
+              // In the future, we should add an input mapping UI to the Capability Node.
+              const input = { ...session.flow_variables };
+
+              const result = await executeCapability(capability, input);
+
+              if (outputVar) {
+                setProperty(session.flow_variables, outputVar, result);
+                console.log(`[Flow Engine] Capability output set to "${outputVar}".`);
+              }
+            } else {
+              console.error(`[Flow Engine] Capability ${capId} not found.`);
+              if (outputVar) setProperty(session.flow_variables, outputVar, { error: 'Capability not found' });
+            }
+          } catch (err: any) {
+            console.error(`[Flow Engine] Capability execution failed:`, err);
+            if (outputVar) setProperty(session.flow_variables, outputVar, { error: err.message });
+          }
+        } else {
+          // Fallback to simulated if no ID (shouldn't happen in real usage)
+          const simulatedOutput = currentNode.capabilityContract?.outputSample ?? {
+            status: 'simulated',
+            capability: currentNode.capabilityName || 'unknown',
+          };
+          if (outputVar) setProperty(session.flow_variables, outputVar, simulatedOutput);
+        }
+        nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+        break;
+      }
+
       case 'code-execution': {
         const varName = currentNode.codeOutputVariable;
         if (currentNode.codeSnippet && varName) {
@@ -800,12 +846,12 @@ export async function executeFlow(
               history.push({ role: 'user', content: cleanedUserInput });
               ({ history, memorySummary } = trimAndSummarizeHistory(history, memorySummary));
 
-              const agentReply = await simpleChatReply({
+              // Autonomous Agent Integration: Fetch capabilities and use agenticFlow
+              const capabilities = await getCapabilitiesForWorkspace(currentWorkspace.id);
+              const agentReply = await agenticFlow({
                 userMessage: cleanedUserInput,
-                modelName,
-                systemPrompt,
-                history,
-                memoryContext: memorySummary,
+                capabilities: capabilities,
+                history: history,
               });
 
               const cleanedReply = cleanAndNormalizeText(agentReply.botReply);

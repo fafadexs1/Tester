@@ -6,7 +6,7 @@ import {
   MoreHorizontal, Copy, Trash2, CheckCircle2, AlertCircle, Play, MessageSquare, TextCursorInput,
   List, Split, GitMerge, Link2, Database, Code2, Replace, FileInput, Calendar,
   Star, Clock, TerminalSquare, Variable, UploadCloud, Webhook,
-  Bot, Mail, Sheet, LayoutTemplate, MonitorSmartphone, MessageCircle, Mic, Image as ImageIcon, Users, BrainCircuit
+  Bot, Mail, Sheet, LayoutTemplate, MonitorSmartphone, MessageCircle, Mic, Image as ImageIcon, Users, BrainCircuit, Blocks
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
@@ -41,6 +41,7 @@ import { FileUploadNode } from './nodes/FileUploadNode';
 import { RatingInputNode } from './nodes/RatingInputNode';
 import { CodeExecutionNode } from './nodes/CodeExecutionNode';
 import { JsonTransformNode } from './nodes/JsonTransformNode';
+import { CapabilityNode } from './nodes/CapabilityNode';
 import { WhatsappTextNode } from './nodes/WhatsappTextNode';
 import { WhatsappMediaNode } from './nodes/WhatsappMediaNode';
 import { WhatsappGroupNode } from './nodes/WhatsappGroupNode';
@@ -77,6 +78,7 @@ const NODE_COMPONENTS: Record<string, React.FC<NodeComponentProps>> = {
   'date-input': DateInputNode,
   'file-upload': FileUploadNode,
   'rating-input': RatingInputNode,
+  capability: CapabilityNode,
   'code-execution': CodeExecutionNode,
   'json-transform': JsonTransformNode,
   'whatsapp-text': WhatsappTextNode,
@@ -165,6 +167,7 @@ const renderNodeIcon = (type: string) => {
     case 'date-input': return <Calendar className="w-3.5 h-3.5 text-teal-400" />;
     case 'file-upload': return <UploadCloud className="w-3.5 h-3.5 text-sky-500" />;
     case 'rating-input': return <Star className="w-3.5 h-3.5 text-yellow-500" />;
+    case 'capability': return <Blocks className="w-3.5 h-3.5 text-violet-400" />;
     case 'time-of-day': return <Clock className="w-3.5 h-3.5 text-fuchsia-400" />;
     case 'log-console': return <TerminalSquare className="w-3.5 h-3.5 text-gray-400" />;
     case 'typing-emulation': return <MoreHorizontal className="w-3.5 h-3.5 text-zinc-500" />;

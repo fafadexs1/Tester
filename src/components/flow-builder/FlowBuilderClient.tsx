@@ -33,6 +33,7 @@ const VARIABLE_DEFINING_FIELDS: (keyof NodeData)[] = [
   'apiOutputVariable', 'variableToSaveDate', 'codeOutputVariable',
   'jsonOutputVariable', 'fileUrlVariable', 'ratingOutputVariable',
   'aiOutputVariable', 'agentResponseVariable', 'supabaseResultVariable',
+  'capabilityOutputVariable',
 ];
 
 const CHATWOOT_PREFILLED_VARIABLES = [

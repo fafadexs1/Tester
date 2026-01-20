@@ -28,6 +28,7 @@ export type NodeType =
   | 'json-transform'
   | 'file-upload'
   | 'rating-input'
+  | 'capability'
   | 'ai-text-generation'
   | 'send-email'
   | 'google-sheets-append'
@@ -159,6 +160,13 @@ export interface NodeData {
   apiResponsePath?: string;
   apiResponseMappings?: ApiResponseMapping[];
 
+  // MCP Capability Node
+  capabilityId?: string;
+  capabilityName?: string;
+  capabilityVersion?: string;
+  capabilityContract?: CapabilityContract;
+  capabilityInputJson?: string;
+  capabilityOutputVariable?: string;
 
   // Delay Node
   delayDuration?: number;
@@ -306,6 +314,63 @@ export interface WorkspaceVersion {
   created_at: string | Date;
   created_by_id: string;
   created_by_username?: string; // To be joined in queries
+}
+
+export type CapabilityRiskLevel = 'low' | 'medium' | 'high';
+export type CapabilityStatus = 'draft' | 'active' | 'deprecated';
+
+export interface CapabilityExample {
+  title: string;
+  input?: Record<string, any> | string | number | boolean | null;
+  output?: Record<string, any> | string | number | boolean | null;
+}
+
+export interface CapabilityContract {
+  summary: string;
+  description: string;
+  dataAccess?: string[];
+  riskLevel: CapabilityRiskLevel;
+  averageDurationMs?: number;
+  estimatedCostUsd?: number;
+  inputSchema?: Record<string, any> | null;
+  outputSample?: Record<string, any> | null;
+  examples?: CapabilityExample[];
+  limits?: {
+    idempotent?: boolean;
+    maxRetries?: number;
+    timeoutMs?: number;
+  };
+  safeMode?: {
+    enabled: boolean;
+    approvalRole?: 'operator' | 'supervisor' | 'admin';
+  };
+  triggerPhrases?: string[];
+}
+
+export interface CapabilityExecutionConfig {
+  type: 'api' | 'function';
+  // API specific
+  apiUrl?: string;
+  apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  apiHeaders?: Record<string, string>;
+
+  // Function specific (for local execution)
+  functionName?: string;
+}
+
+export interface Capability {
+  id: string;
+  workspace_id: string;
+  name: string;
+  slug: string;
+  version: string;
+  status: CapabilityStatus;
+  risk_level: CapabilityRiskLevel;
+  contract: CapabilityContract;
+  execution_config?: CapabilityExecutionConfig; // Added for real execution
+  created_by_id?: string | null;
+  created_at?: string | Date;
+  updated_at?: string | Date;
 }
 
 export type AwaitingInputNode = 'input' | 'option' | 'date-input' | 'file-upload' | 'rating-input';

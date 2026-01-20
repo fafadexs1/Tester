@@ -7,7 +7,7 @@ import {
   MessageSquareText, Type, ListChecks, GitFork, Variable, Timer, Webhook,
   BotMessageSquare, ImageUp, UserPlus2, CalendarDays, ExternalLink, MoreHorizontal, FileImage,
   TerminalSquare, Code2, Shuffle, UploadCloud, Star, Sparkles, Mail, Sheet, BrainCircuit, Headset,
-  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle, MousePointerClick, Hourglass, GitCommitHorizontal, Trash2, Rocket
+  Database, Rows, Search, Edit3, PlayCircle, PlusCircle, GripVertical, TestTube2, Braces, KeyRound, StopCircle, MousePointerClick, Hourglass, GitCommitHorizontal, Trash2, Rocket, Blocks
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -75,6 +75,7 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = () => {
       value: "integrations",
       title: "Integrações",
       blocks: [
+        { type: "capability", label: "Capacidade MCP", icon: <Blocks {...iconProps} className="text-violet-400" />, description: "Executa uma capacidade do catalogo MCP.", defaultData: { capabilityOutputVariable: 'resultado_capacidade' } },
         { type: "api-call", label: "Chamada API", icon: <Webhook {...iconProps} className="text-red-500" />, description: "Conecta-se a serviços externos.", defaultData: { apiUrl: 'https://', apiMethod: 'GET' as const, apiOutputVariable: 'resposta_api' } },
         { type: "dialogy-send-message", label: "Enviar Mensagem (Dialogy)", icon: <Rocket {...iconProps} className="text-orange-500" />, description: "Envia uma mensagem via Dialogy.", defaultData: { dialogyChatId: '{{dialogy_conversation_id}}', dialogyMessageContent: 'Olá, vindo do NexusFlow!' } },
         { type: "redirect", label: "Redirecionar URL", icon: <ExternalLink {...iconProps} className="text-lime-500" />, description: "Envia o usuário para uma URL.", defaultData: { redirectUrl: 'https://google.com' } },

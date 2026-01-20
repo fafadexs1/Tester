@@ -52,7 +52,6 @@ export const KeyValueList: React.FC<KeyValueListProps> = ({
                             className="text-xs h-7 pr-7 bg-black/20 border-white/5 focus:border-primary/50"
                         />
                         <VariableInserter
-                            fieldName={variableInserterId} // This might need adjustment if logic requires specific path
                             onInsert={(variable) => handleChange(item.id, 'key', (item.key || '') + variable)}
                             isIconTrigger
                         />
@@ -65,7 +64,6 @@ export const KeyValueList: React.FC<KeyValueListProps> = ({
                             className="text-xs h-7 pr-7 bg-black/20 border-white/5 focus:border-primary/50"
                         />
                         <VariableInserter
-                            fieldName={variableInserterId}
                             onInsert={(variable) => handleChange(item.id, 'value', (item.value || '') + variable)}
                             isIconTrigger
                         />

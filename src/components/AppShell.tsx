@@ -47,7 +47,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
 import type { Organization } from '@/lib/types';
 import { getOrganizationsForUserAction, createOrganizationAction } from '@/app/actions/organizationActions';
-import { ChevronsUpDown, Workflow, BarChart2, Building, Users, CreditCard, ScrollText, Settings, LogOut, Zap, LifeBuoy, Loader2, PlusCircle, Mail, ShieldCheck, Store } from 'lucide-react';
+import { ChevronsUpDown, Workflow, BarChart2, Building, Users, CreditCard, ScrollText, Settings, LogOut, Zap, LifeBuoy, Loader2, PlusCircle, Mail, ShieldCheck, Store, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { refreshUserSessionAction } from '@/app/actions/authActions';
@@ -71,6 +71,21 @@ const MainNav = () => {
           >
             <Workflow className={cn("h-4 w-4", isActive('/') ? "text-violet-400" : "text-zinc-400")} />
             <span>Fluxos de Trabalho</span>
+          </SidebarMenuButton>
+        </Link>
+      </SidebarMenuItem>
+      <SidebarMenuItem>
+        <Link href="/capabilities" passHref>
+          <SidebarMenuButton
+            isActive={isActive('/capabilities')}
+            tooltip="Capacidades"
+            className={cn(
+              "h-10 transition-all duration-200 hover:bg-white/5 data-[active=true]:bg-violet-600/10 data-[active=true]:text-violet-400 data-[active=true]:hover:bg-violet-600/20",
+              isActive('/capabilities') && "font-medium"
+            )}
+          >
+            <Sparkles className={cn("h-4 w-4", isActive('/capabilities') ? "text-violet-400" : "text-zinc-400")} />
+            <span>Capacidades</span>
           </SidebarMenuButton>
         </Link>
       </SidebarMenuItem>

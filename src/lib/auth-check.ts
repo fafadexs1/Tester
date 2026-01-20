@@ -8,8 +8,11 @@ export async function checkDialogyAccess(email: string) {
         return { allowed: false, reason: "Configuration Error: Missing Secret" };
     }
 
+    const targetUrl = `${DIALOGY_URL}/api/internal/verify-access`;
+    console.log(`[AuthCheck] Attempting to verify access at: ${targetUrl}`);
+
     try {
-        const response = await fetch(`${DIALOGY_URL}/api/internal/verify-access`, {
+        const response = await fetch(targetUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

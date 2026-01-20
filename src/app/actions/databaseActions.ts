@@ -23,6 +23,11 @@ import type {
   MarketplaceListing,
   UserPurchase,
   FlowLog,
+  Capability,
+  CapabilityExecutionConfig,
+  CapabilityContract,
+  CapabilityRiskLevel,
+  CapabilityStatus,
 } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { redirect } from 'next/navigation';
@@ -495,6 +500,38 @@ async function initializeDatabaseSchema(): Promise<void> {
       console.log(`[DB Actions] Added correct unique constraint: workspaces_organization_id_name_key`);
     }
 
+    // Capabilities
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS capabilities (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        slug TEXT NOT NULL,
+        version TEXT NOT NULL DEFAULT 'v1',
+        status TEXT NOT NULL DEFAULT 'draft',
+        risk_level TEXT NOT NULL DEFAULT 'low',
+        contract JSONB NOT NULL,
+        execution_config JSONB,
+        created_by_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(workspace_id, slug, version)
+      );
+    `);
+
+    // Migration for existing table
+    const executionConfigColInfo = await client.query(`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name='capabilities' AND column_name='execution_config'
+    `);
+    if (executionConfigColInfo.rowCount === 0) {
+      console.log("[DB Actions] 'execution_config' column not found in 'capabilities'. Adding column...");
+      await client.query('ALTER TABLE capabilities ADD COLUMN execution_config JSONB;');
+    }
+
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_capabilities_workspace_id ON capabilities (workspace_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_capabilities_status ON capabilities (status);`);
+
     // Flow sessions
     await client.query(`
       CREATE TABLE IF NOT EXISTS flow_sessions (
@@ -627,6 +664,8 @@ async function initializeDatabaseSchema(): Promise<void> {
     await ensureUuidColumn(client, 'team_members', 'team_id');
     await ensureUuidColumn(client, 'team_members', 'user_id');
     await ensureUuidColumn(client, 'team_members', 'organization_id');
+    await ensureUuidColumn(client, 'capabilities', 'workspace_id');
+    await ensureUuidColumn(client, 'capabilities', 'created_by_id');
     await ensureUuidColumn(client, 'flow_logs', 'workspace_id');
 
     await client.query('COMMIT');
@@ -1105,6 +1144,8 @@ export async function deleteWorkspaceAction(workspaceId: string): Promise<{ succ
   return deleteWorkspaceFromDB(workspaceId);
 }
 
+// --- Capability Actions (Moved to end of file) ---
+
 // --- Version History Actions ---
 export async function getWorkspaceVersions(workspaceId: string): Promise<{ data?: WorkspaceVersion[]; error?: string }> {
   try {
@@ -1498,6 +1539,147 @@ export async function getPermissions(): Promise<Permission[]> {
   return result.rows;
 }
 
+export async function getCapabilitiesForWorkspace(workspaceId: string): Promise<Capability[]> {
+  const query = `
+      SELECT *
+      FROM capabilities
+      WHERE workspace_id = $1
+      ORDER BY name ASC
+    `;
+  const result = await runQuery<Capability>(query, [workspaceId]);
+  return result.rows;
+}
+
+export async function getCapabilityById(capabilityId: string): Promise<{ data?: Capability; error?: string }> {
+  const result = await runQuery<Capability>('SELECT * FROM capabilities WHERE id = $1', [capabilityId]);
+  if (result.rowCount === 0) {
+    return { error: 'Capability not found.' };
+  }
+  return { data: result.rows[0] };
+}
+
+export async function deleteCapability(capabilityId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const result = await runQuery('DELETE FROM capabilities WHERE id = $1', [capabilityId]);
+    if (result.rowCount === 0) {
+      return { success: false, error: 'Capability not found.' };
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error('[DB Actions] Delete capability error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function createCapability(data: {
+  workspaceId: string;
+  name: string;
+  slug: string;
+  version: string;
+  status: string;
+  riskLevel: string;
+  contract: CapabilityContract;
+  executionConfig?: CapabilityExecutionConfig;
+  createdById: string;
+}): Promise<{ data?: Capability; error?: string }> {
+  try {
+    const result = await runQuery<Capability>(
+      `
+      INSERT INTO capabilities(workspace_id, name, slug, version, status, risk_level, contract, execution_config, created_by_id)
+  VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
+  RETURNING *
+    `,
+      [
+        data.workspaceId,
+        data.name,
+        data.slug,
+        data.version,
+        data.status,
+        data.riskLevel,
+        JSON.stringify(data.contract),
+        data.executionConfig ? JSON.stringify(data.executionConfig) : null,
+        data.createdById,
+      ]
+    );
+    return { data: result.rows[0] };
+  } catch (error: any) {
+    console.error('[DB Actions] Create capability error:', error);
+    return { error: error.message };
+  }
+}
+
+export async function updateCapability(
+  capabilityId: string,
+  updates: {
+    name?: string;
+    slug?: string;
+    version?: string;
+    status?: string;
+    riskLevel?: string;
+    contract?: CapabilityContract;
+    executionConfig?: CapabilityExecutionConfig;
+  }
+): Promise<{ data?: Capability; error?: string }> {
+  try {
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (updates.name !== undefined) {
+      fields.push(`name = $${idx++} `);
+      values.push(updates.name);
+    }
+    if (updates.slug !== undefined) {
+      fields.push(`slug = $${idx++} `);
+      values.push(updates.slug);
+    }
+    if (updates.version !== undefined) {
+      fields.push(`version = $${idx++} `);
+      values.push(updates.version);
+    }
+    if (updates.status !== undefined) {
+      fields.push(`status = $${idx++} `);
+      values.push(updates.status);
+    }
+    if (updates.riskLevel !== undefined) {
+      fields.push(`risk_level = $${idx++} `);
+      values.push(updates.riskLevel);
+    }
+    if (updates.contract !== undefined) {
+      fields.push(`contract = $${idx++} `);
+      values.push(JSON.stringify(updates.contract));
+    }
+    if (updates.executionConfig !== undefined) {
+      fields.push(`execution_config = $${idx++} `);
+      values.push(JSON.stringify(updates.executionConfig));
+    }
+
+    fields.push(`updated_at = NOW()`);
+
+    if (fields.length === 1) {
+      // Only updated_at, check exists
+      const check = await runQuery('SELECT * FROM capabilities WHERE id = $1', [capabilityId]);
+      if (check.rowCount === 0) return { error: 'Capability not found.' };
+      return { data: check.rows[0] as Capability };
+    }
+
+    values.push(capabilityId);
+    const query = `
+      UPDATE capabilities
+      SET ${fields.join(', ')}
+      WHERE id = $${idx}
+  RETURNING *
+    `;
+
+    const result = await runQuery<Capability>(query, values);
+    if (result.rowCount === 0) return { error: 'Capability not found.' };
+    return { data: result.rows[0] };
+  } catch (error: any) {
+    console.error('[DB Actions] Update capability error:', error);
+    return { error: error.message };
+  }
+}
+
 export async function createRole(
   organizationId: string,
   name: string,
@@ -1601,7 +1783,7 @@ export async function getListings(): Promise<{ data?: MarketplaceListing[]; erro
             FROM marketplace_listings ml
             JOIN users u ON ml.creator_id = u.id
             ORDER BY ml.created_at DESC;
-    `;
+  `;
     const result = await runQuery<any>(query);
     const listings = result.rows.map(row => ({
       ...row,
@@ -1622,7 +1804,7 @@ export async function getListingDetails(listingId: string): Promise<{ data?: Mar
             FROM marketplace_listings ml
             JOIN users u ON ml.creator_id = u.id
             WHERE ml.id = $1;
-    `;
+  `;
     const result = await runQuery<any>(query, [listingId]);
     if (result.rows.length === 0) {
       return { error: "Fluxo não encontrado no marketplace." };
