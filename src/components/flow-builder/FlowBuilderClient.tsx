@@ -7,12 +7,12 @@ import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBloc
 import {
   NODE_WIDTH, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX, GRID_SIZE,
   START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y,
-  OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y,
   MIN_ZOOM, MAX_ZOOM, ZOOM_STEP
 } from '@/lib/constants';
 import FlowSidebar from './FlowSidebar';
 import Canvas from './Canvas';
 import TopBar from './TopBar';
+import { ZoomControls } from './ZoomControls';
 import TestChatPanel from './TestChatPanel';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -170,6 +170,43 @@ function getAncestorsForNode(
   return result;
 }
 
+// Função auxiliar para encontrar conexões ancestrais (Trace Path)
+function getAncestorConnections(targetNodeId: string, connections: Connection[]): Set<string> {
+  const incomingConnectionsMap = new Map<string, Connection[]>();
+  // Index connections by 'to' for fast lookup
+  for (const conn of connections) {
+    if (!incomingConnectionsMap.has(conn.to)) {
+      incomingConnectionsMap.set(conn.to, []);
+    }
+    incomingConnectionsMap.get(conn.to)!.push(conn);
+  }
+
+  const tracedConnectionIds = new Set<string>();
+  const queue: string[] = [targetNodeId];
+  const visitedNodes = new Set<string>([targetNodeId]);
+
+  while (queue.length > 0) {
+    const currentNodeId = queue.shift()!;
+    const incoming = incomingConnectionsMap.get(currentNodeId) || [];
+
+    for (const conn of incoming) {
+      if (!tracedConnectionIds.has(conn.id)) {
+        tracedConnectionIds.add(conn.id);
+        const parentId = conn.from;
+        if (!visitedNodes.has(parentId)) {
+          visitedNodes.add(parentId);
+          queue.push(parentId);
+        }
+      }
+    }
+  }
+
+  return tracedConnectionIds;
+}
+
+
+
+
 
 function generateUniqueVariableName(baseName: string, existingNames: string[]): string {
   if (!baseName || baseName.trim() === '') return '';
@@ -228,23 +265,31 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
 
   const [highlightedConnectionId, setHighlightedConnectionId] = useState<string | null>(null);
   const [highlightedNodeIdBySession, setHighlightedNodeIdBySession] = useState<string | null>(null);
+  const [currentSessionSteps, setCurrentSessionSteps] = useState<string[] | undefined>(undefined);
 
   // Selection State
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
 
   const [canvasOffset, setCanvasOffset] = useState<CanvasOffset>({ x: GRID_SIZE * 2, y: GRID_SIZE * 2 });
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [isInteracting, setIsInteracting] = useState(false);
+  const [isSidebarActive, setIsSidebarActive] = useState(false);
 
   const isPanning = useRef(false);
   const isDraggingNode = useRef(false);
   const draggedNodeId = useRef<string | null>(null);
   const dragStartMousePosition = useRef({ x: 0, y: 0 });
   const initialNodePosition = useRef({ x: 0, y: 0 });
+  const rafIdRef = useRef<number | null>(null); // RAF throttle for DOM updates
+  const pendingNodePosition = useRef<{ x: number; y: number } | null>(null);
+  const draggedNodeElementRef = useRef<HTMLElement | null>(null);
 
   const panStartMousePosition = useRef({ x: 0, y: 0 });
   const initialCanvasOffsetOnPanStart = useRef<CanvasOffset>({ x: 0, y: 0 });
+  const pendingCanvasOffset = useRef<CanvasOffset | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const canvasInnerRef = useRef<HTMLDivElement | null>(null);
 
   const canvasOffsetCbRef = useRef(canvasOffset);
   const zoomLevelCbRef = useRef(zoomLevel);
@@ -286,8 +331,36 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     zoomLevelCbRef.current = zoomLevel;
   }, [zoomLevel]);
 
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    canvasInnerRef.current = canvasRef.current.querySelector('[data-canvas-inner="true"]') as HTMLDivElement | null;
+  }, [hasMounted]);
+
   const currentNodes = activeWorkspace?.nodes || [];
   const currentConnections = activeWorkspace?.connections || [];
+
+  const tracePathConnectionIds = useMemo(() => {
+    if (!activeWorkspace) return new Set<string>();
+
+    if (currentSessionSteps && currentSessionSteps.length > 0) {
+      console.log("[FlowBuilderClient] Tracing using explicit steps:", currentSessionSteps);
+      const pathConnectionIds = new Set<string>();
+      for (let i = 0; i < currentSessionSteps.length - 1; i++) {
+        const fromId = currentSessionSteps[i];
+        const toId = currentSessionSteps[i + 1];
+        // Find connection from A to B.
+        // There could be multiple handles, just highlight ANY connection between them or ALL?
+        // Usually one taken path. We'll highlight all connections linking the two to be safe/visible.
+        const conns = activeWorkspace.connections.filter(c => c.from === fromId && c.to === toId);
+        conns.forEach(c => pathConnectionIds.add(c.id));
+      }
+      return pathConnectionIds;
+    }
+
+    if (!highlightedNodeIdBySession) return new Set<string>();
+
+    return getAncestorConnections(highlightedNodeIdBySession, activeWorkspace.connections);
+  }, [activeWorkspace, highlightedNodeIdBySession, currentSessionSteps]);
 
   // Removed redundant useEffect to prevent double variable scope calculation
   // Variable scope is now managed by updateActiveWorkspace and loadWorkspace
@@ -531,13 +604,23 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   );
 
   const handleCanvasMouseDownForPanning = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    // Only pan if clicking strictly on the canvas background/wrapper, not on nodes
-    if (canvasRef.current && (e.target === canvasRef.current || (e.target as HTMLElement).id === 'flow-content-wrapper')) {
+    // Robust check: Only pan if we are NOT clicking on a node, handle, or interactive element
+    const target = e.target as HTMLElement;
+    const isNode = target.closest('[data-node-id]');
+    const isHandle = target.closest('[data-handle-id]');
+    const isConnector = target.closest('[data-connector="true"]');
+
+    // Also ignore if clicking on absolute UI overlays effectively (though they usually stop propagation)
+    // But mainly we want to allow panning anywhere on the "floor"
+
+    if (!isNode && !isHandle && !isConnector) {
       isPanning.current = true;
+      setIsInteracting(true);
       panStartMousePosition.current = { x: e.clientX, y: e.clientY };
       initialCanvasOffsetOnPanStart.current = { ...canvasOffsetCbRef.current };
       if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
-      setHighlightedNodeIdBySession(null);
+      setHighlightedConnectionId(null);
+      // Removed setHighlightedNodeIdBySession(null) to persist trace visualization during interaction
       // Clear selection when clicking canvas
       setSelectedNodeIds([]);
     }
@@ -547,7 +630,12 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     e.stopPropagation();
     isDraggingNode.current = true;
     draggedNodeId.current = nodeId;
+    setIsInteracting(true);
     dragStartMousePosition.current = { x: e.clientX, y: e.clientY };
+    draggedNodeElementRef.current = (e.currentTarget as HTMLElement).closest('[data-node-id]')?.parentElement as HTMLElement | null;
+    if (!draggedNodeElementRef.current) {
+      draggedNodeElementRef.current = document.querySelector(`[data-node-id="${nodeId}"]`)?.parentElement as HTMLElement | null;
+    }
 
     // Find initial position
     const node = activeWorkspace?.nodes.find(n => n.id === nodeId);
@@ -569,14 +657,45 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     updateNode(id, { x, y });
   }, [updateNode]);
 
+  const applyPendingTransforms = useCallback(() => {
+    rafIdRef.current = null;
+
+    if (!canvasInnerRef.current && canvasRef.current) {
+      canvasInnerRef.current = canvasRef.current.querySelector('[data-canvas-inner="true"]') as HTMLDivElement | null;
+    }
+
+    if (pendingCanvasOffset.current && canvasInnerRef.current) {
+      const { x, y } = pendingCanvasOffset.current;
+      canvasInnerRef.current.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${zoomLevelCbRef.current})`;
+
+      if (canvasRef.current) {
+        const visualGridSpacing = GRID_SIZE * zoomLevelCbRef.current;
+        canvasRef.current.style.backgroundPosition = `${x % visualGridSpacing}px ${y % visualGridSpacing}px`;
+      }
+    }
+
+    if (pendingNodePosition.current && draggedNodeElementRef.current) {
+      const { x, y } = pendingNodePosition.current;
+      draggedNodeElementRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    }
+  }, []);
+
+  const scheduleDOMUpdate = useCallback(() => {
+    if (rafIdRef.current !== null) return;
+    rafIdRef.current = window.requestAnimationFrame(applyPendingTransforms);
+  }, [applyPendingTransforms]);
+
   const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
       const dx = e.clientX - panStartMousePosition.current.x;
       const dy = e.clientY - panStartMousePosition.current.y;
-      setCanvasOffset({
+      const newOffset = {
         x: initialCanvasOffsetOnPanStart.current.x + dx,
         y: initialCanvasOffsetOnPanStart.current.y + dy,
-      });
+      };
+
+      pendingCanvasOffset.current = newOffset;
+      scheduleDOMUpdate();
     } else if (isDraggingNode.current && draggedNodeId.current) {
       const dx = (e.clientX - dragStartMousePosition.current.x) / zoomLevelCbRef.current;
       const dy = (e.clientY - dragStartMousePosition.current.y) / zoomLevelCbRef.current;
@@ -584,7 +703,8 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
       const newX = Math.round((initialNodePosition.current.x + dx) / GRID_SIZE) * GRID_SIZE;
       const newY = Math.round((initialNodePosition.current.y + dy) / GRID_SIZE) * GRID_SIZE;
 
-      updateNode(draggedNodeId.current, { x: newX, y: newY });
+      pendingNodePosition.current = { x: newX, y: newY };
+      scheduleDOMUpdate();
 
     } else if (drawingLineRef.current && canvasRef.current) {
       const canvasRect = canvasRef.current.getBoundingClientRect();
@@ -606,15 +726,28 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
         };
       });
     }
-  }, [updateNode]);
+  }, []);
 
   const handleGlobalMouseUp = useCallback((e: MouseEvent) => {
     if (isPanning.current) {
       isPanning.current = false;
       if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
+      // SYNC TO REACT STATE on mouse up
+      if (pendingCanvasOffset.current) {
+        setCanvasOffset(pendingCanvasOffset.current);
+        pendingCanvasOffset.current = null;
+      }
+      setIsInteracting(false);
     } else if (isDraggingNode.current) {
+      // SYNC TO REACT STATE on mouse up
+      if (pendingNodePosition.current && draggedNodeId.current) {
+        updateNode(draggedNodeId.current, pendingNodePosition.current);
+      }
       isDraggingNode.current = false;
       draggedNodeId.current = null;
+      pendingNodePosition.current = null;
+      draggedNodeElementRef.current = null;
+      setIsInteracting(false);
     } else if (drawingLineRef.current) {
       const targetElement = document.elementFromPoint(e.clientX, e.clientY);
       const targetHandleElement = targetElement?.closest('[data-handle-type="target"]');
@@ -679,10 +812,24 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
       if (isPanning.current) {
         isPanning.current = false;
         if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
+        if (pendingCanvasOffset.current) {
+          setCanvasOffset(pendingCanvasOffset.current);
+          pendingCanvasOffset.current = null;
+        }
+      }
+      if (isDraggingNode.current) {
+        if (pendingNodePosition.current && draggedNodeId.current) {
+          updateNode(draggedNodeId.current, pendingNodePosition.current);
+        }
+        isDraggingNode.current = false;
+        draggedNodeId.current = null;
+        pendingNodePosition.current = null;
+        draggedNodeElementRef.current = null;
       }
       if (drawingLineRef.current) {
         setDrawingLine(null);
       }
+      setIsInteracting(false);
     };
     document.body.addEventListener('mouseleave', handleMouseLeaveWindow);
 
@@ -690,8 +837,12 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
       document.removeEventListener('mousemove', handleGlobalMouseMove);
       document.removeEventListener('mouseup', handleGlobalMouseUp);
       document.body.removeEventListener('mouseleave', handleMouseLeaveWindow);
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
     };
-  }, [handleGlobalMouseMove, handleGlobalMouseUp, hasMounted]);
+  }, [handleGlobalMouseMove, handleGlobalMouseUp, hasMounted, updateNode]);
 
 
   const handleZoom = useCallback((direction: 'in' | 'out' | 'reset') => {
@@ -732,8 +883,9 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
 
   }, []);
 
-  const handleHighlightNodeInFlow = useCallback((nodeId: string | null) => {
+  const handleHighlightNodeInFlow = useCallback((nodeId: string | null, steps?: string[]) => {
     setHighlightedNodeIdBySession(nodeId);
+    setCurrentSessionSteps(steps);
   }, []);
 
   const handleUpdateWorkspace = useCallback((newSettings: Partial<WorkspaceData>) => {
@@ -763,13 +915,15 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
           onUpdateWorkspace={handleUpdateWorkspace}
           isChatPanelOpen={isChatPanelOpen}
           onToggleChatPanel={toggleChatPanel}
-          onZoom={handleZoom}
-          currentZoomLevel={zoomLevel}
           onHighlightNode={handleHighlightNodeInFlow}
           activeWorkspace={activeWorkspace}
         />
+        <ZoomControls
+          onZoom={handleZoom}
+          currentZoomLevel={zoomLevel}
+        />
         <div className="flex-1 flex relative overflow-hidden">
-          <FlowSidebar />
+          <FlowSidebar onInteractionChange={setIsSidebarActive} />
           <div className="flex-1 flex relative overflow-hidden" >
             <Canvas
               ref={canvasRef}
@@ -785,6 +939,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
               onDuplicateNode={duplicateNode}
               onDeleteConnection={deleteConnection}
               onCanvasMouseDown={handleCanvasMouseDownForPanning}
+              isInteracting={isInteracting}
               highlightedConnectionId={highlightedConnectionId}
               setHighlightedConnectionId={setHighlightedConnectionId}
               availableVariablesByNode={availableVariablesByNode}
@@ -795,8 +950,11 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
               onNodeDragStart={handleNodeDragStart}
               onUpdatePosition={handleUpdateNodePosition}
               onEndConnection={(e: React.MouseEvent, node: NodeData) => { /* Handle connection end if needed logic here, mostly handled by mouseUp global */ }}
+              disableAnimations={isSidebarActive}
+              tracePathConnectionIds={tracePathConnectionIds}
             />
           </div>
+
           {hasMounted && isChatPanelOpen && (
             <TestChatPanel
               activeWorkspace={activeWorkspace}

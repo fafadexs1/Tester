@@ -15,4 +15,5 @@ export interface NodeComponentProps {
     supabaseColumns?: any[];
     isLoadingSupabaseColumns?: boolean;
     activeNodeId?: string;
+    onEndConnection?: (event: React.MouseEvent, node: NodeData, handleId?: string) => void;
 }

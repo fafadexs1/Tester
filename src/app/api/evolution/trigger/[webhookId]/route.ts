@@ -461,6 +461,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         awaiting_input_details: null,
         session_timeout_seconds: matchingTrigger.sessionTimeoutSeconds || 0,
         flow_context: flowContext,
+        steps: [],
       };
       workspace = workspaceToStart;
       startExecution = true;

@@ -8,8 +8,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
 import { VariableInserter } from '../components/VariableInserter';
 import { TextFormatToolbar } from '../components/TextFormatToolbar';
+import { Bot, BrainCircuit, Database, Wrench } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-export const IntelligentAgentNode: React.FC<NodeComponentProps> = ({ node, onUpdate }) => {
+export const IntelligentAgentNode: React.FC<NodeComponentProps> = ({ node, onUpdate, onEndConnection }) => {
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
     return (
@@ -66,6 +68,53 @@ export const IntelligentAgentNode: React.FC<NodeComponentProps> = ({ node, onUpd
                 </div>
             </div>
             <p className="text-[10px] text-muted-foreground">Este nó simula uma conversa com um agente de IA. A lógica real usa Genkit.</p>
+
+            {/* Resource Handles - Bottom */}
+            <div className="absolute -bottom-3 left-0 right-0 flex justify-center gap-4 px-2">
+
+                {/* AI Model Handle */}
+                <div className="flex flex-col items-center gap-1 group/h-model relative">
+                    <div
+                        className="w-3 h-3 rounded-full bg-violet-500 border border-black shadow-[0_0_5px_rgba(139,92,246,0.5)] cursor-crosshair hover:scale-125 transition-transform"
+                        data-connector="true"
+                        data-handle-type="target"
+                        data-handle-id="model"
+                        data-node-id={node.id}
+                        onMouseUp={(e) => { e.stopPropagation(); onEndConnection?.(e, node, 'model'); }}
+                        title="Connect AI Model"
+                    />
+                    <span className="text-[8px] uppercase tracking-tighter text-zinc-500 font-bold absolute -bottom-4 whitespace-nowrap opacity-0 group-hover/h-model:opacity-100 transition-opacity bg-black/80 px-1 rounded">Model</span>
+                </div>
+
+                {/* Memory Handle */}
+                <div className="flex flex-col items-center gap-1 group/h-mem relative">
+                    <div
+                        className="w-3 h-3 rounded-full bg-blue-500 border border-black shadow-[0_0_5px_rgba(59,130,246,0.5)] cursor-crosshair hover:scale-125 transition-transform"
+                        data-connector="true"
+                        data-handle-type="target"
+                        data-handle-id="memory"
+                        data-node-id={node.id}
+                        onMouseUp={(e) => { e.stopPropagation(); onEndConnection?.(e, node, 'memory'); }}
+                        title="Connect Memory"
+                    />
+                    <span className="text-[8px] uppercase tracking-tighter text-zinc-500 font-bold absolute -bottom-4 whitespace-nowrap opacity-0 group-hover/h-mem:opacity-100 transition-opacity bg-black/80 px-1 rounded">Memory</span>
+                </div>
+
+                {/* Tools Handle */}
+                <div className="flex flex-col items-center gap-1 group/h-tool relative">
+                    <div
+                        className="w-3 h-3 rounded-full bg-amber-500 border border-black shadow-[0_0_5px_rgba(245,158,11,0.5)] cursor-crosshair hover:scale-125 transition-transform"
+                        data-connector="true"
+                        data-handle-type="target"
+                        data-handle-id="tools"
+                        data-node-id={node.id}
+                        onMouseUp={(e) => { e.stopPropagation(); onEndConnection?.(e, node, 'tools'); }}
+                        title="Connect Tools"
+                    />
+                    <span className="text-[8px] uppercase tracking-tighter text-zinc-500 font-bold absolute -bottom-4 whitespace-nowrap opacity-0 group-hover/h-tool:opacity-100 transition-opacity bg-black/80 px-1 rounded">Tools</span>
+                </div>
+
+            </div>
         </div>
     );
 };

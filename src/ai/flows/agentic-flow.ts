@@ -10,10 +10,10 @@ const GenericToolInputSchema = z.record(z.any());
 
 export const AgenticFlowInputSchema = z.object({
     userMessage: z.string(),
-    // We accept capabilities as 'any' here to avoid complex circular type issues with Zod/TS in the flow definition, 
-    // but we cast them in the logic.
     capabilities: z.array(z.any()),
     history: z.array(z.any()).optional(),
+    modelName: z.string().optional(),
+    modelConfig: z.any().optional(), // For temperature etc (or apiKey if we can inject it)
 });
 
 export const AgenticFlowOutputSchema = z.object({
@@ -27,7 +27,7 @@ export const agenticFlow = ai.defineFlow(
         outputSchema: AgenticFlowOutputSchema,
     },
     async (input) => {
-        const { userMessage, capabilities, history } = input;
+        const { userMessage, capabilities, history, modelName } = input;
         const typedCapabilities = capabilities as Capability[];
 
         // Define tools dynamically
@@ -36,13 +36,12 @@ export const agenticFlow = ai.defineFlow(
                 {
                     name: cap.slug,
                     description: cap.contract.description || cap.contract.summary || `Execute ${cap.name}`,
-                    inputSchema: GenericToolInputSchema, // We'll rely on the model to follow the text description of the schema if we pass it in prompt, or relax validation.
+                    inputSchema: GenericToolInputSchema,
                 },
                 async (toolInput) => {
                     console.log(`[Agentic Flow] Executing tool: ${cap.slug} with input:`, toolInput);
                     try {
                         const result = await executeCapability(cap, toolInput as Record<string, any>);
-                        // Genkit expects the tool output to be a string or JSON.
                         return result;
                     } catch (err: any) {
                         console.error(`[Agentic Flow] Tool execution failed:`, err);
@@ -52,22 +51,23 @@ export const agenticFlow = ai.defineFlow(
             );
         });
 
-        // Generate response using the tools
-        // We inject history into the prompt since we are using a text generation interface or simple chat interface.
         const promptText = `
         You are an autonomous assistant.
         User Message: ${userMessage}
         
         Previous History: ${JSON.stringify(history || [])}
 
-        Available Tools: The system has provided tools you can call. Use them to answer the user's request.
-        If a tool returns an error, try to explain it to the user or try a different approach.
+        Available Tools: Use provided tools if needed.
       `;
 
-        // Note: ai.generate() in this project version seems to use a specific signature.
-        // We assume it supports { model, prompt, tools, config }.
+        // Determine Model to use
+        const modelToUse = modelName || 'googleai/gemini-2.0-flash';
+        const effectiveModel = modelToUse.includes('/') ? modelToUse : `googleai/${modelToUse}`; // Simple heuristic
+
+        console.log(`[Agentic Flow] Generating with model: ${effectiveModel}`);
+
         const llmResponse = await ai.generate({
-            model: 'googleai/gemini-2.0-flash',
+            model: effectiveModel,
             prompt: promptText,
             tools: tools,
             config: {

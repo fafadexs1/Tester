@@ -351,6 +351,15 @@ export async function executeFlow(
 
     console.log(`[Flow Engine - ${session.session_id}] Executing Node: ${currentNode.id} (${currentNode.type} - ${currentNode.title})`);
 
+    // Track execution steps
+    if (!session.steps) {
+      session.steps = [];
+    }
+    // Avoid duplicate trailing steps if re-entering? No, users might loop.
+    // However, we might want to avoid adding valid re-entries if it confuses the "path". 
+    // But for "exact path", we should record it.
+    session.steps.push(currentNodeId);
+
     let nextNodeId: string | null = null;
     session.current_node_id = currentNodeId;
 
@@ -846,12 +855,56 @@ export async function executeFlow(
               history.push({ role: 'user', content: cleanedUserInput });
               ({ history, memorySummary } = trimAndSummarizeHistory(history, memorySummary));
 
-              // Autonomous Agent Integration: Fetch capabilities and use agenticFlow
-              const capabilities = await getCapabilitiesForWorkspace(currentWorkspace.id);
+              // Autonomous Agent Integration: Resolve connected tools and model
+              // 1. Resolve Tools
+              const connectedTools: any[] = [];
+              const toolConnections = connections.filter(c => c.to === currentNode.id && c.targetHandle === 'tools');
+
+              if (toolConnections.length > 0) {
+                console.log(`[Flow Engine] Found ${toolConnections.length} connected tools for agent ${currentNode.id}`);
+                for (const conn of toolConnections) {
+                  const sourceNode = findNodeById(conn.from, currentWorkspace.nodes);
+                  if (sourceNode?.type === 'capability' && sourceNode.capabilityId) {
+                    try {
+                      const cap = await getCapabilityById(sourceNode.capabilityId);
+                      if (cap) connectedTools.push(cap);
+                    } catch (err) {
+                      console.error(`[Flow Engine] Failed to load capability ${sourceNode.capabilityId}`, err);
+                    }
+                  }
+                }
+              } else {
+                // Fallback: If no tools connected, fetch ALL workspace capabilities (Legacy/Default behavior)
+                // Or we can decide to have NO tools if none connected. 
+                // User request implies "n8n style", so likely explicit only. 
+                // But for backward compatibility, maybe keep global if 0 connected?
+                // Let's stick to explicit only if the user is using the new handles. 
+                // Providing a fallback might be safer for existing flows.
+                console.log(`[Flow Engine] No tools explicitly connected. Falling back to all workspace capabilities.`);
+                const allCaps = await getCapabilitiesForWorkspace(currentWorkspace.id);
+                connectedTools.push(...allCaps);
+              }
+
+              // 2. Resolve Model Configuration
+              let targetModel = modelName;
+              let targetApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY; // Default fallback
+
+              const modelConnection = connections.find(c => c.to === currentNode.id && c.targetHandle === 'model');
+              if (modelConnection) {
+                const modelNode = findNodeById(modelConnection.from, currentWorkspace.nodes);
+                if (modelNode?.type === 'ai-model-config') {
+                  if (modelNode.aiModelName) targetModel = substituteVariablesInText(modelNode.aiModelName, session.flow_variables);
+                  if (modelNode.aiApiKey) targetApiKey = substituteVariablesInText(modelNode.aiApiKey, session.flow_variables);
+                  // Provider logic can be added here if agenticFlow supports it
+                }
+              }
+
               const agentReply = await agenticFlow({
                 userMessage: cleanedUserInput,
-                capabilities: capabilities,
+                capabilities: connectedTools,
                 history: history,
+                modelName: targetModel,
+                modelConfig: targetApiKey ? { apiKey: targetApiKey } : undefined,
               });
 
               const cleanedReply = cleanAndNormalizeText(agentReply.botReply);

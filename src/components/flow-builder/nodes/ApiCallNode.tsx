@@ -5,6 +5,8 @@ import { NodeComponentProps } from '../NodeProps';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { DebouncedInput } from '../components/DebouncedInput';
+import { DebouncedTextarea } from '../components/DebouncedTextarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -360,13 +362,13 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                 <div>
                     <Label htmlFor={`${node.id}-apiResponsePath`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Caminho Principal</Label>
                     <div className="flex items-center gap-1.5 mt-1">
-                        <Input
+                        <DebouncedInput
                             id={`${node.id}-apiResponsePath`}
                             placeholder="Ex: data.user.id"
                             value={node.apiResponsePath || ''}
                             onFocus={() => setFocusedApiMappingId(API_PREVIEW_KEY_PRIMARY)}
-                            onChange={(e) => onUpdate(node.id, { apiResponsePath: e.target.value })}
-                            className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50"
+                            onChange={(val) => onUpdate(node.id, { apiResponsePath: String(val) })}
+                            className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0"
                         />
                         <Popover>
                             <PopoverTrigger asChild>
@@ -396,11 +398,11 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                 <div>
                     <Label className="text-[10px] font-medium text-zinc-400 mb-1 block">Variável de Saída</Label>
                     <div className="flex items-center gap-1.5 mt-1">
-                        <Input
+                        <DebouncedInput
                             placeholder="nome_variavel"
                             value={node.apiOutputVariable || ''}
-                            onChange={(e) => onUpdate(node.id, { apiOutputVariable: e.target.value })}
-                            className="h-7 text-xs bg-black/20 border-white/5"
+                            onChange={(val) => onUpdate(node.id, { apiOutputVariable: String(val) })}
+                            className="h-7 text-xs bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0"
                         />
                         <Button
                             variant="outline" size="sm" className="h-7 text-[10px] px-2 border-white/10"
@@ -433,7 +435,7 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                     value={apiSampleInput}
                     onChange={(e) => handleApiSampleInputChange(e.target.value)}
                     rows={4}
-                    className="font-mono text-[10px] bg-black/20 border-white/5 resize-none"
+                    className="font-mono text-[10px] bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none"
                     placeholder='{ "data": ... }'
                 />
                 {apiSampleError && <p className="text-[10px] text-destructive">{apiSampleError}</p>}
@@ -461,11 +463,11 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                                 <div>
                                     <Label className="text-[10px] text-zinc-500">JSONata</Label>
                                     <div className="flex gap-1 mt-1">
-                                        <Input
+                                        <DebouncedInput
                                             value={mapping.jsonPath}
                                             onFocus={() => setFocusedApiMappingId(mapping.id)}
-                                            onChange={(e) => handleUpdateMapping(mapping.id, 'jsonPath', e.target.value)}
-                                            className="h-7 text-xs bg-black/20 border-white/5"
+                                            onChange={(val) => handleUpdateMapping(mapping.id, 'jsonPath', String(val))}
+                                            className="h-7 text-xs bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0"
                                         />
                                         <Popover>
                                             <PopoverTrigger asChild>
@@ -482,10 +484,10 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                                 <div>
                                     <Label className="text-[10px] text-zinc-500">Variável</Label>
                                     <div className="flex gap-1 mt-1">
-                                        <Input
+                                        <DebouncedInput
                                             value={mapping.flowVariable}
-                                            onChange={(e) => handleUpdateMapping(mapping.id, 'flowVariable', e.target.value)}
-                                            className="h-7 text-xs bg-black/20 border-white/5"
+                                            onChange={(val) => handleUpdateMapping(mapping.id, 'flowVariable', String(val))}
+                                            className="h-7 text-xs bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0"
                                         />
                                         <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => {
                                             const sug = buildVariableNameFromPath(mapping.jsonPath);
@@ -498,7 +500,7 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                                 <div>
                                     <Label className="text-[10px] text-zinc-500">Extrair como</Label>
                                     <Select value={mapping.extractAs || 'single'} onValueChange={(val) => handleUpdateMapping(mapping.id, 'extractAs', val)}>
-                                        <SelectTrigger className="h-7 w-[100px] text-[10px] bg-black/20 border-white/5"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger className="h-7 w-[100px] text-[10px] bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="single">Valor</SelectItem>
                                             <SelectItem value="list">Lista</SelectItem>
@@ -508,7 +510,7 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                                 {mapping.extractAs === 'list' && (
                                     <div className="flex-1">
                                         <Label className="text-[10px] text-zinc-500">Campo do Item</Label>
-                                        <Input value={mapping.itemField || ''} onChange={(e) => handleUpdateMapping(mapping.id, 'itemField', e.target.value)} className="h-7 text-xs bg-black/20 border-white/5" />
+                                        <DebouncedInput value={mapping.itemField || ''} onChange={(val) => handleUpdateMapping(mapping.id, 'itemField', String(val))} className="h-7 text-xs bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0" />
                                     </div>
                                 )}
                             </div>
@@ -542,12 +544,12 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                     </Button>
                 </div>
                 <div className="relative">
-                    <Input
+                    <DebouncedInput
                         id={`${node.id}-apiurl`}
                         placeholder="https://api.example.com/data"
                         value={node.apiUrl || ''}
-                        onChange={(e) => onUpdate(node.id, { apiUrl: e.target.value })}
-                        className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50"
+                        onChange={(val) => onUpdate(node.id, { apiUrl: String(val) })}
+                        className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0"
                     />
                     <VariableInserter fieldName="apiUrl" isIconTrigger onInsert={(v) => onUpdate(node.id, { apiUrl: (node.apiUrl || '') + v })} />
                 </div>
@@ -555,7 +557,7 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
             <div>
                 <Label htmlFor={`${node.id}-apimethod`} className="text-[10px] font-medium text-zinc-400">Método HTTP</Label>
                 <Select value={node.apiMethod || 'GET'} onValueChange={(value) => onUpdate(node.id, { apiMethod: value as NodeData['apiMethod'] })}>
-                    <SelectTrigger id={`${node.id}-apimethod`} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"><SelectValue placeholder="Selecione o método" /></SelectTrigger>
+                    <SelectTrigger id={`${node.id}-apimethod`} className="h-7 text-xs bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0"><SelectValue placeholder="Selecione o método" /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="GET">GET</SelectItem><SelectItem value="POST">POST</SelectItem>
                         <SelectItem value="PUT">PUT</SelectItem><SelectItem value="DELETE">DELETE</SelectItem>
@@ -577,7 +579,7 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                     <div>
                         <Label className="text-[10px] font-medium text-zinc-400">Tipo de Autenticação</Label>
                         <Select value={node.apiAuthType || 'none'} onValueChange={(value) => onUpdate(node.id, { apiAuthType: value as NodeData['apiAuthType'] })}>
-                            <SelectTrigger className="h-7 text-xs bg-black/20 border-white/5"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-7 text-xs bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="none">Nenhuma</SelectItem>
                                 <SelectItem value="bearer">Bearer Token</SelectItem>
@@ -589,7 +591,7 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                         <div>
                             <Label className="text-[10px] text-zinc-400">Bearer Token</Label>
                             <div className="relative">
-                                <Input value={node.apiAuthBearerToken || ''} onChange={(e) => onUpdate(node.id, { apiAuthBearerToken: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5" placeholder="Token" />
+                                <DebouncedInput value={node.apiAuthBearerToken || ''} onChange={(val) => onUpdate(node.id, { apiAuthBearerToken: String(val) })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0" placeholder="Token" />
                                 <VariableInserter fieldName="apiAuthBearerToken" isIconTrigger onInsert={(v) => onUpdate(node.id, { apiAuthBearerToken: (node.apiAuthBearerToken || '') + v })} />
                             </div>
                         </div>
@@ -599,14 +601,14 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                             <div>
                                 <Label className="text-[10px] text-zinc-400">Usuário</Label>
                                 <div className="relative">
-                                    <Input value={node.apiAuthBasicUser || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicUser: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5" />
+                                    <DebouncedInput value={node.apiAuthBasicUser || ''} onChange={(val) => onUpdate(node.id, { apiAuthBasicUser: String(val) })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0" />
                                     <VariableInserter fieldName="apiAuthBasicUser" isIconTrigger onInsert={(v) => onUpdate(node.id, { apiAuthBasicUser: (node.apiAuthBasicUser || '') + v })} />
                                 </div>
                             </div>
                             <div>
                                 <Label className="text-[10px] text-zinc-400">Senha</Label>
                                 <div className="relative">
-                                    <Input type="password" value={node.apiAuthBasicPassword || ''} onChange={(e) => onUpdate(node.id, { apiAuthBasicPassword: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5" />
+                                    <DebouncedInput type="password" value={node.apiAuthBasicPassword || ''} onChange={(val) => onUpdate(node.id, { apiAuthBasicPassword: String(val) })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0" />
                                     <VariableInserter fieldName="apiAuthBasicPassword" isIconTrigger onInsert={(v) => onUpdate(node.id, { apiAuthBasicPassword: (node.apiAuthBasicPassword || '') + v })} />
                                 </div>
                             </div>
@@ -636,13 +638,13 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                     <div>
                         <Label className="text-[10px] text-zinc-400">Tipo de Corpo</Label>
                         <Select value={node.apiBodyType || 'none'} onValueChange={(val) => onUpdate(node.id, { apiBodyType: val as NodeData['apiBodyType'] })}>
-                            <SelectTrigger className="h-7 text-xs bg-black/20 border-white/5"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-7 text-xs bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0"><SelectValue /></SelectTrigger>
                             <SelectContent><SelectItem value="none">Nenhum</SelectItem><SelectItem value="json">JSON</SelectItem><SelectItem value="form-data">Form-Data</SelectItem><SelectItem value="raw">Raw</SelectItem></SelectContent>
                         </Select>
                     </div>
                     {node.apiBodyType === 'json' && (
                         <div className="relative">
-                            <Textarea value={node.apiBodyJson || ''} onChange={(e) => onUpdate(node.id, { apiBodyJson: e.target.value })} rows={5} className="text-xs font-mono bg-black/20 border-white/5 pr-6" placeholder="{ ... }" />
+                            <DebouncedTextarea value={node.apiBodyJson || ''} onChange={(val) => onUpdate(node.id, { apiBodyJson: String(val) })} rows={5} className="text-xs font-mono bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0 pr-6" placeholder="{ ... }" />
                             <VariableInserter fieldName="apiBodyJson" isIconTrigger isTextarea onInsert={(v) => onUpdate(node.id, { apiBodyJson: (node.apiBodyJson || '') + v })} />
                         </div>
                     )}
@@ -656,7 +658,7 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                     )}
                     {node.apiBodyType === 'raw' && (
                         <div className="relative">
-                            <Textarea value={node.apiBodyRaw || ''} onChange={(e) => onUpdate(node.id, { apiBodyRaw: e.target.value })} rows={5} className="text-xs font-mono bg-black/20 border-white/5 pr-6" />
+                            <DebouncedTextarea value={node.apiBodyRaw || ''} onChange={(val) => onUpdate(node.id, { apiBodyRaw: String(val) })} rows={5} className="text-xs font-mono bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0 pr-6" />
                             <VariableInserter fieldName="apiBodyRaw" isIconTrigger isTextarea onInsert={(v) => onUpdate(node.id, { apiBodyRaw: (node.apiBodyRaw || '') + v })} />
                         </div>
                     )}

@@ -1,9 +1,8 @@
-
 "use client";
 import React, { useRef, useEffect, useMemo, useCallback, forwardRef } from 'react';
 import type { DropTargetMonitor } from 'react-dnd';
 import { useDrop } from 'react-dnd';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import NodeCard from './NodeCard';
 
 import type {
@@ -13,15 +12,8 @@ import {
   ITEM_TYPE_BLOCK, NODE_WIDTH, GRID_SIZE,
   NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX,
   START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y,
-  OPTION_NODE_HANDLE_INITIAL_Y_OFFSET, OPTION_NODE_HANDLE_SPACING_Y
 } from '@/lib/constants';
-
-const escapeCssSelector = (value: string) => {
-  if (typeof window !== 'undefined' && window.CSS && typeof window.CSS.escape === 'function') {
-    return window.CSS.escape(value);
-  }
-  return value.replace(/([ !"#$%&'()*+,.\/:;<=>?@\[\]^`{|}~\\])/g, '\\$1');
-};
+import { cn } from "@/lib/utils";
 
 interface CanvasProps {
   nodes: NodeData[];
@@ -36,17 +28,19 @@ interface CanvasProps {
   onDuplicateNode: (id: string) => void;
   onDeleteConnection: (id: string) => void;
   onCanvasMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
+  isInteracting: boolean;
   highlightedConnectionId: string | null;
   setHighlightedConnectionId: (id: string | null) => void;
   availableVariablesByNode: Record<string, string[]>;
   highlightedNodeIdBySession: string | null;
   activeWorkspace: WorkspaceData | undefined | null;
-  // New selection & drag props
   selectedNodeIds: string[];
   onSelectNode: (id: string, shiftKey: boolean) => void;
   onNodeDragStart: (e: React.MouseEvent, id: string) => void;
   onUpdatePosition: (id: string, x: number, y: number) => void;
   onEndConnection: (e: React.MouseEvent, node: NodeData) => void;
+  disableAnimations: boolean;
+  tracePathConnectionIds?: Set<string> | null;
 }
 
 const SVG_CANVAS_DIMENSION = 50000;
@@ -54,410 +48,322 @@ const SVG_CANVAS_DIMENSION = 50000;
 const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   nodes, connections, drawingLine, canvasOffset, zoomLevel,
   onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDuplicateNode, onDeleteConnection,
-  onCanvasMouseDown, highlightedConnectionId, setHighlightedConnectionId,
+  onCanvasMouseDown, isInteracting, highlightedConnectionId, setHighlightedConnectionId,
   availableVariablesByNode, highlightedNodeIdBySession, activeWorkspace,
-  selectedNodeIds, onSelectNode, onNodeDragStart, onUpdatePosition, onEndConnection
+  selectedNodeIds, onSelectNode, onNodeDragStart, onUpdatePosition, onEndConnection,
+  disableAnimations, tracePathConnectionIds
 }, ref) => {
   const localCanvasRef = useRef<HTMLDivElement>(null);
-  const flowContentWrapperRef = useRef<HTMLDivElement>(null);
-
   const canvasElementRef = (ref || localCanvasRef) as React.RefObject<HTMLDivElement>;
-
-  const onDropNodeCbRef = useRef(onDropNode);
-  useEffect(() => {
-    onDropNodeCbRef.current = onDropNode;
-  }, [onDropNode]);
-
-  const zoomLevelRef = useRef(zoomLevel);
-  useEffect(() => {
-    zoomLevelRef.current = zoomLevel;
-  }, [zoomLevel]);
-
-  const canvasOffsetRef = useRef(canvasOffset);
-  useEffect(() => {
-    canvasOffsetRef.current = canvasOffset;
-  }, [canvasOffset]);
-
 
   const stableOnDropNode = useCallback(
     (item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
       const clientOffset = monitor.getClientOffset();
       if (clientOffset && canvasElementRef.current) {
         const canvasRect = canvasElementRef.current.getBoundingClientRect();
-
-        // Coordenadas do mouse relativas ao viewport
-        const mouseX = clientOffset.x;
-        const mouseY = clientOffset.y;
-
-        // Posição do canvas no viewport
-        const canvasLeft = canvasRect.left;
-        const canvasTop = canvasRect.top;
-
-        // Coordenadas do drop relativas ao canvas, considerando o estado atual de pan e zoom
-        const currentZoom = zoomLevelRef.current;
-        const currentOffset = canvasOffsetRef.current;
-
-        const logicalX = (mouseX - canvasLeft - currentOffset.x) / currentZoom;
-        const logicalY = (mouseY - canvasTop - currentOffset.y) / currentZoom;
-
-        onDropNodeCbRef.current(item, { x: logicalX, y: logicalY });
+        const logicalX = (clientOffset.x - canvasRect.left - canvasOffset.x) / zoomLevel;
+        const logicalY = (clientOffset.y - canvasRect.top - canvasOffset.y) / zoomLevel;
+        onDropNode(item, { x: logicalX, y: logicalY });
       }
     },
-    [onDropNodeCbRef, zoomLevelRef, canvasElementRef, canvasOffsetRef]
+    [onDropNode, zoomLevel, canvasOffset, canvasElementRef]
   );
 
-  const [{ isOver, canDrop }, drop] = useDrop(() => ({
+  const [, drop] = useDrop(() => ({
     accept: ITEM_TYPE_BLOCK,
     drop: stableOnDropNode,
-    collect: (monitor) => ({
-      isOver: !!monitor.isOver(),
-      canDrop: !!monitor.canDrop(),
-    }),
   }), [stableOnDropNode]);
 
-  // Attach drop target to the main canvas element
   useEffect(() => {
-    const currentCanvas = canvasElementRef.current;
-    if (currentCanvas) {
-      drop(currentCanvas);
-    }
-    return () => {
-      if (canvasElementRef.current) {
-        drop(null);
-      }
-    };
+    if (canvasElementRef.current) drop(canvasElementRef.current);
+    return () => { drop(null); };
   }, [drop, canvasElementRef]);
 
   const drawBezierPath = useCallback((x1: number, y1: number, x2: number, y2: number) => {
-    const dx = Math.abs(x2 - x1) * 0.5;
-    const c1x = x1 + dx;
-    const c1y = y1;
-    const c2x = x2 - dx;
-    const c2y = y2;
-    return `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
+    const dx = Math.abs(x2 - x1) * 0.45;
+    return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
   }, []);
 
-  const getHandleCenterOffset = useCallback((nodeId: string, handleId: string | null, _type: 'source' | 'target', currentZoom: number): number | null => {
-    // DOM-based lookup for accurate handle positioning
-    try {
-      if (!handleId) return null;
-      if (typeof document === 'undefined') return null;
-
-      const nodeEl = document.querySelector(`[data-node-id="${nodeId}"]`);
-      if (!nodeEl) return null;
-
-      // Search for specific handle within the node
-      let handleEl = nodeEl.querySelector(`[data-handle-id="${handleId}"]`);
-
-      if (!handleEl) return null;
-
-      const nodeRect = nodeEl.getBoundingClientRect();
-      const handleRect = handleEl.getBoundingClientRect();
-
-      // Calculate relative position from top of node content
-      // Note: node.y corresponds to the top of the nodeCard element (nodeEl).
-      // Difference in pixels = handleRect.top - nodeRect.top.
-      // Divide by zoom to get logical pixels.
-      // Add half height to center it.
-
-      const relativeTop = (handleRect.top - nodeRect.top) / currentZoom;
-      const relativeCenter = relativeTop + (handleRect.height / currentZoom / 2);
-
-      return relativeCenter;
-
-    } catch (e) {
-      return null;
+  const getHandleCenterOffset = useCallback((node: NodeData, handleId: string | null, type: 'source' | 'target'): number => {
+    // 1. Target Handles (Inputs) are always at fixed position relative to node top
+    if (type === 'target') {
+      return 44; // Fixed offset for input handle (top-11 ~ 44px)
     }
+
+    // 2. Source Handles (Outputs) logic
+    if (!handleId && node.type !== 'start' && node.type !== 'option' && node.type !== 'switch') {
+      // Standard single output node (Message, Api Call, etc)
+      // Usually located at around header height or just below
+      // Standard placement is top-11 (-right-2.5) which is same as target but on right
+      return 44;
+    }
+
+    // 3. Complex Nodes Logic
+    if (node.type === 'start') {
+      // Logic matched with StartNode.tsx rendering
+      // Header ~72px, Content padding ~20px
+      let currentY = 72 + 20; // Start content y
+
+      if (!node.triggers) return currentY;
+
+      for (const trigger of node.triggers) {
+        if (!trigger.enabled) continue;
+
+        if (handleId === trigger.name) {
+          return currentY + 15; // Middle of the main trigger block
+        }
+
+        // Calculate height of this trigger block including user keywords
+        const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
+        const triggerBaseHeight = 40; // Approx height of trigger header
+
+        // Check if handle is one of the keywords
+        const keywordIndex = keywords.findIndex(k => k === handleId);
+        if (keywordIndex !== -1) {
+          // It's a keyword handle
+          return currentY + triggerBaseHeight + (keywordIndex * 32) + 12;
+        }
+
+        // Add total height of this trigger to currentY for next iteration
+        currentY += triggerBaseHeight + (keywords.length * 32) + 10;
+      }
+      return 44; // Fallback
+    }
+
+    if (node.type === 'option') {
+      // Option handles are alongside inputs.
+      // Header ~72px, Content Padding ~20px
+      // Prompt Area (Textarea + Toolbar) ~130px
+      const startOfOptionsY = 72 + 20 + 130 + 35; // Approx start of options list
+      const optionHeight = 44; // Height of each option row (input + gap)
+
+      const index = node.options?.findIndex(o => o.id === handleId);
+      if (index !== undefined && index !== -1) {
+        return startOfOptionsY + (index * optionHeight) + 14;
+      }
+      return 44;
+    }
+
+    if (node.type === 'switch') {
+      // Header ~72px + Padding ~20px
+      // Variable Input area ~60px
+      const startOfCasesY = 72 + 20 + 60 + 35;
+      const caseHeight = 44;
+
+      if (handleId === 'default') {
+        // Default is at the bottom. 
+        // logic: startOfCases + all cases height + spacing + default row
+        const count = node.switchCases?.length || 0;
+        return startOfCasesY + (count * caseHeight) + 40;
+      }
+
+      const index = node.switchCases?.findIndex(c => c.id === handleId);
+      if (index !== undefined && index !== -1) {
+        return startOfCasesY + (index * caseHeight) + 14;
+      }
+      return 44;
+    }
+
+    // Default fallback for any other named handle
+    return 44;
   }, []);
 
   const nodeMap = useMemo(() => {
     const map = new Map<string, NodeData>();
-    (nodes || []).forEach(node => map.set(node.id, node));
+    nodes.forEach(node => map.set(node.id, node));
     return map;
   }, [nodes]);
 
+  const reduceConnectionEffects = isInteracting || connections.length > 120;
+  const canInteractWithConnections = !isInteracting;
 
   const renderedNodes = useMemo(() => (
-    (nodes || []).map((node) => (
-      <motion.div
-        key={node.id}
-        className="absolute z-20"
-        style={{
-          left: node.x,
-          top: node.y,
-          width: NODE_WIDTH,
-        }}
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        transition={{ type: "spring", stiffness: 400, damping: 25, mass: 0.7 }}
-      >
-        <NodeCard
-          node={node}
-          onUpdateNode={onUpdateNode}
-          onStartConnection={onStartConnection}
-          onDeleteNode={onDeleteNode}
-          onDuplicateNode={onDuplicateNode}
-          availableVariables={availableVariablesByNode[node.id] || []}
-          activeWorkspace={activeWorkspace}
+    <AnimatePresence>
+      {nodes.map((node) => (
+        <motion.div
+          key={node.id}
+          className="absolute z-20 will-change-transform"
+          style={{ width: NODE_WIDTH, x: node.x, y: node.y, left: 0, top: 0 }}
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.8, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 350, damping: 25 }}
+        >
+          <NodeCard
+            node={node}
+            onUpdateNode={onUpdateNode}
+            onStartConnection={onStartConnection}
+            onDeleteNode={onDeleteNode}
+            onDuplicateNode={onDuplicateNode}
+            availableVariables={availableVariablesByNode[node.id] || []}
+            activeWorkspace={activeWorkspace}
+            isSelected={selectedNodeIds.includes(node.id)}
+            onSelect={onSelectNode}
+            onDragStart={onNodeDragStart}
+            onUpdatePosition={onUpdatePosition}
+            onEndConnection={onEndConnection}
+          />
+        </motion.div>
+      ))}
+    </AnimatePresence>
+  ), [nodes, onUpdateNode, onStartConnection, onDeleteNode, onDuplicateNode, availableVariablesByNode, activeWorkspace, selectedNodeIds, onSelectNode, onNodeDragStart, onUpdatePosition, onEndConnection]);
 
-          // Passing new props
-          isSelected={selectedNodeIds.includes(node.id)}
-          onSelect={onSelectNode}
-          onDragStart={onNodeDragStart}
-          onUpdatePosition={onUpdatePosition}
-          onEndConnection={onEndConnection}
-        />
-      </motion.div>
-    ))
-  ), [nodes, onUpdateNode, onStartConnection, onDeleteNode, onDuplicateNode, availableVariablesByNode, highlightedNodeIdBySession, activeWorkspace, selectedNodeIds, onSelectNode, onNodeDragStart, onUpdatePosition, onEndConnection]);
+  const isEditing = selectedNodeIds.length > 0;
 
   const renderedConnections = useMemo(() => (
-    (connections || []).map((conn) => {
-      const sourceNode = nodeMap.get(conn.from);
-      const targetNode = nodeMap.get(conn.to);
+    connections.map((conn) => {
+      const source = nodeMap.get(conn.from);
+      const target = nodeMap.get(conn.to);
+      if (!source || !target) return null;
 
-      if (!sourceNode || !targetNode) {
-        return null;
-      }
+      const sourceYOffset = getHandleCenterOffset(source, conn.sourceHandle || null, 'source');
+      const targetYOffset = getHandleCenterOffset(target, null, 'target');
 
-      if (typeof sourceNode.x !== 'number' || typeof sourceNode.y !== 'number' ||
-        typeof targetNode.x !== 'number' || typeof targetNode.y !== 'number') {
-        return null;
-      }
-
-      let sourceHandleYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET;
-
-      // Try accurate DOM lookup first
-      const domOffset = getHandleCenterOffset(sourceNode.id, conn.sourceHandle || 'default', 'source', zoomLevel);
-      if (domOffset !== null) {
-        sourceHandleYOffset = domOffset;
-      } else if (sourceNode.type === 'start' && Array.isArray(sourceNode.triggers) && conn.sourceHandle) {
-        let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
-        let found = false;
-
-        for (const trigger of sourceNode.triggers.filter(t => t.enabled)) {
-          if (trigger.name === conn.sourceHandle) {
-            sourceHandleYOffset = yOffset;
-            found = true;
-            break;
-          }
-          const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
-          if (keywords.includes(conn.sourceHandle)) {
-            const kwIndex = keywords.indexOf(conn.sourceHandle);
-            sourceHandleYOffset = yOffset + 25 + (kwIndex * START_NODE_TRIGGER_SPACING_Y);
-            found = true;
-            break;
-          }
-          const triggerBlockHeight = 40 + (keywords.length * START_NODE_TRIGGER_SPACING_Y);
-          yOffset += triggerBlockHeight + 10;
-        }
-        if (!found) sourceHandleYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET; // Fallback
-
-      } else if (sourceNode.type === 'option') {
-        // New logic for array-based options
-        const options = sourceNode.options || [];
-        // Legacy string fallback
-        const paramsOptions = typeof sourceNode.optionsList === 'string'
-          ? sourceNode.optionsList.split('\n').map((opt, i) => ({ id: "", value: opt.trim() })) // simplified
-          : [];
-
-        // Use array options if present, otherwise legacy
-        const effectiveOptions = options.length > 0 ? options : paramsOptions;
-
-        // Layout estimation:
-        // Header: 40px
-        // Prompt+Toolbar: ~110px
-        // "Opções": ~20px
-        // Start ~170px
-        const initialY = 175;
-        const spacingY = 44;
-
-        if (conn.sourceHandle) {
-          // Try finding by ID first (new way)
-          let index = effectiveOptions.findIndex(o => o.id === conn.sourceHandle);
-          // If not found, try by value (legacy/string way)
-          if (index === -1) {
-            // For legacy string list, sourceHandle is the value itself
-            index = effectiveOptions.findIndex(o => o.value === conn.sourceHandle);
-          }
-
-          if (index !== -1) {
-            sourceHandleYOffset = initialY + (index * spacingY);
-          }
-        }
-
-      } else if (sourceNode.type === 'condition' || sourceNode.type === 'time-of-day') {
-        if (conn.sourceHandle === 'true') {
-          sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (1 / 3) + 6 + 100; // Adjusted for content height
-        } else if (conn.sourceHandle === 'false') {
-          sourceHandleYOffset = NODE_HEADER_HEIGHT_APPROX * (2 / 3) + 6 + 100;
-        }
-        // Condition layout: Variables input (~80px) -> True/False handles. 
-        // Handles are distinct blocks. 
-        // Actually, ConditionNode.tsx shows a different layout. 
-        // It's safer to stick to roughly middle if we can't be precise, 
-        // OR inspect ConditionNode again. 
-        // Let's use a standard offset + spacing.
-        sourceHandleYOffset = conn.sourceHandle === 'true' ? 140 : 180;
-
-      } else if (sourceNode.type === 'switch') {
-        const switchCases = sourceNode.switchCases || [];
-        // Layout: Variable input (~80px) -> "Casos" (~20px) -> Loop
-        const initialY = 145;
-        const spacingY = 44;
-
-        if (conn.sourceHandle && conn.sourceHandle !== 'default') {
-          const caseIndex = switchCases.findIndex(c => c.id === conn.sourceHandle);
-          if (caseIndex !== -1) {
-            sourceHandleYOffset = initialY + (caseIndex * spacingY);
-          }
-        } else {
-          // Default/Else case
-          // It's after the list.
-          sourceHandleYOffset = initialY + (switchCases.length * spacingY) + 40; // Extra spacing for label
-        }
-
-      } else if (sourceNode.type === 'intention-router') {
-        const intents = sourceNode.intents || [];
-        // Layout: Desc (~80px) -> List
-        const initialY = 140;
-        const spacingY = 125; // Each intent block is tall
-
-        if (conn.sourceHandle && conn.sourceHandle !== 'default') {
-          const index = intents.findIndex(i => i.id === conn.sourceHandle);
-          if (index !== -1) {
-            sourceHandleYOffset = initialY + (index * spacingY) + 50; // Handle is largely centered in block?
-            // In IntentionRouterNode, output handle is "top-1/2" of the intent block.
-            // Intent block ~120px? 
-            // Let's say center is +60px from start of block.
-          }
-        } else {
-          // Fallback
-          sourceHandleYOffset = initialY + (intents.length * spacingY) + 40;
-        }
-      }
-
-      const x1 = sourceNode.x + NODE_WIDTH;
-      const y1 = sourceNode.y + sourceHandleYOffset;
-
-      const targetHandleYOffset = NODE_HEADER_CONNECTOR_Y_OFFSET;
-      const x2 = targetNode.x;
-      const y2 = targetNode.y + targetHandleYOffset;
+      const x1 = source.x + NODE_WIDTH;
+      const y1 = source.y + sourceYOffset;
+      const x2 = target.x;
+      const y2 = target.y + targetYOffset;
 
       const isHighlighted = highlightedConnectionId === conn.id;
-      const strokeColor = isHighlighted ? 'hsl(var(--destructive))' : 'url(#gradient-line)';
-      const baseStrokeWidth = isHighlighted ? 3 : 2;
-      const calculatedStrokeWidth = Math.max(0.5, baseStrokeWidth / Math.max(zoomLevel, 0.1));
+      const path = drawBezierPath(x1, y1, x2, y2);
+
+      // Tracing logic from props
+      const isTracingActive = tracePathConnectionIds && tracePathConnectionIds.size > 0;
+      const isTraced = isTracingActive && tracePathConnectionIds?.has(conn.id);
+      const isDimmed = isTracingActive && !isTraced;
+
+      const strokeColor = isHighlighted ? '#a855f7' : (isTraced ? '#a855f7' : (isDimmed ? '#333' : 'url(#connection-gradient)'));
+      const strokeOpacity = isDimmed ? 0.2 : (isHighlighted || isTraced ? 1 : 0.6);
+      const strokeWidth = isHighlighted || isTraced ? 3 : 2;
 
       return (
-        <g key={conn.id} className="canvas-connection"
-          onClick={e => { e.stopPropagation(); onDeleteConnection(conn.id); }}
-          onMouseEnter={() => setHighlightedConnectionId(conn.id)}
-          onMouseLeave={() => setHighlightedConnectionId(null)}
-          style={{ cursor: 'pointer', pointerEvents: 'all' }}
+        <g
+          key={conn.id}
+          onMouseEnter={canInteractWithConnections ? () => setHighlightedConnectionId(conn.id) : undefined}
+          onMouseLeave={canInteractWithConnections ? () => setHighlightedConnectionId(null) : undefined}
+          className="transition-all duration-300"
+          style={{ cursor: canInteractWithConnections ? 'pointer' : 'default', pointerEvents: canInteractWithConnections ? 'all' : 'none' }}
         >
-          {/* Invisible wide path for easier clicking */}
-          <path d={drawBezierPath(x1, y1, x2, y2)} stroke="transparent" strokeWidth={Math.max(15, 20 / Math.max(zoomLevel, 0.1))} fill="none" />
+          {/* Background for easier selection */}
+          {canInteractWithConnections && (
+            <path d={path} stroke="transparent" strokeWidth={24} fill="none" className="pointer-events-auto" />
+          )}
 
-          {/* Glow effect path */}
-          {!isHighlighted && (
+          {/* Glow Effect - disable if dimmed */}
+          {!reduceConnectionEffects && !isDimmed && (
             <path
-              d={drawBezierPath(x1, y1, x2, y2)}
+              d={path}
               stroke="hsl(var(--primary))"
-              strokeWidth={calculatedStrokeWidth * 2}
-              strokeOpacity="0.3"
+              strokeWidth={isHighlighted || isTraced ? 4 : 2}
+              strokeOpacity={isHighlighted || isTraced ? 0.4 : 0.15}
               fill="none"
               filter="url(#glow)"
+              className="transition-all duration-300"
             />
           )}
 
-          {/* Main path */}
+          {/* Core Line */}
           <path
-            d={drawBezierPath(x1, y1, x2, y2)}
+            d={path}
             stroke={strokeColor}
-            strokeWidth={calculatedStrokeWidth}
+            strokeWidth={strokeWidth}
             fill="none"
-            markerEnd={isHighlighted ? "url(#arrowhead-highlight)" : "url(#arrowhead)"}
+            strokeOpacity={strokeOpacity}
+            markerEnd={isHighlighted || isTraced ? "url(#arrow-highlight)" : (isDimmed ? "url(#arrow-dimmed)" : "url(#arrow-default)")}
             className="transition-all duration-300"
           />
+
+          {/* Animated Pulse - Only for highlighted or TRACED connections */}
+          {!reduceConnectionEffects && !isEditing && !disableAnimations && (isHighlighted || isTraced) && (
+            <path
+              d={path}
+              stroke="white"
+              strokeWidth={2}
+              fill="none"
+              strokeDasharray="10,10"
+              className="pointer-events-none animate-dash"
+              opacity="0.8"
+            />
+          )}
+
+          {/* Standard pulse for non-traced (normal state) - hide if tracing is active */}
+          {!reduceConnectionEffects && !isHighlighted && !isEditing && !disableAnimations && !isTracingActive && (
+            <path
+              d={path}
+              stroke="white"
+              strokeWidth={1}
+              strokeOpacity="0.5"
+              fill="none"
+              strokeDasharray="4, 40"
+              className="animate-[dash_4s_linear_infinite]"
+            />
+          )}
         </g>
       );
     })
-
-
-  ), [connections, nodeMap, highlightedConnectionId, onDeleteConnection, setHighlightedConnectionId, zoomLevel, drawBezierPath, getHandleCenterOffset]);
+  ), [connections, nodeMap, highlightedConnectionId, drawBezierPath, getHandleCenterOffset, onDeleteConnection, setHighlightedConnectionId, canInteractWithConnections, reduceConnectionEffects, isEditing, tracePathConnectionIds]);
 
   const visualGridSpacing = GRID_SIZE * zoomLevel;
 
   return (
     <div
       ref={canvasElementRef}
-      className="relative flex-1 bg-neutral-950 overflow-hidden select-none touch-none"
+      className="relative flex-1 bg-black overflow-hidden select-none tech-grid h-full w-full"
       onMouseDown={onCanvasMouseDown}
       style={{
         cursor: 'grab',
-        backgroundImage: `
-          linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-          linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px)
-        `,
-        backgroundSize: `${visualGridSpacing}px ${visualGridSpacing}px`,
         backgroundPosition: `${canvasOffset.x % visualGridSpacing}px ${canvasOffset.y % visualGridSpacing}px`,
+        backgroundSize: `${visualGridSpacing}px ${visualGridSpacing}px`,
+        pointerEvents: 'all' // Ensure we can always click the background
       }}
-      tabIndex={0}
     >
       <div
-        ref={flowContentWrapperRef}
-        id="flow-content-wrapper"
-        className="absolute top-0 left-0"
+        className="absolute top-0 left-0 will-change-transform"
+        data-canvas-inner="true"
         style={{
-          width: `${SVG_CANVAS_DIMENSION}px`,
-          height: `${SVG_CANVAS_DIMENSION}px`,
+          width: SVG_CANVAS_DIMENSION,
+          height: SVG_CANVAS_DIMENSION,
+          transform: `translate3d(${canvasOffset.x}px, ${canvasOffset.y}px, 0) scale(${zoomLevel})`,
           transformOrigin: 'top left',
-          transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${zoomLevel})`,
         }}
       >
-        <svg
-          width={SVG_CANVAS_DIMENSION}
-          height={SVG_CANVAS_DIMENSION}
-          className="absolute top-0 left-0 pointer-events-none z-10 overflow-visible"
-        >
+        <svg width={SVG_CANVAS_DIMENSION} height={SVG_CANVAS_DIMENSION} className="absolute inset-0 z-10 overflow-visible pointer-events-none">
           <defs>
-            <linearGradient id="gradient-line" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="hsl(var(--primary))" />
-              <stop offset="100%" stopColor="hsl(var(--accent))" />
+            <linearGradient id="connection-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="hsl(var(--neon-purple))" />
+              <stop offset="100%" stopColor="hsl(var(--neon-cyan))" />
             </linearGradient>
             <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
               <feGaussianBlur stdDeviation="3" result="blur" />
               <feComposite in="SourceGraphic" in2="blur" operator="over" />
             </filter>
-            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
-              <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--primary))" />
+            <marker id="arrow-default" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6" fill="hsl(var(--neon-cyan))" />
             </marker>
-            <marker id="arrowhead-highlight" markerWidth="10" markerHeight="7" refX="9.5" refY="3.5" orient="auto" markerUnits="strokeWidth">
-              <polygon points="0 0, 10 3.5, 0 7" fill="hsl(var(--destructive))" />
+            <marker id="arrow-highlight" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6" fill="hsl(var(--neon-purple))" />
             </marker>
           </defs>
           {renderedConnections}
           {drawingLine && (
             <path
-              d={drawBezierPath(
-                drawingLine.startX,    // Lógico
-                drawingLine.startY,    // Lógico
-                drawingLine.currentX,  // Já é lógico (definido no FlowBuilderClient)
-                drawingLine.currentY   // Já é lógico (definido no FlowBuilderClient)
-              )}
+              d={drawBezierPath(drawingLine.startX, drawingLine.startY, drawingLine.currentX, drawingLine.currentY)}
               stroke="hsl(var(--primary))"
-              strokeOpacity="0.8"
-              strokeWidth={Math.max(0.5, 2.5 / Math.max(zoomLevel, 0.1))}
+              strokeWidth={1.5}
+              strokeDasharray="5,5"
               fill="none"
-              strokeDasharray="7,3"
-              markerEnd="url(#arrowhead)"
+              className="opacity-50"
             />
           )}
         </svg>
         {renderedNodes}
       </div>
+
+      <style jsx global>{`
+        @keyframes dash {
+          to { stroke-dashoffset: -100; }
+        }
+      `}</style>
     </div>
   );
 });

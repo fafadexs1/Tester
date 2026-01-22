@@ -3,6 +3,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DebouncedInput } from './DebouncedInput';
 import { Trash2, PlusCircle } from 'lucide-react';
 import { VariableInserter } from './VariableInserter';
 import { ApiHeader, ApiQueryParam, ApiFormDataEntry } from '@/lib/types';
@@ -45,11 +46,11 @@ export const KeyValueList: React.FC<KeyValueListProps> = ({
             {(list || []).map((item) => (
                 <div key={item.id} className="flex items-center space-x-2 group">
                     <div className="relative flex-1">
-                        <Input
+                        <DebouncedInput
                             placeholder={keyPlaceholder}
                             value={item.key}
-                            onChange={(e) => handleChange(item.id, 'key', e.target.value)}
-                            className="text-xs h-7 pr-7 bg-black/20 border-white/5 focus:border-primary/50"
+                            onChange={(val) => handleChange(item.id, 'key', String(val))}
+                            className="text-xs h-7 pr-7 bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0"
                         />
                         <VariableInserter
                             onInsert={(variable) => handleChange(item.id, 'key', (item.key || '') + variable)}
@@ -57,11 +58,11 @@ export const KeyValueList: React.FC<KeyValueListProps> = ({
                         />
                     </div>
                     <div className="relative flex-1">
-                        <Input
+                        <DebouncedInput
                             placeholder={valuePlaceholder}
                             value={item.value}
-                            onChange={(e) => handleChange(item.id, 'value', e.target.value)}
-                            className="text-xs h-7 pr-7 bg-black/20 border-white/5 focus:border-primary/50"
+                            onChange={(val) => handleChange(item.id, 'value', String(val))}
+                            className="text-xs h-7 pr-7 bg-black/20 border-white/5 focus:border-white/10 focus-visible:ring-0 focus-visible:ring-offset-0"
                         />
                         <VariableInserter
                             onInsert={(variable) => handleChange(item.id, 'value', (item.value || '') + variable)}

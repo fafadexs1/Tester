@@ -40,6 +40,7 @@ export type NodeType =
   | 'dialogy-send-message'
   | 'time-of-day'
   | 'intention-router'
+  | 'ai-model-config'
   | 'end-flow';
 
 
@@ -260,6 +261,10 @@ export interface NodeData {
 
   // Intention Router Node
   intents?: { id: string; label: string; description: string }[];
+
+  // AI Model Config Node
+  aiProvider?: 'google' | 'openai' | 'anthropic' | 'groq';
+  aiApiKey?: string;
 }
 
 export interface Connection {
@@ -267,6 +272,7 @@ export interface Connection {
   from: string;
   to: string;
   sourceHandle?: string;
+  targetHandle?: string;
 }
 
 export interface DrawingLineData {
@@ -394,6 +400,7 @@ export interface FlowSession {
   last_interaction_at?: string | Date;
   created_at?: string | Date;
   flow_context?: FlowContextType;
+  steps?: string[]; // Array of node IDs visited in order
 }
 
 export type UserRole = 'admin' | 'desenvolvedor' | 'Editor de Fluxo' | 'Publicador' | 'Visualizador' | 'user';

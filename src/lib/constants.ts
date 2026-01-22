@@ -8,13 +8,24 @@ export const NODE_DRAG_HANDLE_OFFSET_X = NODE_WIDTH / 2; // Quando dropping, off
 export const GRID_SIZE = 20; // Tamanho das células da grade para o padrão de fundo
 
 // Constantes para o nó de início com gatilhos dinâmicos
-export const START_NODE_TRIGGER_INITIAL_Y_OFFSET = 40; // Offset Y do primeiro gatilho a partir do topo do conteúdo do nó
-export const START_NODE_TRIGGER_SPACING_Y = 35;      // Espaçamento vertical entre os conectores de gatilho
-export const START_NODE_TRIGGER_AREA_MIN_HEIGHT = 50; // Altura mínima da área de conteúdo do nó de início
+// Constantes para o nó de Início (StartNode)
+export const START_NODE_HEADER_HEIGHT = 72; // Altura do header com ícone e título
+export const START_NODE_TRIGGER_INITIAL_Y_OFFSET = 30; // Offset Y inicial relativo à área de conteúdo
+export const START_NODE_TRIGGER_SPACING_Y = 32;      // Altura/Espaçamento de cada gatilho (TriggerBlock)
+export const START_NODE_KEYWORD_SPACING_Y = 24;      // Altura para cada keyword extra
 
-// Constantes para o nó de Múltipla Escolha com handles dinâmicos
-export const OPTION_NODE_HANDLE_INITIAL_Y_OFFSET = 65; // Offset Y do primeiro handle de opção (considerando o campo de pergunta)
-export const OPTION_NODE_HANDLE_SPACING_Y = 30;      // Espaçamento vertical entre os conectores de opção
+// Constantes para o nó de Opção (OptionNode)
+export const OPTION_NODE_PROMPT_HEIGHT = 100; // Altura aproximada da área da pergunta (textarea + toolbar)
+export const OPTION_NODE_OPTION_HEIGHT = 42; // Altura de cada linha de opção (input + button + spacing)
+export const OPTION_NODE_INITIAL_OFFSET_Y = 80; // Offset inicial do primeiro handle de opção (pula header + pergunta)
+
+// Constantes para o nó de Switch (SwitchNode)
+export const SWITCH_NODE_VAR_HEIGHT = 60; // Altura da área de variável
+export const SWITCH_NODE_CASE_HEIGHT = 42; // Altura de cada caso
+export const SWITCH_NODE_INITIAL_OFFSET_Y = 75; // Offset inicial do primeiro caso
+
+// Constantes Genéricas
+export const NODE_PADDING_Y = 20; // Padding vertical padrão do conteúdo do nó
 
 // Constantes de Zoom
 export const MIN_ZOOM = 0.2;

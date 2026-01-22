@@ -557,6 +557,15 @@ async function initializeDatabaseSchema(): Promise<void> {
       await client.query(`ALTER TABLE flow_sessions ADD COLUMN flow_context TEXT;`);
     }
 
+    const stepsColInfo = await client.query(`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name='flow_sessions' AND column_name='steps'
+    `);
+    if (stepsColInfo.rowCount === 0) {
+      console.log("[DB Actions] 'steps' column not found in 'flow_sessions'. Adding column...");
+      await client.query(`ALTER TABLE flow_sessions ADD COLUMN steps JSONB;`);
+    }
+
     // Marketplace
     await client.query(`
       CREATE TABLE IF NOT EXISTS marketplace_listings (
@@ -1216,12 +1225,11 @@ export async function restoreWorkspaceVersion(
 export async function saveSessionToDB(session: FlowSession): Promise<{ success: boolean; error?: string }> {
   try {
     const query = `
-      INSERT INTO flow_sessions (
         session_id, workspace_id, current_node_id, flow_variables, 
         awaiting_input_type, awaiting_input_details, session_timeout_seconds, 
-        flow_context, last_interaction_at, created_at
+        flow_context, last_interaction_at, created_at, steps
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW(), $9)
       ON CONFLICT (session_id) DO UPDATE
       SET workspace_id = EXCLUDED.workspace_id,
           current_node_id = EXCLUDED.current_node_id,
@@ -1230,6 +1238,7 @@ export async function saveSessionToDB(session: FlowSession): Promise<{ success: 
           awaiting_input_details = EXCLUDED.awaiting_input_details,
           session_timeout_seconds = EXCLUDED.session_timeout_seconds,
           flow_context = EXCLUDED.flow_context,
+          steps = EXCLUDED.steps,
           last_interaction_at = NOW();
     `;
 
@@ -1241,7 +1250,8 @@ export async function saveSessionToDB(session: FlowSession): Promise<{ success: 
       session.awaiting_input_type || null,
       JSON.stringify(session.awaiting_input_details || null),
       session.session_timeout_seconds || 0,
-      session.flow_context || 'evolution'
+      session.flow_context || 'evolution',
+      JSON.stringify(session.steps || [])
     ]);
     return { success: true };
   } catch (error: any) {
@@ -1253,7 +1263,7 @@ export async function saveSessionToDB(session: FlowSession): Promise<{ success: 
 export async function loadSessionFromDB(sessionId: string): Promise<FlowSession | null> {
   try {
     const result = await runQuery<FlowSession>(
-      'SELECT session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, session_timeout_seconds, flow_context, created_at, last_interaction_at FROM flow_sessions WHERE session_id = $1',
+      'SELECT session_id, workspace_id, current_node_id, flow_variables, awaiting_input_type, awaiting_input_details, session_timeout_seconds, flow_context, created_at, last_interaction_at, steps FROM flow_sessions WHERE session_id = $1',
       [sessionId]
     );
     if (result.rows.length > 0) {
@@ -1261,7 +1271,8 @@ export async function loadSessionFromDB(sessionId: string): Promise<FlowSession 
       return {
         ...row,
         flow_variables: row.flow_variables || {},
-        awaiting_input_details: row.awaiting_input_details || null
+        awaiting_input_details: row.awaiting_input_details || null,
+        steps: row.steps || []
       };
     }
     return null;
@@ -1304,7 +1315,8 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
       fs.session_timeout_seconds,
       fs.flow_context,
       fs.created_at,
-      fs.last_interaction_at
+      fs.last_interaction_at,
+      fs.steps
       FROM flow_sessions fs
       JOIN workspaces ws ON fs.workspace_id = ws.id
       JOIN organization_users ou ON ws.organization_id = ou.organization_id
@@ -1317,6 +1329,7 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
       ...row,
       flow_variables: row.flow_variables || {},
       awaiting_input_details: row.awaiting_input_details || null,
+      steps: row.steps || []
     }));
   } catch (error: any) {
     console.error(`[DB Actions] loadAllActiveSessionsFromDB Error for owner ID ${ownerId}: `, error);
@@ -1324,21 +1337,28 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
   }
 }
 
-export async function deleteAllSessionsForOwnerFromDB(ownerId: string): Promise<{ success: boolean; error?: string; count: number }> {
+export async function deleteAllSessionsForOwnerFromDB(ownerId: string, workspaceId?: string): Promise<{ success: boolean; error?: string; count: number }> {
   try {
     if (!ownerId) {
       return { success: false, error: "ID do proprietário não fornecido.", count: 0 };
     }
 
-    const query = `
+    let query = `
       DELETE FROM flow_sessions fs
       USING workspaces ws
       JOIN organization_users ou ON ws.organization_id = ou.organization_id
-      WHERE fs.workspace_id = ws.id AND ou.user_id = $1:: uuid;
+      WHERE fs.workspace_id = ws.id AND ou.user_id = $1:: uuid
     `;
-    const result = await runQuery(query, [ownerId]);
+    const params: any[] = [ownerId];
 
-    console.log(`[DB Actions] Deleted ${result.rowCount} sessions for owner ID ${ownerId}.`);
+    if (workspaceId) {
+      query += ` AND fs.workspace_id = $2::uuid`;
+      params.push(workspaceId);
+    }
+
+    const result = await runQuery(query, params);
+
+    console.log(`[DB Actions] Deleted ${result.rowCount} sessions for owner ID ${ownerId} (workspace: ${workspaceId || 'all'}).`);
     return { success: true, count: result.rowCount ?? 0 };
   } catch (error: any) {
     console.error(`[DB Actions] deleteAllSessionsForOwnerFromDB Error for owner ID ${ownerId}: `, error);

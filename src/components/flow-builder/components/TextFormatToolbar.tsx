@@ -7,7 +7,7 @@ import { NodeData } from '@/lib/types';
 
 interface TextFormatToolbarProps {
     fieldName: keyof NodeData;
-    textAreaRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement>;
+    textAreaRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement | null>;
     onUpdate: (id: string, data: Partial<NodeData>) => void;
     nodeId: string;
 }
