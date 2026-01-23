@@ -1285,12 +1285,12 @@ export async function saveSessionToDB(session: FlowSession): Promise<{ success: 
       session.session_id,
       session.workspace_id,
       session.current_node_id,
-      session.flow_variables || {},
+      JSON.stringify(session.flow_variables || {}),
       session.awaiting_input_type || null,
-      session.awaiting_input_details || null,
+      JSON.stringify(session.awaiting_input_details || null),
       session.session_timeout_seconds || 0,
       session.flow_context || 'evolution',
-      session.steps || []
+      JSON.stringify(session.steps || [])
     ]);
     return { success: true };
   } catch (error: any) {
