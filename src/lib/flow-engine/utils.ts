@@ -7,7 +7,11 @@ export function findNodeById(nodeId: string, nodes: NodeData[]): NodeData | unde
 }
 
 export function findNextNodeId(fromNodeId: string, sourceHandle: string | undefined, connections: Connection[]): string | null {
-  const connection = connections.find(conn => conn.from === fromNodeId && conn.sourceHandle === sourceHandle);
+  const normalizedHandle = sourceHandle ?? 'default';
+  const connection = connections.find(conn =>
+    conn.from === fromNodeId &&
+    (conn.sourceHandle ?? 'default') === normalizedHandle
+  );
   return connection ? connection.to : null;
 }
 

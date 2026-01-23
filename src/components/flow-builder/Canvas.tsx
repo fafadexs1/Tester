@@ -84,6 +84,29 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
     return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
   }, []);
 
+  const getHandlePosition = useCallback((
+    nodeId: string,
+    handleType: 'source' | 'target' | null,
+    handleId?: string | null
+  ): { x: number; y: number } | null => {
+    if (typeof document === 'undefined' || !canvasElementRef.current) return null;
+
+    const selectorParts = ['[data-connector="true"]', `[data-node-id="${nodeId}"]`];
+    if (handleType) selectorParts.push(`[data-handle-type="${handleType}"]`);
+    if (handleId) selectorParts.push(`[data-handle-id="${handleId}"]`);
+    const selector = selectorParts.join('');
+    const handleEl = document.querySelector(selector) as HTMLElement | null;
+    if (!handleEl) return null;
+
+    const handleRect = handleEl.getBoundingClientRect();
+    const canvasRect = canvasElementRef.current.getBoundingClientRect();
+    const centerX = handleRect.left + handleRect.width / 2;
+    const centerY = handleRect.top + handleRect.height / 2;
+    const logicalX = (centerX - canvasRect.left - canvasOffset.x) / zoomLevel;
+    const logicalY = (centerY - canvasRect.top - canvasOffset.y) / zoomLevel;
+    return { x: logicalX, y: logicalY };
+  }, [canvasElementRef, canvasOffset, zoomLevel]);
+
   const getHandleCenterOffset = useCallback((node: NodeData, handleId: string | null, type: 'source' | 'target'): number => {
     // 1. Target Handles (Inputs) are always at fixed position relative to node top
     if (type === 'target') {
@@ -168,6 +191,19 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
     return 44;
   }, []);
 
+  const resolveConnectionPoint = useCallback((
+    node: NodeData,
+    handleType: 'source' | 'target',
+    handleId?: string | null
+  ): { x: number; y: number } => {
+    const handlePosition = getHandlePosition(node.id, handleType, handleId ?? null);
+    if (handlePosition) return handlePosition;
+
+    const yOffset = getHandleCenterOffset(node, handleId ?? null, handleType);
+    const x = handleType === 'source' ? node.x + NODE_WIDTH : node.x;
+    return { x, y: node.y + yOffset };
+  }, [getHandlePosition, getHandleCenterOffset]);
+
   const nodeMap = useMemo(() => {
     const map = new Map<string, NodeData>();
     nodes.forEach(node => map.set(node.id, node));
@@ -216,13 +252,13 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
       const target = nodeMap.get(conn.to);
       if (!source || !target) return null;
 
-      const sourceYOffset = getHandleCenterOffset(source, conn.sourceHandle || null, 'source');
-      const targetYOffset = getHandleCenterOffset(target, null, 'target');
+      const sourcePoint = resolveConnectionPoint(source, 'source', conn.sourceHandle || 'default');
+      const targetPoint = resolveConnectionPoint(target, 'target', conn.targetHandle || 'default');
 
-      const x1 = source.x + NODE_WIDTH;
-      const y1 = source.y + sourceYOffset;
-      const x2 = target.x;
-      const y2 = target.y + targetYOffset;
+      const x1 = sourcePoint.x;
+      const y1 = sourcePoint.y;
+      const x2 = targetPoint.x;
+      const y2 = targetPoint.y;
 
       const isHighlighted = highlightedConnectionId === conn.id;
       const path = drawBezierPath(x1, y1, x2, y2);
@@ -301,7 +337,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
         </g>
       );
     })
-  ), [connections, nodeMap, highlightedConnectionId, drawBezierPath, getHandleCenterOffset, onDeleteConnection, setHighlightedConnectionId, canInteractWithConnections, reduceConnectionEffects, isEditing, tracePathConnectionIds]);
+  ), [connections, nodeMap, highlightedConnectionId, drawBezierPath, resolveConnectionPoint, onDeleteConnection, setHighlightedConnectionId, canInteractWithConnections, reduceConnectionEffects, isEditing, tracePathConnectionIds]);
 
   const visualGridSpacing = GRID_SIZE * zoomLevel;
 

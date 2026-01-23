@@ -36,6 +36,18 @@ dotenv.config();
 
 let pool: Pool | null = null;
 
+const parseJsonField = <T>(value: any, fallback: T): T => {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  return value as T;
+};
+
 function getDbPool(): Pool {
   if (pool) {
     return pool;
@@ -610,6 +622,31 @@ async function initializeDatabaseSchema(): Promise<void> {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_flow_logs_workspace_id_timestamp ON flow_logs (workspace_id, timestamp DESC);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_flow_logs_log_type ON flow_logs (log_type);`);
 
+    // Agent Memories
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS agent_memories (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        agent_id TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        scope_key TEXT NOT NULL,
+        type TEXT NOT NULL,
+        content TEXT NOT NULL,
+        importance REAL NOT NULL DEFAULT 0.5,
+        tags TEXT[],
+        metadata JSONB,
+        content_hash TEXT NOT NULL,
+        source TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        last_accessed_at TIMESTAMPTZ,
+        expires_at TIMESTAMPTZ,
+        UNIQUE (workspace_id, agent_id, scope, scope_key, type, content_hash)
+      );
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_agent_memories_lookup ON agent_memories (workspace_id, agent_id, scope, scope_key);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_agent_memories_type ON agent_memories (type);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_agent_memories_expires ON agent_memories (expires_at);`);
+
 
     // ---- SEEDS ----
     const permissionsToSeed: Permission[] = [
@@ -676,6 +713,7 @@ async function initializeDatabaseSchema(): Promise<void> {
     await ensureUuidColumn(client, 'capabilities', 'workspace_id');
     await ensureUuidColumn(client, 'capabilities', 'created_by_id');
     await ensureUuidColumn(client, 'flow_logs', 'workspace_id');
+    await ensureUuidColumn(client, 'agent_memories', 'workspace_id');
 
     await client.query('COMMIT');
     console.log('[DB Actions] Schema initialization and migration check complete.');
@@ -1225,6 +1263,7 @@ export async function restoreWorkspaceVersion(
 export async function saveSessionToDB(session: FlowSession): Promise<{ success: boolean; error?: string }> {
   try {
     const query = `
+      INSERT INTO flow_sessions (
         session_id, workspace_id, current_node_id, flow_variables, 
         awaiting_input_type, awaiting_input_details, session_timeout_seconds, 
         flow_context, last_interaction_at, created_at, steps
@@ -1246,12 +1285,12 @@ export async function saveSessionToDB(session: FlowSession): Promise<{ success: 
       session.session_id,
       session.workspace_id,
       session.current_node_id,
-      JSON.stringify(session.flow_variables || {}),
+      session.flow_variables || {},
       session.awaiting_input_type || null,
-      JSON.stringify(session.awaiting_input_details || null),
+      session.awaiting_input_details || null,
       session.session_timeout_seconds || 0,
       session.flow_context || 'evolution',
-      JSON.stringify(session.steps || [])
+      session.steps || []
     ]);
     return { success: true };
   } catch (error: any) {
@@ -1268,11 +1307,14 @@ export async function loadSessionFromDB(sessionId: string): Promise<FlowSession 
     );
     if (result.rows.length > 0) {
       const row = result.rows[0];
+      const parsedFlowVars = parseJsonField(row.flow_variables, {});
+      const parsedAwaitingDetails = parseJsonField(row.awaiting_input_details, null);
+      const parsedSteps = parseJsonField(row.steps, []);
       return {
         ...row,
-        flow_variables: row.flow_variables || {},
-        awaiting_input_details: row.awaiting_input_details || null,
-        steps: row.steps || []
+        flow_variables: parsedFlowVars,
+        awaiting_input_details: parsedAwaitingDetails,
+        steps: Array.isArray(parsedSteps) ? parsedSteps : []
       };
     }
     return null;
@@ -1325,12 +1367,17 @@ export async function loadAllActiveSessionsFromDB(ownerId: string): Promise<Flow
     `;
     const result = await runQuery<FlowSession>(query, [ownerId]);
 
-    return result.rows.map(row => ({
-      ...row,
-      flow_variables: row.flow_variables || {},
-      awaiting_input_details: row.awaiting_input_details || null,
-      steps: row.steps || []
-    }));
+    return result.rows.map(row => {
+      const parsedFlowVars = parseJsonField(row.flow_variables, {});
+      const parsedAwaitingDetails = parseJsonField(row.awaiting_input_details, null);
+      const parsedSteps = parseJsonField(row.steps, []);
+      return {
+        ...row,
+        flow_variables: parsedFlowVars,
+        awaiting_input_details: parsedAwaitingDetails,
+        steps: Array.isArray(parsedSteps) ? parsedSteps : []
+      };
+    });
   } catch (error: any) {
     console.error(`[DB Actions] loadAllActiveSessionsFromDB Error for owner ID ${ownerId}: `, error);
     return [];

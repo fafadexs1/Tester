@@ -41,6 +41,7 @@ export type NodeType =
   | 'time-of-day'
   | 'intention-router'
   | 'ai-model-config'
+  | 'ai-memory-config'
   | 'end-flow';
 
 
@@ -265,6 +266,15 @@ export interface NodeData {
   // AI Model Config Node
   aiProvider?: 'google' | 'openai' | 'anthropic' | 'groq';
   aiApiKey?: string;
+
+  // AI Memory Config Node
+  memoryProvider?: 'postgres' | 'redis' | 'mariadb' | 'in-memory';
+  memoryConnectionString?: string;
+  memoryScope?: 'session' | 'user' | 'workspace';
+  memoryScopeKeyVariable?: string;
+  memoryRetentionDays?: number;
+  memoryMaxItems?: number;
+  memoryMinImportance?: number;
 }
 
 export interface Connection {

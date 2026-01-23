@@ -23,6 +23,7 @@ import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 import { agenticFlow } from '@/ai/flows/agentic-flow';
 import { intelligentChoice } from '@/ai/flows/intelligent-choice-flow';
 import { classifyIntent } from '@/ai/flows/intention-classification-flow';
+import { loadMemoryContext, normalizeMemorySettings, recordMemory, type MemorySettings } from '@/lib/agent/memory';
 import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates, evaluateExpression } from './utils';
 import jsonata from 'jsonata';
 
@@ -153,6 +154,47 @@ const normalizeOptionsFromString = (raw: string): string[] => {
   }
 
   return [validLine];
+};
+
+const resolveMemoryScopeKey = (
+  memoryNode: NodeData | null,
+  session: FlowSession,
+  workspace: WorkspaceData
+): string => {
+  const scope = (memoryNode?.memoryScope || 'session').toString().toLowerCase();
+  if (scope === 'workspace') return workspace.id;
+
+  if (scope === 'user') {
+    const rawPath = memoryNode?.memoryScopeKeyVariable?.replace(/\{\{|\}\}/g, '').trim();
+    const scopedValue = rawPath ? getProperty(session.flow_variables, rawPath) : undefined;
+    const fallbackValue =
+      getProperty(session.flow_variables, 'user_id') ||
+      getProperty(session.flow_variables, 'contact_id') ||
+      getProperty(session.flow_variables, 'chatwoot_contact_id') ||
+      getProperty(session.flow_variables, 'dialogy_contact_id');
+
+    const resolved = scopedValue ?? fallbackValue;
+    return resolved ? String(resolved) : session.session_id;
+  }
+
+  return session.session_id;
+};
+
+const buildMemorySettings = (
+  memoryNode: NodeData | null,
+  session: FlowSession,
+  workspace: WorkspaceData
+): MemorySettings => {
+  const scopeKey = resolveMemoryScopeKey(memoryNode, session, workspace);
+  return normalizeMemorySettings({
+    provider: (memoryNode?.memoryProvider as any) || 'postgres',
+    connectionString: memoryNode?.memoryConnectionString,
+    scope: (memoryNode?.memoryScope as any) || 'session',
+    scopeKey,
+    retentionDays: memoryNode?.memoryRetentionDays ?? 14,
+    maxItems: memoryNode?.memoryMaxItems ?? 60,
+    minImportance: memoryNode?.memoryMinImportance ?? 0.35,
+  });
 };
 
 function createSandboxConsole(sessionId: string) {
@@ -827,7 +869,7 @@ export async function executeFlow(
             const userInputForAgent = getProperty(session.flow_variables, inputVarName);
             if (userInputForAgent) {
               const cleanedUserInput = cleanAndNormalizeText(String(userInputForAgent));
-              console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: Calling simpleChatReply with input: "${cleanedUserInput}" (model: ${modelName || 'default'})`);
+              console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: Calling agenticFlow with input: "${cleanedUserInput}" (model: ${modelName || 'default'})`);
 
               if (detectExitIntent(cleanedUserInput)) {
                 console.log(`[Flow Engine - ${session.session_id}] Exit intent detected. Continuing flow.`);
@@ -855,7 +897,25 @@ export async function executeFlow(
               history.push({ role: 'user', content: cleanedUserInput });
               ({ history, memorySummary } = trimAndSummarizeHistory(history, memorySummary));
 
-              // Autonomous Agent Integration: Resolve connected tools and model
+              // Autonomous Agent Integration: Resolve memory, tools, and model
+              const memoryConnection = connections.find(c => c.to === currentNode.id && c.targetHandle === 'memory');
+              const memoryNode = memoryConnection
+                ? (findNodeById(memoryConnection.from, currentWorkspace.nodes) || null)
+                : null;
+              const memorySettings = buildMemorySettings(memoryNode, session, currentWorkspace);
+
+              let memoryContext: Awaited<ReturnType<typeof loadMemoryContext>> | undefined;
+              try {
+                memoryContext = await loadMemoryContext({
+                  settings: memorySettings,
+                  workspaceId: currentWorkspace.id,
+                  agentId: currentNode.id,
+                  query: cleanedUserInput,
+                });
+              } catch (error) {
+                console.warn(`[Flow Engine] Memory context unavailable for agent ${currentNode.id}`, error);
+              }
+
               // 1. Resolve Tools
               const connectedTools: any[] = [];
               const toolConnections = connections.filter(c => c.to === currentNode.id && c.targetHandle === 'tools');
@@ -905,6 +965,9 @@ export async function executeFlow(
                 history: history,
                 modelName: targetModel,
                 modelConfig: targetApiKey ? { apiKey: targetApiKey } : undefined,
+                systemPrompt,
+                temperature: currentNode.temperature,
+                memoryContext,
               });
 
               const cleanedReply = cleanAndNormalizeText(agentReply.botReply);
@@ -919,6 +982,20 @@ export async function executeFlow(
               setProperty(session.flow_variables, historyKey, history);
               if (memorySummary) {
                 setProperty(session.flow_variables, historySummaryKey, memorySummary);
+              }
+
+              try {
+                await recordMemory({
+                  settings: memorySettings,
+                  workspaceId: currentWorkspace.id,
+                  agentId: currentNode.id,
+                  userMessage: cleanedUserInput,
+                  assistantMessage: replyForHistory,
+                  systemPrompt,
+                  modelName: targetModel,
+                });
+              } catch (error) {
+                console.warn(`[Flow Engine] Failed to record memory for agent ${currentNode.id}`, error);
               }
 
               const blocksToSend = messageBlocks.length > 0 ? messageBlocks : [cleanedReply];

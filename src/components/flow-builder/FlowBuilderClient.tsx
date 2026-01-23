@@ -754,8 +754,10 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
       const targetNodeElement = targetElement?.closest('[data-node-id]');
 
       let toId = null;
+      let targetHandleId: string | null = null;
       if (targetHandleElement) {
         toId = targetHandleElement.closest('[data-node-id]')?.getAttribute('data-node-id');
+        targetHandleId = targetHandleElement.getAttribute('data-handle-id');
       } else if (targetNodeElement && !targetNodeElement.closest('[data-connector="true"]')) {
         toId = targetNodeElement.getAttribute('data-node-id');
       }
@@ -768,12 +770,14 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
             from: drawingLineRef.current!.fromId,
             to: toId as string,
             sourceHandle: drawingLineRef.current!.sourceHandleId,
+            targetHandle: targetHandleId || undefined,
           };
 
           const isDuplicate = newConnectionsArray.some(
             c => c.from === newConnection.from &&
               c.to === newConnection.to &&
-              c.sourceHandle === newConnection.sourceHandle
+              c.sourceHandle === newConnection.sourceHandle &&
+              c.targetHandle === newConnection.targetHandle
           );
 
           const existingConnectionFromThisSourceHandle = newConnectionsArray.find(
@@ -806,7 +810,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     if (!hasMounted) return;
 
     document.addEventListener('mousemove', handleGlobalMouseMove);
-    document.addEventListener('mouseup', handleGlobalMouseUp);
+    document.addEventListener('mouseup', handleGlobalMouseUp, true);
 
     const handleMouseLeaveWindow = () => {
       if (isPanning.current) {
@@ -835,7 +839,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
 
     return () => {
       document.removeEventListener('mousemove', handleGlobalMouseMove);
-      document.removeEventListener('mouseup', handleGlobalMouseUp);
+      document.removeEventListener('mouseup', handleGlobalMouseUp, true);
       document.body.removeEventListener('mouseleave', handleMouseLeaveWindow);
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);

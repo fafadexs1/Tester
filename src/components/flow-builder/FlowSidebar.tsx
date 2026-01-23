@@ -63,6 +63,8 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = ({ onInteractionChange 
     ai: [
       { type: "ai-text-generation", label: "Escritor IA", icon: <Sparkles {...iconProps} className="text-violet-400" />, defaultData: { aiPromptText: 'Resuma...', aiOutputVariable: 'res' } },
       { type: "intelligent-agent", label: "Agente Inteligente", icon: <BrainCircuit {...iconProps} className="text-sky-400" />, defaultData: { agentName: 'Assistente' } },
+      { type: "ai-model-config", label: "AI Model Config", icon: <Cpu {...iconProps} className="text-violet-400" />, defaultData: { aiProvider: 'google' } },
+      { type: "ai-memory-config", label: "Memory Config", icon: <Database {...iconProps} className="text-sky-400" />, defaultData: { memoryProvider: 'postgres', memoryScope: 'session' } },
       { type: "intention-router", label: "Intenções", icon: <BrainCircuit {...iconProps} className="text-indigo-500" /> },
       { type: "dialogy-send-message", label: "Dialogy", icon: <Rocket {...iconProps} className="text-orange-500" /> },
     ],
