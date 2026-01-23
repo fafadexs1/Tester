@@ -6,8 +6,8 @@ import { z } from 'genkit';
 const MemoryCandidateSchema = z.object({
   type: z.enum(['semantic', 'episodic', 'procedural']),
   content: z.string().describe('Short, durable memory content.'),
-  importance: z.number().min(0).max(1).describe('0-1 importance score.'),
-  ttlDays: z.number().int().positive().optional().describe('Optional TTL in days.'),
+  importance: z.number().describe('0-1 importance score.'),
+  ttlDays: z.number().optional().describe('Optional TTL in days.'),
   tags: z.array(z.string()).optional(),
 });
 
@@ -55,7 +55,13 @@ export const memoryCompilerFlow = ai.defineFlow(
   },
   async (input) => {
     try {
-      const { output } = await memoryCompilerPrompt(input, { model: input.modelName });
+      // Fallback for known invalid models or default to configured model
+      let effectiveModel = input.modelName;
+      if (!effectiveModel || effectiveModel === 'gemini-3-flash-preview') {
+        effectiveModel = 'googleai/gemini-2.0-flash';
+      }
+
+      const { output } = await memoryCompilerPrompt(input, { model: effectiveModel });
       if (!output) {
         return { items: [], summary: undefined };
       }

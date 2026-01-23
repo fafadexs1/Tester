@@ -6,11 +6,13 @@ import { Button } from '@/components/ui/button';
 import {
   SaveAll, UserCircle, Settings, LogOut, PlugZap, PanelRightOpen, PanelRightClose,
   TerminalSquare, History, Download, Upload, Home, ChevronsLeft,
-  Sparkles, Save, Settings2
+  Sparkles, Save, Settings2, Pencil, Trash2
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -24,7 +26,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from '@/components/auth/AuthProvider';
 import Link from 'next/link';
-import { getEvolutionInstancesForUser, getChatwootInstancesForUserAction, getDialogyInstancesForUserAction } from '@/app/actions/instanceActions';
+import { getEvolutionInstancesForUser, getChatwootInstancesForUserAction, getDialogyInstancesForUserAction, saveEvolutionInstanceAction, saveChatwootInstanceAction, saveDialogyInstanceAction, deleteEvolutionInstanceAction, deleteChatwootInstanceAction, deleteDialogyInstanceAction } from '@/app/actions/instanceActions';
 import { getWorkspaceVersionsAction, restoreWorkspaceVersionAction } from '@/app/actions/versionActions';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -68,6 +70,70 @@ const TopBar: React.FC<TopBarProps> = ({
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [history, setHistory] = useState<WorkspaceVersion[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  const [createInstanceType, setCreateInstanceType] = useState<'evolution' | 'chatwoot' | 'dialogy' | null>(null);
+  const [editingInstance, setEditingInstance] = useState<any>(null);
+  const [isCreatingInstance, setIsCreatingInstance] = useState(false);
+
+  const handleCreateInstance = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsCreatingInstance(true);
+    const formData = new FormData(e.currentTarget);
+
+    // If editing, append the ID if not present (though hidden input should handle it)
+    if (editingInstance?.id) {
+      formData.set('id', editingInstance.id);
+    }
+
+    try {
+      let result;
+      if (createInstanceType === 'evolution') {
+        result = await saveEvolutionInstanceAction(formData);
+      } else if (createInstanceType === 'chatwoot') {
+        result = await saveChatwootInstanceAction(formData);
+      } else if (createInstanceType === 'dialogy') {
+        result = await saveDialogyInstanceAction(formData);
+      }
+
+      if (result?.success) {
+        toast({ title: editingInstance ? "Instância atualizada!" : "Instância criada com sucesso!" });
+        setCreateInstanceType(null);
+        setEditingInstance(null);
+        await fetchInstances();
+      } else {
+        toast({ title: "Erro ao salvar", description: result?.error, variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Erro", description: "Ocorreu um erro inesperado.", variant: "destructive" });
+    } finally {
+      setIsCreatingInstance(false);
+    }
+  };
+
+  const handleEdit = (instance: any, type: 'evolution' | 'chatwoot' | 'dialogy') => {
+    setEditingInstance(instance);
+    setCreateInstanceType(type);
+  };
+
+  const handleDelete = async (id: string, type: 'evolution' | 'chatwoot' | 'dialogy') => {
+    if (!confirm("Tem certeza que deseja excluir esta instância? Esta ação não pode ser desfeita.")) return;
+
+    try {
+      let result;
+      if (type === 'evolution') result = await deleteEvolutionInstanceAction(id);
+      else if (type === 'chatwoot') result = await deleteChatwootInstanceAction(id);
+      else if (type === 'dialogy') result = await deleteDialogyInstanceAction(id);
+
+      if (result?.success) {
+        toast({ title: "Instância removida." });
+        await fetchInstances();
+      } else {
+        toast({ title: "Erro ao excluir", description: result?.error, variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Erro", description: "Falha ao excluir instância.", variant: "destructive" });
+    }
+  };
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -146,295 +212,586 @@ const TopBar: React.FC<TopBarProps> = ({
   }, [activeWorkspace?.id]);
 
   return (
-    <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex justify-center w-full">
-      <header className="neo-glass pointer-events-auto rounded-full px-6 h-12 flex items-center gap-6 shadow-2xl border border-white/10">
+    <>
+      <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex justify-center w-full">
+        <header className="neo-glass pointer-events-auto rounded-full px-6 h-12 flex items-center gap-6 shadow-2xl border border-white/10">
 
-        {/* Left Section: Context & Title */}
-        <div className="flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2 p-1.5 rounded-full hover:bg-white/5 transition-all group">
-            <ChevronsLeft className="w-4 h-4 text-zinc-400 group-hover:text-white" />
-            <Home className="w-4 h-4 text-zinc-400 group-hover:text-white" />
-          </Link>
-          <div className="w-px h-6 bg-white/10" />
-          <div className="flex items-center gap-2">
-            <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-500 font-bold">Studio</span>
-            <input
-              className="bg-transparent border-0 focus-visible:ring-0 text-sm font-bold text-white/90 w-auto min-w-[120px] max-w-[200px] truncate hover:text-white transition-colors"
-              value={workspaceName}
-              onChange={(e) => onUpdateWorkspace({ name: e.target.value })}
-              disabled={!activeWorkspace}
-            />
+          {/* Left Section: Context & Title */}
+          <div className="flex items-center gap-4">
+            <Link href="/" className="flex items-center gap-2 p-1.5 rounded-full hover:bg-white/5 transition-all group">
+              <ChevronsLeft className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+              <Home className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+            </Link>
+            <div className="w-px h-6 bg-white/10" />
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-500 font-bold">Studio</span>
+              <input
+                className="bg-transparent border-0 focus-visible:ring-0 text-sm font-bold text-white/90 w-auto min-w-[120px] max-w-[200px] truncate hover:text-white transition-colors"
+                value={workspaceName}
+                onChange={(e) => onUpdateWorkspace({ name: e.target.value })}
+                disabled={!activeWorkspace}
+              />
+            </div>
           </div>
-        </div>
 
-        {/* Center Section: Core Actions */}
-        <div className="flex items-center gap-3">
-          <Button
-            className="h-9 px-6 rounded-full text-[11px] font-bold bg-gradient-to-r from-primary to-violet-600 hover:from-primary/90 hover:to-violet-500 text-white shadow-[0_8px_16px_-6px_rgba(139,92,246,0.5)] transition-all duration-300 gap-2 border border-white/20 active:scale-95"
-            onClick={() => setIsSaveDialogOpen(true)}
-            disabled={!activeWorkspace}
-          >
-            <Save className="w-3.5 h-3.5 fill-white/20" />
-            Salvar Projeto
-          </Button>
+          {/* Center Section: Core Actions (History Only) */}
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-full bg-white/[0.03] border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all group"
+              onClick={() => { fetchWorkspaceHistory(); setIsHistoryDialogOpen(true); }}
+              title="Histórico de Versões"
+            >
+              <History className="w-4 h-4 text-zinc-400 group-hover:text-primary transition-colors" />
+            </Button>
+          </div>
 
-          <div className="w-px h-4 bg-white/10" />
+          {/* Right Section: Navigation & Tools */}
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-white/10">
+                  <TerminalSquare className="w-4 h-4 text-zinc-400" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="neo-glass border-white/10 min-w-[200px]">
+                <DropdownMenuItem onSelect={() => { setIsSessionsDialogOpen(true); fetchActiveSessions(); }}>
+                  <Sparkles className="mr-2 h-4 w-4 text-primary" />
+                  Sessões Ativas
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportFlow}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Exportar JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleImportClick}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Importar JSON
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 rounded-full bg-white/[0.03] border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all group"
-            onClick={() => { fetchWorkspaceHistory(); setIsHistoryDialogOpen(true); }}
-            title="Histórico de Versões"
-          >
-            <History className="w-4 h-4 text-zinc-400 group-hover:text-primary transition-colors" />
-          </Button>
-        </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn("h-8 w-8 rounded-full transition-all", isChatPanelOpen ? "bg-primary/20 text-white" : "hover:bg-white/10")}
+              onClick={onToggleChatPanel}
+            >
+              {isChatPanelOpen ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4 text-zinc-400" />}
+            </Button>
 
-        {/* Right Section: Navigation & Tools */}
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-white/10">
-                <TerminalSquare className="w-4 h-4 text-zinc-400" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="neo-glass border-white/10 min-w-[200px]">
-              <DropdownMenuItem onSelect={() => { setIsSessionsDialogOpen(true); fetchActiveSessions(); }}>
-                <Sparkles className="mr-2 h-4 w-4 text-primary" />
-                Sessões Ativas
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportFlow}>
-                <Download className="mr-2 h-4 w-4" />
-                Exportar JSON
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleImportClick}>
-                <Upload className="mr-2 h-4 w-4" />
-                Importar JSON
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            <div className="w-px h-6 bg-white/10 mx-1" />
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn("h-8 w-8 rounded-full transition-all", isChatPanelOpen ? "bg-primary/20 text-white" : "hover:bg-white/10")}
-            onClick={onToggleChatPanel}
-          >
-            {isChatPanelOpen ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4 text-zinc-400" />}
-          </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 p-0 border border-white/10 hover:border-primary/50 transition-all z-10">
+                  <Avatar className="h-full w-full">
+                    <AvatarImage src={`https://api.dicebear.com/9.x/initials/svg?seed=${user?.username}`} className="object-cover" />
+                    <AvatarFallback className="bg-primary/20 text-[10px] uppercase font-bold text-primary">{user?.username?.substring(0, 1)}</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="neo-glass min-w-48 border-white/10">
+                <DropdownMenuLabel className="flex flex-col px-4 py-3">
+                  <span className="text-sm font-bold text-white/90">{user?.username}</span>
+                  <span className="text-[10px] text-zinc-500 truncate mt-0.5">{user?.email}</span>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuItem onSelect={handleOpenSettings}>
+                  <Settings className="mr-2 h-4 w-4" /> Configurações
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={handleOpenInstanceManager}>
+                  <PlugZap className="mr-2 h-4 w-4" /> Instâncias
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuItem onClick={logout} className="text-red-400 focus:text-red-400 focus:bg-red-400/10">
+                  <LogOut className="mr-2 h-4 w-4" /> Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </header>
 
-          <div className="w-px h-6 bg-white/10 mx-1" />
+        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 p-0 border border-white/10 hover:border-primary/50 transition-all overflow-hidden">
-                <Avatar className="h-full w-full">
-                  <AvatarImage src={`https://api.dicebear.com/7.x/shapes/svg?seed=${user?.username}`} />
-                  <AvatarFallback className="bg-primary/20 text-[10px] uppercase font-bold text-primary">{user?.username?.substring(0, 1)}</AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="neo-glass min-w-48 border-white/10">
-              <DropdownMenuLabel className="flex flex-col px-4 py-3">
-                <span className="text-sm font-bold text-white/90">{user?.username}</span>
-                <span className="text-[10px] text-zinc-500 truncate mt-0.5">{user?.email}</span>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-white/10" />
-              <DropdownMenuItem onSelect={handleOpenSettings}>
-                <Settings className="mr-2 h-4 w-4" /> Configurações
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={handleOpenInstanceManager}>
-                <PlugZap className="mr-2 h-4 w-4" /> Instâncias
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-white/10" />
-              <DropdownMenuItem onClick={logout} className="text-red-400 focus:text-red-400 focus:bg-red-400/10">
-                <LogOut className="mr-2 h-4 w-4" /> Sair
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
+        {/* Save Dialog */}
+        <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
+          <DialogContent className="neo-glass border-white/10 shadow-2xl rounded-3xl">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold">Salvar Versão</DialogTitle>
+              <DialogDescription className="text-zinc-400">Documente as alterações realizadas neste passo.</DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Textarea
+                className="bg-black/50 border-white/10 h-32 text-xs rounded-2xl focus:ring-primary/40 focus:border-primary/40"
+                placeholder="Ex: Ajustes na lógica de saudação e correção de typos..."
+                value={saveDescription}
+                onChange={(e) => setSaveDescription(e.target.value)}
+              />
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="ghost" className="text-xs font-bold rounded-xl" onClick={() => { onSaveWorkspaces(null); setIsSaveDialogOpen(false); }}>Salvar Rápido</Button>
+              <Button className="bg-primary hover:bg-primary/80 text-white font-bold rounded-xl px-6" onClick={() => { onSaveWorkspaces(saveDescription); setIsSaveDialogOpen(false); }}>Salvar Versão</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
+        {/* History Dialog */}
+        <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
+          <DialogContent className="sm:max-w-2xl neo-glass border-white/10 max-h-[80vh] flex flex-col shadow-2xl rounded-3xl p-0 overflow-hidden">
+            <DialogHeader className="p-6 border-b border-white/5">
+              <DialogTitle className="text-xl font-bold">Histórico de Versões</DialogTitle>
+              <DialogDescription className="text-zinc-500">Restore points and version logs.</DialogDescription>
+            </DialogHeader>
+            <ScrollArea className="flex-1">
+              <div className="p-4">
+                <Table>
+                  <TableHeader className="border-white/5">
+                    <TableRow className="hover:bg-transparent border-white/5">
+                      <TableHead className="text-zinc-500 font-bold uppercase text-[9px] tracking-widest">Version</TableHead>
+                      <TableHead className="text-zinc-500 font-bold uppercase text-[9px] tracking-widest text-right">Created At</TableHead>
+                      <TableHead className="w-[100px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {history.length === 0 ? (
+                      <TableRow><TableCell colSpan={3} className="text-center py-12 text-zinc-600 italic">No history found</TableCell></TableRow>
+                    ) : history.map(v => (
+                      <TableRow key={v.id} className="border-white/5 hover:bg-white/[0.03] transition-colors group">
+                        <TableCell className="py-4">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-bold text-white/90">v{v.version}</span>
+                            <span className="text-[10px] text-zinc-500 line-clamp-1 w-64">{v.description || 'Sem descrição'}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-[10px] text-zinc-500 font-medium">
+                          {formatDistanceToNow(new Date(v.created_at), { addSuffix: true, locale: ptBR })}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="opacity-0 group-hover:opacity-100 h-8 px-3 rounded-xl border-white/10 bg-white/5 hover:bg-primary/20 hover:border-primary/40 hover:text-white transition-all text-[10px] font-bold"
+                            onClick={() => handleRestoreVersion(v.id)}
+                          >
+                            Restaurar
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </ScrollArea>
+          </DialogContent>
+        </Dialog>
 
-      {/* Save Dialog */}
-      <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
+        <Dialog open={isSessionsDialogOpen} onOpenChange={setIsSessionsDialogOpen}>
+          <DialogContent className="sm:max-w-4xl neo-glass border-white/10 max-h-[90vh] flex flex-col shadow-2xl rounded-3xl p-0 overflow-hidden">
+            <DialogHeader className="p-6 border-b border-white/5 flex flex-row items-center justify-between">
+              <div>
+                <DialogTitle className="text-xl font-bold">Sessões Ativas</DialogTitle>
+                <DialogDescription className="text-zinc-400">Gerencie as sessões em execução no fluxo atual.</DialogDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={async () => {
+                    if (!confirm("Tem certeza que deseja encerrar TODAS as sessões ativas deste fluxo?")) return;
+                    setIsLoadingSessions(true);
+                    try {
+                      const url = activeWorkspace?.id
+                        ? `/api/sessions/active?workspaceId=${activeWorkspace.id}`
+                        : '/api/sessions/active';
+                      await fetch(url, { method: 'DELETE' });
+                      await fetchActiveSessions();
+                      toast({ title: "Sessões encerradas", description: "Todas as sessões foram limpas." });
+                    } catch (e) {
+                      toast({ title: "Erro", description: "Falha ao limpar sessões.", variant: "destructive" });
+                    } finally {
+                      setIsLoadingSessions(false);
+                    }
+                  }}
+                  className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Encerrar Todas
+                </Button>
+                <Button variant="outline" size="icon" onClick={() => fetchActiveSessions()} title="Atualizar">
+                  <History className="w-4 h-4" />
+                </Button>
+              </div>
+            </DialogHeader>
+            <ScrollArea className="flex-1 h-[600px]">
+              <div className="p-6">
+                <Table>
+                  <TableHeader className="border-white/5 sticky top-0 bg-black/80 backdrop-blur-md z-10 shadow-sm">
+                    <TableRow className="hover:bg-transparent border-white/5">
+                      <TableHead className="text-zinc-400 font-bold uppercase text-[11px] tracking-widest w-[300px]">Session ID</TableHead>
+                      <TableHead className="text-zinc-400 font-bold uppercase text-[11px] tracking-widest">Node Atual</TableHead>
+                      <TableHead className="text-zinc-400 font-bold uppercase text-[11px] tracking-widest text-right">Iniciado</TableHead>
+                      <TableHead className="w-[100px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingSessions ? (
+                      <TableRow><TableCell colSpan={4} className="text-center py-12"><div className="flex justify-center flex-col items-center gap-2"><Sparkles className="w-6 h-6 animate-spin text-primary" /><span className="text-xs text-zinc-500">Carregando sessões...</span></div></TableCell></TableRow>
+                    ) : activeSessions.length === 0 ? (
+                      <TableRow><TableCell colSpan={4} className="text-center py-20 text-zinc-500 italic text-lg">Nenhuma sessão ativa encontrada.</TableCell></TableRow>
+                    ) : activeSessions.map(s => (
+                      <TableRow key={s.session_id} className="border-white/5 hover:bg-white/[0.03] transition-colors group">
+                        <TableCell className="font-mono text-xs text-zinc-300 py-4 select-all cursor-pointer hover:text-white transition-colors" title="Clique para copiar" onClick={() => { navigator.clipboard.writeText(s.session_id); toast({ title: "ID Copiado" }); }}>
+                          {s.session_id}
+                        </TableCell>
+                        <TableCell className="text-sm font-bold text-white/90">
+                          <div className="flex items-center gap-2">
+                            <div className={cn("w-2 h-2 rounded-full", s.current_node_id ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "bg-zinc-600")} />
+                            {s.current_node_id ? 'Em Andamento' : 'Aguardando'}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-zinc-400 font-medium">
+                          {s.created_at ? formatDistanceToNow(new Date(s.created_at), { addSuffix: true, locale: ptBR }) : '-'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 rounded-full hover:bg-primary/20 hover:text-white"
+                              onClick={() => { setIsSessionsDialogOpen(false); onHighlightNode(s.current_node_id || null, s.steps); }}
+                              title="Localizar no Fluxo"
+                            >
+                              <PanelRightOpen className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 rounded-full hover:bg-red-500/20 hover:text-red-400"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const res = await fetch(`/api/sessions/active?sessionId=${s.session_id}`, { method: 'DELETE' });
+                                if (res.ok) {
+                                  setActiveSessions(prev => prev.filter(sess => sess.session_id !== s.session_id));
+                                  toast({ title: "Sessão Encerrada" });
+                                }
+                              }}
+                              title="Encerrar Sessão"
+                            >
+                              <LogOut className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </ScrollArea>
+          </DialogContent>
+        </Dialog>
+
+        {/* Settings Dialog */}
+        <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
+          <DialogContent className="neo-glass border-white/10 shadow-2xl rounded-3xl">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold">Configurações do Workspace</DialogTitle>
+              <DialogDescription className="text-zinc-400">Gerencie as configurações gerais deste workspace.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="ws-name">Nome do Workspace</Label>
+                <Input
+                  id="ws-name"
+                  value={activeWorkspace?.name || ''}
+                  onChange={(e) => onUpdateWorkspace({ name: e.target.value })}
+                  className="bg-black/20 border-white/10"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ws-desc">Descrição (Indisponível)</Label>
+                <div className="p-3 bg-black/20 rounded border border-white/5 text-xs text-zinc-500 italic">
+                  A edição de descrição ainda não é suportada por este workspace.
+                </div>
+              </div>
+              <div className="pt-2 border-t border-white/5 mt-4">
+                <Label className="text-xs text-zinc-500 mb-2 block">ID do Workspace</Label>
+                <div className="font-mono text-[10px] bg-black/40 p-2 rounded text-zinc-400 select-all">
+                  {activeWorkspace?.id}
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+
+
+        {/* Instance Manager Dialog */}
+        <Dialog open={isInstanceManagerOpen} onOpenChange={setIsInstanceManagerOpen}>
+          <DialogContent className="sm:max-w-3xl neo-glass border-white/10 h-[600px] flex flex-col shadow-2xl rounded-3xl p-0 overflow-hidden">
+            <DialogHeader className="p-6 border-b border-white/5 pb-4">
+              <DialogTitle className="text-xl font-bold">Gerenciador de Instâncias</DialogTitle>
+              <DialogDescription className="text-zinc-400">Conecte e gerencie seus serviços externos.</DialogDescription>
+            </DialogHeader>
+
+            <Tabs defaultValue="evolution" className="flex-1 flex flex-col overflow-hidden">
+              <div className="px-6 pt-4">
+                <TabsList className="bg-black/20 border border-white/5 p-1 h-9 w-full justify-start rounded-xl">
+                  <TabsTrigger value="evolution" className="rounded-lg text-xs font-medium data-[state=active]:bg-primary/20 data-[state=active]:text-primary">Evolution API</TabsTrigger>
+                  <TabsTrigger value="chatwoot" className="rounded-lg text-xs font-medium data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400">Chatwoot</TabsTrigger>
+                  <TabsTrigger value="dialogy" className="rounded-lg text-xs font-medium data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">Dialogy</TabsTrigger>
+                </TabsList>
+              </div>
+
+              <div className="flex-1 overflow-hidden p-6 pt-4">
+                {/* Evolution Tab */}
+                <TabsContent value="evolution" className="h-full mt-0 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/20">
+                        <PlugZap className="w-4 h-4 text-green-500" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-white text-sm">Evolution API</h3>
+                        <p className="text-[10px] text-zinc-500">Gateway WhatsApp</p>
+                      </div>
+                    </div>
+                    <Button size="sm" className="h-7 text-xs gap-1.5 bg-green-600 hover:bg-green-500 text-white border border-green-400/20 shadow-lg shadow-green-900/20" onClick={() => { setEditingInstance(null); setCreateInstanceType('evolution'); }}>
+                      <Plus className="w-3 h-3" />
+                      Nova Instância
+                    </Button>
+                  </div>
+
+                  <ScrollArea className="h-[380px] -mr-4 pr-4">
+                    {evolutionInstances.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-40 bg-white/5 rounded-2xl border border-dashed border-white/10 gap-2">
+                        <PlugZap className="w-8 h-8 text-zinc-600" />
+                        <p className="text-sm font-medium text-zinc-400">Nenhuma instância conectada</p>
+                        <p className="text-[10px] text-zinc-600 max-w-[200px] text-center">Adicione uma nova instância para conectar o WhatsApp.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-3">
+                        {evolutionInstances.map(inst => (
+                          <div key={inst.id} className={cn("flex items-center justify-between p-4 rounded-2xl border transition-all group", activeWorkspace?.evolution_instance_id === inst.id ? "bg-green-500/5 border-green-500/30" : "bg-white/[0.02] border-white/5 hover:border-white/10 hover:bg-white/[0.04]")}>
+                            <div className="flex items-center gap-4">
+                              <div className={cn("w-2 h-2 rounded-full", inst.status === 'online' ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-zinc-600")} />
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-sm font-bold text-white/90">{inst.name}</span>
+                                <span className="text-[10px] text-zinc-500 font-mono">{inst.baseUrl}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => handleEdit(inst, 'evolution')} title="Editar">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/10" onClick={() => handleDelete(inst.id, 'evolution')} title="Excluir">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                              <div className="w-px h-4 bg-white/10 mx-1" />
+                              <Button size="sm" variant={activeWorkspace?.evolution_instance_id === inst.id ? "secondary" : "outline"}
+                                onClick={() => onUpdateWorkspace({ evolution_instance_id: inst.id })}
+                                className={cn("h-8 text-xs px-4 rounded-xl transition-all", activeWorkspace?.evolution_instance_id === inst.id ? "bg-green-500 text-white font-bold shadow-[0_4px_12px_-4px_rgba(34,197,94,0.4)] hover:bg-green-600" : "bg-transparent border-white/10 hover:bg-white/5 text-zinc-400 hover:text-white")}
+                              >
+                                {activeWorkspace?.evolution_instance_id === inst.id ? 'Conectado' : 'Conectar'}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </TabsContent>
+
+                {/* Chatwoot Tab */}
+                <TabsContent value="chatwoot" className="h-full mt-0 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                        <div className="w-4 h-4 flex items-center justify-center font-bold text-[10px] text-blue-500">Cw</div>
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-white text-sm">Chatwoot</h3>
+                        <p className="text-[10px] text-zinc-500">Customer Support</p>
+                      </div>
+                    </div>
+                    <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-500 text-white border border-blue-400/20 shadow-lg shadow-blue-900/20" onClick={() => { setEditingInstance(null); setCreateInstanceType('chatwoot'); }}>
+                      <Plus className="w-3 h-3" />
+                      Nova Conta
+                    </Button>
+                  </div>
+
+                  <ScrollArea className="h-[380px] -mr-4 pr-4">
+                    {chatwootInstances.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-40 bg-white/5 rounded-2xl border border-dashed border-white/10 gap-2">
+                        <div className="w-8 h-8 rounded bg-zinc-800/50 flex items-center justify-center text-zinc-600 text-xs font-bold">Cw</div>
+                        <p className="text-sm font-medium text-zinc-400">Nenhuma conta conectada</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-3">
+                        {chatwootInstances.map(inst => (
+                          <div key={inst.id} className={cn("flex items-center justify-between p-4 rounded-2xl border transition-all group", activeWorkspace?.chatwoot_instance_id === inst.id ? "bg-blue-500/5 border-blue-500/30" : "bg-white/[0.02] border-white/5 hover:border-white/10 hover:bg-white/[0.04]")}>
+                            <div className="flex items-center gap-4">
+                              <div className={cn("w-2 h-2 rounded-full", inst.status === 'online' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" : "bg-zinc-600")} />
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-sm font-bold text-white/90">{inst.name}</span>
+                                <span className="text-[10px] text-zinc-500 font-mono">{inst.baseUrl}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => handleEdit(inst, 'chatwoot')} title="Editar">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/10" onClick={() => handleDelete(inst.id, 'chatwoot')} title="Excluir">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                              <div className="w-px h-4 bg-white/10 mx-1" />
+                              <Button size="sm" variant={activeWorkspace?.chatwoot_instance_id === inst.id ? "secondary" : "outline"}
+                                onClick={() => onUpdateWorkspace({ chatwoot_instance_id: inst.id })}
+                                className={cn("h-8 text-xs px-4 rounded-xl transition-all", activeWorkspace?.chatwoot_instance_id === inst.id ? "bg-blue-500 text-white font-bold shadow-[0_4px_12px_-4px_rgba(59,130,246,0.4)] hover:bg-blue-600" : "bg-transparent border-white/10 hover:bg-white/5 text-zinc-400 hover:text-white")}
+                              >
+                                {activeWorkspace?.chatwoot_instance_id === inst.id ? 'Conectado' : 'Conectar'}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </TabsContent>
+
+                {/* Dialogy Tab */}
+                <TabsContent value="dialogy" className="h-full mt-0 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                        <div className="w-4 h-4 flex items-center justify-center font-bold text-[10px] text-purple-500">Dy</div>
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-white text-sm">Dialogy</h3>
+                        <p className="text-[10px] text-zinc-500">Native Integration</p>
+                      </div>
+                    </div>
+                    <Button size="sm" className="h-7 text-xs gap-1.5 bg-purple-600 hover:bg-purple-500 text-white border border-purple-400/20 shadow-lg shadow-purple-900/20" onClick={() => { setEditingInstance(null); setCreateInstanceType('dialogy'); }}>
+                      <Plus className="w-3 h-3" />
+                      Nova Instância
+                    </Button>
+                  </div>
+
+                  <ScrollArea className="h-[380px] -mr-4 pr-4">
+                    {dialogyInstances.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-40 bg-white/5 rounded-2xl border border-dashed border-white/10 gap-2">
+                        <div className="w-8 h-8 rounded bg-zinc-800/50 flex items-center justify-center text-zinc-600 text-xs font-bold">Dy</div>
+                        <p className="text-sm font-medium text-zinc-400">Nenhuma conta conectada</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-3">
+                        {dialogyInstances.map(inst => (
+                          <div key={inst.id} className={cn("flex items-center justify-between p-4 rounded-2xl border transition-all group", activeWorkspace?.dialogy_instance_id === inst.id ? "bg-purple-500/5 border-purple-500/30" : "bg-white/[0.02] border-white/5 hover:border-white/10 hover:bg-white/[0.04]")}>
+                            <div className="flex items-center gap-4">
+                              <div className={cn("w-2 h-2 rounded-full", inst.status === 'online' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" : "bg-zinc-600")} />
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-sm font-bold text-white/90">{inst.name}</span>
+                                <span className="text-[10px] text-zinc-500 font-mono">{inst.baseUrl}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => handleEdit(inst, 'dialogy')} title="Editar">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 rounded-xl text-zinc-400 hover:text-red-400 hover:bg-red-500/10" onClick={() => handleDelete(inst.id, 'dialogy')} title="Excluir">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                              <div className="w-px h-4 bg-white/10 mx-1" />
+                              <Button size="sm" variant={activeWorkspace?.dialogy_instance_id === inst.id ? "secondary" : "outline"}
+                                onClick={() => onUpdateWorkspace({ dialogy_instance_id: inst.id })}
+                                className={cn("h-8 text-xs px-4 rounded-xl transition-all", activeWorkspace?.dialogy_instance_id === inst.id ? "bg-purple-500 text-white font-bold shadow-[0_4px_12px_-4px_rgba(168,85,247,0.4)] hover:bg-purple-600" : "bg-transparent border-white/10 hover:bg-white/5 text-zinc-400 hover:text-white")}
+                              >
+                                {activeWorkspace?.dialogy_instance_id === inst.id ? 'Conectado' : 'Conectar'}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </TabsContent>
+              </div>
+            </Tabs>
+          </DialogContent>
+        </Dialog>
+
+      </div>
+
+      {/* Floating Save Button */}
+      <div className="fixed bottom-6 right-6 z-[100] pointer-events-auto">
+        <Button
+          className="h-12 px-8 rounded-full font-bold bg-gradient-to-r from-primary to-violet-600 hover:from-primary/90 hover:to-violet-500 text-white shadow-[0_8px_32px_-6px_rgba(139,92,246,0.6)] hover:shadow-[0_8px_40px_-4px_rgba(139,92,246,0.8)] transition-all duration-300 gap-3 border border-white/20 active:scale-95 text-sm cursor-pointer"
+          onClick={() => setIsSaveDialogOpen(true)}
+          disabled={!activeWorkspace}
+        >
+          <Save className="w-4 h-4 fill-white/20" />
+          Salvar Projeto
+        </Button>
+      </div>
+      {/* Create/Edit Instance Dialog */}
+      <Dialog open={!!createInstanceType} onOpenChange={(open) => !open && setCreateInstanceType(null)}>
         <DialogContent className="neo-glass border-white/10 shadow-2xl rounded-3xl">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold">Salvar Versão</DialogTitle>
-            <DialogDescription className="text-zinc-400">Documente as alterações realizadas neste passo.</DialogDescription>
+            <DialogTitle className="text-xl font-bold">
+              {editingInstance ? 'Editar Instância' : (
+                <>
+                  {createInstanceType === 'evolution' && 'Nova Instância Evolution'}
+                  {createInstanceType === 'chatwoot' && 'Nova Instância Chatwoot'}
+                  {createInstanceType === 'dialogy' && 'Nova Instância Dialogy'}
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Preencha os dados de conexão.
+            </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Textarea
-              className="bg-black/50 border-white/10 h-32 text-xs rounded-2xl focus:ring-primary/40 focus:border-primary/40"
-              placeholder="Ex: Ajustes na lógica de saudação e correção de typos..."
-              value={saveDescription}
-              onChange={(e) => setSaveDescription(e.target.value)}
-            />
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="ghost" className="text-xs font-bold rounded-xl" onClick={() => { onSaveWorkspaces(null); setIsSaveDialogOpen(false); }}>Salvar Rápido</Button>
-            <Button className="bg-primary hover:bg-primary/80 text-white font-bold rounded-xl px-6" onClick={() => { onSaveWorkspaces(saveDescription); setIsSaveDialogOpen(false); }}>Salvar Versão</Button>
-          </DialogFooter>
+          <form onSubmit={handleCreateInstance} className="space-y-4 py-4">
+            {editingInstance && <input type="hidden" name="id" value={editingInstance.id} />}
+            <div className="space-y-2">
+              <Label htmlFor="inst-name">Nome</Label>
+              <Input id="inst-name" name="name" required className="bg-black/20 border-white/10" placeholder="Ex: Produção" defaultValue={editingInstance?.name} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inst-url">URL Base</Label>
+              <Input id="inst-url" name="baseUrl" required className="bg-black/20 border-white/10" placeholder="https://..." defaultValue={editingInstance?.baseUrl} />
+            </div>
+
+            {createInstanceType === 'evolution' && (
+              <div className="space-y-2">
+                <Label htmlFor="inst-apikey">Global Log API Key (Opcional)</Label>
+                <Input id="inst-apikey" name="apiKey" className="bg-black/20 border-white/10" type="password" defaultValue={editingInstance?.apiKey} />
+              </div>
+            )}
+            {createInstanceType === 'chatwoot' && (
+              <div className="space-y-2">
+                <Label htmlFor="inst-token">User API Access Token</Label>
+                <Input id="inst-token" name="apiAccessToken" required className="bg-black/20 border-white/10" type="password" defaultValue={editingInstance?.apiAccessToken} />
+              </div>
+            )}
+            {createInstanceType === 'dialogy' && (
+              <div className="space-y-2">
+                <Label htmlFor="inst-apikey">API Key / Token</Label>
+                <Input id="inst-apikey" name="apiKey" required className="bg-black/20 border-white/10" type="password" defaultValue={editingInstance?.apiKey} />
+              </div>
+            )}
+
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="ghost" className="rounded-xl" onClick={() => setCreateInstanceType(null)}>Cancelar</Button>
+              <Button type="submit" className="bg-primary hover:bg-primary/80 rounded-xl font-bold" disabled={isCreatingInstance}>
+                {isCreatingInstance ? <Sparkles className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                {editingInstance ? 'Salvar Alterações' : 'Criar Conexão'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
-      {/* History Dialog */}
-      <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
-        <DialogContent className="sm:max-w-2xl neo-glass border-white/10 max-h-[80vh] flex flex-col shadow-2xl rounded-3xl p-0 overflow-hidden">
-          <DialogHeader className="p-6 border-b border-white/5">
-            <DialogTitle className="text-xl font-bold">Histórico de Versões</DialogTitle>
-            <DialogDescription className="text-zinc-500">Restore points and version logs.</DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="flex-1">
-            <div className="p-4">
-              <Table>
-                <TableHeader className="border-white/5">
-                  <TableRow className="hover:bg-transparent border-white/5">
-                    <TableHead className="text-zinc-500 font-bold uppercase text-[9px] tracking-widest">Version</TableHead>
-                    <TableHead className="text-zinc-500 font-bold uppercase text-[9px] tracking-widest text-right">Created At</TableHead>
-                    <TableHead className="w-[100px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {history.length === 0 ? (
-                    <TableRow><TableCell colSpan={3} className="text-center py-12 text-zinc-600 italic">No history found</TableCell></TableRow>
-                  ) : history.map(v => (
-                    <TableRow key={v.id} className="border-white/5 hover:bg-white/[0.03] transition-colors group">
-                      <TableCell className="py-4">
-                        <div className="flex flex-col gap-1">
-                          <span className="font-bold text-white/90">v{v.version}</span>
-                          <span className="text-[10px] text-zinc-500 line-clamp-1 w-64">{v.description || 'Sem descrição'}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right text-[10px] text-zinc-500 font-medium">
-                        {formatDistanceToNow(new Date(v.created_at), { addSuffix: true, locale: ptBR })}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="opacity-0 group-hover:opacity-100 h-8 px-3 rounded-xl border-white/10 bg-white/5 hover:bg-primary/20 hover:border-primary/40 hover:text-white transition-all text-[10px] font-bold"
-                          onClick={() => handleRestoreVersion(v.id)}
-                        >
-                          Restaurar
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isSessionsDialogOpen} onOpenChange={setIsSessionsDialogOpen}>
-        <DialogContent className="sm:max-w-4xl neo-glass border-white/10 max-h-[90vh] flex flex-col shadow-2xl rounded-3xl p-0 overflow-hidden">
-          <DialogHeader className="p-6 border-b border-white/5 flex flex-row items-center justify-between">
-            <div>
-              <DialogTitle className="text-xl font-bold">Sessões Ativas</DialogTitle>
-              <DialogDescription className="text-zinc-400">Gerencie as sessões em execução no fluxo atual.</DialogDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={async () => {
-                  if (!confirm("Tem certeza que deseja encerrar TODAS as sessões ativas deste fluxo?")) return;
-                  setIsLoadingSessions(true);
-                  try {
-                    const url = activeWorkspace?.id
-                      ? `/api/sessions/active?workspaceId=${activeWorkspace.id}`
-                      : '/api/sessions/active';
-                    await fetch(url, { method: 'DELETE' });
-                    await fetchActiveSessions();
-                    toast({ title: "Sessões encerradas", description: "Todas as sessões foram limpas." });
-                  } catch (e) {
-                    toast({ title: "Erro", description: "Falha ao limpar sessões.", variant: "destructive" });
-                  } finally {
-                    setIsLoadingSessions(false);
-                  }
-                }}
-                className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Encerrar Todas
-              </Button>
-              <Button variant="outline" size="icon" onClick={() => fetchActiveSessions()} title="Atualizar">
-                <History className="w-4 h-4" />
-              </Button>
-            </div>
-          </DialogHeader>
-          <ScrollArea className="flex-1 h-[600px]">
-            <div className="p-6">
-              <Table>
-                <TableHeader className="border-white/5 sticky top-0 bg-black/80 backdrop-blur-md z-10 shadow-sm">
-                  <TableRow className="hover:bg-transparent border-white/5">
-                    <TableHead className="text-zinc-400 font-bold uppercase text-[11px] tracking-widest w-[300px]">Session ID</TableHead>
-                    <TableHead className="text-zinc-400 font-bold uppercase text-[11px] tracking-widest">Node Atual</TableHead>
-                    <TableHead className="text-zinc-400 font-bold uppercase text-[11px] tracking-widest text-right">Iniciado</TableHead>
-                    <TableHead className="w-[100px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoadingSessions ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-12"><div className="flex justify-center flex-col items-center gap-2"><Sparkles className="w-6 h-6 animate-spin text-primary" /><span className="text-xs text-zinc-500">Carregando sessões...</span></div></TableCell></TableRow>
-                  ) : activeSessions.length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-20 text-zinc-500 italic text-lg">Nenhuma sessão ativa encontrada.</TableCell></TableRow>
-                  ) : activeSessions.map(s => (
-                    <TableRow key={s.session_id} className="border-white/5 hover:bg-white/[0.03] transition-colors group">
-                      <TableCell className="font-mono text-xs text-zinc-300 py-4 select-all cursor-pointer hover:text-white transition-colors" title="Clique para copiar" onClick={() => { navigator.clipboard.writeText(s.session_id); toast({ title: "ID Copiado" }); }}>
-                        {s.session_id}
-                      </TableCell>
-                      <TableCell className="text-sm font-bold text-white/90">
-                        <div className="flex items-center gap-2">
-                          <div className={cn("w-2 h-2 rounded-full", s.current_node_id ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "bg-zinc-600")} />
-                          {s.current_node_id ? 'Em Andamento' : 'Aguardando'}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right text-xs text-zinc-400 font-medium">
-                        {s.created_at ? formatDistanceToNow(new Date(s.created_at), { addSuffix: true, locale: ptBR }) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 rounded-full hover:bg-primary/20 hover:text-white"
-                            onClick={() => { setIsSessionsDialogOpen(false); onHighlightNode(s.current_node_id || null, s.steps); }}
-                            title="Localizar no Fluxo"
-                          >
-                            <PanelRightOpen className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 rounded-full hover:bg-red-500/20 hover:text-red-400"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              const res = await fetch(`/api/sessions/active?sessionId=${s.session_id}`, { method: 'DELETE' });
-                              if (res.ok) {
-                                setActiveSessions(prev => prev.filter(sess => sess.session_id !== s.session_id));
-                                toast({ title: "Sessão Encerrada" });
-                              }
-                            }}
-                            title="Encerrar Sessão"
-                          >
-                            <LogOut className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-    </div>
+    </>
   );
 };
 

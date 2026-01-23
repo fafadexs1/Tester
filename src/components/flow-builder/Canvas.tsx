@@ -109,6 +109,16 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   }, [canvasElementRef, canvasOffset, zoomLevel]);
 
   const getHandleCenterOffset = useCallback((node: NodeData, handleId: string | null, type: 'source' | 'target'): number => {
+    // COMPACT NODE LOGIC (Memory, Model, Capability)
+    // These nodes are w-20 h-20 (80px) centered in the 320px wrapper.
+    // Wrapper Padding is ~24px (pt-6).
+    // So the circle starts at Y ~ 24px.
+    // Target Handle should be at Top of circle (-top-1.5) -> Approx Y=22px.
+    if (['ai-memory-config', 'ai-model-config', 'capability'].includes(node.type)) {
+      if (type === 'target') return 22; // Top of the circle
+      if (type === 'source') return 104; // Bottom of the circle (24 + 80 = 104)
+    }
+
     // 1. Target Handles (Inputs) are always at fixed position relative to node top
     if (type === 'target') {
       return 44; // Fixed offset for input handle (top-11 ~ 44px)
@@ -117,8 +127,6 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
     // 2. Source Handles (Outputs) logic
     if (!handleId && node.type !== 'start' && node.type !== 'option' && node.type !== 'switch') {
       // Standard single output node (Message, Api Call, etc)
-      // Usually located at around header height or just below
-      // Standard placement is top-11 (-right-2.5) which is same as target but on right
       return 44;
     }
 
@@ -156,8 +164,6 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
 
     if (node.type === 'option') {
       // Option handles are alongside inputs.
-      // Header ~72px, Content Padding ~20px
-      // Prompt Area (Textarea + Toolbar) ~130px
       const startOfOptionsY = 72 + 20 + 130 + 35; // Approx start of options list
       const optionHeight = 44; // Height of each option row (input + gap)
 
@@ -169,14 +175,10 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
     }
 
     if (node.type === 'switch') {
-      // Header ~72px + Padding ~20px
-      // Variable Input area ~60px
       const startOfCasesY = 72 + 20 + 60 + 35;
       const caseHeight = 44;
 
       if (handleId === 'default') {
-        // Default is at the bottom. 
-        // logic: startOfCases + all cases height + spacing + default row
         const count = node.switchCases?.length || 0;
         return startOfCasesY + (count * caseHeight) + 40;
       }
@@ -201,8 +203,16 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
     if (handlePosition) return handlePosition;
 
     const yOffset = getHandleCenterOffset(node, handleId ?? null, handleType);
-    const x = handleType === 'source' ? node.x + NODE_WIDTH : node.x;
-    return { x, y: node.y + yOffset };
+
+    // For compact nodes, the X should be center of the node wrapper (NODE_WIDTH / 2)
+    // For standard nodes: Source is Right Edge (NODE_WIDTH), Target is Left Edge (0)
+    let xOffset = handleType === 'source' ? NODE_WIDTH : 0;
+
+    if (['ai-memory-config', 'ai-model-config', 'capability'].includes(node.type)) {
+      xOffset = NODE_WIDTH / 2;
+    }
+
+    return { x: node.x + xOffset, y: node.y + yOffset };
   }, [getHandlePosition, getHandleCenterOffset]);
 
   const nodeMap = useMemo(() => {
@@ -284,12 +294,27 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
             if (canInteractWithConnections) onDeleteConnection(conn.id);
           }}
           className="transition-all duration-300"
-          style={{ cursor: canInteractWithConnections ? 'pointer' : 'default', pointerEvents: canInteractWithConnections ? 'all' : 'none' }}
+          style={{ cursor: canInteractWithConnections ? 'pointer' : 'default', pointerEvents: canInteractWithConnections ? 'auto' : 'none' }}
         >
           <title>Clique para remover conexão</title>
-          {/* Background for easier selection */}
+          {/* Background for easier selection - This is the ONLY clickable element */}
           {canInteractWithConnections && (
-            <path d={path} stroke="transparent" strokeWidth={24} fill="none" className="pointer-events-auto" />
+            <path
+              d={path}
+              stroke="transparent"
+              strokeWidth={24}
+              fill="none"
+              style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onDeleteConnection(conn.id);
+              }}
+            />
           )}
 
           {/* Glow Effect - disable if dimmed */}
@@ -301,7 +326,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
               strokeOpacity={isHighlighted || isTraced ? 0.4 : 0.15}
               fill="none"
               filter="url(#glow)"
-              className="transition-all duration-300"
+              className="transition-all duration-300 pointer-events-none"
             />
           )}
 
@@ -313,7 +338,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
             fill="none"
             strokeOpacity={strokeOpacity}
             markerEnd={isHighlighted || isTraced ? "url(#arrow-highlight)" : (isDimmed ? "url(#arrow-dimmed)" : "url(#arrow-default)")}
-            className="transition-all duration-300"
+            className="transition-all duration-300 pointer-events-none"
           />
 
           {/* Animated Pulse - Only for highlighted or TRACED connections */}
@@ -338,7 +363,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
               strokeOpacity="0.5"
               fill="none"
               strokeDasharray="4, 40"
-              className="animate-[dash_4s_linear_infinite]"
+              className="animate-[dash_4s_linear_infinite] pointer-events-none"
             />
           )}
         </g>
@@ -370,7 +395,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
           transformOrigin: 'top left',
         }}
       >
-        <svg width={SVG_CANVAS_DIMENSION} height={SVG_CANVAS_DIMENSION} className="absolute inset-0 z-10 overflow-visible pointer-events-none">
+        <svg width={SVG_CANVAS_DIMENSION} height={SVG_CANVAS_DIMENSION} className="absolute inset-0 z-10 overflow-visible">
           <defs>
             <linearGradient id="connection-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="hsl(var(--neon-purple))" />
@@ -396,6 +421,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
               strokeDasharray="5,5"
               fill="none"
               className="opacity-50"
+              style={{ pointerEvents: 'none' }}
             />
           )}
         </svg>

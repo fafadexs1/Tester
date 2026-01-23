@@ -62,7 +62,7 @@ export async function saveEvolutionInstanceAction(
     }
 
     const rawData = {
-        id: formData.get('id') as string | undefined,
+        id: (formData.get('id') as string) || undefined,
         name: formData.get('name') as string,
         baseUrl: formData.get('baseUrl') as string,
         apiKey: formData.get('apiKey') as string,
@@ -180,7 +180,7 @@ export async function saveChatwootInstanceAction(
     }
 
     const rawData = {
-        id: formData.get('id') as string | undefined,
+        id: (formData.get('id') as string) || undefined,
         name: formData.get('name') as string,
         baseUrl: formData.get('baseUrl') as string,
         apiAccessToken: formData.get('apiAccessToken') as string,
@@ -297,7 +297,7 @@ export async function saveDialogyInstanceAction(
     }
 
     const rawData = {
-        id: formData.get('id') as string | undefined,
+        id: (formData.get('id') as string) || undefined,
         name: formData.get('name') as string,
         baseUrl: formData.get('baseUrl') as string,
         apiKey: formData.get('apiKey') as string,

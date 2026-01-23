@@ -125,13 +125,13 @@ const NodeCard = memo(({
   const getSubNodeConfig = () => {
     switch (node.type) {
       case 'ai-memory-config':
-        return { label: 'Memory', iconColor: 'text-blue-400', bgColor: 'from-blue-500/20 to-blue-600/10', borderColor: 'border-blue-500/30', glowColor: 'rgba(59,130,246,0.3)' };
+        return { label: 'Memory', iconColor: 'text-zinc-400', bgColor: 'from-zinc-900 to-zinc-950', borderColor: 'border-zinc-800', glowColor: 'rgba(0,0,0,0)' };
       case 'ai-model-config':
-        return { label: 'Model', iconColor: 'text-violet-400', bgColor: 'from-violet-500/20 to-violet-600/10', borderColor: 'border-violet-500/30', glowColor: 'rgba(139,92,246,0.3)' };
+        return { label: 'Model', iconColor: 'text-zinc-400', bgColor: 'from-zinc-900 to-zinc-950', borderColor: 'border-zinc-800', glowColor: 'rgba(0,0,0,0)' };
       case 'capability':
-        return { label: node.capabilityName || 'Tool', iconColor: 'text-amber-400', bgColor: 'from-amber-500/20 to-amber-600/10', borderColor: 'border-amber-500/30', glowColor: 'rgba(245,158,11,0.3)' };
+        return { label: node.capabilityName || 'Tool', iconColor: 'text-zinc-400', bgColor: 'from-zinc-900 to-zinc-950', borderColor: 'border-zinc-800', glowColor: 'rgba(0,0,0,0)' };
       default:
-        return { label: 'Node', iconColor: 'text-zinc-400', bgColor: 'from-zinc-500/20 to-zinc-600/10', borderColor: 'border-zinc-500/30', glowColor: 'rgba(113,113,122,0.3)' };
+        return { label: 'Node', iconColor: 'text-zinc-400', bgColor: 'from-zinc-900 to-zinc-950', borderColor: 'border-zinc-800', glowColor: 'rgba(0,0,0,0)' };
     }
   };
   const subNodeConfig = getSubNodeConfig();
@@ -225,17 +225,17 @@ const NodeCard = memo(({
       {/* Node Body */}
       <div className={cn("p-5", isCompactSubNode && "pt-6 pb-6")}>
         {isCompactSubNode ? (
-          <div className="flex flex-col items-center gap-3">
+          <div className="flex flex-col items-center gap-2">
             <div
-              className="relative w-28 h-28 flex items-center justify-center group/circle"
+              className="relative w-20 h-20 flex items-center justify-center group/circle"
             >
               <div
                 className={cn(
-                  "absolute inset-0 rounded-full bg-gradient-to-br border shadow-2xl transition-transform duration-300 group-hover/circle:scale-105 cursor-crosshair",
+                  "absolute inset-0 rounded-full bg-gradient-to-br border shadow-lg transition-transform duration-300 group-hover/circle:scale-105 cursor-crosshair",
                   subNodeConfig.bgColor,
                   subNodeConfig.borderColor
                 )}
-                style={{ boxShadow: `0 0 30px ${subNodeConfig.glowColor}` }}
+                // Removed manual boxShadow/glow from here to rely on class shadow-xl or none
                 onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}
                 data-connector="true" data-handle-type="source" data-handle-id="default" data-node-id={node.id}
                 title="Arraste para conectar"
@@ -243,28 +243,27 @@ const NodeCard = memo(({
 
               <div
                 className={cn(
-                  "absolute inset-4 rounded-full bg-black/80 border flex items-center justify-center cursor-grab active:cursor-grabbing z-10 transition-colors",
+                  "absolute inset-3 rounded-full bg-black/80 border flex items-center justify-center cursor-grab active:cursor-grabbing z-10 transition-colors",
                   subNodeConfig.borderColor
                 )}
                 onMouseDown={(e) => onDragStart(e, node.id)}
               >
-                <div className={cn("transform scale-150", subNodeConfig.iconColor)}>
+                <div className={cn("transform scale-125", subNodeConfig.iconColor)}>
                   {renderNodeIcon(node.type)}
                 </div>
               </div>
 
-              {/* Explicit Top Source Handle for easy connection */}
+              {/* Explicit Top Target Handle for incoming connection */}
               <div
                 className={cn(
                   "absolute -top-1.5 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 bg-black z-50 cursor-crosshair transition-transform hover:scale-125",
                   subNodeConfig.borderColor
                 )}
-                style={{ boxShadow: `0 0 8px ${subNodeConfig.glowColor}` }}
-                onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}
-                data-connector="true" data-handle-type="source" data-handle-id="default" data-node-id={node.id}
-                title="Arraste para conectar ao Agente"
+                onMouseUp={(e) => { e.stopPropagation(); onEndConnection(e, node); }}
+                data-connector="true" data-handle-type="target" data-handle-id="default" data-node-id={node.id}
+                title="Solte para conectar"
               >
-                <div className={cn("absolute inset-0.5 rounded-full opacity-50", subNodeConfig.bgColor)} />
+                <div className={cn("absolute inset-0.5 rounded-full opacity-50", "bg-zinc-500")} />
               </div>
 
               {/* Delete Button - Visible on Hover */}
@@ -279,11 +278,18 @@ const NodeCard = memo(({
 
             </div>
 
-            <div className="text-center space-y-1 px-3">
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-200">{subNodeConfig.label}</p>
-              <p className="text-[9px] text-zinc-500 font-mono">{node.capabilityVersion ? `v${node.capabilityVersion}` : node.type}</p>
+            <div className="text-center space-y-0.5 px-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">{subNodeConfig.label}</p>
+              <p className="text-[9px] text-zinc-500 font-mono">
+                {node.type === 'ai-memory-config'
+                  ? (node.memoryProvider || 'postgres')
+                  : node.type === 'ai-model-config'
+                    ? ('openai') // Default for now until modelProvider is added to NodeData
+                    : node.capabilityVersion ? `v${node.capabilityVersion}` : node.type
+                }
+              </p>
               {node.capabilityContract?.summary && (
-                <p className="text-[9px] text-zinc-500 line-clamp-2">{node.capabilityContract.summary}</p>
+                <p className="text-[9px] text-zinc-500 line-clamp-2 max-w-[120px]">{node.capabilityContract.summary}</p>
               )}
             </div>
           </div>

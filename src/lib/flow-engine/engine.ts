@@ -1,4 +1,3 @@
-
 'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import vm from 'node:vm';
@@ -31,7 +30,7 @@ import jsonata from 'jsonata';
 const CODE_EXECUTION_TIMEOUT_MS = 2000;
 const MAX_AGENT_HISTORY_MESSAGES = 50;
 const MAX_AGENT_MEMORY_SUMMARY_CHARS = 4000;
-const MOJIBAKE_HINT_REGEX = /(Ã.|â.|�)/;
+const MOJIBAKE_HINT_REGEX = /(Ã.|â.|)/;
 
 type AgentHistoryEntry = { role: 'user' | 'assistant' | 'system'; content: string };
 const EXIT_INTENT_PATTERNS = [
@@ -45,7 +44,7 @@ const repairMojibake = (text: string): string => {
   if (!text || !MOJIBAKE_HINT_REGEX.test(text)) return text;
   try {
     const candidate = Buffer.from(text, 'latin1').toString('utf8');
-    const hasReplacement = candidate.includes('�');
+    const hasReplacement = candidate.includes('');
     const hasPortugueseAccents = /[áàãâéêíóôõúüçÁÀÃÂÉÊÍÓÔÕÚÜÇ]/.test(candidate);
     if (!hasReplacement && hasPortugueseAccents) {
       return candidate;
@@ -74,17 +73,83 @@ const mergeMemorySummary = (currentSummary: string | undefined, addition: string
 };
 
 const splitIntoMessageBlocks = (text: string): string[] => {
-  const parts = cleanAndNormalizeText(text)
-    .split(/\n{2,}/)
-    .map(p => p.trim())
-    .filter(Boolean);
+  const cleaned = cleanAndNormalizeText(text);
+  if (!cleaned) return [];
 
-  if (parts.length === 0) return [];
-  if (parts.length <= 3) return parts;
+  // 1. Initial split by double newlines (paragraphs)
+  let parts = cleaned.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
 
-  // Mantém os dois primeiros blocos e junta o restante para não perder conteúdo
-  const mergedTail = parts.slice(2).join(' ');
-  return [parts[0], parts[1], mergedTail];
+  // 2. Refine: Split huge blocks (> 600 chars) by single newlines or sentences
+  // This avoids sending massive walls of text in a single bubble
+  const MAX_CHARS_PER_BLOCK = 600;
+
+  parts = parts.flatMap(part => {
+    if (part.length <= MAX_CHARS_PER_BLOCK) return [part];
+
+    // Try splitting by single newline first
+    const lines = part.split(/\n+/);
+    if (lines.length > 1) {
+      // Re-group lines to avoid tiny 1-word bubbles if possible, but keep under limit
+      const groupedLines: string[] = [];
+      let currentGroup = "";
+
+      for (const line of lines) {
+        if ((currentGroup + "\n" + line).length > MAX_CHARS_PER_BLOCK && currentGroup) {
+          groupedLines.push(currentGroup.trim());
+          currentGroup = line;
+        } else {
+          currentGroup = currentGroup ? currentGroup + "\n" + line : line;
+        }
+      }
+      if (currentGroup) groupedLines.push(currentGroup.trim());
+
+      // If splitting by lines helped reduce size, return it
+      if (groupedLines.every(g => g.length <= MAX_CHARS_PER_BLOCK)) {
+        return groupedLines;
+      }
+    }
+
+    // Fallback: Split by sentence-like endings if still too big or no newlines
+    // Regex matches . ! ? followed by space or end of string.
+    const sentences = part.split(/([.!?]+(?:\s+|$))/).reduce((acc: string[], val, i, arr) => {
+      if (i % 2 === 0) {
+        const next = arr[i + 1] || "";
+        acc.push(val + next);
+      }
+      return acc;
+    }, []);
+
+    const groupedSentences: string[] = [];
+    let currentChunk = "";
+
+    for (const s of sentences) {
+      if ((currentChunk + s).length > MAX_CHARS_PER_BLOCK && currentChunk) {
+        groupedSentences.push(currentChunk.trim());
+        currentChunk = s;
+      } else {
+        currentChunk += s;
+      }
+    }
+    if (currentChunk) groupedSentences.push(currentChunk.trim());
+
+    return groupedSentences;
+  });
+
+  if (parts.length <= 1) return parts;
+
+  // 3. Cap the number of bubbles to prevent spam notification storm
+  // Increased to 7 to allow for more granular updates as requested
+  const MAX_BUBBLES = 7;
+
+  if (parts.length <= MAX_BUBBLES) {
+    return parts;
+  }
+
+  // Merge tail if we exceed the limit (the last bubble might be longer, but it's a trade-off)
+  const head = parts.slice(0, MAX_BUBBLES - 1);
+  const tail = parts.slice(MAX_BUBBLES - 1).join('\n\n');
+
+  return [...head, tail];
 };
 
 const trimAndSummarizeHistory = (
@@ -194,6 +259,11 @@ const buildMemorySettings = (
     retentionDays: memoryNode?.memoryRetentionDays ?? 14,
     maxItems: memoryNode?.memoryMaxItems ?? 60,
     minImportance: memoryNode?.memoryMinImportance ?? 0.35,
+    redisConnectionString: memoryNode?.memoryRedisConnectionString,
+    hybridCacheTTL: memoryNode?.memoryHybridCacheTTL,
+    hybridWriteThrough: true, // Defaulting to true as not yet exposed in UI fully or defaults
+    embeddingsEnabled: memoryNode?.memoryEmbeddingsEnabled,
+    embeddingsModel: memoryNode?.memoryEmbeddingsModel,
   });
 };
 

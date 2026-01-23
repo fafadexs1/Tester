@@ -1,12 +1,15 @@
 import {
+  createMemoryStore,
+} from './memory/factory';
+import {
   MemoryItem,
   MemoryProvider,
   MemoryQuery,
   MemoryScope,
   MemoryType,
   MemoryWrite,
-  createMemoryStore,
-} from './memory-store';
+} from './memory/types';
+import { generateEmbedding } from './memory/embedding';
 import { memoryCompilerFlow } from '@/ai/flows/memory-compiler-flow';
 
 export interface MemorySettings {
@@ -17,6 +20,12 @@ export interface MemorySettings {
   retentionDays: number;
   maxItems: number;
   minImportance: number;
+  // Hybrid & Advanced settings
+  hybridCacheTTL?: number;
+  hybridWriteThrough?: boolean;
+  redisConnectionString?: string;
+  embeddingsEnabled?: boolean;
+  embeddingsModel?: string;
 }
 
 export interface MemoryContext {
@@ -41,6 +50,7 @@ const DEFAULT_SETTINGS: Omit<MemorySettings, 'scopeKey'> = {
   retentionDays: 14,
   maxItems: 60,
   minImportance: 0.35,
+  embeddingsEnabled: false,
 };
 
 const STOPWORDS = new Set([
@@ -93,6 +103,14 @@ const recencyScore = (isoDate: string | null | undefined, halfLifeDays: number):
 };
 
 const scoreMemoryItem = (item: MemoryItem, query: string): number => {
+  // If we have similarity from vector search, use it heavily
+  // The query method in PostgresStore returns 'similarity' if available, but it might not be in the MemoryItem interface strictly unless we added it?
+  // Wait, MemoryItem doesn't have 'similarity'. 
+  // Usually vector stores return it as metadata or we handle it in retrieval order.
+  // Ideally, if vector search was used, the items are ALREADY sorted by similarity.
+  // So we might just trust the order or use a simpler score.
+
+  // For now, let's keep the heuristic score as a fallback or hybrid rerank.
   const queryTokens = tokenize(query);
   const contentTokens = tokenize(item.content);
   const relevance = jaccardSimilarity(queryTokens, contentTokens);
@@ -133,6 +151,11 @@ export const normalizeMemorySettings = (input: Partial<MemorySettings>): MemoryS
   retentionDays: input.retentionDays ?? DEFAULT_SETTINGS.retentionDays,
   maxItems: input.maxItems ?? DEFAULT_SETTINGS.maxItems,
   minImportance: input.minImportance ?? DEFAULT_SETTINGS.minImportance,
+  hybridCacheTTL: input.hybridCacheTTL,
+  hybridWriteThrough: input.hybridWriteThrough,
+  redisConnectionString: input.redisConnectionString,
+  embeddingsEnabled: input.embeddingsEnabled ?? DEFAULT_SETTINGS.embeddingsEnabled,
+  embeddingsModel: input.embeddingsModel,
 });
 
 const heuristicMemoryCandidates = (userMessage: string, assistantMessage: string): MemoryCandidate[] => {
@@ -226,9 +249,22 @@ export const loadMemoryContext = async (params: {
   query: string;
 }): Promise<MemoryContext> => {
   const settings = normalizeMemorySettings(params.settings);
-  const store = createMemoryStore(settings.provider, settings.connectionString);
+  const store = createMemoryStore(settings.provider, settings.connectionString, {
+    hybridCacheTTL: settings.hybridCacheTTL,
+    hybridWriteThrough: settings.hybridWriteThrough,
+    redisConnectionString: settings.redisConnectionString,
+  });
 
   await store.deleteExpired?.();
+
+  // Generate embedding for query if enabled
+  let queryEmbedding: number[] | undefined;
+  if (settings.embeddingsEnabled && params.query) {
+    const result = await generateEmbedding(params.query, settings.embeddingsModel);
+    if (result) {
+      queryEmbedding = result.embedding;
+    }
+  }
 
   const queryParams: MemoryQuery = {
     workspaceId: params.workspaceId,
@@ -237,9 +273,16 @@ export const loadMemoryContext = async (params: {
     scopeKey: settings.scopeKey,
     limit: Math.min(settings.maxItems * 3, 200),
     minImportance: settings.minImportance,
+    embedding: queryEmbedding,
+    similarityThreshold: 0.5, // Default threshold
   };
 
   const items = await store.query(queryParams);
+
+  // Rerank or score items
+  // If we used vector search, items are already sorted by similarity in the DB layer typically (PostgresMemoryStore does this)
+  // But we still apply the scoring heuristic for a balanced view (recency + importance)
+
   const scored = items
     .map(item => ({ item, score: scoreMemoryItem(item, params.query) }))
     .sort((a, b) => b.score - a.score);
@@ -292,7 +335,11 @@ export const recordMemory = async (params: {
   modelName?: string;
 }): Promise<void> => {
   const settings = normalizeMemorySettings(params.settings);
-  const store = createMemoryStore(settings.provider, settings.connectionString);
+  const store = createMemoryStore(settings.provider, settings.connectionString, {
+    hybridCacheTTL: settings.hybridCacheTTL,
+    hybridWriteThrough: settings.hybridWriteThrough,
+    redisConnectionString: settings.redisConnectionString,
+  });
 
   const candidates = await compileMemoryCandidates({
     userMessage: params.userMessage,
@@ -304,17 +351,27 @@ export const recordMemory = async (params: {
   const filtered = filterCandidates(candidates, settings.minImportance);
   if (!filtered.length) return;
 
-  const payload: MemoryWrite[] = filtered.map(candidate => ({
-    workspaceId: params.workspaceId,
-    agentId: params.agentId,
-    scope: settings.scope,
-    scopeKey: settings.scopeKey,
-    type: candidate.type,
-    content: truncateText(candidate.content, 500),
-    importance: candidate.importance,
-    tags: candidate.tags,
-    expiresAt: resolveExpiry(candidate, settings),
-    source: 'compiler',
+  // Process embeddings in parallel if enabled
+  const payload: MemoryWrite[] = await Promise.all(filtered.map(async candidate => {
+    let embedding: number[] | undefined;
+    if (settings.embeddingsEnabled) {
+      const result = await generateEmbedding(candidate.content, settings.embeddingsModel);
+      if (result) embedding = result.embedding;
+    }
+
+    return {
+      workspaceId: params.workspaceId,
+      agentId: params.agentId,
+      scope: settings.scope,
+      scopeKey: settings.scopeKey,
+      type: candidate.type,
+      content: truncateText(candidate.content, 500),
+      importance: candidate.importance,
+      tags: candidate.tags,
+      expiresAt: resolveExpiry(candidate, settings),
+      source: 'compiler',
+      embedding,
+    };
   }));
 
   await store.put(payload);

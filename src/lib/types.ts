@@ -268,13 +268,22 @@ export interface NodeData {
   aiApiKey?: string;
 
   // AI Memory Config Node
-  memoryProvider?: 'postgres' | 'redis' | 'mariadb' | 'in-memory';
+  memoryProvider?: 'postgres' | 'redis' | 'mariadb' | 'in-memory' | 'hybrid';
   memoryConnectionString?: string;
   memoryScope?: 'session' | 'user' | 'workspace';
   memoryScopeKeyVariable?: string;
   memoryRetentionDays?: number;
   memoryMaxItems?: number;
   memoryMinImportance?: number;
+  memoryHybridCacheTTL?: number;
+  memoryHybridWriteThrough?: boolean;
+  memoryRedisConnectionString?: string;
+  memoryEmbeddingsEnabled?: boolean;
+  memoryEmbeddingsModel?: string;
+  memoryIndexType?: 'ivfflat' | 'hnsw';
+  memoryCompressionEnabled?: boolean;
+  memoryAutoSummarize?: boolean;
+  memorySummarizeThreshold?: number;
 }
 
 export interface Connection {
