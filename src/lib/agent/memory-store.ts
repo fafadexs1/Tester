@@ -1,5 +1,3 @@
-'use server';
-
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { runQuery } from '@/app/actions/databaseActions';
