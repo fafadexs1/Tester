@@ -311,6 +311,8 @@ async function sendOmniChannelMessage(
           chatId: String(chatId),
           content
         });
+        // Small delay to ensure message order is preserved by the API
+        await new Promise(resolve => setTimeout(resolve, 500));
         return;
       } else {
         console.error(`[sendOmniChannelMessage] Instância Dialogy ${workspace.dialogy_instance_id} não encontrada na base.`);
@@ -335,6 +337,8 @@ async function sendOmniChannelMessage(
           conversationId: Number(conversationId),
           content
         });
+        // Small delay to ensure message order is preserved by the API
+        await new Promise(resolve => setTimeout(resolve, 500));
         return;
       }
     }

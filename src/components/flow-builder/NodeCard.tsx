@@ -55,7 +55,7 @@ import { IntentionRouterNode } from './nodes/IntentionRouterNode';
 import { ModelNode } from './nodes/ModelNode';
 import { MemoryNode } from './nodes/MemoryNode';
 
-const NODE_COMPONENTS: Record<string, React.FC<NodeComponentProps>> = {
+export const NODE_COMPONENTS: Record<string, React.FC<NodeComponentProps>> = {
   start: StartNode, message: MessageNode, input: InputNode, option: OptionNode,
   condition: ConditionNode, switch: SwitchNode, 'api-call': ApiCallNode,
   'set-variable': SetVariableNode, delay: DelayNode, redirect: RedirectNode,
@@ -87,6 +87,7 @@ interface NodeCardProps {
   onDuplicateNode: (id: string) => void;
   onStartConnection: (e: React.MouseEvent, node: NodeData, handleId: string) => void;
   onEndConnection: (e: React.MouseEvent, node: NodeData) => void;
+  onConfigure?: (id: string) => void;
   availableVariables: string[];
   activeWorkspace?: WorkspaceData | null;
 }
@@ -103,40 +104,67 @@ const renderNodeIcon = (type: string) => {
     case 'ai-text-generation': return <Sparkles className={cn(iconClass, "text-violet-400")} />;
     case 'api-call': return <Webhook className={cn(iconClass, "text-pink-400")} />;
     case 'end-flow': return <CheckCircle2 className={cn(iconClass, "text-rose-500")} />;
+    case 'ai-memory-config': return <Database className={cn(iconClass, "text-blue-400")} />;
+    case 'ai-model-config': return <BrainCircuit className={cn(iconClass, "text-violet-400")} />;
     default: return <Command className={cn(iconClass, "text-zinc-500")} />;
   }
 };
 
 const NodeCard = memo(({
-  node, isSelected, onSelect, onDragStart, onUpdateNode, onDeleteNode, onDuplicateNode, onStartConnection, onEndConnection, availableVariables, activeWorkspace
+  node, isSelected, onSelect, onDragStart, onUpdateNode, onDeleteNode, onDuplicateNode, onStartConnection, onEndConnection, onConfigure, availableVariables, activeWorkspace
 }: NodeCardProps) => {
   const NodeComponent = NODE_COMPONENTS[node.type];
   const showInputHandle = node.type !== 'start';
-  const isToolNode = node.type === 'capability';
-  const isCompactToolNode = isToolNode && !isSelected;
-  const toolLabel = node.capabilityName || node.title || 'Tool';
-  const toolSubLabel = node.capabilityVersion ? `v${node.capabilityVersion}` : 'MCP Tool';
-  const toolSummary = node.capabilityContract?.summary || node.capabilityContract?.description || '';
+
+  // N8N-style sub-nodes that should be circular
+  const SUB_NODE_TYPES = ['ai-memory-config', 'ai-model-config', 'capability'];
+  const isSubNode = SUB_NODE_TYPES.includes(node.type);
+  const isCompactSubNode = isSubNode; // Always compact/circular
+
+  // Labels for sub-nodes
+  const getSubNodeConfig = () => {
+    switch (node.type) {
+      case 'ai-memory-config':
+        return { label: 'Memory', iconColor: 'text-blue-400', bgColor: 'from-blue-500/20 to-blue-600/10', borderColor: 'border-blue-500/30', glowColor: 'rgba(59,130,246,0.3)' };
+      case 'ai-model-config':
+        return { label: 'Model', iconColor: 'text-violet-400', bgColor: 'from-violet-500/20 to-violet-600/10', borderColor: 'border-violet-500/30', glowColor: 'rgba(139,92,246,0.3)' };
+      case 'capability':
+        return { label: node.capabilityName || 'Tool', iconColor: 'text-amber-400', bgColor: 'from-amber-500/20 to-amber-600/10', borderColor: 'border-amber-500/30', glowColor: 'rgba(245,158,11,0.3)' };
+      default:
+        return { label: 'Node', iconColor: 'text-zinc-400', bgColor: 'from-zinc-500/20 to-zinc-600/10', borderColor: 'border-zinc-500/30', glowColor: 'rgba(113,113,122,0.3)' };
+    }
+  };
+  const subNodeConfig = getSubNodeConfig();
 
   return (
     <div
       className={cn(
         "relative w-full rounded-[2rem] transition-[transform,colors,box-shadow] duration-300 group/card will-change-transform",
-        "neo-glass border-white/[0.05]",
+        isCompactSubNode ? "bg-transparent shadow-none border-none" : "neo-glass border-white/[0.05]",
         isSelected
-          ? "scale-[1.02] border-primary/40 ring-1 ring-primary/20 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.8)] z-30"
+          ? (isCompactSubNode
+            ? "z-30 scale-105" // For circular nodes, just scale up slightly and bring to front, NO borders/rectangles
+            : "scale-[1.02] border-primary/40 ring-1 ring-primary/20 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.8)] z-30")
           : "hover:border-white/10 hover:shadow-2xl z-20"
       )}
       onMouseDown={(e) => { e.stopPropagation(); onSelect(node.id, e.shiftKey); }}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        if (isSubNode && onConfigure) {
+          onConfigure(node.id);
+        }
+      }}
       data-node-id={node.id}
     >
-      {/* Aurora Glow behind card */}
-      <div className={cn(
-        "absolute -inset-1 rounded-[2.5rem] opacity-0 blur-lg transition-opacity duration-300 -z-10 bg-primary/5 will-change-[opacity]",
-        isSelected && "opacity-100"
-      )} />
+      {/* Aurora Glow behind card - Disable for compact nodes */}
+      {!isCompactSubNode && (
+        <div className={cn(
+          "absolute -inset-1 rounded-[2.5rem] opacity-0 blur-lg transition-opacity duration-300 -z-10 bg-primary/5 will-change-[opacity]",
+          isSelected && "opacity-100"
+        )} />
+      )}
 
-      {!isCompactToolNode && (
+      {!isCompactSubNode && (
         <div
           className={cn(
             "flex items-center justify-between p-4 cursor-grab active:cursor-grabbing rounded-t-[2rem] border-b border-white/[0.03] bg-white/[0.01]",
@@ -183,7 +211,7 @@ const NodeCard = memo(({
       )}
 
       {/* Target Handle (Input) */}
-      {showInputHandle && !isCompactToolNode && (
+      {showInputHandle && !isCompactSubNode && (
         <div
           className="absolute -left-2 top-11 z-30 flex items-center justify-center group/h-in w-4 h-4"
           onMouseUp={(e) => { e.stopPropagation(); onEndConnection(e, node); }}
@@ -195,43 +223,67 @@ const NodeCard = memo(({
       )}
 
       {/* Node Body */}
-      <div className={cn("p-5", isCompactToolNode && "pt-6 pb-6")}>
-        {isCompactToolNode ? (
+      <div className={cn("p-5", isCompactSubNode && "pt-6 pb-6")}>
+        {isCompactSubNode ? (
           <div className="flex flex-col items-center gap-3">
             <div
-              className="relative w-28 h-28 flex items-center justify-center"
+              className="relative w-28 h-28 flex items-center justify-center group/circle"
             >
               <div
-                className="absolute inset-0 rounded-full bg-gradient-to-br from-sky-500/20 via-transparent to-amber-400/20 border border-white/10 shadow-[0_0_24px_rgba(56,189,248,0.25)] cursor-crosshair"
+                className={cn(
+                  "absolute inset-0 rounded-full bg-gradient-to-br border shadow-2xl transition-transform duration-300 group-hover/circle:scale-105 cursor-crosshair",
+                  subNodeConfig.bgColor,
+                  subNodeConfig.borderColor
+                )}
+                style={{ boxShadow: `0 0 30px ${subNodeConfig.glowColor}` }}
                 onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}
                 data-connector="true" data-handle-type="source" data-handle-id="default" data-node-id={node.id}
                 title="Arraste para conectar"
               />
-              <div className="absolute inset-1.5 rounded-full border border-dashed border-white/10 animate-[spin_12s_linear_infinite] pointer-events-none" />
+
               <div
-                className="absolute inset-4 rounded-full bg-black/70 border border-white/10 flex items-center justify-center cursor-grab active:cursor-grabbing z-10"
+                className={cn(
+                  "absolute inset-4 rounded-full bg-black/80 border flex items-center justify-center cursor-grab active:cursor-grabbing z-10 transition-colors",
+                  subNodeConfig.borderColor
+                )}
                 onMouseDown={(e) => onDragStart(e, node.id)}
               >
-                <Blocks className="w-6 h-6 text-sky-300" />
+                <div className={cn("transform scale-150", subNodeConfig.iconColor)}>
+                  {renderNodeIcon(node.type)}
+                </div>
               </div>
 
-              {showInputHandle && (
-                <div
-                  className="absolute -left-3 top-1/2 -translate-y-1/2 z-30 flex items-center justify-center group/h-in w-4 h-4"
-                  onMouseUp={(e) => { e.stopPropagation(); onEndConnection(e, node); }}
-                  data-connector="true" data-handle-type="target" data-handle-id="default" data-node-id={node.id}
-                >
-                  <div className="absolute inset-0 bg-primary/20 rounded-full blur-md opacity-0 group-hover/h-in:opacity-100 transition-opacity" />
-                  <div className="w-2 h-2 rounded-full border-2 border-primary bg-black group-hover/h-in:scale-125 transition-all" />
-                </div>
-              )}
+              {/* Explicit Top Source Handle for easy connection */}
+              <div
+                className={cn(
+                  "absolute -top-1.5 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 bg-black z-50 cursor-crosshair transition-transform hover:scale-125",
+                  subNodeConfig.borderColor
+                )}
+                style={{ boxShadow: `0 0 8px ${subNodeConfig.glowColor}` }}
+                onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}
+                data-connector="true" data-handle-type="source" data-handle-id="default" data-node-id={node.id}
+                title="Arraste para conectar ao Agente"
+              >
+                <div className={cn("absolute inset-0.5 rounded-full opacity-50", subNodeConfig.bgColor)} />
+              </div>
+
+              {/* Delete Button - Visible on Hover */}
+              <button
+                className="absolute top-0 right-0 p-1.5 rounded-full bg-zinc-900 border border-zinc-700 text-zinc-400 hover:bg-red-500/20 hover:border-red-500 hover:text-red-500 transition-all opacity-0 group-hover/circle:opacity-100 z-50 transform hover:scale-110"
+                onClick={(e) => { e.stopPropagation(); onDeleteNode(node.id); }}
+                title="Deletar Nó"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+
+
             </div>
 
             <div className="text-center space-y-1 px-3">
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-200">{toolLabel}</p>
-              <p className="text-[9px] text-zinc-500 font-mono">{toolSubLabel}</p>
-              {toolSummary && (
-                <p className="text-[9px] text-zinc-500 line-clamp-2">{toolSummary}</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-200">{subNodeConfig.label}</p>
+              <p className="text-[9px] text-zinc-500 font-mono">{node.capabilityVersion ? `v${node.capabilityVersion}` : node.type}</p>
+              {node.capabilityContract?.summary && (
+                <p className="text-[9px] text-zinc-500 line-clamp-2">{node.capabilityContract.summary}</p>
               )}
             </div>
           </div>
@@ -250,7 +302,7 @@ const NodeCard = memo(({
       </div>
 
       {/* Source Handle (Output) */}
-      {!SELF_CONTAINED_NODES.includes(node.type) && !isCompactToolNode && (
+      {!SELF_CONTAINED_NODES.includes(node.type) && !isCompactSubNode && (
         <div
           className="absolute -right-2 top-11 z-30 flex items-center justify-center group/h-out w-4 h-4 cursor-crosshair"
           onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}

@@ -11,6 +11,7 @@ import {
 } from '@/lib/constants';
 import FlowSidebar from './FlowSidebar';
 import Canvas from './Canvas';
+import { NODE_COMPONENTS } from './NodeCard';
 import TopBar from './TopBar';
 import { ZoomControls } from './ZoomControls';
 import TestChatPanel from './TestChatPanel';
@@ -24,6 +25,8 @@ import {
 } from '@/app/actions/databaseActions';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 
 const LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN = 'nexusflowChatPanelOpen';
@@ -274,6 +277,12 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isInteracting, setIsInteracting] = useState(false);
   const [isSidebarActive, setIsSidebarActive] = useState(false);
+
+  const [configuringNodeId, setConfiguringNodeId] = useState<string | null>(null);
+
+  const handleConfigureNode = useCallback((id: string) => {
+    setConfiguringNodeId(id);
+  }, []);
 
   const isPanning = useRef(false);
   const isDraggingNode = useRef(false);
@@ -564,6 +573,8 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     });
   }, [updateActiveWorkspace]);
 
+
+
   const handleStartConnection = useCallback(
     (event: React.MouseEvent, fromNodeData: NodeData, sourceHandleId?: string) => {
       if (!canvasRef.current) return;
@@ -800,6 +811,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   }, [updateActiveWorkspace]);
 
   const deleteConnection = useCallback((connectionId: string) => {
+    console.log("Deletando conexão:", connectionId);
     updateActiveWorkspace(ws => ({
       ...ws,
       connections: (ws.connections || []).filter(conn => conn.id !== connectionId)
@@ -954,6 +966,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
               onNodeDragStart={handleNodeDragStart}
               onUpdatePosition={handleUpdateNodePosition}
               onEndConnection={(e: React.MouseEvent, node: NodeData) => { /* Handle connection end if needed logic here, mostly handled by mouseUp global */ }}
+              onConfigureNode={handleConfigureNode}
               disableAnimations={isSidebarActive}
               tracePathConnectionIds={tracePathConnectionIds}
             />
@@ -965,6 +978,50 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
             />
           )}
         </div>
+
+        {/* Node Configuration Dialog */}
+        {configuringNodeId && activeWorkspace?.nodes.find(n => n.id === configuringNodeId) && (
+          <Dialog open={!!configuringNodeId} onOpenChange={(open) => !open && setConfiguringNodeId(null)}>
+            <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-6 dark:bg-zinc-950 dark:border-white/10">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                    {(() => {
+                      const nodeData = activeWorkspace?.nodes.find(n => n.id === configuringNodeId);
+                      // We can reuse renderNodeIcon logic if we export it or just use generic text
+                      return nodeData?.title || 'Node Configuration';
+                    })()}
+                  </div>
+                </DialogTitle>
+                <DialogDescription>
+                  Configure the properties of this node. Changes are saved automatically.
+                </DialogDescription>
+              </DialogHeader>
+              <ScrollArea className="flex-1 pr-4">
+                {(() => {
+                  const nodeData = activeWorkspace?.nodes.find(n => n.id === configuringNodeId);
+                  if (!nodeData) return null;
+                  const Component = NODE_COMPONENTS[nodeData.type];
+                  if (!Component) return <div className="p-4 text-red-400">Component definition not found for {nodeData.type}</div>;
+
+                  return (
+                    <div className="pt-4 pb-8 space-y-6">
+                      <Component
+                        node={nodeData}
+                        activeWorkspace={activeWorkspace}
+                        availableVariables={availableVariablesByNode[nodeData.id] || []}
+                        onUpdate={updateNode}
+                        onStartConnection={() => { }}
+                        onEndConnection={() => { }}
+                        activeNodeId={nodeData.id}
+                      />
+                    </div>
+                  );
+                })()}
+              </ScrollArea>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </DndProvider>
   );

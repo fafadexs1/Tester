@@ -39,6 +39,7 @@ interface CanvasProps {
   onNodeDragStart: (e: React.MouseEvent, id: string) => void;
   onUpdatePosition: (id: string, x: number, y: number) => void;
   onEndConnection: (e: React.MouseEvent, node: NodeData) => void;
+  onConfigureNode?: (id: string) => void;
   disableAnimations: boolean;
   tracePathConnectionIds?: Set<string> | null;
 }
@@ -50,7 +51,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDuplicateNode, onDeleteConnection,
   onCanvasMouseDown, isInteracting, highlightedConnectionId, setHighlightedConnectionId,
   availableVariablesByNode, highlightedNodeIdBySession, activeWorkspace,
-  selectedNodeIds, onSelectNode, onNodeDragStart, onUpdatePosition, onEndConnection,
+  selectedNodeIds, onSelectNode, onNodeDragStart, onUpdatePosition, onEndConnection, onConfigureNode,
   disableAnimations, tracePathConnectionIds
 }, ref) => {
   const localCanvasRef = useRef<HTMLDivElement>(null);
@@ -238,6 +239,7 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
             onDragStart={onNodeDragStart}
             onUpdatePosition={onUpdatePosition}
             onEndConnection={onEndConnection}
+            onConfigure={onConfigureNode}
           />
         </motion.div>
       ))}
@@ -277,9 +279,14 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
           key={conn.id}
           onMouseEnter={canInteractWithConnections ? () => setHighlightedConnectionId(conn.id) : undefined}
           onMouseLeave={canInteractWithConnections ? () => setHighlightedConnectionId(null) : undefined}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (canInteractWithConnections) onDeleteConnection(conn.id);
+          }}
           className="transition-all duration-300"
           style={{ cursor: canInteractWithConnections ? 'pointer' : 'default', pointerEvents: canInteractWithConnections ? 'all' : 'none' }}
         >
+          <title>Clique para remover conexão</title>
           {/* Background for easier selection */}
           {canInteractWithConnections && (
             <path d={path} stroke="transparent" strokeWidth={24} fill="none" className="pointer-events-auto" />

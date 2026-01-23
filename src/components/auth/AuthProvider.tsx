@@ -7,7 +7,6 @@ import type { User, Organization } from '@/lib/types';
 import { loginAction, logoutAction, registerAction } from '@/app/actions/authActions';
 import { getCurrentUser } from '@/lib/auth';
 import { getOrganizationsForUserAction } from '@/app/actions/organizationActions';
-import { Loader2 } from 'lucide-react';
 
 interface AuthContextType {
   user: User | null;
@@ -145,11 +144,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading || isProcessingSSO) return; // Wait for SSO
 
+    // Pages that don't require authentication redirect logic
+    const noRedirectPages = ['/login', '/logout', '/profile', '/admin', '/presentation'];
+    const isNoRedirectPage = noRedirectPages.some(p => pathname === p) || pathname.startsWith('/flow/');
+
     const isAuthPage = pathname === '/login';
 
     if (user && isAuthPage) {
       router.push('/');
-    } else if (!user && !isAuthPage && pathname !== '/logout') {
+    } else if (!user && !isNoRedirectPage) {
       // PRESERVE QUERY PARAMS on redirect
       const currentSearch = searchParams.toString();
       const nextUrl = currentSearch ? `/login?${currentSearch}` : '/login';
@@ -195,33 +198,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshAuth: fetchUserAndOrgs,
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <span className="ml-4 text-muted-foreground">Verificando sessão...</span>
-      </div>
-    );
-  }
-
-  if (!user && !['/login', '/logout'].includes(pathname)) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <span className="ml-4 text-muted-foreground">Redirecionando para o login...</span>
-      </div>
-    );
-  }
-
-  if (user && pathname === '/login') {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-background">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <span className="ml-4 text-muted-foreground">Redirecionando para o dashboard...</span>
-      </div>
-    );
-  }
-
+  // Return children directly - let AppShell handle the loading display
+  // This prevents the UI from freezing when loading/redirect states get stuck
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
