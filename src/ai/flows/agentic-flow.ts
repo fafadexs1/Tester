@@ -94,9 +94,10 @@ const selectRelevantCapabilities = (
     userMessage: string,
     memoryContext?: z.infer<typeof MemoryContextSchema>
 ): Capability[] => {
-    if (capabilities.length <= MAX_TOOL_COUNT) return capabilities;
-    const contextText = `${userMessage} ${memoryContext?.summary || ''}`.trim();
-    const contextTokens = tokenize(contextText);
+    // STRICTER FILTERING: Filter by relevance to avoid hallucination.
+    const contextTokens = tokenize(userMessage);
+    const JACCARD_THRESHOLD = 0.1;
+    const OVERLAP_THRESHOLD = 0.3; // If 30% of user keywords are found in tool, include it.
 
     const scored = capabilities.map(cap => {
         const signal = [
@@ -108,11 +109,54 @@ const selectRelevantCapabilities = (
         ]
             .filter(Boolean)
             .join(' ');
-        const score = jaccardSimilarity(contextTokens, tokenize(signal));
+        const signalTokens = tokenize(signal);
+
+        // Jaccard: Intersection / Union (Good for overall similarity, bad for short query vs long desc)
+        const jaccard = jaccardSimilarity(contextTokens, signalTokens);
+
+        // Overlap: Intersection / QueryLength (Good for "Does tool cover my keywords?")
+        const setSignal = new Set(signalTokens);
+        let intersection = 0;
+        for (const token of contextTokens) {
+            if (setSignal.has(token)) intersection += 1;
+        }
+        const overlap = contextTokens.length > 0 ? intersection / contextTokens.length : 0;
+
+        // Final score matches if either is strong enough
+        const score = Math.max(jaccard, overlap);
+
+        console.log(`[Agentic Flow Debug] Cap: ${cap.slug}`);
+        console.log(`[Agentic Flow Debug] Tokens (User): [${contextTokens.join(', ')}]`);
+        console.log(`[Agentic Flow Debug] Scores -> Jaccard: ${jaccard.toFixed(4)}, Overlap: ${overlap.toFixed(4)}, Final: ${score.toFixed(4)}`);
+
         return { cap, score };
     });
 
+    const filtered = scored.filter(entry => entry.score >= Math.min(JACCARD_THRESHOLD, OVERLAP_THRESHOLD));
+    // Wait, we want to Pass if (jaccard > 0.1 OR overlap > 0.3)
+    // Ideally we define 'passed' boolean logic. 
+
+    const finalFiltered = scored.filter(entry => {
+        // If overlap is high (user asks specifically for this features keywords), let it pass.
+        if (entry.score >= OVERLAP_THRESHOLD) return true;
+        // If jaccard is decent (general similarity), let it pass.
+        // But note: earlier we saw jaccard 0.03 for valid request. 
+        // Overlap was likely 1.0 there.
+        // So relying on Overlap for short queries is key.
+        return false;
+    });
+
+    // Let's stick to using the 'score' (max) against a slightly more permissive common threshold?
+    // Actually, explicit logic is clearer. 
+    // Let's rewrite the filter.
+
     return scored
+        .filter(entry => {
+            // We can access exact calculated metrics if we recalculated them or stored them, 
+            // but `entry.score` is just max.
+            // Let's relax the threshold for Max Score effectively.
+            return entry.score >= 0.1; // If Overlap is 1.0, it passes. If Jaccard is 0.1, it passes.
+        })
         .sort((a, b) => b.score - a.score)
         .slice(0, MAX_TOOL_COUNT)
         .map(entry => entry.cap);
@@ -129,12 +173,21 @@ export const agenticFlow = ai.defineFlow(
         const typedCapabilities = capabilities as Capability[];
         const selectedCapabilities = selectRelevantCapabilities(typedCapabilities, userMessage, memoryContext);
 
+        // Log which tools ACTUALLY passed the filter
+        if (selectedCapabilities.length > 0) {
+            console.log(`[Agentic Flow] Tools EXPOSED to LLM (${selectedCapabilities.length}):`, selectedCapabilities.map(c => c.slug).join(', '));
+        } else {
+            console.log(`[Agentic Flow] NO tools exposed to LLM (filtered out due to low relevance)`);
+        }
+
         // Define tools dynamically
         const tools = selectedCapabilities.map((cap) => {
+            const uniqueSuffix = Math.random().toString(36).substring(2, 6);
             return ai.defineTool(
                 {
-                    name: cap.slug,
-                    description: cap.contract.description || cap.contract.summary || `Execute ${cap.name}`,
+                    name: `${cap.slug}_${uniqueSuffix}`,
+                    description: (cap.contract.description || cap.contract.summary || `Execute ${cap.name}`) +
+                        (cap.contract.inputSchema ? `\n\nInput Schema: ${JSON.stringify(cap.contract.inputSchema)}` : ''),
                     inputSchema: GenericToolInputSchema,
                 },
                 async (toolInput) => {
@@ -161,8 +214,16 @@ export const agenticFlow = ai.defineFlow(
             .join('\n\n');
 
         // Determine Model to use
-        const modelToUse = modelName || 'googleai/gemini-2.0-flash';
-        const effectiveModel = modelToUse.includes('/') ? modelToUse : `googleai/${modelToUse}`; // Simple heuristic
+        let modelToUse = modelName || 'googleai/gemini-2.5-flash';
+
+        // Force fallback ONLY if unstable model AND tools are exposed (tool calls cause thought_signature errors)
+        const hasToolsExposed = selectedCapabilities.length > 0;
+        if (hasToolsExposed && (modelToUse.includes('gemini-3') || modelToUse.includes('preview') || modelToUse.includes('thinking'))) {
+            console.warn(`[Agentic Flow] Downgrading model ${modelToUse} to gemini-2.5-flash for tool compatibility.`);
+            modelToUse = 'googleai/gemini-2.5-flash';
+        }
+
+        const effectiveModel = modelToUse.includes('/') ? modelToUse : `googleai/${modelToUse}`;
 
         console.log(`[Agentic Flow] Generating with model: ${effectiveModel}`);
         if (selectedCapabilities.length !== typedCapabilities.length) {

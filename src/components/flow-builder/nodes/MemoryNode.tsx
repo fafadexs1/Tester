@@ -186,7 +186,10 @@ export const MemoryNode: React.FC<NodeComponentProps> = ({ node, onUpdate }) => 
                                         <SelectItem value="openai-text-embedding-3-small">OpenAI (text-embedding-3-small)</SelectItem>
                                         <SelectItem value="openai-text-embedding-3-large">OpenAI (text-embedding-3-large)</SelectItem>
                                         <SelectItem value="start-mistral-embed">Mistral (embed)</SelectItem>
-                                        <SelectItem value="local-bert">Local (BERT - Experimental)</SelectItem>
+                                        <SelectItem value="start-mistral-embed">Mistral (embed)</SelectItem>
+                                        <SelectItem value="local-minilm">Local (MiniLM-L6 - Fast)</SelectItem>
+                                        <SelectItem value="local-e5">Local (E5-Small - High Quality)</SelectItem>
+                                        <SelectItem value="local-hybrid">Local (Smart Hybrid: MiniLM + E5)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

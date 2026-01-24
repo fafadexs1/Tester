@@ -54,6 +54,7 @@ import {
 import { IntentionRouterNode } from './nodes/IntentionRouterNode';
 import { ModelNode } from './nodes/ModelNode';
 import { MemoryNode } from './nodes/MemoryNode';
+import { HttpToolNode } from './nodes/HttpToolNode';
 
 export const NODE_COMPONENTS: Record<string, React.FC<NodeComponentProps>> = {
   start: StartNode, message: MessageNode, input: InputNode, option: OptionNode,
@@ -72,9 +73,10 @@ export const NODE_COMPONENTS: Record<string, React.FC<NodeComponentProps>> = {
   'supabase-delete-row': SupabaseDeleteRowNode, 'intention-router': IntentionRouterNode,
   'ai-model-config': ModelNode,
   'ai-memory-config': MemoryNode,
+  'http-tool': HttpToolNode,
 };
 
-const SELF_CONTAINED_NODES = ['start', 'option', 'condition', 'switch', 'time-of-day', 'intention-router', 'api-call', 'message', 'input', 'end-flow'];
+const SELF_CONTAINED_NODES = ['start', 'option', 'condition', 'switch', 'time-of-day', 'intention-router', 'api-call', 'message', 'input', 'end-flow', 'http-tool'];
 
 interface NodeCardProps {
   node: NodeData;
@@ -103,6 +105,7 @@ const renderNodeIcon = (type: string) => {
     case 'switch': return <GitMerge className={cn(iconClass, "text-indigo-400")} />;
     case 'ai-text-generation': return <Sparkles className={cn(iconClass, "text-violet-400")} />;
     case 'api-call': return <Webhook className={cn(iconClass, "text-pink-400")} />;
+    case 'http-tool': return <Webhook className={cn(iconClass, "text-rose-400")} />;
     case 'end-flow': return <CheckCircle2 className={cn(iconClass, "text-rose-500")} />;
     case 'ai-memory-config': return <Database className={cn(iconClass, "text-blue-400")} />;
     case 'ai-model-config': return <BrainCircuit className={cn(iconClass, "text-violet-400")} />;
@@ -114,10 +117,10 @@ const NodeCard = memo(({
   node, isSelected, onSelect, onDragStart, onUpdateNode, onDeleteNode, onDuplicateNode, onStartConnection, onEndConnection, onConfigure, availableVariables, activeWorkspace
 }: NodeCardProps) => {
   const NodeComponent = NODE_COMPONENTS[node.type];
-  const showInputHandle = node.type !== 'start';
+  const showInputHandle = node.type !== 'start' && node.type !== 'http-tool';
 
   // N8N-style sub-nodes that should be circular
-  const SUB_NODE_TYPES = ['ai-memory-config', 'ai-model-config', 'capability'];
+  const SUB_NODE_TYPES = ['ai-memory-config', 'ai-model-config', 'capability', 'http-tool'];
   const isSubNode = SUB_NODE_TYPES.includes(node.type);
   const isCompactSubNode = isSubNode; // Always compact/circular
 
@@ -130,6 +133,8 @@ const NodeCard = memo(({
         return { label: 'Model', iconColor: 'text-zinc-400', bgColor: 'from-zinc-900 to-zinc-950', borderColor: 'border-zinc-800', glowColor: 'rgba(0,0,0,0)' };
       case 'capability':
         return { label: node.capabilityName || 'Tool', iconColor: 'text-zinc-400', bgColor: 'from-zinc-900 to-zinc-950', borderColor: 'border-zinc-800', glowColor: 'rgba(0,0,0,0)' };
+      case 'http-tool':
+        return { label: node.httpToolName || 'API Tool', iconColor: 'text-rose-400', bgColor: 'from-rose-950/20 to-zinc-950', borderColor: 'border-rose-900/50', glowColor: 'rgba(244, 63, 94, 0.2)' };
       default:
         return { label: 'Node', iconColor: 'text-zinc-400', bgColor: 'from-zinc-900 to-zinc-950', borderColor: 'border-zinc-800', glowColor: 'rgba(0,0,0,0)' };
     }

@@ -67,6 +67,7 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = ({ onInteractionChange 
       { type: "ai-memory-config", label: "Memory Config", icon: <Database {...iconProps} className="text-sky-400" />, defaultData: { memoryProvider: 'postgres', memoryScope: 'session' } },
       { type: "intention-router", label: "Intenções", icon: <BrainCircuit {...iconProps} className="text-indigo-500" /> },
       { type: "dialogy-send-message", label: "Dialogy", icon: <Rocket {...iconProps} className="text-orange-500" /> },
+      { type: "http-tool", label: "Ferramenta API", icon: <Webhook {...iconProps} className="text-rose-400" />, defaultData: { httpToolMethod: 'GET', httpToolName: 'minha_ferramenta' } },
     ],
     whatsapp: [
       { type: "whatsapp-text", label: "Texto WA", icon: <MessageSquareText {...iconProps} className="text-emerald-500" /> },

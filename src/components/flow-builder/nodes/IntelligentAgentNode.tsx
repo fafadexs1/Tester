@@ -42,13 +42,7 @@ export const IntelligentAgentNode: React.FC<NodeComponentProps> = ({ node, onUpd
                 <Label htmlFor={`${node.id}-agentresponsevar`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Salvar Resposta na Variável</Label>
                 <Input id={`${node.id}-agentresponsevar`} placeholder="resposta_agente" value={node.agentResponseVariable || ''} onChange={(e) => onUpdate(node.id, { agentResponseVariable: e.target.value })} className="h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50" />
             </div>
-            <div>
-                <Label htmlFor={`${node.id}-aimodel`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Modelo de IA (opcional)</Label>
-                <div className="relative">
-                    <Input id={`${node.id}-aimodel`} placeholder="gemini-1.5-flash (padrão Genkit)" value={node.aiModelName || ''} onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })} className="h-7 text-xs pr-7 bg-black/20 border-white/5 focus:border-primary/50" />
-                    <VariableInserter fieldName="aiModelName" isIconTrigger onInsert={(v) => onUpdate(node.id, { aiModelName: (node.aiModelName || '') + v })} />
-                </div>
-            </div>
+
             <div className="grid grid-cols-2 gap-2">
                 <div>
                     <Label htmlFor={`${node.id}-maxturns`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Máx. Turnos</Label>

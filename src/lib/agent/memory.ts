@@ -257,32 +257,66 @@ export const loadMemoryContext = async (params: {
 
   await store.deleteExpired?.();
 
-  // Generate embedding for query if enabled
-  let queryEmbedding: number[] | undefined;
-  if (settings.embeddingsEnabled && params.query) {
-    const result = await generateEmbedding(params.query, settings.embeddingsModel);
-    if (result) {
-      queryEmbedding = result.embedding;
+  let items: MemoryItem[] = [];
+
+  // Hybrid Strategy: Run two queries if needed
+  if (settings.embeddingsEnabled && params.query && settings.embeddingsModel === 'local-hybrid') {
+    // 1. Query for Semantic/Procedural using E5
+    const p1 = (async () => {
+      const e5Result = await generateEmbedding(params.query, 'local-e5');
+      if (e5Result) {
+        return store.query({
+          ...baseQueryParams(params, settings),
+          embedding: e5Result.embedding,
+          types: ['semantic', 'procedural'] // Target facts
+        });
+      }
+      return [];
+    })();
+
+    // 2. Query for Episodic using MiniLM
+    const p2 = (async () => {
+      const miniLMResult = await generateEmbedding(params.query, 'local-minilm');
+      if (miniLMResult) {
+        return store.query({
+          ...baseQueryParams(params, settings),
+          embedding: miniLMResult.embedding,
+          types: ['episodic'] // Target chat history
+        });
+      }
+      return [];
+    })();
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+    items = [...r1, ...r2];
+
+    // Remove duplicates just in case (though types are disjoint here)
+    const seen = new Set();
+    items = items.filter(i => {
+      if (seen.has(i.id)) return false;
+      seen.add(i.id);
+      return true;
+    });
+
+  } else {
+    // Standard single model approach
+    let queryEmbedding: number[] | undefined;
+    if (settings.embeddingsEnabled && params.query) {
+      const result = await generateEmbedding(params.query, settings.embeddingsModel);
+      if (result) {
+        queryEmbedding = result.embedding;
+      }
     }
+
+    const queryParams: MemoryQuery = {
+      ...baseQueryParams(params, settings),
+      embedding: queryEmbedding,
+    };
+
+    items = await store.query(queryParams);
   }
 
-  const queryParams: MemoryQuery = {
-    workspaceId: params.workspaceId,
-    agentId: params.agentId,
-    scope: settings.scope,
-    scopeKey: settings.scopeKey,
-    limit: Math.min(settings.maxItems * 3, 200),
-    minImportance: settings.minImportance,
-    embedding: queryEmbedding,
-    similarityThreshold: 0.5, // Default threshold
-  };
-
-  const items = await store.query(queryParams);
-
   // Rerank or score items
-  // If we used vector search, items are already sorted by similarity in the DB layer typically (PostgresMemoryStore does this)
-  // But we still apply the scoring heuristic for a balanced view (recency + importance)
-
   const scored = items
     .map(item => ({ item, score: scoreMemoryItem(item, params.query) }))
     .sort((a, b) => b.score - a.score);
@@ -325,6 +359,17 @@ export const loadMemoryContext = async (params: {
   };
 };
 
+// Helper for common params
+const baseQueryParams = (params: any, settings: any): MemoryQuery => ({
+  workspaceId: params.workspaceId,
+  agentId: params.agentId,
+  scope: settings.scope,
+  scopeKey: settings.scopeKey,
+  limit: Math.min(settings.maxItems * 3, 200),
+  minImportance: settings.minImportance,
+  similarityThreshold: 0.5,
+});
+
 export const recordMemory = async (params: {
   settings: MemorySettings;
   workspaceId: string;
@@ -354,8 +399,20 @@ export const recordMemory = async (params: {
   // Process embeddings in parallel if enabled
   const payload: MemoryWrite[] = await Promise.all(filtered.map(async candidate => {
     let embedding: number[] | undefined;
+
     if (settings.embeddingsEnabled) {
-      const result = await generateEmbedding(candidate.content, settings.embeddingsModel);
+      let modelToUse = settings.embeddingsModel;
+
+      // Smart Hybrid Logic
+      if (modelToUse === 'local-hybrid') {
+        if (candidate.type === 'episodic') {
+          modelToUse = 'local-minilm'; // Chat history -> MiniLM
+        } else {
+          modelToUse = 'local-e5'; // Facts/Procedures -> E5
+        }
+      }
+
+      const result = await generateEmbedding(candidate.content, modelToUse);
       if (result) embedding = result.embedding;
     }
 

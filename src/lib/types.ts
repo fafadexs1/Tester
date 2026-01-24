@@ -42,6 +42,7 @@ export type NodeType =
   | 'intention-router'
   | 'ai-model-config'
   | 'ai-memory-config'
+  | 'http-tool'
   | 'end-flow';
 
 
@@ -284,6 +285,20 @@ export interface NodeData {
   memoryCompressionEnabled?: boolean;
   memoryAutoSummarize?: boolean;
   memorySummarizeThreshold?: number;
+
+  // HTTP Tool Node
+  httpToolName?: string;
+  httpToolDescription?: string;
+  httpToolUrl?: string;
+  httpToolMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  httpToolHeaders?: { key: string; value: string }[];
+  httpToolParams?: { key: string; value: string }[];
+  httpToolFormData?: { key: string; value: string }[];
+  httpToolBodyType?: 'none' | 'json' | 'text' | 'form-data';
+  httpToolBody?: string;
+  httpToolAuthType?: 'none' | 'bearer' | 'basic' | 'header';
+  httpToolAuthKey?: string;
+  httpToolAuthToken?: string;
 }
 
 export interface Connection {
@@ -378,6 +393,15 @@ export interface CapabilityExecutionConfig {
   apiUrl?: string;
   apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   apiHeaders?: Record<string, string>;
+  apiBody?: string;
+  apiBodyType?: 'none' | 'json' | 'text' | 'form-data';
+  apiParams?: Record<string, string>;
+  apiFormData?: Record<string, string>;
+  apiAuth?: {
+    type?: 'none' | 'bearer' | 'basic' | 'header';
+    key?: string;
+    token?: string;
+  };
 
   // Function specific (for local execution)
   functionName?: string;

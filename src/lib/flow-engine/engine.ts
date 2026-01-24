@@ -1005,6 +1005,66 @@ export async function executeFlow(
                     } catch (err) {
                       console.error(`[Flow Engine] Failed to load capability ${sourceNode.capabilityId}`, err);
                     }
+                  } else if (sourceNode?.type === 'http-tool') {
+                    try {
+                      const extractVars = (str: string | undefined): string[] => {
+                        if (!str) return [];
+                        // Basic regex for {{var}}
+                        const matches = str.matchAll(/\{\{([^}]+)\}\}/g);
+                        return Array.from(matches, m => m[1].trim());
+                      };
+
+                      const vars = new Set([
+                        ...extractVars(sourceNode.httpToolUrl),
+                        ...extractVars(sourceNode.httpToolBody),
+                        ...(sourceNode.httpToolHeaders || []).flatMap((h: any) => extractVars(h.value)),
+                        ...(sourceNode.httpToolParams || []).flatMap((p: any) => extractVars(p.value)),
+                        ...(sourceNode.httpToolFormData || []).flatMap((f: any) => extractVars(f.value)),
+                        ...extractVars(sourceNode.httpToolAuthToken),
+                        ...extractVars(sourceNode.httpToolAuthKey)
+                      ]);
+
+                      const properties: Record<string, any> = {};
+                      vars.forEach(v => properties[v] = { type: 'string' });
+
+                      const inputSchema = JSON.stringify({
+                        type: 'object',
+                        properties,
+                        required: Array.from(vars)
+                      });
+
+                      const httpCap = {
+                        id: `http-${sourceNode.id}`,
+                        workspace_id: currentWorkspace.id,
+                        name: sourceNode.httpToolName || 'HTTP Request',
+                        slug: sourceNode.httpToolName?.toLowerCase().replace(/[^a-z0-9_]/g, '') || `http_tool_${sourceNode.id.substring(0, 4)}`,
+                        version: '1.0.0',
+                        contract: {
+                          description: sourceNode.httpToolDescription || 'Performs an specific HTTP request.',
+                          inputSchema: inputSchema,
+                          outputSample: {}
+                        },
+                        execution_config: {
+                          type: 'api', // Use the generic API executor which now supports substitution
+                          apiUrl: sourceNode.httpToolUrl,
+                          apiMethod: sourceNode.httpToolMethod || 'GET',
+                          apiHeaders: (sourceNode.httpToolHeaders || []).reduce((acc: any, h: any) => ({ ...acc, [h.key]: h.value }), {}),
+                          apiBody: sourceNode.httpToolBody,
+                          apiBodyType: sourceNode.httpToolBodyType,
+                          apiParams: (sourceNode.httpToolParams || []).reduce((acc: any, p: any) => ({ ...acc, [p.key]: p.value }), {}),
+                          apiFormData: (sourceNode.httpToolFormData || []).reduce((acc: any, p: any) => ({ ...acc, [p.key]: p.value }), {}),
+                          apiAuth: {
+                            type: sourceNode.httpToolAuthType,
+                            key: sourceNode.httpToolAuthKey,
+                            token: sourceNode.httpToolAuthToken
+                          }
+                        }
+                      };
+                      connectedTools.push(httpCap);
+                      console.log(`[Flow Engine] Registered Tool Definition for Agent: ${httpCap.slug} (Available)`);
+                    } catch (err) {
+                      console.error(`[Flow Engine] Failed to build HTTP Tool ${sourceNode.id}`, err);
+                    }
                   }
                 }
               } else {
