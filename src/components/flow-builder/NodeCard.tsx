@@ -6,7 +6,7 @@ import {
   MoreHorizontal, Copy, Trash2, CheckCircle2, AlertCircle, Play, MessageSquare, TextCursorInput,
   List, Split, GitMerge, Link2, Database, Code2, Replace, FileInput, Calendar,
   Star, Clock, TerminalSquare, Variable, UploadCloud, Webhook,
-  Bot, Mail, Sheet, LayoutTemplate, MonitorSmartphone, MessageCircle, Mic, Image as ImageIcon, Users, BrainCircuit, Blocks, Sparkles, ChevronDown, Rocket, Command
+  Bot, Mail, Sheet, LayoutTemplate, MonitorSmartphone, MessageCircle, Mic, Image as ImageIcon, Users, BrainCircuit, Blocks, Sparkles, ChevronDown, Rocket, Command, Book
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
@@ -55,6 +55,7 @@ import { IntentionRouterNode } from './nodes/IntentionRouterNode';
 import { ModelNode } from './nodes/ModelNode';
 import { MemoryNode } from './nodes/MemoryNode';
 import { HttpToolNode } from './nodes/HttpToolNode';
+import { KnowledgeNode } from './nodes/KnowledgeNode';
 
 export const NODE_COMPONENTS: Record<string, React.FC<NodeComponentProps>> = {
   start: StartNode, message: MessageNode, input: InputNode, option: OptionNode,
@@ -74,9 +75,10 @@ export const NODE_COMPONENTS: Record<string, React.FC<NodeComponentProps>> = {
   'ai-model-config': ModelNode,
   'ai-memory-config': MemoryNode,
   'http-tool': HttpToolNode,
+  'knowledge': KnowledgeNode,
 };
 
-const SELF_CONTAINED_NODES = ['start', 'option', 'condition', 'switch', 'time-of-day', 'intention-router', 'api-call', 'message', 'input', 'end-flow', 'http-tool'];
+const SELF_CONTAINED_NODES = ['start', 'option', 'condition', 'switch', 'time-of-day', 'intention-router', 'api-call', 'message', 'input', 'end-flow', 'http-tool', 'knowledge'];
 
 interface NodeCardProps {
   node: NodeData;
@@ -106,6 +108,7 @@ const renderNodeIcon = (type: string) => {
     case 'ai-text-generation': return <Sparkles className={cn(iconClass, "text-violet-400")} />;
     case 'api-call': return <Webhook className={cn(iconClass, "text-pink-400")} />;
     case 'http-tool': return <Webhook className={cn(iconClass, "text-rose-400")} />;
+    case 'knowledge': return <Book className={cn(iconClass, "text-amber-400")} />;
     case 'end-flow': return <CheckCircle2 className={cn(iconClass, "text-rose-500")} />;
     case 'ai-memory-config': return <Database className={cn(iconClass, "text-blue-400")} />;
     case 'ai-model-config': return <BrainCircuit className={cn(iconClass, "text-violet-400")} />;
@@ -120,7 +123,7 @@ const NodeCard = memo(({
   const showInputHandle = node.type !== 'start' && node.type !== 'http-tool';
 
   // N8N-style sub-nodes that should be circular
-  const SUB_NODE_TYPES = ['ai-memory-config', 'ai-model-config', 'capability', 'http-tool'];
+  const SUB_NODE_TYPES = ['ai-memory-config', 'ai-model-config', 'capability', 'http-tool', 'knowledge'];
   const isSubNode = SUB_NODE_TYPES.includes(node.type);
   const isCompactSubNode = isSubNode; // Always compact/circular
 
@@ -135,6 +138,8 @@ const NodeCard = memo(({
         return { label: node.capabilityName || 'Tool', iconColor: 'text-zinc-400', bgColor: 'from-zinc-900 to-zinc-950', borderColor: 'border-zinc-800', glowColor: 'rgba(0,0,0,0)' };
       case 'http-tool':
         return { label: node.httpToolName || 'API Tool', iconColor: 'text-rose-400', bgColor: 'from-rose-950/20 to-zinc-950', borderColor: 'border-rose-900/50', glowColor: 'rgba(244, 63, 94, 0.2)' };
+      case 'knowledge':
+        return { label: 'Knowledge Base', iconColor: 'text-amber-400', bgColor: 'from-amber-950/20 to-zinc-950', borderColor: 'border-amber-900/50', glowColor: 'rgba(245, 158, 11, 0.2)' };
       default:
         return { label: 'Node', iconColor: 'text-zinc-400', bgColor: 'from-zinc-900 to-zinc-950', borderColor: 'border-zinc-800', glowColor: 'rgba(0,0,0,0)' };
     }

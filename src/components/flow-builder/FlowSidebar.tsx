@@ -9,7 +9,7 @@ import {
   CalendarDays, Mail, Sheet, LayoutTemplate, MonitorSmartphone, Mic, PlayCircle,
   Menu, Cpu, Zap, Database, Search, ChevronRight, Layers, Settings2,
   LogOut, Keyboard, History, FileJson, Share2, Phone, Image as ImageIcon, Users,
-  MailSearch, DatabaseBackup, Clock, Calendar, FileUp, StarHalf
+  MailSearch, DatabaseBackup, Clock, Calendar, FileUp, StarHalf, Book
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { v4 as uuidv4 } from 'uuid';
@@ -68,6 +68,7 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = ({ onInteractionChange 
       { type: "intention-router", label: "Intenções", icon: <BrainCircuit {...iconProps} className="text-indigo-500" /> },
       { type: "dialogy-send-message", label: "Dialogy", icon: <Rocket {...iconProps} className="text-orange-500" /> },
       { type: "http-tool", label: "Ferramenta API", icon: <Webhook {...iconProps} className="text-rose-400" />, defaultData: { httpToolMethod: 'GET', httpToolName: 'minha_ferramenta' } },
+      { type: "knowledge", label: "Base de Conhecimento", icon: <Book {...iconProps} className="text-amber-400" />, description: "Informações para o agente consultar", defaultData: {} },
     ],
     whatsapp: [
       { type: "whatsapp-text", label: "Texto WA", icon: <MessageSquareText {...iconProps} className="text-emerald-500" /> },

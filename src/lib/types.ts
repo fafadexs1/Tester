@@ -43,6 +43,7 @@ export type NodeType =
   | 'ai-model-config'
   | 'ai-memory-config'
   | 'http-tool'
+  | 'knowledge'
   | 'end-flow';
 
 
@@ -299,6 +300,10 @@ export interface NodeData {
   httpToolAuthType?: 'none' | 'bearer' | 'basic' | 'header';
   httpToolAuthKey?: string;
   httpToolAuthToken?: string;
+
+  // Knowledge Node
+  knowledgeConnectionString?: string;
+  knowledgeEmbeddingsModel?: string;
 }
 
 export interface Connection {

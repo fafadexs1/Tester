@@ -291,6 +291,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const initialNodePosition = useRef({ x: 0, y: 0 });
   const rafIdRef = useRef<number | null>(null); // RAF throttle for DOM updates
   const pendingNodePosition = useRef<{ x: number; y: number } | null>(null);
+  const pendingDrawingLinePosition = useRef<{ x: number; y: number } | null>(null); // RAF optimized drawing line
   const draggedNodeElementRef = useRef<HTMLElement | null>(null);
 
   const panStartMousePosition = useRef({ x: 0, y: 0 });
@@ -689,6 +690,13 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
       const { x, y } = pendingNodePosition.current;
       draggedNodeElementRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
     }
+
+    // Batch drawing line state updates via RAF to prevent excessive re-renders
+    if (pendingDrawingLinePosition.current && drawingLineRef.current) {
+      const { x, y } = pendingDrawingLinePosition.current;
+      setDrawingLine(prev => prev ? { ...prev, currentX: x, currentY: y } : null);
+      pendingDrawingLinePosition.current = null;
+    }
   }, []);
 
   const scheduleDOMUpdate = useCallback(() => {
@@ -728,14 +736,9 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
       const logicalCurrentX = (mouseXOnCanvasVisual - currentCanvasOffset.x) / currentZoomLevel;
       const logicalCurrentY = (mouseYOnCanvasVisual - currentCanvasOffset.y) / currentZoomLevel;
 
-      setDrawingLine((prev) => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          currentX: logicalCurrentX,
-          currentY: logicalCurrentY,
-        };
-      });
+      // Use RAF batching to prevent excessive re-renders during connection drawing
+      pendingDrawingLinePosition.current = { x: logicalCurrentX, y: logicalCurrentY };
+      scheduleDOMUpdate();
     }
   }, []);
 

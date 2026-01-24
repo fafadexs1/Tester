@@ -1,4 +1,5 @@
 import { Capability, CapabilityExecutionConfig } from '@/lib/types';
+import { KnowledgeStore } from '@/lib/agent/memory/stores/knowledge-store';
 
 // Registry for local function execution
 const functionRegistry: Record<string, (input: any) => Promise<any>> = {
@@ -46,6 +47,59 @@ const functionRegistry: Record<string, (input: any) => Promise<any>> = {
                 error: error.message || 'Unknown error occurred during HTTP request'
             };
         }
+    },
+
+    lookupKnowledge: async (input: {
+        query: string;
+        category?: string;
+        workspaceId: string;
+        connectionString?: string;
+        embeddingsModel?: string;
+    }) => {
+        const { query, category, workspaceId, connectionString, embeddingsModel } = input;
+
+        if (!query || !workspaceId) {
+            return { error: 'Query and workspaceId are required', results: [] };
+        }
+
+        console.log(`[lookupKnowledge] Searching for "${query}" in workspace ${workspaceId}${category ? ` (category: ${category})` : ''}`);
+
+        try {
+            const store = new KnowledgeStore(connectionString);
+            const results = await store.search({
+                workspaceId,
+                query,
+                category,
+                limit: 5,
+                embeddingsModel: embeddingsModel || 'openai-text-embedding-3-small'
+            });
+
+            if (results.length === 0) {
+                return {
+                    found: false,
+                    message: `No knowledge found for "${query}"`,
+                    results: []
+                };
+            }
+
+            return {
+                found: true,
+                count: results.length,
+                results: results.map(r => ({
+                    category: r.category,
+                    key: r.key,
+                    title: r.title,
+                    content: r.content,
+                    similarity: r.similarity
+                }))
+            };
+        } catch (error: any) {
+            console.error('[lookupKnowledge] Error:', error);
+            return {
+                error: error.message || 'Failed to search knowledge base',
+                results: []
+            };
+        }
     }
 };
 
@@ -68,8 +122,17 @@ export async function executeCapability(capability: Capability, input: Record<st
             throw new Error(`Function '${functionName}' not found in registry.`);
         }
 
+        // Merge context from execution_config into input (for knowledge lookup etc)
+        const enrichedInput = {
+            ...input,
+            // Inject context from execution_config if available
+            workspaceId: input.workspaceId || (config as any)._workspaceId,
+            connectionString: input.connectionString || (config as any)._connectionString,
+            embeddingsModel: input.embeddingsModel || (config as any)._embeddingsModel,
+        };
+
         console.log(`[Capability Executor] Executing local function: ${functionName}`);
-        return await fn(input);
+        return await fn(enrichedInput);
     } else {
         throw new Error(`Unknown execution type: ${(config as any).type}`);
     }

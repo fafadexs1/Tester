@@ -456,6 +456,7 @@ export async function executeFlow(
   let flowEnded = false;
 
   console.log(`[Flow Engine] Starting execution loop. Start Node: ${currentNodeId}`);
+  console.log(`[Flow Engine DEBUG] Workspace "${currentWorkspace.name}" has ${nodes.length} nodes and ${connections.length} connections.`);
 
   while (currentNodeId && shouldContinue) {
     const currentNode = findNodeById(currentNodeId, nodes);
@@ -972,9 +973,23 @@ export async function executeFlow(
               ({ history, memorySummary } = trimAndSummarizeHistory(history, memorySummary));
 
               // Autonomous Agent Integration: Resolve memory, tools, and model
-              const memoryConnection = connections.find(c => c.to === currentNode.id && c.targetHandle === 'memory');
+              console.log(`[Flow Engine] Inspecting connections for Agent ${currentNode.id}`);
+
+              const incoming = connections.filter(c => c.to === currentNode.id);
+              const outgoing = connections.filter(c => c.from === currentNode.id);
+
+              console.log(`[Flow Engine] Connections: Incoming=${incoming.length}, Outgoing=${outgoing.length}`);
+
+              // Allow Memory Node to be connected in either direction
+              const memoryConnection =
+                incoming.find(c => c.targetHandle === 'memory') ||
+                outgoing.find(c => {
+                  const target = findNodeById(c.to, currentWorkspace.nodes);
+                  return target?.type === 'ai-memory-config';
+                });
+
               const memoryNode = memoryConnection
-                ? (findNodeById(memoryConnection.from, currentWorkspace.nodes) || null)
+                ? (findNodeById(memoryConnection.from === currentNode.id ? memoryConnection.to : memoryConnection.from, currentWorkspace.nodes) || null)
                 : null;
               const memorySettings = buildMemorySettings(memoryNode, session, currentWorkspace);
 
@@ -990,9 +1005,19 @@ export async function executeFlow(
                 console.warn(`[Flow Engine] Memory context unavailable for agent ${currentNode.id}`, error);
               }
 
-              // 1. Resolve Tools
+              // 1. Resolve Tools (Bidirectional)
               const connectedTools: any[] = [];
-              const toolConnections = connections.filter(c => c.to === currentNode.id && c.targetHandle === 'tools');
+
+              // Incoming to 'tools' handle
+              const incomingTools = incoming.filter(c => c.targetHandle === 'tools');
+
+              // Outgoing to known tool types (Tool/Knowledge/HTTP)
+              const outgoingTools = outgoing.filter(c => {
+                const target = findNodeById(c.to, currentWorkspace.nodes);
+                return target?.type === 'knowledge' || target?.type === 'http-tool' || target?.type === 'capability';
+              });
+
+              const toolConnections = [...incomingTools, ...outgoingTools];
 
               if (toolConnections.length > 0) {
                 console.log(`[Flow Engine] Found ${toolConnections.length} connected tools for agent ${currentNode.id}`);
@@ -1065,6 +1090,49 @@ export async function executeFlow(
                     } catch (err) {
                       console.error(`[Flow Engine] Failed to build HTTP Tool ${sourceNode.id}`, err);
                     }
+                  } else if (sourceNode?.type === 'knowledge') {
+                    try {
+                      const memoryNodeForInheritance = currentWorkspace.nodes.find(n => n.type === 'ai-memory-config');
+                      const connectionString = sourceNode.knowledgeConnectionString || memoryNodeForInheritance?.memoryConnectionString;
+                      const embeddingsModel = sourceNode.knowledgeEmbeddingsModel || memoryNodeForInheritance?.memoryEmbeddingsModel || 'local-hybrid';
+
+                      const knowledgeCap = {
+                        id: `knowledge-lookup-${sourceNode.id}`,
+                        workspace_id: currentWorkspace.id,
+                        name: sourceNode.title || 'Knowledge Base Lookup',
+                        slug: 'lookup_knowledge', // FIXED slug to match agent expectation
+                        version: '1.0.0',
+                        contract: {
+                          summary: 'Busca informações na base de conhecimento da empresa/agente',
+                          description: 'Use esta ferramenta para buscar qualquer informação sobre a empresa, como planos de internet, preços, regiões de cobertura, FAQs, políticas, produtos e serviços. Se o usuário perguntar "você tem...", "qual o preço", "como funciona", "tem internet em...", sempre use esta ferramenta.',
+                          triggerPhrases: [
+                            'plano', 'planos', 'preço', 'preços', 'região', 'regiões', 'valor', 'valores',
+                            'internet', 'fibra', 'wifi', 'conexão', 'velocidade', 'mega', 'instalação',
+                            'atendemos', 'atende', 'cobertura', 'faq', 'ajuda', 'dúvida', 'informação', 'informações',
+                            'como funciona', 'quanto custa', 'qual o valor', 'sobre a empresa', 'você tem', 'vcs tem', 'gostaria de saber'
+                          ],
+                          inputSchema: JSON.stringify({
+                            type: 'object',
+                            properties: {
+                              query: { type: 'string', description: 'Termo ou pergunta para buscar na base de conhecimento' },
+                              category: { type: 'string', description: 'Categoria opcional: plans, regions, faq, products, services' }
+                            },
+                            required: ['query']
+                          })
+                        },
+                        execution_config: {
+                          type: 'function',
+                          functionName: 'lookupKnowledge',
+                          _workspaceId: currentWorkspace.id,
+                          _connectionString: connectionString,
+                          _embeddingsModel: embeddingsModel
+                        }
+                      };
+                      connectedTools.push(knowledgeCap);
+                      console.log(`[Flow Engine] Registered Knowledge Tool for Agent: ${knowledgeCap.slug} (From explicit connection)`);
+                    } catch (err) {
+                      console.error(`[Flow Engine] Failed to build Knowledge Tool ${sourceNode.id}`, err);
+                    }
                   }
                 }
               } else {
@@ -1077,6 +1145,51 @@ export async function executeFlow(
                 console.log(`[Flow Engine] No tools explicitly connected. Falling back to all workspace capabilities.`);
                 const allCaps = await getCapabilitiesForWorkspace(currentWorkspace.id);
                 connectedTools.push(...allCaps);
+              }
+
+              // Auto-inject lookup_knowledge tool if Memory Node is connected (Legacy/Fallback)
+              // Only inject if NOT already added by an explicit Knowledge Node connection
+              if (memoryNode && !connectedTools.some(t => t.slug === 'lookup_knowledge')) {
+                const knowledgeLookupCap = {
+                  id: `knowledge-lookup-${currentNode.id}`,
+                  workspace_id: currentWorkspace.id,
+                  name: 'Knowledge Base Lookup',
+                  slug: 'lookup_knowledge',
+                  version: '1.0.0',
+                  contract: {
+                    summary: 'Busca informações na base de conhecimento da empresa/agente',
+                    description: 'Use esta ferramenta para buscar qualquer informação sobre a empresa, como planos de internet, preços, regiões de cobertura, FAQs, políticas, produtos e serviços. Se o usuário perguntar "você tem...", "qual o preço", "como funciona", "tem internet em...", sempre use esta ferramenta.',
+                    triggerPhrases: [
+                      // Singular/Plural
+                      'plano', 'planos', 'preço', 'preços', 'região', 'regiões', 'valor', 'valores',
+                      // Domain specific
+                      'internet', 'fibra', 'wifi', 'conexão', 'velocidade', 'mega', 'instalação',
+                      // Intent
+                      'atendemos', 'atende', 'cobertura', 'faq', 'ajuda', 'dúvida', 'informação', 'informações',
+                      // Common questions
+                      'como funciona', 'quanto custa', 'qual o valor', 'sobre a empresa', 'você tem', 'vcs tem', 'gostaria de saber'
+                    ],
+                    inputSchema: JSON.stringify({
+                      type: 'object',
+                      properties: {
+                        query: { type: 'string', description: 'Termo ou pergunta para buscar na base de conhecimento' },
+                        category: { type: 'string', description: 'Categoria opcional: plans, regions, faq, products, services' }
+                      },
+                      required: ['query']
+                    })
+                  },
+                  execution_config: {
+                    type: 'function',
+                    functionName: 'lookupKnowledge',
+                    // Additional context injected at execution time
+                    _workspaceId: currentWorkspace.id,
+                    _connectionString: memorySettings.connectionString,
+                    _embeddingsModel: memorySettings.embeddingsModel,
+                  }
+                };
+
+                console.log(`[Flow Engine] Injected lookup_knowledge tool for agent ${currentNode.id}`);
+                connectedTools.push(knowledgeLookupCap);
               }
 
               // 2. Resolve Model Configuration
@@ -1092,6 +1205,7 @@ export async function executeFlow(
                   // Provider logic can be added here if agenticFlow supports it
                 }
               }
+
 
               const agentReply = await agenticFlow({
                 userMessage: cleanedUserInput,

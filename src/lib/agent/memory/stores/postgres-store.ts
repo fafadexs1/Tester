@@ -31,9 +31,17 @@ export class PostgresMemoryStore implements MemoryStore {
         try {
             await this.execute(`CREATE EXTENSION IF NOT EXISTS vector`);
             this.supportsVector = true;
-        } catch (e) {
-            console.warn('[PostgresMemoryStore] Failed to install "vector" extension. Embeddings will be disabled.');
-            this.supportsVector = false;
+        } catch (e: any) {
+            // Silently fail if extension is not available (common in managed/shared DBs)
+            // Code '0A000' or similar indicates feature not supported
+            if (e.code === '0A000' || e.message?.includes('not available')) {
+                this.supportsVector = false;
+                // Debug log only, don't spam console
+                // console.debug('[PostgresMemoryStore] PGVector extension not available in this database.');
+            } else {
+                console.warn('[PostgresMemoryStore] Failed to install "vector" extension:', e.message);
+                this.supportsVector = false;
+            }
         }
 
         // 2. Ensure table exists with new columns
@@ -117,10 +125,26 @@ export class PostgresMemoryStore implements MemoryStore {
                 else if (item.embedding.length === 384) embed384 = JSON.stringify(item.embedding);
             }
 
+            // Normalize tags to ensure it's always a string array
+            let normalizedTags: string[] | null = null;
+            if (item.tags) {
+                if (Array.isArray(item.tags)) {
+                    // Already an array, ensure all elements are strings
+                    normalizedTags = item.tags.map((t: any) => String(t)).filter((t: string) => t.length > 0);
+                } else if (typeof item.tags === 'object') {
+                    // Object was passed, extract keys or values as tags
+                    normalizedTags = Object.keys(item.tags).filter((k: string) => k.length > 0);
+                } else if (typeof item.tags === 'string') {
+                    // Single string, wrap in array
+                    normalizedTags = [item.tags];
+                }
+                if (normalizedTags && normalizedTags.length === 0) normalizedTags = null;
+            }
+
             values.push(
                 item.workspaceId, item.agentId, item.scope, item.scopeKey, item.type, item.content,
                 normalizeImportance(item.importance),
-                item.tags ? JSON.stringify(item.tags) : null,
+                normalizedTags ? JSON.stringify(normalizedTags) : null,
                 item.metadata ? JSON.stringify(item.metadata) : null,
                 hash,
                 item.expiresAt || null,

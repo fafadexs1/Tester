@@ -83,10 +83,14 @@ export async function runQuery<T extends QueryResultRow>(query: string, params: 
     return result as unknown as QueryResult<T & QueryResultRow>;
   } catch (error: any) {
     await client.query('ROLLBACK');
-    console.error(
-      `[DB Actions] Query failed and rolled back: ${query.substring(0, 100)}...`,
-      { error: error.message, code: error.code }
-    );
+    if (error.code === '0A000' && error.message.includes('vector')) {
+      // Silently ignore vector extension errors on default DB, handled by caller
+    } else {
+      console.error(
+        `[DB Actions] Query failed and rolled back: ${query.substring(0, 100)}...`,
+        { error: error.message, code: error.code }
+      );
+    }
 
     if (['ECONNRESET', 'ECONNREFUSED'].includes(error.code) || error.message.includes('timeout')) {
       if (pool) await pool.end();

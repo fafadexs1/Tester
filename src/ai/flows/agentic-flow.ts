@@ -8,6 +8,13 @@ import { executeCapability } from '@/lib/capability-executor';
 // In production, we should implement a robust JSON Schema -> Zod converter.
 const GenericToolInputSchema = z.record(z.any());
 const MAX_TOOL_COUNT = 8;
+const MAX_KNOWLEDGE_CHARS = 2000;
+const DEFAULT_KNOWLEDGE_KEYWORDS = [
+    'plano', 'planos', 'preco', 'precos', 'valor', 'valores', 'empresa',
+    'servico', 'servicos', 'cobertura', 'internet', 'fibra', 'wifi',
+    'instalacao', 'velocidade', 'mega', 'beneficio', 'beneficios',
+    'contrato', 'pacote', 'mensalidade'
+];
 
 const MemoryContextSchema = z.object({
     summary: z.string().optional(),
@@ -37,6 +44,15 @@ const tokenize = (text: string): string[] =>
         .replace(/[^\p{L}\p{N}\s]/gu, ' ')
         .split(/\s+/)
         .filter(token => token.length > 2);
+
+const normalizeForMatch = (text: string): string =>
+    text
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 
 const jaccardSimilarity = (a: string[], b: string[]): number => {
     if (!a.length || !b.length) return 0;
@@ -87,6 +103,35 @@ const formatMemoryContext = (memoryContext?: z.infer<typeof MemoryContextSchema>
     }
 
     return sections.length ? `Memory Context:\n${sections.join('\n\n')}` : '';
+};
+
+const shouldPrefetchKnowledge = (cap: Capability | undefined, userMessage: string): boolean => {
+    if (!cap || !userMessage.trim()) return false;
+    const normalizedMessage = normalizeForMatch(userMessage);
+    if (!normalizedMessage) return false;
+
+    const triggerPhrases = Array.isArray(cap.contract?.triggerPhrases) ? cap.contract.triggerPhrases : [];
+    const keywords = [...triggerPhrases, ...DEFAULT_KNOWLEDGE_KEYWORDS];
+
+    return keywords.some(phrase => {
+        const normalizedPhrase = normalizeForMatch(String(phrase || ''));
+        return normalizedPhrase ? normalizedMessage.includes(normalizedPhrase) : false;
+    });
+};
+
+const formatKnowledgeResults = (result: any): string => {
+    if (!result || result.error || !result.found || !Array.isArray(result.results)) return '';
+    const lines = result.results.map((item: any, index: number) => {
+        const title = String(item.title || item.key || item.category || `Item ${index + 1}`);
+        const content = String(item.content || '').trim();
+        const trimmed = content.length > 600 ? `${content.slice(0, 600).trimEnd()}...` : content;
+        return `- ${title}: ${trimmed}`;
+    });
+    const formatted = `Knowledge Base Results:\n${lines.join('\n')}`.trim();
+    if (!formatted) return '';
+    return formatted.length > MAX_KNOWLEDGE_CHARS
+        ? `${formatted.slice(0, MAX_KNOWLEDGE_CHARS).trimEnd()}...`
+        : formatted;
 };
 
 const selectRelevantCapabilities = (
@@ -171,7 +216,40 @@ export const agenticFlow = ai.defineFlow(
     async (input) => {
         const { userMessage, capabilities, history, modelName, systemPrompt, memoryContext } = input;
         const typedCapabilities = capabilities as Capability[];
-        const selectedCapabilities = selectRelevantCapabilities(typedCapabilities, userMessage, memoryContext);
+        const knowledgeCap = typedCapabilities.find(cap => cap.slug === 'lookup_knowledge');
+        const shouldLookupKnowledge = shouldPrefetchKnowledge(knowledgeCap, userMessage);
+
+        let selectedCapabilities = selectRelevantCapabilities(typedCapabilities, userMessage, memoryContext);
+        if (knowledgeCap && shouldLookupKnowledge && !selectedCapabilities.some(cap => cap.slug === 'lookup_knowledge')) {
+            selectedCapabilities = [knowledgeCap, ...selectedCapabilities].slice(0, MAX_TOOL_COUNT);
+        }
+
+        let knowledgeContext = '';
+        if (knowledgeCap && shouldLookupKnowledge) {
+            const execConfig = (knowledgeCap.execution_config || {}) as any;
+            const hasConnection = Boolean(execConfig._connectionString || execConfig.connectionString);
+            if (hasConnection) {
+                try {
+                    const result = await executeCapability(knowledgeCap, { query: userMessage });
+                    knowledgeContext = formatKnowledgeResults(result);
+                    if (knowledgeContext) {
+                        console.log('[Agentic Flow] Knowledge prefetch: results found');
+                    } else {
+                        console.log('[Agentic Flow] Knowledge prefetch: no results');
+                    }
+                } catch (err) {
+                    console.warn('[Agentic Flow] Knowledge prefetch failed:', err);
+                }
+            } else {
+                console.warn('[Agentic Flow] Knowledge prefetch skipped: missing connection string.');
+            }
+        }
+        const knowledgeGuidance = knowledgeContext
+            ? 'Use the Knowledge Base Results to answer. If they do not address the question, ask a focused follow-up.'
+            : '';
+
+        const usedToolNames = new Set<string>();
+        const toolNameBySlug = new Map<string, string>();
 
         // Log which tools ACTUALLY passed the filter
         if (selectedCapabilities.length > 0) {
@@ -181,11 +259,21 @@ export const agenticFlow = ai.defineFlow(
         }
 
         // Define tools dynamically
-        const tools = selectedCapabilities.map((cap) => {
-            const uniqueSuffix = Math.random().toString(36).substring(2, 6);
+        const tools = selectedCapabilities.map((cap, index) => {
+            const baseName = (cap.slug || cap.name || `tool_${index}`).trim();
+            let toolName = baseName || `tool_${index}`;
+            let suffix = 1;
+            while (usedToolNames.has(toolName)) {
+                toolName = `${baseName}_${suffix++}`;
+            }
+            usedToolNames.add(toolName);
+            if (!toolNameBySlug.has(cap.slug)) {
+                toolNameBySlug.set(cap.slug, toolName);
+            }
+
             return ai.defineTool(
                 {
-                    name: `${cap.slug}_${uniqueSuffix}`,
+                    name: toolName,
                     description: (cap.contract.description || cap.contract.summary || `Execute ${cap.name}`) +
                         (cap.contract.inputSchema ? `\n\nInput Schema: ${JSON.stringify(cap.contract.inputSchema)}` : ''),
                     inputSchema: GenericToolInputSchema,
@@ -203,9 +291,17 @@ export const agenticFlow = ai.defineFlow(
             );
         });
 
+        const knowledgeToolName = toolNameBySlug.get('lookup_knowledge');
+        const knowledgeToolInstruction = knowledgeToolName
+            ? `IMPORTANT: You have access to tools/capabilities. If the user asks about the company, plans, prices, services, or coverage, you MUST use the '${knowledgeToolName}' tool to find the answer. Do NOT answer "As a large language model I cannot...". Instead, use the tool to find the info.`
+            : 'IMPORTANT: You have access to tools/capabilities. Use them when they help you answer. Do NOT answer "As a large language model I cannot...".';
+
         const promptSections = [
             systemPrompt ? `System Instructions:\n${systemPrompt}` : 'You are an autonomous assistant.',
+            knowledgeToolInstruction,
             formatMemoryContext(memoryContext),
+            knowledgeContext,
+            knowledgeGuidance,
             formatHistory(history, userMessage),
             `User: ${userMessage}`,
             'Assistant:',
