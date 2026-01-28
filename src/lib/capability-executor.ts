@@ -64,6 +64,10 @@ const functionRegistry: Record<string, (input: any) => Promise<any>> = {
 
         console.log(`[lookupKnowledge] Searching for "${query}" in workspace ${workspaceId}${category ? ` (category: ${category})` : ''}`);
 
+        if (!connectionString) {
+            return { error: 'Connection string is required for knowledge lookup', results: [] };
+        }
+
         try {
             const store = new KnowledgeStore(connectionString);
             const results = await store.search({
