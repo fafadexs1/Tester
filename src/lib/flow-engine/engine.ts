@@ -34,7 +34,7 @@ const MOJIBAKE_HINT_REGEX = /(Ã.|â.|)/;
 
 type AgentHistoryEntry = { role: 'user' | 'assistant' | 'system'; content: string };
 const EXIT_INTENT_PATTERNS = [
-  'não quero', 'nao quero', 'não desejo', 'nao desejo', 'não', 'nao',
+  'não quero', 'nao quero', 'não desejo', 'nao desejo',
   'encerrar', 'encerra', 'encerrando', 'encerrar atendimento', 'finalizar', 'finaliza',
   'cancelar', 'cancelamento', 'cancela',
   'parar', 'chega', 'sair', 'sair do atendimento', 'tchau', 'adeus', 'obrigado, mas', 'obrigada, mas'
@@ -946,11 +946,46 @@ export async function executeFlow(
               const cleanedUserInput = cleanAndNormalizeText(String(userInputForAgent));
               console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: Calling agenticFlow with input: "${cleanedUserInput}" (model: ${modelName || 'default'})`);
 
-              if (detectExitIntent(cleanedUserInput)) {
+              // Smart Exit Detection
+              let isExit = detectExitIntent(cleanedUserInput);
+
+              if (!isExit) {
+                // Secondary check using LLM to understand intent contextually (avoiding false positives from simple keywords)
+                // This ensures we only exit if the user REALLY wants to "Finalizar"
+                try {
+                  const exitCheck = await classifyIntent({
+                    userMessage: cleanedUserInput,
+                    intents: [
+                      { id: 'exit', label: 'Exit', description: 'User explicitly wants to end the conversation, stop the service, or cancel the current process.' },
+                      { id: 'continue', label: 'Continue', description: 'User is answering a question, asking something, denying a specific offer, or continuing the conversation.' }
+                    ],
+                    modelName: 'googleai/gemini-2.0-flash'
+                  });
+                  if (exitCheck.matchedIntentId === 'exit' && (exitCheck.confidence || 0) > 0.85) {
+                    isExit = true;
+                    console.log(`[Flow Engine - ${session.session_id}] Smart Exit Detection triggered: "${cleanedUserInput}"`);
+                  }
+                } catch (err) {
+                  // Silent fail on LLM check, fallback to regex result
+                }
+              }
+
+              if (isExit) {
                 console.log(`[Flow Engine - ${session.session_id}] Exit intent detected. Continuing flow.`);
                 setProperty(session.flow_variables, responseVarName, cleanedUserInput);
                 setProperty(session.flow_variables, `_agent_exit_intent_${currentNode.id}`, true);
+
+                // Try to find a specific 'exit' handle if it existed (not standard yet), or default
                 nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+
+                // Safety net: If no connection found, don't just "break" to a pause.
+                // We should ideally maybe log this clearly or default to End Flow? 
+                // For now, if nextNodeId is null, it WILL pause in the main loop, which is correct behavior for an unconnected exit.
+                // But we log it.
+                if (!nextNodeId) {
+                  console.warn(`[Flow Engine] Agent exited but no 'default' connection found. Flow will pause.`);
+                }
+
                 shouldContinue = true;
                 break;
               }
@@ -1125,7 +1160,8 @@ export async function executeFlow(
                           functionName: 'lookupKnowledge',
                           _workspaceId: currentWorkspace.id,
                           _connectionString: connectionString,
-                          _embeddingsModel: embeddingsModel
+                          _embeddingsModel: embeddingsModel,
+                          _category: sourceNode.knowledgeBaseId // Injected for strict isolation
                         }
                       };
                       connectedTools.push(knowledgeCap);

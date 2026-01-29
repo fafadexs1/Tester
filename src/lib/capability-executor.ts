@@ -133,6 +133,8 @@ export async function executeCapability(capability: Capability, input: Record<st
             workspaceId: input.workspaceId || (config as any)._workspaceId,
             connectionString: input.connectionString || (config as any)._connectionString,
             embeddingsModel: input.embeddingsModel || (config as any)._embeddingsModel,
+            // Strictly enforce knowledge collection isolation
+            category: input.category || (config as any).category || (config as any)._category || (config as any).knowledge_base_id,
         };
 
         console.log(`[Capability Executor] Executing local function: ${functionName}`);

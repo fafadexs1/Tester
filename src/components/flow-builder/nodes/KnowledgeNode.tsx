@@ -55,6 +55,7 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
     const workspaceId = activeWorkspace?.id;
 
     // Find Memory Node in workspace to inherit connection string if not set
+    const knowledgeBaseId = node.knowledgeBaseId || ''; // Default to empty (global/mixed) if not set, or specific behavior
     const memoryNode = activeWorkspace?.nodes?.find(n => n.type === 'ai-memory-config');
     const connectionString = node.knowledgeConnectionString || memoryNode?.memoryConnectionString;
     const embeddingsModel = node.knowledgeEmbeddingsModel || memoryNode?.memoryEmbeddingsModel || 'local-hybrid';
@@ -67,11 +68,21 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
             const params = new URLSearchParams({ workspaceId });
             if (connectionString) params.append('connectionString', connectionString);
 
+            // If ID is set, ONLY show entries for that ID (strict isolation)
+            if (knowledgeBaseId) {
+                params.append('category', knowledgeBaseId);
+            }
+
             const res = await fetch(`/api/knowledge?${params}`);
             const data = await res.json();
 
             if (data.success) {
                 setEntries(data.entries || []);
+                // Categories are less relevant for the filter dropdown if we are isolated, 
+                // but we might want to show available semantic categories within this base.
+                // The API returns distinct 'category' column values, which now are IDs.
+                // So filtering by category dropdown might be weird if we don't fix API.
+                // For now, let's keep it simple: Client filtering works on the returned list.
                 setCategories(data.categories || []);
             } else {
                 throw new Error(data.error);
@@ -85,14 +96,15 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
         } finally {
             setIsLoading(false);
         }
-    }, [workspaceId, connectionString, toast]);
+    }, [workspaceId, connectionString, knowledgeBaseId, toast]);
 
     // Load on mount and when switching to list tab
     useEffect(() => {
+        // Reload when ID changes too
         if (activeTab === 'list' && workspaceId) {
             loadEntries();
         }
-    }, [activeTab, workspaceId, loadEntries]);
+    }, [activeTab, workspaceId, knowledgeBaseId, loadEntries]);
 
     // Save entry
     const handleSave = async () => {
@@ -100,6 +112,15 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
             toast({
                 title: "Erro",
                 description: "Workspace não encontrado.",
+                variant: "destructive"
+            });
+            return;
+        }
+
+        if (!knowledgeBaseId) {
+            toast({
+                title: "ID da Base Obrigatório",
+                description: "Defina um ID para esta Base de Conhecimento antes de salvar.",
                 variant: "destructive"
             });
             return;
@@ -123,7 +144,15 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
                     workspaceId,
                     connectionString,
                     embeddingsModel,
-                    ...formData
+                    ...formData,
+                    // MAGIC SWAP: 
+                    // DB Category = Collection ID (Internal strict vault)
+                    category: knowledgeBaseId,
+                    // DB Metadata = Semantic Category (UI grouping)
+                    metadata: {
+                        ...(editingEntry?.metadata || {}),
+                        semanticCategory: formData.category
+                    }
                 })
             });
 
@@ -132,7 +161,7 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
             if (data.success) {
                 toast({
                     title: editingEntry ? "Atualizado!" : "Criado!",
-                    description: `Entry "${formData.title}" salva com sucesso.`,
+                    description: `Entry "${formData.title}" salva na base "${knowledgeBaseId}".`,
                 });
 
                 // Reset form
@@ -187,7 +216,8 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
     const handleEdit = (entry: KnowledgeEntry) => {
         setEditingEntry(entry);
         setFormData({
-            category: entry.category,
+            // Restore Semantic Category from metadata (or fallback to category if legacy)
+            category: entry.metadata?.semanticCategory || entry.category,
             key: entry.key,
             title: entry.title,
             content: entry.content,
@@ -197,7 +227,8 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
 
     // Filter entries
     const filteredEntries = entries.filter(e => {
-        const matchesCategory = filterCategory === 'all' || e.category === filterCategory;
+        const semanticCat = e.metadata?.semanticCategory || e.category;
+        const matchesCategory = filterCategory === 'all' || semanticCat === filterCategory;
         const matchesSearch = !searchQuery ||
             e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
             e.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -205,10 +236,11 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
         return matchesCategory && matchesSearch;
     });
 
-    // Group entries by category
+    // Group entries by semantic category
     const groupedEntries = filteredEntries.reduce((acc, entry) => {
-        if (!acc[entry.category]) acc[entry.category] = [];
-        acc[entry.category].push(entry);
+        const semanticCat = entry.metadata?.semanticCategory || entry.category;
+        if (!acc[semanticCat]) acc[semanticCat] = [];
+        acc[semanticCat].push(entry);
         return acc;
     }, {} as Record<string, KnowledgeEntry[]>);
 
@@ -224,6 +256,25 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
                     <p className="text-[9px] text-zinc-500">Informações para o agente consultar</p>
                 </div>
             </div>
+
+            {/* Knowledge Base ID (Isolation) */}
+            <div className="space-y-1">
+                <Label className="text-[10px] text-zinc-400">
+                    ID da Base (Ex: "1", "vendas", "suporte")
+                    <span className="text-amber-400 ml-1">*</span>
+                </Label>
+                <Input
+                    placeholder="Digite um ID para isolar esta base"
+                    value={node.knowledgeBaseId || ''}
+                    onChange={(e) => onUpdate(node.id, { knowledgeBaseId: e.target.value })}
+                    className="h-7 text-xs bg-black/20 border-white/5 focus:border-amber-500/50 font-mono text-amber-200/80"
+                />
+                <p className="text-[9px] text-zinc-600">
+                    Isola os conteúdos. O bot só acessará itens com este ID.
+                </p>
+            </div>
+
+            <div className="h-px bg-white/5" />
 
             {/* Connection String (Optional - inherited from Memory Node) */}
             <div className="space-y-1">
@@ -280,7 +331,7 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
                 <TabsContent value="create" className="mt-3 space-y-3">
                     <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
-                            <Label className="text-[9px] text-zinc-500">Categoria</Label>
+                            <Label className="text-[9px] text-zinc-500">Categoria (Semântica)</Label>
                             <Select
                                 value={formData.category}
                                 onValueChange={(v) => setFormData(f => ({ ...f, category: v }))}
@@ -371,7 +422,7 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">Todas</SelectItem>
-                                {categories.map(cat => (
+                                {Object.keys(groupedEntries).map(cat => (
                                     <SelectItem key={cat} value={cat}>
                                         {CATEGORY_OPTIONS.find(o => o.value === cat)?.label || cat}
                                     </SelectItem>
@@ -390,14 +441,16 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
                         ) : filteredEntries.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-8 text-zinc-500 gap-2">
                                 <FolderOpen className="w-8 h-8 opacity-50" />
-                                <span className="text-xs">Nenhuma entry encontrada</span>
+                                <span className="text-xs">
+                                    {knowledgeBaseId ? `Nenhum item em "${knowledgeBaseId}"` : 'Nenhum item encontrado'}
+                                </span>
                                 <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => setActiveTab('create')}
                                     className="text-xs text-amber-400 hover:text-amber-300"
                                 >
-                                    Criar primeira entry
+                                    Criar item
                                 </Button>
                             </div>
                         ) : (

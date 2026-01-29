@@ -302,6 +302,7 @@ export interface NodeData {
   httpToolAuthToken?: string;
 
   // Knowledge Node
+  knowledgeBaseId?: string;
   knowledgeConnectionString?: string;
   knowledgeEmbeddingsModel?: string;
 }
