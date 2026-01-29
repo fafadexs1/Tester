@@ -1242,6 +1242,29 @@ export async function executeFlow(
                 }
               }
 
+              // Process System Prompt to resolve @ToolName references
+              let finalSystemPrompt = systemPrompt;
+              if (finalSystemPrompt && connectedTools.length > 0) {
+                connectedTools.forEach(tool => {
+                  const slug = tool.slug;
+                  const name = tool.name;
+                  if (!slug) return;
+
+                  // Replace @slug (e.g. @tool_cipriano -> 'tool_cipriano')
+                  const slugRegex = new RegExp(`@${slug}`, 'gi');
+                  finalSystemPrompt = finalSystemPrompt.replace(slugRegex, `'${slug}'`);
+
+                  // Replace @name (e.g. @Cipriano -> 'tool_cipriano') if name exists
+                  if (name) {
+                    const cleanName = name.replace(/\s+/g, ''); // Remove spaces
+                    if (cleanName && cleanName.toLowerCase() !== slug.toLowerCase()) {
+                      const nameRegex = new RegExp(`@${cleanName}`, 'gi');
+                      finalSystemPrompt = finalSystemPrompt.replace(nameRegex, `'${slug}'`);
+                    }
+                  }
+                });
+                console.log(`[Flow Engine] Processed Agent System Prompt:`, finalSystemPrompt);
+              }
 
               const agentReply = await agenticFlow({
                 userMessage: cleanedUserInput,
@@ -1249,7 +1272,7 @@ export async function executeFlow(
                 history: history,
                 modelName: targetModel,
                 modelConfig: targetApiKey ? { apiKey: targetApiKey } : undefined,
-                systemPrompt,
+                systemPrompt: finalSystemPrompt,
                 temperature: currentNode.temperature,
                 memoryContext,
               });

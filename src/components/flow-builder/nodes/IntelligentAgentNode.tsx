@@ -1,18 +1,48 @@
 "use client";
 
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { NodeComponentProps } from '../NodeProps';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Textarea } from '@/components/ui/textarea'; // Keep for other fields if needed
+import { MentionsTextarea, MentionOption } from '../components/MentionsTextarea';
 import { Slider } from '@/components/ui/slider';
 import { VariableInserter } from '../components/VariableInserter';
 import { TextFormatToolbar } from '../components/TextFormatToolbar';
 import { Bot, BrainCircuit, Database, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export const IntelligentAgentNode: React.FC<NodeComponentProps> = ({ node, onUpdate, onEndConnection }) => {
+export const IntelligentAgentNode: React.FC<NodeComponentProps> = ({ node, onUpdate, onEndConnection, activeWorkspace }) => {
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
+
+    const availableTools = useMemo(() => {
+        if (!activeWorkspace?.nodes) return [];
+
+        return activeWorkspace.nodes
+            .filter(n => ['http-tool', 'capability', 'knowledge'].includes(n.type))
+            .map(n => {
+                let label = n.title;
+                let type: MentionOption['type'] = 'tool';
+
+                if (n.type === 'http-tool') {
+                    label = n.httpToolName || n.title || 'HTTP Tool';
+                    type = 'http';
+                } else if (n.type === 'capability') {
+                    label = n.capabilityName || n.title || 'Capability';
+                    type = 'capability';
+                } else if (n.type === 'knowledge') {
+                    label = n.title || 'Knowledge Base';
+                    type = 'knowledge';
+                }
+
+                return {
+                    id: n.id,
+                    label,
+                    value: n.id, // We use ID or Slug, but label is what user sees/inserts mostly
+                    type
+                };
+            });
+    }, [activeWorkspace?.nodes]);
 
     return (
         <div className="space-y-2" data-no-drag="true">
@@ -25,8 +55,17 @@ export const IntelligentAgentNode: React.FC<NodeComponentProps> = ({ node, onUpd
             </div>
             <div>
                 <Label htmlFor={`${node.id}-agentsystemprompt`} className="text-[10px] font-medium text-zinc-400 mb-1 block">Prompt do Sistema / Instruções</Label>
-                <div className="relative">
-                    <Textarea ref={textAreaRef} id={`${node.id}-agentsystemprompt`} placeholder="Você é um assistente virtual especializado em {{area_especializacao}}." value={node.agentSystemPrompt || ''} onChange={(e) => onUpdate(node.id, { agentSystemPrompt: e.target.value })} rows={4} className="text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 resize-none" />
+                <div className="relative h-32"> {/* Fixed height container for popover positioning context */}
+                    <MentionsTextarea
+                        ref={textAreaRef}
+                        id={`${node.id}-agentsystemprompt`}
+                        placeholder="Você é um assistente virtual... Use @Ferramenta para..."
+                        value={node.agentSystemPrompt || ''}
+                        onUpdate={(val) => onUpdate(node.id, { agentSystemPrompt: val })}
+                        options={availableTools}
+                        rows={4}
+                        className="text-xs pr-8 bg-black/20 border-white/5 focus:border-primary/50 resize-none h-full"
+                    />
                     <VariableInserter fieldName="agentSystemPrompt" isIconTrigger isTextarea onInsert={(v) => onUpdate(node.id, { agentSystemPrompt: (node.agentSystemPrompt || '') + v })} />
                 </div>
                 <TextFormatToolbar fieldName="agentSystemPrompt" textAreaRef={textAreaRef as React.RefObject<HTMLTextAreaElement>} onUpdate={onUpdate} nodeId={node.id} />

@@ -182,26 +182,12 @@ const selectRelevantCapabilities = (
     // Ideally we define 'passed' boolean logic. 
 
     const finalFiltered = scored.filter(entry => {
-        // If overlap is high (user asks specifically for this features keywords), let it pass.
-        if (entry.score >= OVERLAP_THRESHOLD) return true;
-        // If jaccard is decent (general similarity), let it pass.
-        // But note: earlier we saw jaccard 0.03 for valid request. 
-        // Overlap was likely 1.0 there.
-        // So relying on Overlap for short queries is key.
-        return false;
+        // PERMISSIVE: If there is ANY token overlap or similarity, let it through.
+        // We rely on the LLM to choose the right tool from the final list (capped at MAX_TOOL_COUNT).
+        return entry.score > 0.001;
     });
 
-    // Let's stick to using the 'score' (max) against a slightly more permissive common threshold?
-    // Actually, explicit logic is clearer. 
-    // Let's rewrite the filter.
-
-    return scored
-        .filter(entry => {
-            // We can access exact calculated metrics if we recalculated them or stored them, 
-            // but `entry.score` is just max.
-            // Let's relax the threshold for Max Score effectively.
-            return entry.score >= 0.1; // If Overlap is 1.0, it passes. If Jaccard is 0.1, it passes.
-        })
+    return finalFiltered
         .sort((a, b) => b.score - a.score)
         .slice(0, MAX_TOOL_COUNT)
         .map(entry => entry.cap);
@@ -298,6 +284,7 @@ export const agenticFlow = ai.defineFlow(
 
         const promptSections = [
             systemPrompt ? `System Instructions:\n${systemPrompt}` : 'You are an autonomous assistant.',
+            `IMPORTANT: You are an autonomous agent. If you use a tool, you MUST use its output to formulate a response to the user. Do not stop after using a tool. Read your System Instructions to decide what to do next. If the tool result is successful, explain it to the user or ask the next logical question.`,
             knowledgeToolInstruction,
             formatMemoryContext(memoryContext),
             knowledgeContext,
@@ -326,16 +313,23 @@ export const agenticFlow = ai.defineFlow(
             console.log(`[Agentic Flow] Tool shortlist: ${selectedCapabilities.length}/${typedCapabilities.length}`);
         }
 
-        const llmResponse = await ai.generate({
-            model: effectiveModel,
-            prompt: promptSections,
-            tools: tools,
-            config: {
-                temperature: input.temperature ?? 0.7,
-                ...(input.modelConfig && typeof input.modelConfig === 'object' ? input.modelConfig : {}),
-            },
-        });
+        let llmResponse;
+        try {
+            llmResponse = await ai.generate({
+                model: effectiveModel,
+                prompt: promptSections,
+                tools: tools.length > 0 ? tools : undefined, // Pass undefined if no tools, to avoid library issues
+                config: {
+                    temperature: input.temperature ?? 0.7,
+                    ...(input.modelConfig && typeof input.modelConfig === 'object' ? input.modelConfig : {}),
+                },
+            });
+            console.log(`[Agentic Flow] Generation complete. Response text length: ${llmResponse.text?.length || 0}`);
+        } catch (e: any) {
+            console.error(`[Agentic Flow] AI Generate Error:`, e);
+            return { botReply: "I encountered an error while thinking. Please try again." };
+        }
 
-        return { botReply: llmResponse.text };
+        return { botReply: llmResponse.text || "I didn't have anything to say." };
     }
 );
