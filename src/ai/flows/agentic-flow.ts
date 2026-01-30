@@ -36,6 +36,7 @@ export const AgenticFlowInputSchema = z.object({
 
 export const AgenticFlowOutputSchema = z.object({
     botReply: z.string(),
+    toolsCalled: z.array(z.string()).optional(),
 });
 
 const tokenize = (text: string): string[] =>
@@ -233,6 +234,7 @@ export const agenticFlow = ai.defineFlow(
 
         const usedToolNames = new Set<string>();
         const toolNameBySlug = new Map<string, string>();
+        const calledToolSlugs: string[] = []; // Track which tools are actually called
 
         // Log which tools ACTUALLY passed the filter
         if (selectedCapabilities.length > 0) {
@@ -263,6 +265,7 @@ export const agenticFlow = ai.defineFlow(
                 },
                 async (toolInput) => {
                     console.log(`[Agentic Flow] Executing tool: ${cap.slug} with input:`, toolInput);
+                    calledToolSlugs.push(cap.slug); // Track this tool was called
                     try {
                         const result = await executeCapability(cap, toolInput as Record<string, any>);
                         return result;
@@ -327,6 +330,8 @@ export const agenticFlow = ai.defineFlow(
             return { botReply: "I encountered an error while thinking. Please try again." };
         }
 
-        return { botReply: llmResponse.text || "I didn't have anything to say." };
+        const toolsCalled = calledToolSlugs.length > 0 ? calledToolSlugs : undefined;
+        console.log(`[Agentic Flow] Tools called: ${toolsCalled?.join(', ') || 'none'}`);
+        return { botReply: llmResponse.text || "I didn't have anything to say.", toolsCalled };
     }
 );

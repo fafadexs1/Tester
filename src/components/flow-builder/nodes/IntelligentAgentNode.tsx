@@ -16,32 +16,45 @@ export const IntelligentAgentNode: React.FC<NodeComponentProps> = ({ node, onUpd
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
     const availableTools = useMemo(() => {
-        if (!activeWorkspace?.nodes) return [];
+        const tools: MentionOption[] = [];
 
-        return activeWorkspace.nodes
-            .filter(n => ['http-tool', 'capability', 'knowledge'].includes(n.type))
-            .map(n => {
-                let label = n.title;
-                let type: MentionOption['type'] = 'tool';
+        // Add tools from workspace nodes
+        if (activeWorkspace?.nodes) {
+            activeWorkspace.nodes
+                .filter(n => ['http-tool', 'capability', 'knowledge'].includes(n.type))
+                .forEach(n => {
+                    let label = n.title;
+                    let type: MentionOption['type'] = 'tool';
 
-                if (n.type === 'http-tool') {
-                    label = n.httpToolName || n.title || 'HTTP Tool';
-                    type = 'http';
-                } else if (n.type === 'capability') {
-                    label = n.capabilityName || n.title || 'Capability';
-                    type = 'capability';
-                } else if (n.type === 'knowledge') {
-                    label = n.title || 'Knowledge Base';
-                    type = 'knowledge';
-                }
+                    if (n.type === 'http-tool') {
+                        label = n.httpToolName || n.title || 'HTTP Tool';
+                        type = 'http';
+                    } else if (n.type === 'capability') {
+                        label = n.capabilityName || n.title || 'Capability';
+                        type = 'capability';
+                    } else if (n.type === 'knowledge') {
+                        label = n.title || 'Knowledge Base';
+                        type = 'knowledge';
+                    }
 
-                return {
-                    id: n.id,
-                    label,
-                    value: n.id, // We use ID or Slug, but label is what user sees/inserts mostly
-                    type
-                };
-            });
+                    tools.push({
+                        id: n.id,
+                        label,
+                        value: n.id,
+                        type
+                    });
+                });
+        }
+
+        // Always add the built-in finalizar_atendimento tool
+        tools.push({
+            id: 'finalizar_atendimento',
+            label: 'finalizar_atendimento',
+            value: 'finalizar_atendimento',
+            type: 'tool'
+        });
+
+        return tools;
     }, [activeWorkspace?.nodes]);
 
     return (

@@ -1228,7 +1228,31 @@ export async function executeFlow(
                 connectedTools.push(knowledgeLookupCap);
               }
 
-              // 2. Resolve Model Configuration
+              // Always inject the built-in 'finalizar_atendimento' tool
+              // The Agent can call this to signal it has completed its task and the flow should continue
+              const finalizarCap = {
+                id: `finalizar-${currentNode.id}`,
+                workspace_id: currentWorkspace.id,
+                name: 'Finalizar Atendimento',
+                slug: 'finalizar_atendimento',
+                version: '1.0.0',
+                contract: {
+                  summary: 'Encerra o atendimento do agente e prossegue para o próximo passo do fluxo',
+                  description: 'Use esta ferramenta APENAS quando você tiver completado TODOS os passos do seu script/prompt. Ao chamar esta ferramenta, o fluxo irá prosseguir para o próximo nó. NÃO use antes de terminar todas as etapas.',
+                  inputSchema: JSON.stringify({
+                    type: 'object',
+                    properties: {
+                      motivo: { type: 'string', description: 'Motivo da finalização (ex: cadastro_completo, usuario_desistiu, transferencia)' }
+                    },
+                    required: ['motivo']
+                  })
+                },
+                execution_config: {
+                  type: 'noop' // No-op: This tool doesn't actually do anything, it's just a signal
+                }
+              };
+              connectedTools.push(finalizarCap);
+              console.log(`[Flow Engine] Injected 'finalizar_atendimento' tool for agent ${currentNode.id}`);
               let targetModel = modelName;
               let targetApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY; // Default fallback
 
@@ -1308,6 +1332,17 @@ export async function executeFlow(
               const blocksToSend = messageBlocks.length > 0 ? messageBlocks : [cleanedReply];
               for (const block of blocksToSend) {
                 await sendOmniChannelMessage(session, currentWorkspace, block);
+              }
+
+              // Check if the Agent explicitly called the "exit" tool (finalizar_atendimento)
+              // This gives the LLM/Prompt full control over when to exit
+              const calledExitTool = (agentReply.toolsCalled || []).includes('finalizar_atendimento');
+              if (calledExitTool) {
+                console.log(`[Flow Engine] Agent called 'finalizar_atendimento' - exiting to default path.`);
+                setProperty(session.flow_variables, `_agent_completed_${currentNode.id}`, true);
+                nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+                shouldContinue = true;
+                break;
               }
             } else {
               console.warn(`[Flow Engine - ${session.session_id}] Intelligent Agent: Input variable '${inputVarName}' not found.`);
