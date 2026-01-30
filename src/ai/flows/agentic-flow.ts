@@ -181,13 +181,10 @@ const selectRelevantCapabilities = (
     // Wait, we want to Pass if (jaccard > 0.1 OR overlap > 0.3)
     // Ideally we define 'passed' boolean logic. 
 
-    const finalFiltered = scored.filter(entry => {
-        // PERMISSIVE: If there is ANY token overlap or similarity, let it through.
-        // We rely on the LLM to choose the right tool from the final list (capped at MAX_TOOL_COUNT).
-        return entry.score > 0.001;
-    });
-
-    return finalFiltered
+    // PERMISSIVE: Always expose ALL tools to the LLM. Let it decide based on context.
+    // The LLM has the full System Prompt and conversation history, so it can make better decisions.
+    // We only sort by relevance and cap the count to avoid overwhelming the model.
+    return scored
         .sort((a, b) => b.score - a.score)
         .slice(0, MAX_TOOL_COUNT)
         .map(entry => entry.cap);
