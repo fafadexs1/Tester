@@ -277,9 +277,11 @@ export const agenticFlow = ai.defineFlow(
                 },
                 async (toolInput) => {
                     console.log(`[Agentic Flow] Executing tool: ${cap.slug} with input:`, toolInput);
-                    calledToolSlugs.push(cap.slug); // Track this tool was called
                     try {
                         const result = await executeCapability(cap, toolInput as Record<string, any>);
+                        if (!result?.error) {
+                            calledToolSlugs.push(cap.slug); // Track only successful tool calls
+                        }
                         return result;
                     } catch (err: any) {
                         console.error(`[Agentic Flow] Tool execution failed:`, err);

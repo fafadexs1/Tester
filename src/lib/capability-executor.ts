@@ -115,6 +115,8 @@ export async function executeCapability(capability: Capability, input: Record<st
 
     if (config.type === 'api') {
         return executeApiCapability(config, input);
+    } else if (config.type === 'noop') {
+        return { ok: true };
     } else if (config.type === 'function') {
         const functionName = config.functionName;
         if (!functionName) {
