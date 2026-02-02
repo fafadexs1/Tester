@@ -9,6 +9,8 @@ const MemoryCandidateSchema = z.object({
   importance: z.number().describe('0-1 importance score.'),
   ttlDays: z.number().optional().describe('Optional TTL in days.'),
   tags: z.array(z.string()).optional(),
+  confirmed: z.boolean().optional(),
+  confidence: z.number().optional().describe('0-1 confidence score.'),
 });
 
 const MemoryCompilerInputSchema = z.object({

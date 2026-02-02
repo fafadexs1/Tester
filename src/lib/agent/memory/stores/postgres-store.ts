@@ -69,6 +69,17 @@ export class PostgresMemoryStore implements MemoryStore {
       );
     `);
 
+        // Ensure scope_key accepts any stable identifier (phone, text, custom IDs)
+        try {
+            await this.execute(`
+        ALTER TABLE agent_memories
+        ALTER COLUMN scope_key TYPE TEXT
+        USING scope_key::text
+      `);
+        } catch (e: any) {
+            console.warn('[PostgresMemoryStore] Failed to ensure scope_key is TEXT:', e?.message || e);
+        }
+
         // 2.5 Ensure embedding columns exist (manual migration for existing tables)
         if (this.supportsVector) {
             try {

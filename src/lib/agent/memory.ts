@@ -1,4 +1,4 @@
-import {
+﻿import {
   createMemoryStore,
 } from './memory/factory';
 import {
@@ -33,6 +33,9 @@ export interface MemoryContext {
   facts: string[];
   episodes: string[];
   procedures: string[];
+  unconfirmedFacts?: string[];
+  unconfirmedEpisodes?: string[];
+  unconfirmedProcedures?: string[];
   items: MemoryItem[];
 }
 
@@ -42,6 +45,8 @@ interface MemoryCandidate {
   importance?: number;
   ttlDays?: number;
   tags?: string[];
+  confirmed?: boolean;
+  confidence?: number;
 }
 
 const DEFAULT_SETTINGS: Omit<MemorySettings, 'scopeKey'> = {
@@ -126,8 +131,79 @@ const scoreMemoryItem = (item: MemoryItem, query: string): number => {
   return relevance * weights.relevance + importance * weights.importance + recency * weights.recency;
 };
 
+const isConfirmedMemoryItem = (item: MemoryItem): boolean => {
+  const meta = item.metadata ?? {};
+  if (typeof meta === 'object' && (meta as any).confirmed === true) return true;
+  if (item.source === 'tool' || item.source === 'manual' || item.source === 'system') return true;
+  return false;
+};
+
 const isSensitive = (content: string): boolean =>
   SENSITIVE_PATTERNS.some(pattern => pattern.test(content));
+
+const normalizeConfidence = (value: number | undefined, fallback = 0.5): number => {
+  const base = typeof value === 'number' ? value : fallback;
+  return Math.max(0, Math.min(1, base));
+};
+
+const extractExplicitMemoryCandidates = (userMessage: string): MemoryCandidate[] => {
+  const candidates: MemoryCandidate[] = [];
+  const normalized = userMessage.trim();
+  if (!normalized) return candidates;
+
+  const nameMatch = normalized.match(/\b(meu nome (?:e|é)|me chamo|i am|my name is)\s+([^\.,;]+)/i);
+  if (nameMatch && nameMatch[2]) {
+    candidates.push({
+      type: 'semantic',
+      content: `User name: ${nameMatch[2].trim()}`,
+      importance: 0.9,
+      tags: ['identity', 'name'],
+      confirmed: true,
+      confidence: 0.95,
+    });
+  }
+
+  const preferenceMatch = normalized.match(/\b(prefiro|gosto de|nao gosto de|não gosto de|i like|i prefer|i do not like)\s+([^\.,;]+)/i);
+  if (preferenceMatch && preferenceMatch[2]) {
+    candidates.push({
+      type: 'semantic',
+      content: `Preference: ${preferenceMatch[1]} ${preferenceMatch[2].trim()}`,
+      importance: 0.7,
+      tags: ['preference'],
+      confirmed: true,
+      confidence: 0.85,
+    });
+  }
+
+  const emailMatch = normalized.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  if (emailMatch) {
+    candidates.push({
+      type: 'semantic',
+      content: `Email: ${emailMatch[0]}`,
+      importance: 0.8,
+      tags: ['contact', 'email'],
+      confirmed: true,
+      confidence: 0.9,
+    });
+  }
+
+  const phoneTaggedMatch = normalized.match(/\b(telefone|celular|whatsapp|fone|contato)\b[^\d]*(\+?[\d\s().-]{8,}\d)/i);
+  if (phoneTaggedMatch && phoneTaggedMatch[2]) {
+    const digitsOnly = phoneTaggedMatch[2].replace(/\D/g, '');
+    if (digitsOnly.length >= 8) {
+      candidates.push({
+        type: 'semantic',
+        content: `Phone: ${digitsOnly}`,
+        importance: 0.85,
+        tags: ['contact', 'phone'],
+        confirmed: true,
+        confidence: 0.9,
+      });
+    }
+  }
+
+  return candidates;
+};
 
 const resolveExpiry = (candidate: MemoryCandidate, settings: MemorySettings): string | null => {
   if (typeof candidate.ttlDays === 'number') {
@@ -159,28 +235,9 @@ export const normalizeMemorySettings = (input: Partial<MemorySettings>): MemoryS
 });
 
 const heuristicMemoryCandidates = (userMessage: string, assistantMessage: string): MemoryCandidate[] => {
-  const candidates: MemoryCandidate[] = [];
-  const lower = userMessage.toLowerCase();
-
-  const nameMatch = userMessage.match(/\b(meu nome (?:e|é)|me chamo|i am|my name is)\s+([^\.,;]+)/i);
-  if (nameMatch && nameMatch[2]) {
-    candidates.push({
-      type: 'semantic',
-      content: `User name: ${nameMatch[2].trim()}`,
-      importance: 0.85,
-      tags: ['identity'],
-    });
-  }
-
-  const preferenceMatch = userMessage.match(/\b(prefiro|gosto de|nao gosto de|não gosto de|i like|i prefer|i do not like)\s+([^\.,;]+)/i);
-  if (preferenceMatch && preferenceMatch[2]) {
-    candidates.push({
-      type: 'semantic',
-      content: `Preference: ${preferenceMatch[1]} ${preferenceMatch[2].trim()}`,
-      importance: 0.7,
-      tags: ['preference'],
-    });
-  }
+  const candidates: MemoryCandidate[] = [
+    ...extractExplicitMemoryCandidates(userMessage),
+  ];
 
   const shortEpisode = truncateText(`${normalizeText(userMessage)} | ${normalizeText(assistantMessage)}`, 220);
   if (shortEpisode) {
@@ -190,6 +247,8 @@ const heuristicMemoryCandidates = (userMessage: string, assistantMessage: string
       importance: 0.25,
       ttlDays: 7,
       tags: ['episode'],
+      confirmed: false,
+      confidence: 0.3,
     });
   }
 
@@ -202,6 +261,13 @@ const compileMemoryCandidates = async (params: {
   systemPrompt?: string;
   modelName?: string;
 }): Promise<MemoryCandidate[]> => {
+  const explicitCandidates = extractExplicitMemoryCandidates(params.userMessage);
+  const explicitMap = new Map<string, MemoryCandidate>();
+  explicitCandidates.forEach(candidate => {
+    const key = `${candidate.type}:${normalizeText(candidate.content).toLowerCase()}`;
+    explicitMap.set(key, candidate);
+  });
+
   try {
     const response = await memoryCompilerFlow({
       userMessage: params.userMessage,
@@ -210,13 +276,27 @@ const compileMemoryCandidates = async (params: {
       modelName: params.modelName,
     });
     if (response?.items?.length) {
-      return response.items.map(item => ({
-        type: item.type,
-        content: normalizeText(item.content),
-        importance: item.importance,
-        ttlDays: item.ttlDays,
-        tags: item.tags,
-      }));
+      const merged: MemoryCandidate[] = response.items.map(item => {
+        const content = normalizeText(item.content);
+        const key = `${item.type}:${content.toLowerCase()}`;
+        const explicit = explicitMap.get(key);
+        if (explicit) {
+          explicitMap.delete(key);
+        }
+
+        return {
+          type: item.type,
+          content,
+          importance: item.importance,
+          ttlDays: item.ttlDays,
+          tags: item.tags,
+          confirmed: explicit?.confirmed ?? item.confirmed ?? false,
+          confidence: explicit?.confidence ?? item.confidence ?? item.importance,
+        };
+      });
+
+      explicitMap.forEach(candidate => merged.push(candidate));
+      return merged;
     }
   } catch (error) {
     console.warn('[Memory] Compiler flow failed, using heuristic fallback.', error);
@@ -232,11 +312,32 @@ const filterCandidates = (items: MemoryCandidate[], minImportance: number): Memo
     if (!content) return;
     const key = `${item.type}:${content.toLowerCase()}`;
     const importance = Math.max(0, Math.min(1, item.importance ?? 0.5));
-    if (importance < minImportance) return;
+    const confirmed = Boolean(item.confirmed);
+    const confidence = normalizeConfidence(item.confidence, importance);
+    if (importance < minImportance && !confirmed) return;
     if (isSensitive(content)) return;
     const existing = dedup.get(key);
-    if (!existing || (existing.importance ?? 0) < importance) {
-      dedup.set(key, { ...item, content, importance });
+    if (!existing) {
+      dedup.set(key, { ...item, content, importance, confirmed, confidence });
+      return;
+    }
+
+    const existingConfirmed = Boolean(existing.confirmed);
+    const existingConfidence = normalizeConfidence(existing.confidence, existing.importance ?? 0.5);
+
+    if (confirmed && !existingConfirmed) {
+      dedup.set(key, { ...item, content, importance, confirmed, confidence });
+      return;
+    }
+
+    if (confirmed === existingConfirmed && confidence > existingConfidence) {
+      dedup.set(key, { ...item, content, importance, confirmed, confidence });
+      return;
+    }
+
+    if (confirmed === existingConfirmed && confidence === existingConfidence && (existing.importance ?? 0) < importance) {
+      dedup.set(key, { ...item, content, importance, confirmed, confidence });
+      return;
     }
   });
   return Array.from(dedup.values());
@@ -324,28 +425,68 @@ export const loadMemoryContext = async (params: {
   const facts: MemoryItem[] = [];
   const episodes: MemoryItem[] = [];
   const procedures: MemoryItem[] = [];
+  const unconfirmedFacts: MemoryItem[] = [];
+  const unconfirmedEpisodes: MemoryItem[] = [];
+  const unconfirmedProcedures: MemoryItem[] = [];
   const touched: string[] = [];
 
   for (const { item } of scored) {
-    if (item.type === 'semantic' && facts.length < 6) facts.push(item);
-    if (item.type === 'episodic' && episodes.length < 4) episodes.push(item);
-    if (item.type === 'procedural' && procedures.length < 3) procedures.push(item);
-    if ((facts.length >= 6) && (episodes.length >= 4) && (procedures.length >= 3)) break;
+    const confirmed = isConfirmedMemoryItem(item);
+
+    if (item.type === 'semantic') {
+      if (confirmed && facts.length < 6) facts.push(item);
+      if (!confirmed && unconfirmedFacts.length < 3) unconfirmedFacts.push(item);
+    }
+    if (item.type === 'episodic') {
+      if (confirmed && episodes.length < 4) episodes.push(item);
+      if (!confirmed && unconfirmedEpisodes.length < 2) unconfirmedEpisodes.push(item);
+    }
+    if (item.type === 'procedural') {
+      if (confirmed && procedures.length < 3) procedures.push(item);
+      if (!confirmed && unconfirmedProcedures.length < 2) unconfirmedProcedures.push(item);
+    }
+
+    if (
+      facts.length >= 6 &&
+      episodes.length >= 4 &&
+      procedures.length >= 3 &&
+      unconfirmedFacts.length >= 3 &&
+      unconfirmedEpisodes.length >= 2 &&
+      unconfirmedProcedures.length >= 2
+    ) {
+      break;
+    }
   }
 
-  const selectedItems = [...facts, ...episodes, ...procedures];
+  const selectedItems = [
+    ...facts,
+    ...episodes,
+    ...procedures,
+    ...unconfirmedFacts,
+    ...unconfirmedEpisodes,
+    ...unconfirmedProcedures,
+  ];
   selectedItems.forEach(item => touched.push(item.id));
   if (touched.length) await store.touch(touched);
 
   const summarySections: string[] = [];
   if (facts.length) {
-    summarySections.push(`Facts:\n- ${facts.map(f => f.content).join('\n- ')}`);
+    summarySections.push(`Confirmed Facts:\n- ${facts.map(f => f.content).join('\n- ')}`);
   }
   if (episodes.length) {
-    summarySections.push(`Episodes:\n- ${episodes.map(e => e.content).join('\n- ')}`);
+    summarySections.push(`Confirmed Episodes:\n- ${episodes.map(e => e.content).join('\n- ')}`);
   }
   if (procedures.length) {
-    summarySections.push(`Procedures:\n- ${procedures.map(p => p.content).join('\n- ')}`);
+    summarySections.push(`Confirmed Procedures:\n- ${procedures.map(p => p.content).join('\n- ')}`);
+  }
+  if (unconfirmedFacts.length) {
+    summarySections.push(`Unconfirmed Facts (use only as hints):\n- ${unconfirmedFacts.map(f => f.content).join('\n- ')}`);
+  }
+  if (unconfirmedEpisodes.length) {
+    summarySections.push(`Unconfirmed Episodes (use only as context):\n- ${unconfirmedEpisodes.map(e => e.content).join('\n- ')}`);
+  }
+  if (unconfirmedProcedures.length) {
+    summarySections.push(`Unconfirmed Procedures (use only as hints):\n- ${unconfirmedProcedures.map(p => p.content).join('\n- ')}`);
   }
 
   const summary = summarySections.join('\n\n').slice(0, 1600);
@@ -355,6 +496,9 @@ export const loadMemoryContext = async (params: {
     facts: facts.map(item => item.content),
     episodes: episodes.map(item => item.content),
     procedures: procedures.map(item => item.content),
+    unconfirmedFacts: unconfirmedFacts.map(item => item.content),
+    unconfirmedEpisodes: unconfirmedEpisodes.map(item => item.content),
+    unconfirmedProcedures: unconfirmedProcedures.map(item => item.content),
     items: selectedItems,
   };
 };
@@ -425,6 +569,10 @@ export const recordMemory = async (params: {
       content: truncateText(candidate.content, 500),
       importance: candidate.importance,
       tags: candidate.tags,
+      metadata: {
+        confirmed: candidate.confirmed ?? false,
+        confidence: normalizeConfidence(candidate.confidence, candidate.importance ?? 0.5),
+      },
       expiresAt: resolveExpiry(candidate, settings),
       source: 'compiler',
       embedding,
@@ -433,3 +581,4 @@ export const recordMemory = async (params: {
 
   await store.put(payload);
 };
+

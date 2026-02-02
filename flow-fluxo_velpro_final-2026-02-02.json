@@ -1,0 +1,1803 @@
+{
+  "version": "1.0",
+  "name": "Fluxo Velpro Final",
+  "nodes": [
+    {
+      "x": -618,
+      "y": 110,
+      "id": "68dccee9-37ec-4f20-99b4-986440252fa1",
+      "type": "start",
+      "title": "Início do Fluxo",
+      "triggers": [
+        {
+          "id": "d7228779-d4ab-4439-87f4-1cbf036ee6db",
+          "name": "Manual",
+          "type": "manual",
+          "enabled": false
+        },
+        {
+          "id": "bc9e4ccb-52b9-4a6a-a8d7-b77807665f8f",
+          "name": "Webhook",
+          "type": "webhook",
+          "enabled": true,
+          "keyword": "",
+          "variableMappings": [
+            {
+              "id": "5a1fff05-e30d-4920-94e4-36e66c72e21b",
+              "jsonPath": "conversation.id",
+              "flowVariable": "id_conversa"
+            },
+            {
+              "id": "126381a7-1fab-443a-9ca1-3ea38f75c317",
+              "jsonPath": "message.content",
+              "flowVariable": "mensagem_usuario"
+            },
+            {
+              "id": "a1fe7d9f-718a-4604-b305-13283641023d",
+              "jsonPath": "conversation.id",
+              "flowVariable": "id_chat"
+            }
+          ],
+          "sessionTimeoutSeconds": 0
+        }
+      ]
+    },
+    {
+      "x": 2,
+      "y": -208,
+      "id": "a417828e-d19f-45ea-8184-f26348f588a8",
+      "text": "Olá, sou o assistente virtual da *Velpro Telecom.* Seja bem-vindo!",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 900,
+      "y": 140,
+      "id": "c64c2011-f4f0-43c3-9721-d3e97f7fa58d",
+      "type": "option",
+      "title": "Fucker",
+      "options": [
+        {
+          "id": "6886987d-f0c2-414c-9771-4edd1ddcb64d",
+          "value": "🚀 Assinar Internet"
+        },
+        {
+          "id": "bf7d3ca0-7bab-44b4-a599-5a722b69cf74",
+          "value": "🔄Transferência de Endereço"
+        },
+        {
+          "id": "f9533055-942a-4dc3-941c-2c5e242e6185",
+          "value": "🛠 Suporte Técnico"
+        },
+        {
+          "id": "51aefe37-961c-42c9-824e-af8c7ca97a7f",
+          "value": "💰 Financeiro"
+        },
+        {
+          "id": "fb47c06c-f54d-4f14-a6e4-7f7aa0c0e8f7",
+          "value": "❌ Encerrar Atendimento"
+        }
+      ],
+      "aiEnabled": false,
+      "optionsList": "🚀 Assinar Internet\n🔄Transferência de Endereço\n🛠 Suporte Técnico\n💰 Financeiro\n❌ Encerrar Atendimento",
+      "questionText": "Digite a opção desejada: ✨",
+      "apiResponseAsInput": false,
+      "variableToSaveChoice": "escolha_usuario",
+      "apiResponsePathForValue": "optionChoice"
+    },
+    {
+      "x": 976,
+      "y": -1170,
+      "id": "b67f8821-c264-490b-89e6-ab8722bdcdd3",
+      "type": "option",
+      "title": "Múltiplas Escolhas",
+      "aiEnabled": false,
+      "optionsList": "Google / Pesquisa no Google\nInstagram\nFacebook\nIndicação de amigo ou cliente\nOutdoor / Anúncio físico\nVendedor / Representante\nOutros (Panfleto, etc)",
+      "questionText": "Antes de continuarmos, como conheceu a empresa?",
+      "apiResponseAsInput": false,
+      "variableToSaveChoice": "escolha_usuario",
+      "apiResponsePathForValue": "optionChoice"
+    },
+    {
+      "x": 1578,
+      "y": -1094,
+      "id": "8dc8df5b-d39f-4852-ace0-1b996457f12b",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://dialogy.fhgg2n.easypanel.host/api/teams/b3b71514-098f-49fa-b922-f38a40065ef6/status",
+      "apiMethod": "GET",
+      "apiAuthType": "bearer",
+      "apiBodyType": "none",
+      "apiResponsePath": "isOpen",
+      "apiOutputVariable": "verifica_horario",
+      "apiAuthBearerToken": "dgy_57ee93909deb0215be313a486aabb1ca0281ad284f42c47f",
+      "apiResponseMappings": []
+    },
+    {
+      "x": 2347,
+      "y": -1036,
+      "id": "d4421955-47cc-448d-b865-554277a4e376",
+      "type": "switch",
+      "title": "Escolha de Caminho",
+      "switchCases": [
+        {
+          "id": "92046e51-59c6-4c43-9fc3-4ff431f77033",
+          "value": "true"
+        },
+        {
+          "id": "f7e04c98-ad03-4b25-b441-ad2deafaf10b",
+          "value": "false"
+        }
+      ],
+      "switchVariable": "{{verifica_horario}}"
+    },
+    {
+      "x": 2600,
+      "y": -700,
+      "id": "a7a9d87a-b148-42e9-896e-6b96ad0399a0",
+      "type": "input",
+      "title": "Entrada do Usuário",
+      "inputType": "text",
+      "promptText": "✅ Ótimo! Para finalizar o pedido responda ao formulário abaixo EM APENAS UMA MENSAGEM\n\n[FORMULÁRIO]\nNome Completo:\nE-mail:\nCPF:\nRG:\nData de nascimento:\nCelular:\nWhatsapp:\nEndereço Completo:\nComo conheceu a empresa:\nPlano Escolhido:\nData de Vencimento:",
+      "apiResponseAsInput": false,
+      "variableToSaveResponse": "nome_usuario",
+      "apiResponsePathForValue": "responseText"
+    },
+    {
+      "x": 1426,
+      "y": 217,
+      "id": "798a463b-83c1-4d5f-9fa9-99e4e1403a9c",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://dialogy.fhgg2n.easypanel.host/api/teams/b9a74d62-7f65-46c1-a5ae-4887fde9926e/status",
+      "apiMethod": "GET",
+      "apiAuthType": "bearer",
+      "apiBodyType": "none",
+      "apiResponsePath": "isOpen",
+      "apiOutputVariable": "verifica_horario",
+      "apiAuthBearerToken": "dgy_57ee93909deb0215be313a486aabb1ca0281ad284f42c47f",
+      "apiResponseMappings": []
+    },
+    {
+      "x": 2161,
+      "y": 241,
+      "id": "85305a21-3382-41d4-9877-9adbd789f8ee",
+      "type": "switch",
+      "title": "Escolha de Caminho",
+      "switchCases": [
+        {
+          "id": "92046e51-59c6-4c43-9fc3-4ff431f77033",
+          "value": "true"
+        }
+      ],
+      "switchVariable": "{{verifica_horario}}"
+    },
+    {
+      "x": 2640,
+      "y": 540,
+      "id": "c6f70a76-fb40-42c2-b16d-23795232947a",
+      "text": "Nosso expediente de suporte técnico se encerrou por hoje. Nosso horário de atendimento é de segunda a sexta-feira, das 8h às 20h, aos sábados das 8h às 18h, e aos domingos e feriados, das 8h às 12h. Pedimos desculpas por qualquer inconveniente.",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 2606,
+      "y": -315,
+      "id": "b0ca8f89-f86b-4653-bcb6-11abfc89ca3e",
+      "type": "option",
+      "title": "Múltiplas Escolhas",
+      "options": [
+        {
+          "id": "0bc584e2-4429-495f-aaef-04f30abc6219",
+          "value": "Problemas de sinal"
+        },
+        {
+          "id": "0a1ce939-7126-4efe-938f-9949b8d5a2f7",
+          "value": "Boleto/Pagamento"
+        },
+        {
+          "id": "e3b3eee6-32d9-41ff-8ed5-5e16974b4913",
+          "value": "Desbloquear Internet"
+        }
+      ],
+      "aiEnabled": false,
+      "optionsList": "Problemas de sinal\nBoleto/Pagamento\nDesbloquear Internet",
+      "questionText": "👩🏽‍💻 Qual dos assuntos abaixo mais se aproxima do seu pedido?",
+      "apiResponseAsInput": false,
+      "variableToSaveChoice": "escolha_usuario_1",
+      "apiResponsePathForValue": "optionChoice"
+    },
+    {
+      "x": 3199,
+      "y": -129,
+      "id": "3df99771-1413-4413-972e-294a02deb895",
+      "text": "👩🏽‍💻 Sem problemas, parece que você está tendo um problema um pouco mais complicado, neste caso vou te encaminhar para o nosso atendimento humano agora mesmo!",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 1803,
+      "y": 236,
+      "id": "ec461173-1f4a-4a13-9346-91d4c9c63f22",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://dialogy.fhgg2n.easypanel.host/api/agent/chats/{{id_conversa}}/tags",
+      "apiMethod": "POST",
+      "apiBodyRaw": "{\n    \"tagId\": \"f1edc42b-5d86-4b43-b70b-358a78b83aab\"\n}",
+      "apiAuthType": "bearer",
+      "apiBodyJson": "{\n    \"tagId\": \"e2c48e3b-0c2f-405d-8b5c-d4edd57ba4e1\"\n  }",
+      "apiBodyType": "raw",
+      "apiHeadersList": [
+        {
+          "id": "27117af4-3b73-436c-81b7-5a5aafefc4f1",
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "apiOutputVariable": "resposta_api",
+      "apiAuthBearerToken": "dgy_57ee93909deb0215be313a486aabb1ca0281ad284f42c47f",
+      "apiBodyFormDataList": [
+        {
+          "id": "c03817e0-ccb2-4be8-a281-0fd7b4df1410",
+          "key": "tagId",
+          "value": "f1edc42b-5d86-4b43-b70b-358a78b83aab"
+        }
+      ]
+    },
+    {
+      "x": 3108,
+      "y": 607,
+      "id": "80c2af14-6a19-421f-84ea-24ac20672d71",
+      "type": "end-flow",
+      "title": "Fim do Fluxo"
+    },
+    {
+      "x": 840,
+      "y": 1220,
+      "id": "963b4ead-e253-4534-8b1f-5a9a502ff868",
+      "type": "end-flow",
+      "title": "Fim do Fluxo"
+    },
+    {
+      "x": 4305,
+      "y": 3539,
+      "id": "220439be-5b74-478c-9035-07b7422b6fa4",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://velpro.sgp.tsmx.com.br/api/ura/fatura2via/",
+      "apiMethod": "POST",
+      "apiBodyRaw": "",
+      "apiAuthType": "none",
+      "apiBodyJson": "",
+      "apiBodyType": "form-data",
+      "apiHeadersList": [],
+      "apiResponsePath": "links",
+      "apiAuthBasicUser": "",
+      "apiOutputVariable": "resposta_api_1",
+      "apiAuthBearerToken": "",
+      "apiQueryParamsList": [],
+      "apiBodyFormDataList": [
+        {
+          "id": "8280252e-9997-4951-890f-d48200326368",
+          "key": "app",
+          "value": "Discordrotas"
+        },
+        {
+          "id": "794a97af-dda2-4428-b005-d1cba0f9bb74",
+          "key": "token",
+          "value": "ada5d2d9-1914-49a3-ab42-9e8a8296edf5"
+        },
+        {
+          "id": "9a26abb1-4c2f-4ceb-ae0b-49516f9eab0e",
+          "key": "contrato",
+          "value": "{{contrato_escolhido}}"
+        },
+        {
+          "id": "43f60f05-bd6a-4a80-84dd-68d09b612f04",
+          "key": "nao_gerar_os",
+          "value": "1"
+        }
+      ],
+      "apiResponseMappings": [
+        {
+          "id": "a727ca5c-19ac-4ab9-93f3-644f3e34c24f",
+          "jsonPath": "link",
+          "extractAs": "single",
+          "flowVariable": "link_fatura"
+        },
+        {
+          "id": "6642392e-44cf-4b65-a5f0-6f2497dbc242",
+          "jsonPath": "links[0].codigopix",
+          "extractAs": "single",
+          "flowVariable": "pix_fatura"
+        },
+        {
+          "id": "a0ff7b52-1ed4-428a-97ba-637005be41d3",
+          "jsonPath": "links[0].valor",
+          "extractAs": "single",
+          "flowVariable": "valor_fatura"
+        },
+        {
+          "id": "d69e5985-5df1-48b4-8fa6-f177c4d3444b",
+          "jsonPath": "razaoSocial",
+          "extractAs": "single",
+          "flowVariable": "cliente_nome_fatura"
+        },
+        {
+          "id": "37d81172-bcdc-4a81-8459-43add1caaf2e",
+          "jsonPath": "contratoId",
+          "extractAs": "single",
+          "flowVariable": "contrato_fatura"
+        },
+        {
+          "id": "6d55c55b-c1a2-4f1c-a322-0a92471b9d41",
+          "jsonPath": "links[0].vencimento",
+          "extractAs": "single",
+          "flowVariable": "vencimento_fatura"
+        }
+      ],
+      "apiAuthBasicPassword": ""
+    },
+    {
+      "x": 2201,
+      "y": 930,
+      "id": "a1140f03-efd3-4e59-ab2e-d9e973434ca0",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://dialogy.fhgg2n.easypanel.host/api/teams/e4991d0b-917c-42e7-8cde-014b0bdf5bb8/status",
+      "apiMethod": "GET",
+      "apiAuthType": "bearer",
+      "apiBodyType": "none",
+      "apiResponsePath": "isOpen",
+      "apiOutputVariable": "verifica_horario",
+      "apiAuthBearerToken": "dgy_57ee93909deb0215be313a486aabb1ca0281ad284f42c47f",
+      "apiResponseMappings": []
+    },
+    {
+      "x": 2196,
+      "y": 1484,
+      "id": "4250bd24-de2e-43f8-ac97-b215e0a01ae6",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://dialogy.fhgg2n.easypanel.host/api/agent/chats/{{id_conversa}}/tags",
+      "apiMethod": "POST",
+      "apiBodyRaw": "{\n    \"tagId\": \"58ef50bc-f95e-4fa2-b060-1571cb173e48\"\n}",
+      "apiAuthType": "bearer",
+      "apiBodyJson": "{\n    \"tagId\": \"e2c48e3b-0c2f-405d-8b5c-d4edd57ba4e1\"\n  }",
+      "apiBodyType": "raw",
+      "apiHeadersList": [
+        {
+          "id": "27117af4-3b73-436c-81b7-5a5aafefc4f1",
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "apiOutputVariable": "resposta_api",
+      "apiAuthBearerToken": "dgy_57ee93909deb0215be313a486aabb1ca0281ad284f42c47f",
+      "apiBodyFormDataList": [
+        {
+          "id": "c03817e0-ccb2-4be8-a281-0fd7b4df1410",
+          "key": "tagId",
+          "value": "f1edc42b-5d86-4b43-b70b-358a78b83aab"
+        }
+      ]
+    },
+    {
+      "x": 2634,
+      "y": 2803,
+      "id": "4af42d8b-9d8f-4785-98d4-cc5f164dec0d",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://velpro.sgp.tsmx.com.br/api/ura/clientes/",
+      "apiMethod": "POST",
+      "apiBodyRaw": "",
+      "apiAuthType": "none",
+      "apiBodyJson": "{\n  \"app\": \"{{app}}\",\n  \"token\": \"{{token}}\",\n  \"cpfcnpj\": \"999.999.999-99\"\n}",
+      "apiBodyType": "form-data",
+      "apiHeadersList": [],
+      "apiResponsePath": "clientes[0].contratos",
+      "apiAuthBasicUser": "",
+      "apiOutputVariable": "resposta_api_1",
+      "apiAuthBearerToken": "",
+      "apiQueryParamsList": [],
+      "apiBodyFormDataList": [
+        {
+          "id": "290c8a9f-e4a5-4766-8024-7f00a7193c3f",
+          "key": "app",
+          "value": "Discordrotas"
+        },
+        {
+          "id": "ed3e681d-e832-4ea2-8e0e-e1fe1ea28517",
+          "key": "token",
+          "value": "ada5d2d9-1914-49a3-ab42-9e8a8296edf5"
+        },
+        {
+          "id": "b2222b91-dca8-4a0f-a3c7-b6c0299daf06",
+          "key": "cpfcnpj",
+          "value": "{{cpf_titular}}"
+        }
+      ],
+      "apiResponseMappings": [
+        {
+          "id": "e3e0c71b-591c-47b1-8951-1f7b6280c953",
+          "jsonPath": "clientes.contratos",
+          "extractAs": "list",
+          "itemField": "id",
+          "flowVariable": "contratos_clientes"
+        },
+        {
+          "id": "5d043474-ebb6-4fbd-82c5-1f1e94f64e17",
+          "jsonPath": "clientes[0].contratos[0].servicos[0].endereco.logradouro",
+          "extractAs": "single",
+          "flowVariable": "contrato_logradouro"
+        },
+        {
+          "id": "207614d9-2fee-4259-8d29-93827de1b8b2",
+          "jsonPath": "clientes[0].contratos[0].servicos[0].endereco.bairro",
+          "extractAs": "single",
+          "flowVariable": "contrato_bairro"
+        },
+        {
+          "id": "8865ada0-0b0a-4d1c-83f9-4c463d303c28",
+          "jsonPath": "clientes[0].contratos[0].servicos[0].endereco.complemento",
+          "extractAs": "single",
+          "flowVariable": "contrato_complemento"
+        }
+      ],
+      "apiAuthBasicPassword": ""
+    },
+    {
+      "x": 3888,
+      "y": 3506,
+      "id": "46cf004a-d04d-4c20-9d8b-9cedbf11b436",
+      "type": "option",
+      "title": "Múltiplas Escolhas",
+      "options": [
+        {
+          "id": "14355c8c-6bd3-4a7c-98f3-433e51f747b5",
+          "value": "{{contratos_clientes}}"
+        }
+      ],
+      "aiEnabled": false,
+      "optionsList": "{{contratos_clientes}}",
+      "questionText": "Escolha uma opção:",
+      "apiResponseAsInput": false,
+      "variableToSaveChoice": "contrato_escolhido",
+      "apiResponsePathForValue": "optionChoice"
+    },
+    {
+      "x": 2142,
+      "y": 2818,
+      "id": "2c157dee-8679-4003-8264-4d17f2cfb4cf",
+      "type": "input",
+      "title": "Entrada do Usuário",
+      "inputType": "number",
+      "promptText": "Digite o CPF do titular",
+      "questionText": "Digite o CPF do titular",
+      "apiResponseAsInput": false,
+      "variableToSaveResponse": "cpf_titular",
+      "apiResponsePathForValue": "responseText"
+    },
+    {
+      "x": 4703,
+      "y": 3604,
+      "id": "eb574508-4c90-4555-9325-91bcfa27a614",
+      "text": "Olá, {{cliente_nome_fatura}}!\n\nO valor da sua fatura é R${{valor_fatura}}\n\nData de vencimento: {{vencimento_fatura}}",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 5548,
+      "y": 3512,
+      "id": "b16eebf8-c1e4-47fc-8d2b-4c8eab85d120",
+      "text": "{{pix_fatura}}",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 5134,
+      "y": 3579,
+      "id": "5856fa19-14e3-466d-aa84-85042260843f",
+      "text": "Pague com pix: ",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 5934,
+      "y": 3210,
+      "id": "ecf2d6a1-2fd6-4416-b0e6-26ea0b489405",
+      "text": "Acesse sua fatura: {{link_fatura}}",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 5926,
+      "y": 3470,
+      "id": "6936cf8d-0820-4801-bc4c-65131905e557",
+      "text": "Qualquer dúvida, pode nos chamar novamente!",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 6434,
+      "y": 3716,
+      "id": "515a66a4-639c-4d61-aa12-bdc6a2006f8e",
+      "type": "end-flow",
+      "title": "Fim do Fluxo"
+    },
+    {
+      "x": 1462,
+      "y": 888,
+      "id": "99ae0347-cb4d-45c8-98a3-8fb6c31e53e9",
+      "type": "option",
+      "title": "Múltiplas Escolhas",
+      "options": [
+        {
+          "id": "f61e106c-5518-4417-b9dc-b29f6dfa0eec",
+          "value": "📄2° Via Fatura"
+        },
+        {
+          "id": "3a4b8c9b-5c34-4629-a465-4aa1b682d76f",
+          "value": "💸Negociar dívida"
+        },
+        {
+          "id": "ebc82b43-a03d-40c6-adf9-6e185b2893f0",
+          "value": "💰Informar Pagamento"
+        },
+        {
+          "id": "10c880ae-1719-47f5-9a76-7c5911a70c56",
+          "value": "❓Outros Assuntos"
+        },
+        {
+          "id": "b285b1e1-46d5-4aaa-802d-7455ea3bed6c",
+          "value": "🔓Desbloqueio de confiança"
+        },
+        {
+          "id": "ffb0f3e6-b555-46fd-8e96-2f0d71627242",
+          "value": "↩️Voltar"
+        }
+      ],
+      "aiEnabled": false,
+      "optionsList": "📄2° Via Fatura\n💸Negociar dívida\n💰Informar Pagamento\n❓Outros Assuntos\n🔓Desbloqueio de confiança",
+      "questionText": "Escolha uma opção:",
+      "apiResponseAsInput": false,
+      "variableToSaveChoice": "escolha_usuario_2",
+      "apiResponsePathForValue": "optionChoice"
+    },
+    {
+      "x": 2703,
+      "y": 1289,
+      "id": "9bba7344-2d5e-4580-aec3-b0c299f75c31",
+      "type": "switch",
+      "title": "Escolha de Caminho",
+      "switchCases": [
+        {
+          "id": "92046e51-59c6-4c43-9fc3-4ff431f77033",
+          "value": "true"
+        }
+      ],
+      "switchVariable": "{{verifica_horario}}"
+    },
+    {
+      "x": 3090,
+      "y": 1775,
+      "id": "dfba00ef-5b34-4cd8-ac03-ce455dfcd407",
+      "text": "Infelizmente, o setor financeiro já se encerrou hoje. Nosso horário de atendimento do setor financeiro é de segunda a sábado, das 8h às 18h. Domingos e feriados não temos expediente no financeiro.",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 3563,
+      "y": 1290,
+      "id": "60741028-3301-4c9b-a2b2-d6aeeaf2daf2",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://dialogy.fhgg2n.easypanel.host/api/agent/chats/{{id_conversa}}/transfer",
+      "apiMethod": "POST",
+      "apiBodyRaw": "",
+      "apiAuthType": "bearer",
+      "apiBodyJson": "{\n  \"teamId\": \"e4991d0b-917c-42e7-8cde-014b0bdf5bb8\"\n}",
+      "apiBodyType": "json",
+      "apiHeadersList": [
+        {
+          "id": "5f8dc442-fcc7-49fa-a7f8-52cd916083eb",
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "apiAuthBasicUser": "",
+      "apiOutputVariable": "resposta_api_2",
+      "apiAuthBearerToken": "dgy_57ee93909deb0215be313a486aabb1ca0281ad284f42c47f",
+      "apiQueryParamsList": [],
+      "apiBodyFormDataList": [],
+      "apiAuthBasicPassword": ""
+    },
+    {
+      "x": 3135,
+      "y": 1308,
+      "id": "38ea2175-2948-4a86-a61c-fc6165287904",
+      "text": "🎆 Só um instantinho! ✨\n\nEstamos preparando tudo para te conectar com um de nossos atendentes.",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 1650,
+      "y": 2804,
+      "id": "2de563d2-1905-4693-acc4-463b286c7cbf",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://dialogy.fhgg2n.easypanel.host/api/agent/chats/{{id_conversa}}/tags",
+      "apiMethod": "POST",
+      "apiBodyRaw": "{\n    \"tagId\": \"58ef50bc-f95e-4fa2-b060-1571cb173e48\"\n}",
+      "apiAuthType": "bearer",
+      "apiBodyJson": "{\n    \"tagId\": \"e2c48e3b-0c2f-405d-8b5c-d4edd57ba4e1\"\n  }",
+      "apiBodyType": "raw",
+      "apiHeadersList": [
+        {
+          "id": "27117af4-3b73-436c-81b7-5a5aafefc4f1",
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "apiOutputVariable": "resposta_api",
+      "apiAuthBearerToken": "dgy_57ee93909deb0215be313a486aabb1ca0281ad284f42c47f",
+      "apiBodyFormDataList": [
+        {
+          "id": "c03817e0-ccb2-4be8-a281-0fd7b4df1410",
+          "key": "tagId",
+          "value": "f1edc42b-5d86-4b43-b70b-358a78b83aab"
+        }
+      ]
+    },
+    {
+      "x": 658,
+      "y": 1987,
+      "id": "2744247a-418a-4ea9-a086-21382e2bf124",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://velpro.sgp.tsmx.com.br/api/ura/liberacaopromessa/",
+      "apiMethod": "POST",
+      "apiBodyRaw": "",
+      "apiAuthType": "none",
+      "apiBodyJson": "{\n  \"app\": \"Discordrotas\",\n  \"token\": \"ada5d2d9-1914-49a3-ab42-9e8a8296edf5\",\n  \"contrato\": \"{{contrato_escolhido}}\",\n  \"data_promessa\": \"{{mes_tratado}}\"\n}",
+      "apiBodyType": "json",
+      "apiHeadersList": [
+        {
+          "id": "e8e04c24-ffce-4d0e-82c0-288c839da821",
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "apiAuthBasicUser": "",
+      "apiOutputVariable": "resposta_api_3",
+      "apiAuthBearerToken": "",
+      "apiQueryParamsList": [],
+      "apiBodyFormDataList": [
+        {
+          "id": "fc088c9f-7ceb-4e13-a436-6422493eca66",
+          "key": "app",
+          "value": "Discordrotas"
+        },
+        {
+          "id": "d2bf1511-ac96-4b28-aae9-acca6c5e4b27",
+          "key": "token",
+          "value": "ada5d2d9-1914-49a3-ab42-9e8a8296edf5"
+        },
+        {
+          "id": "ebfaa1ff-159c-46df-8880-96b9e0ed389c",
+          "key": "contrato",
+          "value": "19204"
+        },
+        {
+          "id": "dcc68189-6d78-46ac-b384-d61c7a8f74ee",
+          "key": "data_promessa",
+          "value": "07-14-2025"
+        }
+      ],
+      "apiResponseMappings": [
+        {
+          "id": "dc1ae689-8487-4f5e-9267-834eb52c6fcf",
+          "jsonPath": "msg",
+          "extractAs": "single",
+          "flowVariable": "mensagem_liberacao"
+        },
+        {
+          "id": "2c627057-fb01-40c7-b492-747f86ce4ace",
+          "jsonPath": "status",
+          "extractAs": "single",
+          "flowVariable": "status_valor"
+        }
+      ],
+      "apiAuthBasicPassword": ""
+    },
+    {
+      "x": -2572,
+      "y": 1818,
+      "id": "9a6acf0e-49cf-461c-b05b-029e259efe48",
+      "type": "input",
+      "title": "Entrada do Usuário",
+      "inputType": "text",
+      "promptText": "Digite o CPF do titular",
+      "questionText": "Digite o CPF do titular",
+      "apiResponseAsInput": false,
+      "inputValidationType": "none",
+      "variableToSaveResponse": "cpf_titular",
+      "apiResponsePathForValue": "responseText"
+    },
+    {
+      "x": -2093,
+      "y": 1835,
+      "id": "59aaaa8a-8534-4252-93ba-398b61d7ac7a",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://velpro.sgp.tsmx.com.br/api/ura/clientes/",
+      "apiMethod": "POST",
+      "apiBodyRaw": "",
+      "apiAuthType": "none",
+      "apiBodyJson": "{\n  \"app\": \"{{app}}\",\n  \"token\": \"{{token}}\",\n  \"cpfcnpj\": \"999.999.999-99\"\n}",
+      "apiBodyType": "form-data",
+      "apiHeadersList": [],
+      "apiResponsePath": "clientes.contratos",
+      "apiAuthBasicUser": "",
+      "apiOutputVariable": "resposta_api_1",
+      "apiAuthBearerToken": "",
+      "apiQueryParamsList": [],
+      "apiBodyFormDataList": [
+        {
+          "id": "290c8a9f-e4a5-4766-8024-7f00a7193c3f",
+          "key": "app",
+          "value": "Discordrotas"
+        },
+        {
+          "id": "ed3e681d-e832-4ea2-8e0e-e1fe1ea28517",
+          "key": "token",
+          "value": "ada5d2d9-1914-49a3-ab42-9e8a8296edf5"
+        },
+        {
+          "id": "b2222b91-dca8-4a0f-a3c7-b6c0299daf06",
+          "key": "cpfcnpj",
+          "value": "{{cpf_titular}}"
+        }
+      ],
+      "apiResponseMappings": [
+        {
+          "id": "e3e0c71b-591c-47b1-8951-1f7b6280c953",
+          "jsonPath": "clientes.contratos",
+          "extractAs": "list",
+          "itemField": "id",
+          "flowVariable": "contratos_clientes"
+        }
+      ],
+      "apiAuthBasicPassword": ""
+    },
+    {
+      "x": -660,
+      "y": 1816,
+      "id": "0d8b4b59-2784-4b0b-b8cb-e295dbdd5387",
+      "type": "option",
+      "title": "Múltiplas Escolhas",
+      "options": [
+        {
+          "id": "28a44df3-9215-43a0-a719-96a476ed10ba",
+          "value": "{{contratos_clientes}}"
+        }
+      ],
+      "aiEnabled": false,
+      "optionsList": "{{contratos_clientes}}",
+      "questionText": "Escolha uma opção:",
+      "apiResponseAsInput": false,
+      "variableToSaveChoice": "contrato_escolhido",
+      "apiResponsePathForValue": "optionChoice"
+    },
+    {
+      "x": -137,
+      "y": 1863,
+      "id": "3e9ce131-6a0b-42a2-ab60-37ce8854e07b",
+      "type": "code-execution",
+      "title": "Executar Código (JS)",
+      "codeSnippet": "function gerarDataMais3Dias() {\n  const hoje = new Date();\n  const diaSeguinte = new Date(hoje);\n  diaSeguinte.setDate(diaSeguinte.getDate() + 1);\n\n  const resultado = new Date(diaSeguinte);\n  resultado.setDate(resultado.getDate() + 3);\n\n  const ano = resultado.getFullYear();\n  const mes = String(resultado.getMonth() + 1).padStart(2, '0');\n  const dia = String(resultado.getDate()).padStart(2, '0');\n\n  return `${ano}-${mes}-${dia}`;\n}\n\n// devolve o valor para que o painel salve na variável\nreturn gerarDataMais3Dias();",
+      "codeOutputVariable": "resultado_codigo"
+    },
+    {
+      "x": 1531,
+      "y": 1980,
+      "id": "d8bb61ea-53c2-473a-b8a8-2bfcc5d37895",
+      "text": "{{mensagem_liberacao}}",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 277,
+      "y": 1894,
+      "id": "30a27265-c50d-4e47-b8f5-a673e50ef986",
+      "type": "set-variable",
+      "title": "Definir Variável",
+      "variableName": "mes_tratado",
+      "variableValue": "{{resultado_codigo}}"
+    },
+    {
+      "x": 3268,
+      "y": -1205,
+      "id": "c6cdfb32-5bdf-4d85-a141-56266c1a317a",
+      "text": "👩🏽‍💻 Vi que você tem interesse em contratar nossos serviços 🚀\nVou te conectar agora com um especialista para te explicar tudo direitinho.",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 3697,
+      "y": -233,
+      "id": "7261da04-f240-4f89-a40b-6fd43f5983dc",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://dialogy.fhgg2n.easypanel.host/api/agent/chats/{{id_conversa}}/transfer",
+      "apiMethod": "POST",
+      "apiBodyRaw": "",
+      "apiAuthType": "bearer",
+      "apiBodyJson": "{\n  \"teamId\": \"b9a74d62-7f65-46c1-a5ae-4887fde9926e\"\n}",
+      "apiBodyType": "json",
+      "apiHeadersList": [
+        {
+          "id": "5f8dc442-fcc7-49fa-a7f8-52cd916083eb",
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "apiAuthBasicUser": "",
+      "apiOutputVariable": "resposta_api_2",
+      "apiAuthBearerToken": "dgy_57ee93909deb0215be313a486aabb1ca0281ad284f42c47f",
+      "apiQueryParamsList": [],
+      "apiBodyFormDataList": [],
+      "apiAuthBasicPassword": ""
+    },
+    {
+      "x": 3784,
+      "y": -1244,
+      "id": "3852954f-13b4-4ee5-a804-b81e661ee436",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://dialogy.fhgg2n.easypanel.host/api/agent/chats/{{id_conversa}}/transfer",
+      "apiMethod": "POST",
+      "apiBodyRaw": "",
+      "apiAuthType": "bearer",
+      "apiBodyJson": "{\n  \"teamId\": \"b3b71514-098f-49fa-b922-f38a40065ef6\"\n}",
+      "apiBodyType": "json",
+      "apiHeadersList": [
+        {
+          "id": "5f8dc442-fcc7-49fa-a7f8-52cd916083eb",
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "apiAuthBasicUser": "",
+      "apiOutputVariable": "resposta_api_2",
+      "apiAuthBearerToken": "dgy_57ee93909deb0215be313a486aabb1ca0281ad284f42c47f",
+      "apiQueryParamsList": [],
+      "apiBodyFormDataList": [],
+      "apiAuthBasicPassword": ""
+    },
+    {
+      "x": 1946,
+      "y": -1049,
+      "id": "ed49dbae-92ef-4fb6-b2dd-830db50f4e5a",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://dialogy.fhgg2n.easypanel.host/api/agent/chats/{{id_conversa}}/tags",
+      "apiMethod": "POST",
+      "apiBodyRaw": "{\n    \"tagId\": \"8fa25b50-165f-4e88-ab96-82f1c8d7debd\"\n}",
+      "apiAuthType": "bearer",
+      "apiBodyJson": "{\n    \"tagId\": \"e2c48e3b-0c2f-405d-8b5c-d4edd57ba4e1\"\n  }",
+      "apiBodyType": "raw",
+      "apiHeadersList": [
+        {
+          "id": "27117af4-3b73-436c-81b7-5a5aafefc4f1",
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "apiOutputVariable": "resposta_api",
+      "apiAuthBearerToken": "dgy_57ee93909deb0215be313a486aabb1ca0281ad284f42c47f",
+      "apiBodyFormDataList": [
+        {
+          "id": "c03817e0-ccb2-4be8-a281-0fd7b4df1410",
+          "key": "tagId",
+          "value": "f1edc42b-5d86-4b43-b70b-358a78b83aab"
+        }
+      ]
+    },
+    {
+      "x": 3680,
+      "y": 2040,
+      "id": "8aa39fcc-c1f4-41f1-ae2f-86e5b5aee0eb",
+      "type": "end-flow",
+      "title": "Fim do Fluxo"
+    },
+    {
+      "x": 3758,
+      "y": -625,
+      "id": "8e8fc70e-170a-4ab4-8558-3d55097d7c22",
+      "type": "end-flow",
+      "title": "Fim do Fluxo"
+    },
+    {
+      "x": 3538,
+      "y": 2383,
+      "id": "eb69168d-2b65-4a55-bbf8-0892e271ec83",
+      "type": "code-execution",
+      "title": "Executar Código (JS)",
+      "codeSnippet": "const texto = \"{{contrato_escolhido}}\"; // ajuste para a sua variável\nconst match = texto.match(/^\\s*(\\d+)/);\nconst numeroContrato = match ? match[1] : \"\";\n\nreturn numeroContrato;",
+      "codeOutputVariable": "pega_contrato"
+    },
+    {
+      "x": 3921,
+      "y": 2279,
+      "id": "70580637-dcda-4e48-b85f-23380be38e45",
+      "text": "{{pega_contrato}}",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 3043,
+      "y": 3084,
+      "id": "b126fef9-ecf2-4eb7-9f4c-dbac5bd34330",
+      "type": "code-execution",
+      "title": "Executar Código (JS)",
+      "codeSnippet": "// garante que \"contratos_clientes\" é uma lista\nconst contratos = Array.isArray(variables[\"contratos_clientes\"])\n  ? variables[\"contratos_clientes\"]\n  : [];\n\n// conta contratos válidos (números ou strings não vazias)\nconst quantidade = contratos.filter(c => String(c).trim().length > 0).length;\n\nlet resultado;\n\nif (quantidade === 1) {\n  resultado = \"apenas_1_contrato\";\n} else if (quantidade > 1) {\n  resultado = \"mais_de_1_contrato\";\n} else {\n  resultado = \"nenhum_contrato\";\n}\n\nreturn resultado;",
+      "codeOutputVariable": "resultado_codigo_1"
+    },
+    {
+      "x": 3405,
+      "y": 3297,
+      "id": "d17f5fb2-40b7-4fe2-a590-77a5bfadbff9",
+      "type": "switch",
+      "title": "Escolha de Caminho",
+      "switchCases": [
+        {
+          "id": "0b8a6eeb-21d6-4fe5-9ce9-12c67b1ab46b",
+          "value": "apenas_1_contrato"
+        },
+        {
+          "id": "26f24672-8b14-4ccf-861c-10ea3a5b3ff3",
+          "value": "mais_de_1_contrato"
+        },
+        {
+          "id": "5e31d0a4-0ec1-4834-a516-095aa1cabab0",
+          "value": "nenhum_contrato"
+        }
+      ],
+      "switchVariable": "{{resultado_codigo_1}}"
+    },
+    {
+      "x": 3884,
+      "y": 3230,
+      "id": "cef320f3-1110-498a-9585-7ecdf2788e00",
+      "type": "set-variable",
+      "title": "Definir Variável",
+      "variableName": "contrato_escolhido",
+      "variableValue": "{{contratos_clientes}}"
+    },
+    {
+      "x": 1536,
+      "y": 2260,
+      "id": "3fcd5026-326b-4393-8842-dc536e562c64",
+      "text": "Infelizmente não foi possível, entre em contato com o setor financeiro!",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 2973,
+      "y": 3849,
+      "id": "f5b65cb6-1e8d-424e-aef2-32b89f08fcf5",
+      "type": "option",
+      "title": "Múltiplas Escolhas",
+      "options": [
+        {
+          "id": "0f5ac6e5-b01d-4928-8c28-be4e4d6c3009",
+          "value": "Tentar novamente"
+        },
+        {
+          "id": "6d819bc8-fc15-455b-a824-7c7e8a1e8701",
+          "value": "Encerrar Atendimento"
+        }
+      ],
+      "optionsList": "Tentar novamente\nEncerrar Atendimento",
+      "questionText": "Não encontramos nenhum contrato neste, o que deseja fazer?",
+      "apiResponseAsInput": false,
+      "variableToSaveChoice": "escolha_usuario_3",
+      "apiResponsePathForValue": "optionChoice"
+    },
+    {
+      "x": 3420,
+      "y": 4280,
+      "id": "8c5902af-3ac8-4160-b23b-1bc733ed37de",
+      "type": "end-flow",
+      "title": "Fim do Fluxo"
+    },
+    {
+      "x": -1630,
+      "y": 1811,
+      "id": "5f164a10-5788-4c55-ac8d-0922c31a6f70",
+      "type": "code-execution",
+      "title": "Executar Código (JS)",
+      "codeSnippet": "// garante que \"contratos_clientes\" é uma lista\nconst contratos = Array.isArray(variables[\"contratos_clientes\"])\n  ? variables[\"contratos_clientes\"]\n  : [];\n\n// conta contratos válidos (números ou strings não vazias)\nconst quantidade = contratos.filter(c => String(c).trim().length > 0).length;\n\nlet resultado;\n\nif (quantidade === 1) {\n  resultado = \"apenas_1_contrato\";\n} else if (quantidade > 1) {\n  resultado = \"mais_de_1_contrato\";\n} else {\n  resultado = \"nenhum_contrato\";\n}\n\nreturn resultado;",
+      "codeOutputVariable": "resultado_codigo_1"
+    },
+    {
+      "x": -1200,
+      "y": 1903,
+      "id": "1d2865c1-c12f-49b8-9586-ee331ebc4ed7",
+      "type": "switch",
+      "title": "Escolha de Caminho",
+      "switchCases": [
+        {
+          "id": "0b8a6eeb-21d6-4fe5-9ce9-12c67b1ab46b",
+          "value": "apenas_1_contrato"
+        },
+        {
+          "id": "26f24672-8b14-4ccf-861c-10ea3a5b3ff3",
+          "value": "mais_de_1_contrato"
+        },
+        {
+          "id": "5e31d0a4-0ec1-4834-a516-095aa1cabab0",
+          "value": "nenhum_contrato"
+        }
+      ],
+      "switchVariable": "{{resultado_codigo_1}}",
+      "conditionVariable": "{{resultado_codigo_1}}"
+    },
+    {
+      "x": -1199,
+      "y": 2467,
+      "id": "086d414c-f199-4d4d-bfc4-103f5cdb316b",
+      "type": "option",
+      "title": "Múltiplas Escolhas",
+      "options": [
+        {
+          "id": "07251547-20dc-492f-8cb6-9096e369a70e",
+          "value": "Tentar novamente"
+        },
+        {
+          "id": "1ab4fdc8-1591-47c5-aa04-fa839debad4b",
+          "value": "Encerrar Atendimento"
+        }
+      ],
+      "optionsList": "Tentar novamente\nEncerrar Atendimento",
+      "questionText": "Não encontramos nenhum contrato neste, o que deseja fazer?",
+      "apiResponseAsInput": false,
+      "variableToSaveChoice": "escolha_usuario_3",
+      "apiResponsePathForValue": "optionChoice"
+    },
+    {
+      "x": -673,
+      "y": 2614,
+      "id": "43d29c32-9b67-40cf-bf39-0330e1a0ba23",
+      "type": "end-flow",
+      "title": "Fim do Fluxo"
+    },
+    {
+      "x": 1089,
+      "y": 1970,
+      "id": "afbb7322-3058-4747-bbae-48c668ebe672",
+      "type": "switch",
+      "title": "Escolha de Caminho",
+      "switchCases": [
+        {
+          "id": "e7d1f7d5-3665-4a3a-abdc-986ff9dcb4c0",
+          "value": "0"
+        },
+        {
+          "id": "bc7ed72b-b7f2-4407-83ce-c86a56118185",
+          "value": "1"
+        },
+        {
+          "id": "a484e9e3-ec74-4e00-9a60-493099785bcf",
+          "value": "2"
+        }
+      ],
+      "switchVariable": "{{status_valor}}",
+      "conditionVariable": "{{status_valor}}"
+    },
+    {
+      "x": 1533,
+      "y": 1723,
+      "id": "e55ff144-e984-48fa-a8af-83c96906b318",
+      "text": "Sua conexão ainda não foi bloqueada, pode utilizar normalmente!",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 1965,
+      "y": 2061,
+      "id": "905c2764-7576-4b80-8b23-60ddace402b6",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://dialogy.fhgg2n.easypanel.host/api/agent/chats/close",
+      "apiMethod": "POST",
+      "apiBodyRaw": "",
+      "apiAuthType": "bearer",
+      "apiBodyJson": "{\n  \"chatId\": \"{{id_conversa}}\",\n  \"reasonTagId\": \"5a064503-1cca-4c42-983b-1556255061b1\",\n  \"notes\": \"Executou alguma ação como pegar uma fatura ou outros\"\n}",
+      "apiBodyType": "json",
+      "apiHeadersList": [
+        {
+          "id": "98aeb7ad-82e0-447f-bd06-bcf494a796e8",
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "apiAuthBasicUser": "",
+      "apiOutputVariable": "resposta_api_4",
+      "apiAuthBearerToken": "dgy_57ee93909deb0215be313a486aabb1ca0281ad284f42c47f",
+      "apiQueryParamsList": [],
+      "apiBodyFormDataList": [],
+      "apiAuthBasicPassword": ""
+    },
+    {
+      "x": 2694,
+      "y": 2176,
+      "id": "17be07d8-9ada-4174-ac86-aa467ceb7e61",
+      "type": "end-flow",
+      "title": "Fim do Fluxo"
+    },
+    {
+      "x": 2331,
+      "y": 2121,
+      "id": "d1454be5-c3ef-431a-9f32-455f7c42bb3e",
+      "text": "*Atendimento encerrado automaticamente pelo sistema!*",
+      "type": "message",
+      "title": "Exibir Texto"
+    },
+    {
+      "x": 6440,
+      "y": 3149,
+      "id": "2c011fa0-0870-43c7-88eb-aba09a853dbc",
+      "type": "api-call",
+      "title": "Chamada API",
+      "apiUrl": "https://dialogy.fhgg2n.easypanel.host/api/agent/chats/close",
+      "apiMethod": "POST",
+      "apiBodyRaw": "",
+      "apiAuthType": "bearer",
+      "apiBodyJson": "{\n  \"chatId\": \"{{id_conversa}}\",\n  \"reasonTagId\": \"5a064503-1cca-4c42-983b-1556255061b1\",\n  \"notes\": \"Executou alguma ação como pegar uma fatura ou outros\"\n}",
+      "apiBodyType": "json",
+      "apiHeadersList": [
+        {
+          "id": "98aeb7ad-82e0-447f-bd06-bcf494a796e8",
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "apiAuthBasicUser": "",
+      "apiOutputVariable": "resposta_api_4",
+      "apiAuthBearerToken": "dgy_57ee93909deb0215be313a486aabb1ca0281ad284f42c47f",
+      "apiQueryParamsList": [],
+      "apiBodyFormDataList": [],
+      "apiAuthBasicPassword": ""
+    },
+    {
+      "x": -660,
+      "y": 1560,
+      "id": "b7003151-a5f9-4b8b-9bfc-d4a5630aedf0",
+      "type": "set-variable",
+      "title": "Definir Variável",
+      "variableName": "contrato_escolhido",
+      "variableValue": "{{contratos_clientes}}"
+    },
+    {
+      "x": 860,
+      "y": 800,
+      "id": "819ae4e3-e3cc-4d6b-a251-e88416b5ca66",
+      "type": "api-call",
+      "title": "Encerra",
+      "apiUrl": "https://dialogy.fhgg2n.easypanel.host/api/agent/chats/close",
+      "apiMethod": "POST",
+      "apiBodyRaw": "",
+      "apiAuthType": "bearer",
+      "apiBodyJson": "{\n  \"chatId\": \"{{id_conversa}}\",\n  \"reasonTagId\": \"5a064503-1cca-4c42-983b-1556255061b1\",\n  \"notes\": \"Executou alguma ação como pegar uma fatura ou outros\"\n}",
+      "apiBodyType": "json",
+      "apiHeadersList": [
+        {
+          "id": "98aeb7ad-82e0-447f-bd06-bcf494a796e8",
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "apiAuthBasicUser": "",
+      "apiOutputVariable": "resposta_api_4",
+      "apiAuthBearerToken": "dgy_57ee93909deb0215be313a486aabb1ca0281ad284f42c47f",
+      "apiQueryParamsList": [],
+      "apiBodyFormDataList": [],
+      "apiAuthBasicPassword": ""
+    },
+    {
+      "x": 3080,
+      "y": -900,
+      "id": "86d4cc09-9e0c-49c2-91be-f57aced83f3d",
+      "type": "intelligent-agent",
+      "title": "Agente Inteligente",
+      "agentName": "Assistente",
+      "temperature": 0.21,
+      "agentSystemPrompt": "🆔 Identidade do Agente\n\nNome: Raquel\nFunção: Assistente Virtual do Setor Comercial – Velpro Telecom\n\nObjetivo principal:\nIdentificar o interesse inicial do cliente, conduzir a conversa de forma natural, apresentar os planos disponíveis, responder dúvidas técnico-comerciais, coletar informações essenciais somente quando fizer sentido e informar que um atendente humano do setor comercial entrará em contato.\n\n🧠 Personalidade e Tom\n\nVocê é Raquel, assistente virtual do setor comercial da Velpro Telecom.\n\nTom educado, simpático, claro e profissional\n\nLinguagem simples, natural e acessível\n\nComunicação curta, objetiva e amigável\n\nSempre focada em comercial e decisão de compra\n\nNunca diga que é IA ou robô — apenas “assistente virtual”\n\nRestrições absolutas\n\nNunca prometa valores, prazos ou condições específicas\n\nNunca finalize vendas\nNunca negocie preços\n\nNunca prometa instalação\n\nNunca confirme disponibilidade técnica\n\nNunca saia do papel comercial\n\n🗣️ Forma de Apresentação\n\n(obrigatória – apenas uma vez no início da conversa)\n\n“Olá! 😊\nEu sou a Raquel, assistente virtual do setor comercial da Velpro Telecom.”\n\n🧭 PASSO 1 – Identificar a intenção do cliente\n\nAntes de qualquer coleta de dados, sempre pergunte o que o cliente deseja, de forma aberta e natural:\n\n“Me conta, por favor 😊 \nO que você está procurando ou como posso te ajudar hoje?”\n\nIntenções esperadas\n\nInternet fibra\n\nInternet + TV\n\nInformações gerais\n\nContratar novo serviço\n\n⚠️ Importante:\n\nA Velpro Telecom não oferece apenas TV\n\nNão oferece Internet Móvel\n\nTrabalha somente com internet fibra óptica, com ou sem TV\n\n📡 PASSO 2 – Apresentação dos Planos (obrigatório antes de coletar dados)\n\nApós identificar a intenção, sempre apresente os planos disponíveis, consultando a Tool de base de conhecimento na tool \"contratar_plano_internet\", você deve mandar ele bem formatado igual está, não mude valores.\n\nEnvie as informações completas do plano\n\nUse linguagem clara e comercial\n\nExplique para que tipo de uso cada plano é indicado\n\nNão personalize valores\n\nNão prometa performance absoluta\nExemplo de abordagem correta:\n\n“De forma geral, temos planos que atendem desde uso básico até casas com muitos dispositivos conectados ao mesmo tempo 😊”\n\n🧠 PERMISSÃO ESPECIAL – Respostas Técnico-Comerciais (PODE RESPONDER)\n\nVocê PODE responder perguntas técnicas de nível comercial, desde que estejam ligadas à decisão de compra.\n\nExemplos do que você PODE explicar:\n\nPara quantas pessoas ou dispositivos o plano costuma atender\n\nDiferença entre Wi-Fi 5 e Wi-Fi 6\n\nQue os equipamentos normalmente são compatíveis com Wi-Fi 6 em planos superiores\n\nUso ideal para:\n\nStreaming\n\nJogos online\n\nHome office\n\nEmpresas\n\nDiferença entre planos residenciais e empresariais\n\n⚠️ Sempre use termos como:\n\n“em geral”, “normalmente”, “na maioria dos casos”, “costuma atender bem”\n\n🚫 O que é Técnico Profundo (NÃO RESPONDER)\n\nVocê NÃO deve responder quando envolver:\n\nAlcance do Wi-Fi dentro do imóvel\n\nMetros de cobertura\n\nDiagnóstico de sinal\n\nInterferência\n\nGarantia de velocidade no Wi-Fi\n\nConfirmação de equipamento específico do cliente\n\nDisponibilidade técnica no endereço\n\nNesses casos, redirecione para humano.\n\n🔁 Regras de Conversa\nPerguntas técnicas profundas\n\n“Um atendente do setor comercial vai conseguir te explicar tudo certinho 😊”\n\nPerguntas sobre valores\n\nConsulte a base de conhecimento (planos 2026)\n\nResponda de forma informativa e genérica\n\nNunca negocie ou personalize\n\nExemplo:\n\n“Os valores podem variar conforme a região e o tipo de plano 😊\nUm atendente do setor comercial confirma tudo certinho com você.”\n\n📋 PASSO 3 – Coleta de Informações Essenciais\n\n📋 Ficha de Cadastro Velpro\n(Preencha e envie junto com as fotos solicitadas apenas após o cliente selecionar o plano)\n\n✔️Endereço completo:\n✔️ Localização (se der)\n✔️2 Telefones (se der)\n✔️Dia de vencimento escolhido (5/10/15/20/25):\n✔️Turno para instalação (Manhã ou Tarde):\n\n⚠️ Importante: O titular precisa estar presente na instalação com documento físico com foto em mãos para assinatura do contrato online. 🤝\n\nPergunte um de cada vez\n\nSomente se ainda não tiver sido informado\n\nNunca repita dados que o cliente já informou espontaneamente\n\nProcure na base de conhecimento sobre as informacoes para contratar \"ficha_cliente\"\n\n✅ PASSO 4 - Encerramento Obrigatório\n\n(sempre usar após coletar as informações)\n\n“Perfeito! 🙌\nJá registrei suas informações.\nUm atendente do setor comercial da Velpro Telecom irá entrar em contato com você em breve para dar continuidade ao atendimento.\nObrigada pelo seu interesse! 💚”\n\nApós coletado os dados do cadastro, você deve usar a tool @enviar_atendimento_discord (http-tool) para enviar os dados do cadastro. E Então @finalizar_atendimento .\n\n🚫 Proibições Finais (regra absoluta)\n\nNão negociar preços\nNão prometer instalação\nNão confirmar cobertura\nNão sair do papel comercia\n\n@@@@@@@",
+      "userInputVariable": "{{mensagem_usuario}}",
+      "agentResponseVariable": "resposta_do_agente"
+    },
+    {
+      "x": 3060,
+      "y": -260,
+      "id": "20fd2e6a-af06-4ca9-9e75-0fd5154e4cb9",
+      "type": "ai-memory-config",
+      "title": "Memory Config",
+      "memoryScope": "user",
+      "memoryProvider": "hybrid",
+      "memoryConnectionString": "postgres://postgres:225676a743c4dbf95bd6@fhgg2n.easypanel.host:8870/evolutionapi?sslmode=disable",
+      "memoryScopeKeyVariable": "{{id_estavel}}",
+      "memoryRedisConnectionString": "redis://default:341a4c3b69a77a1b0f7d@fhgg2n.easypanel.host:8871"
+    },
+    {
+      "x": 2880,
+      "y": -320,
+      "id": "2a61f2a4-cd98-4340-b712-70a3fa56383f",
+      "type": "ai-model-config",
+      "title": "AI Model Config",
+      "aiApiKey": "AIzaSyD_iqW7oyArYgSHTvb9VkM4LtBxJGlqBjY",
+      "aiProvider": "google",
+      "aiModelName": "gemini-3-flash-preview"
+    },
+    {
+      "x": 3260,
+      "y": -300,
+      "id": "4c999f34-aabd-496f-b8f4-c6b16c6357f6",
+      "type": "knowledge",
+      "title": "Base de Conhecimento"
+    },
+    {
+      "x": 3460,
+      "y": -340,
+      "id": "c18e8cae-ee42-4673-89e2-f810e905695f",
+      "type": "http-tool",
+      "title": "Ferramenta API",
+      "httpToolUrl": "http://pufferpanel.fhgg2n.easypanel.host:25567/send-message",
+      "httpToolBody": "{\n\"channel_id\": \"1420958123576791100\",\n\"message\": \"{{INFORMACOES_CLIENTE}}\"\n}",
+      "httpToolName": "enviar_atendimento_discord",
+      "httpToolMethod": "POST",
+      "httpToolHeaders": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "httpToolBodyType": "form-data",
+      "httpToolFormData": [
+        {
+          "key": "channel_id",
+          "value": "1420958123576791100"
+        },
+        {
+          "key": "message",
+          "value": "{{INFORMACOES_CLIENTE}}"
+        }
+      ],
+      "httpToolDescription": "📌 Instrução para Envio de Dados Pós-Atendimento (Velpro Telecom)\n🧠 Contexto da ferramenta\n\nEsta ferramenta deve ser utilizada somente após a finalização do atendimento, quando todas as informações necessárias para a contratação já foram coletadas.\n\nO conteúdo enviado será um texto em formato livre, usado internamente pelo time comercial para dar continuidade ao contato com o cliente.\n\n⚠️ Regra principal\n\nO envio deve ser feito apenas como TEXTO (string)\n\nNÃO é JSON\n\nNÃO precisa escapar quebra de linha\n\nPode usar enter normalmente para espaçamento\n\n🧾 Formatação obrigatória\n\nTexto bem organizado e fácil de ler no Discord\n\nUsar Markdown (**negrito**)\n\nManter espaçamentos claros entre blocos\n\nSempre incluir Observações sobre o comportamento do cliente\n\n✅ MODELO CORRETO DE ENVIO\n**Informações do Cliente para Atendimento Velpro Telecom**\n\n**Nome:** Fabrício de Sousa Soares  \n**Telefone:** 61995215930  \n**CEP:** 72883772  \n**Plano de Interesse:** 1000 MEGA  \n\n**Observações:**  \nCliente demonstrou bastante interesse no plano, fez perguntas sobre velocidade e estabilidade da conexão. Pareceu seguro na decisão, apenas confirmando detalhes antes de contratar.\n\n❌ Exemplo errado (não fazer)\n\nTexto todo junto\n\nSem espaçamento\n\nSem observações\n\nNome Fabrício Telefone 61995215930 Plano 1000\n\n🧠 Observações (obrigatórias)\n\nA IA deve sempre comentar brevemente sobre:\n\nNível de interesse do cliente\n\nSe estava indeciso ou decidido\n\nSe fez muitas perguntas\n\nSe pediu tempo para pensar\n\nSe aparenta ser um lead quente ou morno\n\nEssas informações são extremamente importantes para o setor comercial humano."
+    }
+  ],
+  "connections": [
+    {
+      "id": "88b00aef-ff20-47da-b96b-57bccbbd9fb6",
+      "to": "c64c2011-f4f0-43c3-9721-d3e97f7fa58d",
+      "from": "a417828e-d19f-45ea-8184-f26348f588a8",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "96a294f2-7f2d-4b34-acba-83887bdcdc8b",
+      "to": "8dc8df5b-d39f-4852-ace0-1b996457f12b",
+      "from": "b67f8821-c264-490b-89e6-ab8722bdcdd3",
+      "sourceHandle": "Google / Pesquisa no Google"
+    },
+    {
+      "id": "4877bd6f-8ffe-457c-aba2-9c5963104654",
+      "to": "8dc8df5b-d39f-4852-ace0-1b996457f12b",
+      "from": "b67f8821-c264-490b-89e6-ab8722bdcdd3",
+      "sourceHandle": "Instagram"
+    },
+    {
+      "id": "bedcef3c-fa8d-4ac0-a5b5-b0a5e561048f",
+      "to": "8dc8df5b-d39f-4852-ace0-1b996457f12b",
+      "from": "b67f8821-c264-490b-89e6-ab8722bdcdd3",
+      "sourceHandle": "Facebook"
+    },
+    {
+      "id": "ef02bd1f-6bcc-4fbf-8b30-b14820347402",
+      "to": "8dc8df5b-d39f-4852-ace0-1b996457f12b",
+      "from": "b67f8821-c264-490b-89e6-ab8722bdcdd3",
+      "sourceHandle": "Indicação de amigo ou cliente"
+    },
+    {
+      "id": "ba781022-6ccc-4c06-b68f-d9bd7a8fcc3e",
+      "to": "8dc8df5b-d39f-4852-ace0-1b996457f12b",
+      "from": "b67f8821-c264-490b-89e6-ab8722bdcdd3",
+      "sourceHandle": "Outdoor / Anúncio físico"
+    },
+    {
+      "id": "0bcf4fc3-7f6a-4514-b826-576086ac3bb2",
+      "to": "8dc8df5b-d39f-4852-ace0-1b996457f12b",
+      "from": "b67f8821-c264-490b-89e6-ab8722bdcdd3",
+      "sourceHandle": "Vendedor / Representante"
+    },
+    {
+      "id": "17e86e91-338b-4403-a34f-94dbdba96469",
+      "to": "8dc8df5b-d39f-4852-ace0-1b996457f12b",
+      "from": "b67f8821-c264-490b-89e6-ab8722bdcdd3",
+      "sourceHandle": "Outros (Panfleto, etc)"
+    },
+    {
+      "id": "094bba2b-e8d9-425f-abf1-324a2504b9fc",
+      "to": "c6f70a76-fb40-42c2-b16d-23795232947a",
+      "from": "85305a21-3382-41d4-9877-9adbd789f8ee",
+      "sourceHandle": "otherwise"
+    },
+    {
+      "id": "ef4e377d-ce7e-42de-9a43-4c4e9b09790d",
+      "to": "b0ca8f89-f86b-4653-bcb6-11abfc89ca3e",
+      "from": "85305a21-3382-41d4-9877-9adbd789f8ee",
+      "sourceHandle": "92046e51-59c6-4c43-9fc3-4ff431f77033"
+    },
+    {
+      "id": "71c02d18-a063-438a-bdaf-e6e3b8cd8414",
+      "to": "ec461173-1f4a-4a13-9346-91d4c9c63f22",
+      "from": "798a463b-83c1-4d5f-9fa9-99e4e1403a9c",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "4841a2a3-a13a-417b-9039-55756a958e92",
+      "to": "85305a21-3382-41d4-9877-9adbd789f8ee",
+      "from": "ec461173-1f4a-4a13-9346-91d4c9c63f22",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "c315aa21-b74f-465c-94fd-364c488420fc",
+      "to": "80c2af14-6a19-421f-84ea-24ac20672d71",
+      "from": "c6f70a76-fb40-42c2-b16d-23795232947a",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "14396690-ca33-40ae-867c-9abdbe5d996c",
+      "to": "4250bd24-de2e-43f8-ac97-b215e0a01ae6",
+      "from": "a1140f03-efd3-4e59-ab2e-d9e973434ca0",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "2b8e1c96-47ba-4f06-be19-1dbd41fbe30f",
+      "to": "eb574508-4c90-4555-9325-91bcfa27a614",
+      "from": "220439be-5b74-478c-9035-07b7422b6fa4",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "2598fd49-aab2-474a-8c19-873908c4dffe",
+      "to": "5856fa19-14e3-466d-aa84-85042260843f",
+      "from": "eb574508-4c90-4555-9325-91bcfa27a614",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "6c8ac394-7974-467f-a6cb-b98f62840abd",
+      "to": "b16eebf8-c1e4-47fc-8d2b-4c8eab85d120",
+      "from": "5856fa19-14e3-466d-aa84-85042260843f",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "5bdbfc1d-f70a-45e9-8ace-79877169e299",
+      "to": "ecf2d6a1-2fd6-4416-b0e6-26ea0b489405",
+      "from": "b16eebf8-c1e4-47fc-8d2b-4c8eab85d120",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "a4fc90c3-e694-42c6-bef6-516e58b0631d",
+      "to": "6936cf8d-0820-4801-bc4c-65131905e557",
+      "from": "ecf2d6a1-2fd6-4416-b0e6-26ea0b489405",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "4319ec99-2f71-40c7-b193-ced8acd125e3",
+      "to": "9bba7344-2d5e-4580-aec3-b0c299f75c31",
+      "from": "4250bd24-de2e-43f8-ac97-b215e0a01ae6",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "68c33f66-a83f-4804-9002-44cb082fb376",
+      "to": "dfba00ef-5b34-4cd8-ac03-ce455dfcd407",
+      "from": "9bba7344-2d5e-4580-aec3-b0c299f75c31",
+      "sourceHandle": "otherwise"
+    },
+    {
+      "id": "da05b241-3ce5-420b-9b51-ae96afe64046",
+      "to": "38ea2175-2948-4a86-a61c-fc6165287904",
+      "from": "9bba7344-2d5e-4580-aec3-b0c299f75c31",
+      "sourceHandle": "92046e51-59c6-4c43-9fc3-4ff431f77033"
+    },
+    {
+      "id": "b446bd4f-28d0-4916-a566-a4ed7819dbcb",
+      "to": "60741028-3301-4c9b-a2b2-d6aeeaf2daf2",
+      "from": "38ea2175-2948-4a86-a61c-fc6165287904",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "983246c2-1f67-4223-a52d-f81afd4d5551",
+      "to": "2c157dee-8679-4003-8264-4d17f2cfb4cf",
+      "from": "2de563d2-1905-4693-acc4-463b286c7cbf",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "1c7053fc-7995-4de4-86b2-4a2dff80b60e",
+      "to": "59aaaa8a-8534-4252-93ba-398b61d7ac7a",
+      "from": "9a6acf0e-49cf-461c-b05b-029e259efe48",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "90780833-578a-4895-b904-129eefe0d604",
+      "to": "30a27265-c50d-4e47-b8f5-a673e50ef986",
+      "from": "3e9ce131-6a0b-42a2-ab60-37ce8854e07b",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "1f4c2477-6e76-433b-a3cb-c331eda6b98c",
+      "to": "2744247a-418a-4ea9-a086-21382e2bf124",
+      "from": "30a27265-c50d-4e47-b8f5-a673e50ef986",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "29e3ca58-dbeb-4c99-bd96-3ab946f724d2",
+      "to": "7261da04-f240-4f89-a40b-6fd43f5983dc",
+      "from": "3df99771-1413-4413-972e-294a02deb895",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "266ab784-f1bc-4e73-85c4-fb9a74669e01",
+      "to": "3852954f-13b4-4ee5-a804-b81e661ee436",
+      "from": "c6cdfb32-5bdf-4d85-a141-56266c1a317a",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "b387a2d4-064d-465c-b5ac-49b905e39f12",
+      "to": "ed49dbae-92ef-4fb6-b2dd-830db50f4e5a",
+      "from": "8dc8df5b-d39f-4852-ace0-1b996457f12b",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "209a3916-f762-4052-b599-b92c3959c23d",
+      "to": "d4421955-47cc-448d-b865-554277a4e376",
+      "from": "ed49dbae-92ef-4fb6-b2dd-830db50f4e5a",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "e720cafd-fda6-4266-8d83-182de33a8624",
+      "to": "4af42d8b-9d8f-4785-98d4-cc5f164dec0d",
+      "from": "2c157dee-8679-4003-8264-4d17f2cfb4cf",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "ed9adaf0-5391-49f0-8b77-bf6e2a74d110",
+      "to": "8aa39fcc-c1f4-41f1-ae2f-86e5b5aee0eb",
+      "from": "dfba00ef-5b34-4cd8-ac03-ce455dfcd407",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "37253855-3661-400f-97d8-a5910930626c",
+      "to": "d17f5fb2-40b7-4fe2-a590-77a5bfadbff9",
+      "from": "b126fef9-ecf2-4eb7-9f4c-dbac5bd34330",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "0a2dfbc3-5b30-44b2-8351-f5db6e265dc5",
+      "to": "46cf004a-d04d-4c20-9d8b-9cedbf11b436",
+      "from": "d17f5fb2-40b7-4fe2-a590-77a5bfadbff9",
+      "sourceHandle": "26f24672-8b14-4ccf-861c-10ea3a5b3ff3"
+    },
+    {
+      "id": "0bd4f3e7-5732-485d-be02-99369c296ca8",
+      "to": "cef320f3-1110-498a-9585-7ecdf2788e00",
+      "from": "d17f5fb2-40b7-4fe2-a590-77a5bfadbff9",
+      "sourceHandle": "0b8a6eeb-21d6-4fe5-9ce9-12c67b1ab46b"
+    },
+    {
+      "id": "6de63d9b-bb01-482b-8986-e1c4f7fe680a",
+      "to": "220439be-5b74-478c-9035-07b7422b6fa4",
+      "from": "cef320f3-1110-498a-9585-7ecdf2788e00",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "90695316-e892-46cb-a7dd-7e71ea18c846",
+      "to": "b126fef9-ecf2-4eb7-9f4c-dbac5bd34330",
+      "from": "4af42d8b-9d8f-4785-98d4-cc5f164dec0d",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "7628beea-ea2c-4dec-8c40-6ec918dcbaba",
+      "to": "f5b65cb6-1e8d-424e-aef2-32b89f08fcf5",
+      "from": "d17f5fb2-40b7-4fe2-a590-77a5bfadbff9",
+      "sourceHandle": "5e31d0a4-0ec1-4834-a516-095aa1cabab0"
+    },
+    {
+      "id": "47786363-3ee8-41f1-9dff-bdf9edabcedf",
+      "to": "5f164a10-5788-4c55-ac8d-0922c31a6f70",
+      "from": "59aaaa8a-8534-4252-93ba-398b61d7ac7a",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "a9a470ae-768e-4a0c-bc13-f9a6be84ad41",
+      "to": "1d2865c1-c12f-49b8-9586-ee331ebc4ed7",
+      "from": "5f164a10-5788-4c55-ac8d-0922c31a6f70",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "6b709afe-17d3-4572-bcc2-3f1402435552",
+      "to": "0d8b4b59-2784-4b0b-b8cb-e295dbdd5387",
+      "from": "1d2865c1-c12f-49b8-9586-ee331ebc4ed7",
+      "sourceHandle": "26f24672-8b14-4ccf-861c-10ea3a5b3ff3"
+    },
+    {
+      "id": "ac1efd49-baad-46b0-b6d1-3ded6c01bf1f",
+      "to": "d8bb61ea-53c2-473a-b8a8-2bfcc5d37895",
+      "from": "afbb7322-3058-4747-bbae-48c668ebe672",
+      "sourceHandle": "bc7ed72b-b7f2-4407-83ce-c86a56118185"
+    },
+    {
+      "id": "8030bc66-83b3-4343-8895-4ae45dc0523d",
+      "to": "e55ff144-e984-48fa-a8af-83c96906b318",
+      "from": "afbb7322-3058-4747-bbae-48c668ebe672",
+      "sourceHandle": "e7d1f7d5-3665-4a3a-abdc-986ff9dcb4c0"
+    },
+    {
+      "id": "88337d63-f893-46a3-8e07-d36c316b2cce",
+      "to": "905c2764-7576-4b80-8b23-60ddace402b6",
+      "from": "e55ff144-e984-48fa-a8af-83c96906b318",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "7b89de23-1a35-4d22-b628-01f2853189c4",
+      "to": "905c2764-7576-4b80-8b23-60ddace402b6",
+      "from": "d8bb61ea-53c2-473a-b8a8-2bfcc5d37895",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "95eb78c6-d349-4c05-ad23-cd486d537a6d",
+      "to": "905c2764-7576-4b80-8b23-60ddace402b6",
+      "from": "3fcd5026-326b-4393-8842-dc536e562c64",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "a107ade1-ca2a-4b9b-bef5-50274ba892ae",
+      "to": "d1454be5-c3ef-431a-9f32-455f7c42bb3e",
+      "from": "905c2764-7576-4b80-8b23-60ddace402b6",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "1d65060d-3933-4a6a-a0b3-3f7491a392b3",
+      "to": "17be07d8-9ada-4174-ac86-aa467ceb7e61",
+      "from": "d1454be5-c3ef-431a-9f32-455f7c42bb3e",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "420072b9-72d2-46ee-99a4-a88a7cb5395a",
+      "to": "2c011fa0-0870-43c7-88eb-aba09a853dbc",
+      "from": "6936cf8d-0820-4801-bc4c-65131905e557",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "588ee849-0ca4-422c-859b-9c6a889d975f",
+      "to": "515a66a4-639c-4d61-aa12-bdc6a2006f8e",
+      "from": "2c011fa0-0870-43c7-88eb-aba09a853dbc",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "6c2e0d94-d40b-46d2-9879-316e72137161",
+      "to": "3fcd5026-326b-4393-8842-dc536e562c64",
+      "from": "afbb7322-3058-4747-bbae-48c668ebe672",
+      "sourceHandle": "a484e9e3-ec74-4e00-9a60-493099785bcf"
+    },
+    {
+      "id": "c1e450fd-6ded-4569-a27f-47a59c6fae0d",
+      "to": "086d414c-f199-4d4d-bfc4-103f5cdb316b",
+      "from": "1d2865c1-c12f-49b8-9586-ee331ebc4ed7",
+      "sourceHandle": "5e31d0a4-0ec1-4834-a516-095aa1cabab0"
+    },
+    {
+      "id": "732e2c60-311c-4d3b-9706-cffa8d4f453a",
+      "to": "b7003151-a5f9-4b8b-9bfc-d4a5630aedf0",
+      "from": "1d2865c1-c12f-49b8-9586-ee331ebc4ed7",
+      "sourceHandle": "0b8a6eeb-21d6-4fe5-9ce9-12c67b1ab46b"
+    },
+    {
+      "id": "ea331520-5342-4acc-b8ef-bcf25a6e3bbd",
+      "to": "3e9ce131-6a0b-42a2-ab60-37ce8854e07b",
+      "from": "b7003151-a5f9-4b8b-9bfc-d4a5630aedf0",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "2215a6e2-c53d-4214-98c5-e50a42592fbc",
+      "to": "afbb7322-3058-4747-bbae-48c668ebe672",
+      "from": "2744247a-418a-4ea9-a086-21382e2bf124",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "fa3f8960-c53b-48d3-ba9a-6ca01fb829e2",
+      "to": "c6cdfb32-5bdf-4d85-a141-56266c1a317a",
+      "from": "d4421955-47cc-448d-b865-554277a4e376",
+      "sourceHandle": "92046e51-59c6-4c43-9fc3-4ff431f77033"
+    },
+    {
+      "id": "caf9b18b-d89d-4bb3-af36-4bf7059b9f9e",
+      "to": "b67f8821-c264-490b-89e6-ab8722bdcdd3",
+      "from": "c64c2011-f4f0-43c3-9721-d3e97f7fa58d",
+      "sourceHandle": "6886987d-f0c2-414c-9771-4edd1ddcb64d"
+    },
+    {
+      "id": "62fa49e7-c527-4711-88a7-915e9b4692b2",
+      "to": "8dc8df5b-d39f-4852-ace0-1b996457f12b",
+      "from": "c64c2011-f4f0-43c3-9721-d3e97f7fa58d",
+      "sourceHandle": "bf7d3ca0-7bab-44b4-a599-5a722b69cf74"
+    },
+    {
+      "id": "bc2bcc5b-4b8d-4435-b85b-45e33b3d82ff",
+      "to": "798a463b-83c1-4d5f-9fa9-99e4e1403a9c",
+      "from": "c64c2011-f4f0-43c3-9721-d3e97f7fa58d",
+      "sourceHandle": "f9533055-942a-4dc3-941c-2c5e242e6185"
+    },
+    {
+      "id": "359e189f-337b-45dc-a931-4f6c010fb270",
+      "to": "99ae0347-cb4d-45c8-98a3-8fb6c31e53e9",
+      "from": "c64c2011-f4f0-43c3-9721-d3e97f7fa58d",
+      "sourceHandle": "51aefe37-961c-42c9-824e-af8c7ca97a7f"
+    },
+    {
+      "id": "11b95ea4-07c5-435b-95ad-6defde297e77",
+      "to": "a1140f03-efd3-4e59-ab2e-d9e973434ca0",
+      "from": "99ae0347-cb4d-45c8-98a3-8fb6c31e53e9",
+      "sourceHandle": "3a4b8c9b-5c34-4629-a465-4aa1b682d76f"
+    },
+    {
+      "id": "1015d54b-183e-4b87-aa13-a7da4db8423a",
+      "to": "a1140f03-efd3-4e59-ab2e-d9e973434ca0",
+      "from": "99ae0347-cb4d-45c8-98a3-8fb6c31e53e9",
+      "sourceHandle": "ebc82b43-a03d-40c6-adf9-6e185b2893f0"
+    },
+    {
+      "id": "f7215868-6bf3-43d3-8af4-f544779eaf52",
+      "to": "a1140f03-efd3-4e59-ab2e-d9e973434ca0",
+      "from": "99ae0347-cb4d-45c8-98a3-8fb6c31e53e9",
+      "sourceHandle": "10c880ae-1719-47f5-9a76-7c5911a70c56"
+    },
+    {
+      "id": "ae3d80eb-5e1b-4b40-be36-bcab70c0ca01",
+      "to": "3e9ce131-6a0b-42a2-ab60-37ce8854e07b",
+      "from": "0d8b4b59-2784-4b0b-b8cb-e295dbdd5387",
+      "sourceHandle": "28a44df3-9215-43a0-a719-96a476ed10ba"
+    },
+    {
+      "id": "348386d5-45b4-45c3-b142-15c4876ac875",
+      "to": "220439be-5b74-478c-9035-07b7422b6fa4",
+      "from": "46cf004a-d04d-4c20-9d8b-9cedbf11b436",
+      "sourceHandle": "14355c8c-6bd3-4a7c-98f3-433e51f747b5"
+    },
+    {
+      "id": "f94887b3-b35e-43ed-903e-05dff42ca5ac",
+      "to": "8c5902af-3ac8-4160-b23b-1bc733ed37de",
+      "from": "f5b65cb6-1e8d-424e-aef2-32b89f08fcf5",
+      "sourceHandle": "6d819bc8-fc15-455b-a824-7c7e8a1e8701"
+    },
+    {
+      "id": "f0bba6b1-d024-438d-bbae-1b4dfd8f0b6a",
+      "to": "2c157dee-8679-4003-8264-4d17f2cfb4cf",
+      "from": "f5b65cb6-1e8d-424e-aef2-32b89f08fcf5",
+      "sourceHandle": "0f5ac6e5-b01d-4928-8c28-be4e4d6c3009"
+    },
+    {
+      "id": "d8153b8d-072d-4341-b7f3-8bdb6b56499b",
+      "to": "43d29c32-9b67-40cf-bf39-0330e1a0ba23",
+      "from": "086d414c-f199-4d4d-bfc4-103f5cdb316b",
+      "sourceHandle": "1ab4fdc8-1591-47c5-aa04-fa839debad4b"
+    },
+    {
+      "id": "0764c460-4fd3-4e9c-ba72-f71c3b81d263",
+      "to": "9a6acf0e-49cf-461c-b05b-029e259efe48",
+      "from": "086d414c-f199-4d4d-bfc4-103f5cdb316b",
+      "sourceHandle": "07251547-20dc-492f-8cb6-9096e369a70e"
+    },
+    {
+      "id": "eee85eff-5e75-473c-bea2-862f5e6ac001",
+      "to": "2de563d2-1905-4693-acc4-463b286c7cbf",
+      "from": "99ae0347-cb4d-45c8-98a3-8fb6c31e53e9",
+      "sourceHandle": "f61e106c-5518-4417-b9dc-b29f6dfa0eec"
+    },
+    {
+      "id": "1c8a32e5-ac3c-4623-89d5-6c4bc978a18f",
+      "to": "9a6acf0e-49cf-461c-b05b-029e259efe48",
+      "from": "99ae0347-cb4d-45c8-98a3-8fb6c31e53e9",
+      "sourceHandle": "b285b1e1-46d5-4aaa-802d-7455ea3bed6c"
+    },
+    {
+      "id": "5132a5f1-d0c3-4da2-9df3-1c03c4744b0d",
+      "to": "a417828e-d19f-45ea-8184-f26348f588a8",
+      "from": "68dccee9-37ec-4f20-99b4-986440252fa1",
+      "sourceHandle": "Webhook"
+    },
+    {
+      "id": "145ac4bd-151e-4a01-802e-cd5f896ecb57",
+      "to": "3df99771-1413-4413-972e-294a02deb895",
+      "from": "b0ca8f89-f86b-4653-bcb6-11abfc89ca3e",
+      "sourceHandle": "0bc584e2-4429-495f-aaef-04f30abc6219"
+    },
+    {
+      "id": "af54b7b4-2e5a-4028-800a-099dd4eb1d84",
+      "to": "99ae0347-cb4d-45c8-98a3-8fb6c31e53e9",
+      "from": "b0ca8f89-f86b-4653-bcb6-11abfc89ca3e",
+      "sourceHandle": "0a1ce939-7126-4efe-938f-9949b8d5a2f7"
+    },
+    {
+      "id": "18ba1788-78fe-4b3c-af15-b0168c425157",
+      "to": "99ae0347-cb4d-45c8-98a3-8fb6c31e53e9",
+      "from": "b0ca8f89-f86b-4653-bcb6-11abfc89ca3e",
+      "sourceHandle": "e3b3eee6-32d9-41ff-8ed5-5e16974b4913"
+    },
+    {
+      "id": "2dab1a68-6948-47e2-b0df-d73825bb0629",
+      "to": "963b4ead-e253-4534-8b1f-5a9a502ff868",
+      "from": "819ae4e3-e3cc-4d6b-a251-e88416b5ca66",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "d54d15eb-a635-4b78-98af-7426b2f65c96",
+      "to": "819ae4e3-e3cc-4d6b-a251-e88416b5ca66",
+      "from": "c64c2011-f4f0-43c3-9721-d3e97f7fa58d",
+      "sourceHandle": "fb47c06c-f54d-4f14-a6e4-7f7aa0c0e8f7"
+    },
+    {
+      "id": "1689e18c-ffd4-436f-9929-57edab19878b",
+      "to": "c64c2011-f4f0-43c3-9721-d3e97f7fa58d",
+      "from": "99ae0347-cb4d-45c8-98a3-8fb6c31e53e9",
+      "sourceHandle": "ffb0f3e6-b555-46fd-8e96-2f0d71627242"
+    },
+    {
+      "id": "a2c4bcf4-900d-4891-b998-c39f8803904b",
+      "to": "86d4cc09-9e0c-49c2-91be-f57aced83f3d",
+      "from": "20fd2e6a-af06-4ca9-9e75-0fd5154e4cb9",
+      "sourceHandle": "default",
+      "targetHandle": "memory"
+    },
+    {
+      "id": "f4c641f7-0371-44fb-9608-24a2d0b69f83",
+      "to": "86d4cc09-9e0c-49c2-91be-f57aced83f3d",
+      "from": "2a61f2a4-cd98-4340-b712-70a3fa56383f",
+      "sourceHandle": "default",
+      "targetHandle": "model"
+    },
+    {
+      "id": "05378e25-cda1-4a5a-b97f-822f14bda1fa",
+      "to": "86d4cc09-9e0c-49c2-91be-f57aced83f3d",
+      "from": "4c999f34-aabd-496f-b8f4-c6b16c6357f6",
+      "sourceHandle": "default",
+      "targetHandle": "tools"
+    },
+    {
+      "id": "63dbe138-fea7-4d41-9786-69504e5a03d1",
+      "to": "86d4cc09-9e0c-49c2-91be-f57aced83f3d",
+      "from": "c18e8cae-ee42-4673-89e2-f810e905695f",
+      "sourceHandle": "default",
+      "targetHandle": "tools"
+    },
+    {
+      "id": "860fe4df-b3a4-43f4-8637-3769d3af2dd8",
+      "to": "8e8fc70e-170a-4ab4-8558-3d55097d7c22",
+      "from": "86d4cc09-9e0c-49c2-91be-f57aced83f3d",
+      "sourceHandle": "default"
+    },
+    {
+      "id": "3ad57fa3-d353-43fa-b7f4-00b9bef19572",
+      "to": "86d4cc09-9e0c-49c2-91be-f57aced83f3d",
+      "from": "d4421955-47cc-448d-b865-554277a4e376",
+      "sourceHandle": "f7e04c98-ad03-4b25-b441-ad2deafaf10b",
+      "targetHandle": "default"
+    }
+  ],
+  "settings": {
+    "evolution_instance_id": null,
+    "chatwoot_enabled": false,
+    "chatwoot_instance_id": null,
+    "dialogy_instance_id": "0f7fc21e-f996-44bf-8486-91af9dbc715b"
+  }
+}

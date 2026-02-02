@@ -221,6 +221,20 @@ const normalizeOptionsFromString = (raw: string): string[] => {
   return [validLine];
 };
 
+const normalizeStableId = (value: unknown): string | undefined => {
+  if (value === null || value === undefined) return undefined;
+  const text = String(value).trim();
+  return text.length ? text : undefined;
+};
+
+const normalizeWhatsappId = (value: unknown): string | undefined => {
+  const text = normalizeStableId(value);
+  if (!text) return undefined;
+  const withoutPrefix = text.replace(/^evolution_jid_/, '');
+  const atIndex = withoutPrefix.indexOf('@');
+  return atIndex > 0 ? withoutPrefix.slice(0, atIndex) : withoutPrefix;
+};
+
 const resolveMemoryScopeKey = (
   memoryNode: NodeData | null,
   session: FlowSession,
@@ -231,15 +245,18 @@ const resolveMemoryScopeKey = (
 
   if (scope === 'user') {
     const rawPath = memoryNode?.memoryScopeKeyVariable?.replace(/\{\{|\}\}/g, '').trim();
-    const scopedValue = rawPath ? getProperty(session.flow_variables, rawPath) : undefined;
-    const fallbackValue =
-      getProperty(session.flow_variables, 'user_id') ||
-      getProperty(session.flow_variables, 'contact_id') ||
-      getProperty(session.flow_variables, 'chatwoot_contact_id') ||
-      getProperty(session.flow_variables, 'dialogy_contact_id');
+    const scopedValue = rawPath ? normalizeStableId(getProperty(session.flow_variables, rawPath)) : undefined;
+    if (scopedValue) return scopedValue;
 
-    const resolved = scopedValue ?? fallbackValue;
-    return resolved ? String(resolved) : session.session_id;
+    const fallbackValue =
+      normalizeStableId(getProperty(session.flow_variables, 'user_id')) ||
+      normalizeStableId(getProperty(session.flow_variables, 'contact_id')) ||
+      normalizeStableId(getProperty(session.flow_variables, 'chatwoot_contact_id')) ||
+      normalizeStableId(getProperty(session.flow_variables, 'dialogy_contact_id')) ||
+      normalizeStableId(getProperty(session.flow_variables, 'contact_phone')) ||
+      normalizeWhatsappId(getProperty(session.flow_variables, 'whatsapp_sender_jid'));
+
+    return fallbackValue ?? session.session_id;
   }
 
   return session.session_id;

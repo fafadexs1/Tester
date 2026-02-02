@@ -21,6 +21,9 @@ const MemoryContextSchema = z.object({
     facts: z.array(z.string()).optional(),
     episodes: z.array(z.string()).optional(),
     procedures: z.array(z.string()).optional(),
+    unconfirmedFacts: z.array(z.string()).optional(),
+    unconfirmedEpisodes: z.array(z.string()).optional(),
+    unconfirmedProcedures: z.array(z.string()).optional(),
 });
 
 export const AgenticFlowInputSchema = z.object({
@@ -94,13 +97,22 @@ const formatMemoryContext = (memoryContext?: z.infer<typeof MemoryContextSchema>
 
     const sections: string[] = [];
     if (memoryContext.facts?.length) {
-        sections.push(`Facts:\n- ${memoryContext.facts.join('\n- ')}`);
+        sections.push(`Confirmed Facts:\n- ${memoryContext.facts.join('\n- ')}`);
     }
     if (memoryContext.episodes?.length) {
-        sections.push(`Episodes:\n- ${memoryContext.episodes.join('\n- ')}`);
+        sections.push(`Confirmed Episodes:\n- ${memoryContext.episodes.join('\n- ')}`);
     }
     if (memoryContext.procedures?.length) {
-        sections.push(`Procedures:\n- ${memoryContext.procedures.join('\n- ')}`);
+        sections.push(`Confirmed Procedures:\n- ${memoryContext.procedures.join('\n- ')}`);
+    }
+    if (memoryContext.unconfirmedFacts?.length) {
+        sections.push(`Unconfirmed Facts (use only as hints):\n- ${memoryContext.unconfirmedFacts.join('\n- ')}`);
+    }
+    if (memoryContext.unconfirmedEpisodes?.length) {
+        sections.push(`Unconfirmed Episodes (use only as context):\n- ${memoryContext.unconfirmedEpisodes.join('\n- ')}`);
+    }
+    if (memoryContext.unconfirmedProcedures?.length) {
+        sections.push(`Unconfirmed Procedures (use only as hints):\n- ${memoryContext.unconfirmedProcedures.join('\n- ')}`);
     }
 
     return sections.length ? `Memory Context:\n${sections.join('\n\n')}` : '';
@@ -281,11 +293,20 @@ export const agenticFlow = ai.defineFlow(
         const knowledgeToolInstruction = knowledgeToolName
             ? `IMPORTANT: You have access to tools/capabilities. If the user asks about the company, plans, prices, services, or coverage, you MUST use the '${knowledgeToolName}' tool to find the answer. Do NOT answer "As a large language model I cannot...". Instead, use the tool to find the info.`
             : 'IMPORTANT: You have access to tools/capabilities. Use them when they help you answer. Do NOT answer "As a large language model I cannot...".';
+        const hasUnconfirmedMemory = Boolean(
+            memoryContext?.unconfirmedFacts?.length ||
+            memoryContext?.unconfirmedEpisodes?.length ||
+            memoryContext?.unconfirmedProcedures?.length
+        );
+        const memorySafetyInstruction = hasUnconfirmedMemory
+            ? 'IMPORTANT: Memory Context includes UNCONFIRMED hints. Use them only to guide questions; do NOT state them as facts. Only treat Confirmed Facts/Procedures as reliable.'
+            : '';
 
         const promptSections = [
             systemPrompt ? `System Instructions:\n${systemPrompt}` : 'You are an autonomous assistant.',
             `IMPORTANT: You are an autonomous agent. If you use a tool, you MUST use its output to formulate a response to the user. Do not stop after using a tool. Read your System Instructions to decide what to do next. If the tool result is successful, explain it to the user or ask the next logical question.`,
             knowledgeToolInstruction,
+            memorySafetyInstruction,
             formatMemoryContext(memoryContext),
             knowledgeContext,
             knowledgeGuidance,
