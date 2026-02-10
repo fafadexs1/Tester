@@ -1,4 +1,4 @@
-'use server';
+﻿'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import vm from 'node:vm';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
@@ -23,6 +23,18 @@ import { agenticFlow } from '@/ai/flows/agentic-flow';
 import { intelligentChoice } from '@/ai/flows/intelligent-choice-flow';
 import { classifyIntent } from '@/ai/flows/intention-classification-flow';
 import { loadMemoryContext, normalizeMemorySettings, recordMemory, type MemorySettings } from '@/lib/agent/memory';
+import {
+  buildAgentStatePromptFragment,
+  buildMemoryQueryFromTurn,
+  buildRouteRedirectMessage,
+  detectExplicitRouteSignalFromReply,
+  inferAgentRouteFromText,
+  mergeAgentConversationState,
+  sanitizeAgentReply,
+  type AgentConversationState,
+  type AgentRoute,
+  type AgentRouteDecision,
+} from '@/lib/agent/guardrails';
 import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates, evaluateExpression } from './utils';
 import jsonata from 'jsonata';
 
@@ -30,22 +42,50 @@ import jsonata from 'jsonata';
 const CODE_EXECUTION_TIMEOUT_MS = 2000;
 const MAX_AGENT_HISTORY_MESSAGES = 50;
 const MAX_AGENT_MEMORY_SUMMARY_CHARS = 4000;
-const MOJIBAKE_HINT_REGEX = /(Ã.|â.|)/;
+const MOJIBAKE_HINT_REGEX = /(Ãƒ.|Ã¢.|)/;
 
 type AgentHistoryEntry = { role: 'user' | 'assistant' | 'system'; content: string };
 const EXIT_INTENT_PATTERNS = [
-  'não quero', 'nao quero', 'não desejo', 'nao desejo',
+  'nÃ£o quero', 'nao quero', 'nÃ£o desejo', 'nao desejo',
   'encerrar', 'encerra', 'encerrando', 'encerrar atendimento', 'finalizar', 'finaliza',
   'cancelar', 'cancelamento', 'cancela',
   'parar', 'chega', 'sair', 'sair do atendimento', 'tchau', 'adeus', 'obrigado, mas', 'obrigada, mas'
 ];
+
+const AGENT_ROUTE_INTENTS = [
+  {
+    id: 'SUPORTE',
+    label: 'Suporte Tecnico',
+    description: 'Problemas tecnicos como sem internet, lentidao, sinal ruim, queda de conexao, roteador ou modem.',
+  },
+  {
+    id: 'FINANCEIRO',
+    label: 'Financeiro',
+    description: 'Demandas de boleto, fatura, pagamento, vencimento, divida, negociacao, segunda via.',
+  },
+  {
+    id: 'ENCERRAR',
+    label: 'Encerrar Atendimento',
+    description: 'Usuario quer parar, encerrar, finalizar ou cancelar o atendimento atual.',
+  },
+  {
+    id: 'ASSINATURA',
+    label: 'Assinatura Comercial',
+    description: 'Usuario quer contratar plano, tirar duvidas comerciais ou seguir fluxo de venda.',
+  },
+];
+
+const AGENT_ROUTE_LLM_THRESHOLD = 0.72;
+
+const isRoute = (value: string): value is AgentRoute =>
+  value === 'SUPORTE' || value === 'FINANCEIRO' || value === 'ENCERRAR' || value === 'ASSINATURA' || value === 'UNKNOWN';
 
 const repairMojibake = (text: string): string => {
   if (!text || !MOJIBAKE_HINT_REGEX.test(text)) return text;
   try {
     const candidate = Buffer.from(text, 'latin1').toString('utf8');
     const hasReplacement = candidate.includes('');
-    const hasPortugueseAccents = /[áàãâéêíóôõúüçÁÀÃÂÉÊÍÓÔÕÚÜÇ]/.test(candidate);
+    const hasPortugueseAccents = /[Ã¡Ã Ã£Ã¢Ã©ÃªÃ­Ã³Ã´ÃµÃºÃ¼Ã§ÃÃ€ÃƒÃ‚Ã‰ÃŠÃÃ“Ã”Ã•ÃšÃœÃ‡]/.test(candidate);
     if (!hasReplacement && hasPortugueseAccents) {
       return candidate;
     }
@@ -180,6 +220,42 @@ const detectExitIntent = (text: string): boolean => {
   return EXIT_INTENT_PATTERNS.some(pattern => normalized.includes(pattern));
 };
 
+const resolveAgentRouteDecision = async (userInput: string): Promise<AgentRouteDecision> => {
+  const heuristic = inferAgentRouteFromText(userInput);
+  const shouldCallClassifier =
+    userInput.trim().length >= 4 &&
+    (heuristic.route === 'UNKNOWN' || heuristic.confidence < AGENT_ROUTE_LLM_THRESHOLD);
+
+  if (!shouldCallClassifier) {
+    return heuristic;
+  }
+
+  try {
+    const llmResult = await classifyIntent({
+      userMessage: userInput,
+      intents: AGENT_ROUTE_INTENTS,
+      modelName: 'googleai/gemini-2.0-flash',
+    });
+
+    const candidateRoute = llmResult.matchedIntentId?.toUpperCase?.() || '';
+    if (isRoute(candidateRoute) && llmResult.confidence !== undefined && llmResult.confidence >= AGENT_ROUTE_LLM_THRESHOLD) {
+      const route = candidateRoute as AgentRoute;
+      const shouldExitFlow = route !== 'ASSINATURA' && route !== 'UNKNOWN';
+      return {
+        route,
+        confidence: llmResult.confidence,
+        reason: llmResult.reasoning || 'Rota inferida por classificador LLM.',
+        matchedSignals: heuristic.matchedSignals,
+        shouldExitFlow,
+      };
+    }
+  } catch (error) {
+    console.warn('[Flow Engine] Route classification fallback failed, keeping heuristic decision.', error);
+  }
+
+  return heuristic;
+};
+
 const normalizeOptionsFromString = (raw: string): string[] => {
   if (!raw) return [];
   const trimmed = raw.trim();
@@ -268,19 +344,20 @@ const buildMemorySettings = (
   workspace: WorkspaceData
 ): MemorySettings => {
   const scopeKey = resolveMemoryScopeKey(memoryNode, session, workspace);
+  const fallbackProvider = memoryNode?.memoryRedisConnectionString ? 'hybrid' : 'postgres';
   return normalizeMemorySettings({
-    provider: (memoryNode?.memoryProvider as any) || 'postgres',
+    provider: (memoryNode?.memoryProvider as any) || fallbackProvider,
     connectionString: memoryNode?.memoryConnectionString,
     scope: (memoryNode?.memoryScope as any) || 'session',
     scopeKey,
-    retentionDays: memoryNode?.memoryRetentionDays ?? 14,
-    maxItems: memoryNode?.memoryMaxItems ?? 60,
-    minImportance: memoryNode?.memoryMinImportance ?? 0.35,
+    retentionDays: memoryNode?.memoryRetentionDays ?? 30,
+    maxItems: memoryNode?.memoryMaxItems ?? 120,
+    minImportance: memoryNode?.memoryMinImportance ?? 0.3,
     redisConnectionString: memoryNode?.memoryRedisConnectionString,
     hybridCacheTTL: memoryNode?.memoryHybridCacheTTL,
-    hybridWriteThrough: true, // Defaulting to true as not yet exposed in UI fully or defaults
-    embeddingsEnabled: memoryNode?.memoryEmbeddingsEnabled,
-    embeddingsModel: memoryNode?.memoryEmbeddingsModel,
+    hybridWriteThrough: memoryNode?.memoryHybridWriteThrough ?? true,
+    embeddingsEnabled: memoryNode?.memoryEmbeddingsEnabled ?? true,
+    embeddingsModel: memoryNode?.memoryEmbeddingsModel || 'local-hybrid',
   });
 };
 
@@ -402,11 +479,11 @@ async function sendOmniChannelMessage(
         await new Promise(resolve => setTimeout(resolve, 500));
         return;
       } else {
-        console.error(`[sendOmniChannelMessage] Instância Dialogy ${workspace.dialogy_instance_id} não encontrada na base.`);
+        console.error(`[sendOmniChannelMessage] InstÃ¢ncia Dialogy ${workspace.dialogy_instance_id} nÃ£o encontrada na base.`);
         return;
       }
     }
-    console.error(`[sendOmniChannelMessage] Falha ao enviar pela Dialogy. Instância (${workspace.dialogy_instance_id}) ou Chat ID (${chatId}) ausente.`);
+    console.error(`[sendOmniChannelMessage] Falha ao enviar pela Dialogy. InstÃ¢ncia (${workspace.dialogy_instance_id}) ou Chat ID (${chatId}) ausente.`);
     return;
   }
 
@@ -429,29 +506,29 @@ async function sendOmniChannelMessage(
         return;
       }
     }
-    console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Chatwoot. Instância, Account ID ou Conversation ID ausente.`);
+    console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Chatwoot. InstÃ¢ncia, Account ID ou Conversation ID ausente.`);
     return;
   }
 
-  // Se não for nenhum dos contextos acima, assume-se Evolution/WhatsApp como padrão
+  // Se nÃ£o for nenhum dos contextos acima, assume-se Evolution/WhatsApp como padrÃ£o
   const recipientPhoneNumber = session.flow_variables.whatsapp_sender_jid || session.session_id.split('@@')[0].replace('evolution_jid_', '');
-  const evoWorkspace = workspace; // Usa o workspace já carregado
+  const evoWorkspace = workspace; // Usa o workspace jÃ¡ carregado
 
   if (evoWorkspace && evoWorkspace.evolution_instance_id && recipientPhoneNumber) {
-    // Aqui, precisamos buscar os detalhes da instância evolution a partir do ID
-    const evoDetails = await loadWorkspaceFromDB(evoWorkspace.id); // Esta chamada parece incorreta, deveria ser uma busca de instância
-    // A lógica para buscar detalhes da instância precisa ser revista
-    console.error(`[sendOmniChannelMessage] Lógica para buscar detalhes da instância Evolution precisa de revisão. Assumindo que o workspace tem os detalhes.`);
-    // Assumindo por enquanto que o workspace tem os detalhes necessários, o que não é o caso ideal
-    // Em uma refatoração futura, loadEvolutionInstanceFromDB(evoWorkspace.evolution_instance_id) seria o correto.
+    // Aqui, precisamos buscar os detalhes da instÃ¢ncia evolution a partir do ID
+    const evoDetails = await loadWorkspaceFromDB(evoWorkspace.id); // Esta chamada parece incorreta, deveria ser uma busca de instÃ¢ncia
+    // A lÃ³gica para buscar detalhes da instÃ¢ncia precisa ser revista
+    console.error(`[sendOmniChannelMessage] LÃ³gica para buscar detalhes da instÃ¢ncia Evolution precisa de revisÃ£o. Assumindo que o workspace tem os detalhes.`);
+    // Assumindo por enquanto que o workspace tem os detalhes necessÃ¡rios, o que nÃ£o Ã© o caso ideal
+    // Em uma refatoraÃ§Ã£o futura, loadEvolutionInstanceFromDB(evoWorkspace.evolution_instance_id) seria o correto.
 
     console.log(`[sendOmniChannelMessage] Roteando para Evolution (jid=${recipientPhoneNumber})`);
-    // A ação de envio de mensagem do Evolution precisa da URL base e API key, que não estão diretamente no objeto workspace.
-    // Esta parte da lógica está quebrada e precisa ser consertada no futuro.
-    // Por agora, vamos pular o envio se não tivermos os detalhes.
-    console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Evolution. A lógica para obter detalhes da instância (URL, API Key) a partir do workspace precisa ser implementada.`);
+    // A aÃ§Ã£o de envio de mensagem do Evolution precisa da URL base e API key, que nÃ£o estÃ£o diretamente no objeto workspace.
+    // Esta parte da lÃ³gica estÃ¡ quebrada e precisa ser consertada no futuro.
+    // Por agora, vamos pular o envio se nÃ£o tivermos os detalhes.
+    console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Evolution. A lÃ³gica para obter detalhes da instÃ¢ncia (URL, API Key) a partir do workspace precisa ser implementada.`);
   } else {
-    console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Evolution. Instância (${evoWorkspace?.evolution_instance_id}) ou JID do destinatário (${recipientPhoneNumber}) ausente.`);
+    console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Evolution. InstÃ¢ncia (${evoWorkspace?.evolution_instance_id}) ou JID do destinatÃ¡rio (${recipientPhoneNumber}) ausente.`);
   }
 }
 
@@ -524,7 +601,7 @@ export async function executeFlow(
       case 'rating-input':
       case 'option': {
         if (getProperty(session.flow_variables, '_invalidOption') === true) {
-          await sendOmniChannelMessage(session, currentWorkspace, "Opção inválida. Por favor, tente novamente.");
+          await sendOmniChannelMessage(session, currentWorkspace, "OpÃ§Ã£o invÃ¡lida. Por favor, tente novamente.");
           delete session.flow_variables['_invalidOption'];
           shouldContinue = false;
           break;
@@ -662,7 +739,7 @@ export async function executeFlow(
             break;
           }
           default:
-            console.warn(`[Flow Engine] Operador de condição desconhecido: "${currentNode.conditionOperator}" (normalizado: "${op}")`);
+            console.warn(`[Flow Engine] Operador de condiÃ§Ã£o desconhecido: "${currentNode.conditionOperator}" (normalizado: "${op}")`);
             conditionMet = false;
         }
 
@@ -698,7 +775,7 @@ export async function executeFlow(
               isInTimeRange = now.getTime() >= startDate.getTime() && now.getTime() <= endDate.getTime();
             }
           } else {
-            console.warn(`[Flow Engine - ${session.session_id}] time-of-day: horários inválidos ou ausentes (start="${startTimeStr}" end="${endTimeStr}"). Considerando fora do intervalo.`);
+            console.warn(`[Flow Engine - ${session.session_id}] time-of-day: horÃ¡rios invÃ¡lidos ou ausentes (start="${startTimeStr}" end="${endTimeStr}"). Considerando fora do intervalo.`);
             isInTimeRange = false;
           }
 
@@ -920,13 +997,13 @@ export async function executeFlow(
               session.flow_variables
             );
             setProperty(session.flow_variables, varName, result);
-            console.log(`[Flow Engine Code] Variável "${varName}" definida com sucesso.`);
+            console.log(`[Flow Engine Code] VariÃ¡vel "${varName}" definida com sucesso.`);
           } catch (e: any) {
-            console.error(`[Flow Engine - ${session.session_id}] Erro ao executar código no sandbox:`, e);
+            console.error(`[Flow Engine - ${session.session_id}] Erro ao executar cÃ³digo no sandbox:`, e);
             setProperty(session.flow_variables, varName, { error: e.message });
           }
         } else {
-          console.warn(`[Flow Engine] Nó 'Executar Código' sem script ou variável de saída definida.`);
+          console.warn(`[Flow Engine] NÃ³ 'Executar CÃ³digo' sem script ou variÃ¡vel de saÃ­da definida.`);
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
@@ -948,7 +1025,6 @@ export async function executeFlow(
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
-
       case 'intelligent-agent': {
         const responseVarName = currentNode.agentResponseVariable;
         const inputVarName = currentNode.userInputVariable?.replace(/\{\{|\}\}/g, '').trim();
@@ -961,51 +1037,7 @@ export async function executeFlow(
             const userInputForAgent = getProperty(session.flow_variables, inputVarName);
             if (userInputForAgent) {
               const cleanedUserInput = cleanAndNormalizeText(String(userInputForAgent));
-              console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: Calling agenticFlow with input: "${cleanedUserInput}" (model: ${modelName || 'default'})`);
-
-              // Smart Exit Detection
-              let isExit = detectExitIntent(cleanedUserInput);
-
-              if (!isExit) {
-                // Secondary check using LLM to understand intent contextually (avoiding false positives from simple keywords)
-                // This ensures we only exit if the user REALLY wants to "Finalizar"
-                try {
-                  const exitCheck = await classifyIntent({
-                    userMessage: cleanedUserInput,
-                    intents: [
-                      { id: 'exit', label: 'Exit', description: 'User explicitly wants to end the conversation, stop the service, or cancel the current process.' },
-                      { id: 'continue', label: 'Continue', description: 'User is answering a question, asking something, denying a specific offer, or continuing the conversation.' }
-                    ],
-                    modelName: 'googleai/gemini-2.0-flash'
-                  });
-                  if (exitCheck.matchedIntentId === 'exit' && (exitCheck.confidence || 0) > 0.85) {
-                    isExit = true;
-                    console.log(`[Flow Engine - ${session.session_id}] Smart Exit Detection triggered: "${cleanedUserInput}"`);
-                  }
-                } catch (err) {
-                  // Silent fail on LLM check, fallback to regex result
-                }
-              }
-
-              if (isExit) {
-                console.log(`[Flow Engine - ${session.session_id}] Exit intent detected. Continuing flow.`);
-                setProperty(session.flow_variables, responseVarName, cleanedUserInput);
-                setProperty(session.flow_variables, `_agent_exit_intent_${currentNode.id}`, true);
-
-                // Try to find a specific 'exit' handle if it existed (not standard yet), or default
-                nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
-
-                // Safety net: If no connection found, don't just "break" to a pause.
-                // We should ideally maybe log this clearly or default to End Flow? 
-                // For now, if nextNodeId is null, it WILL pause in the main loop, which is correct behavior for an unconnected exit.
-                // But we log it.
-                if (!nextNodeId) {
-                  console.warn(`[Flow Engine] Agent exited but no 'default' connection found. Flow will pause.`);
-                }
-
-                shouldContinue = true;
-                break;
-              }
+              console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: input "${cleanedUserInput}" (model: ${modelName || 'default'})`);
 
               const historyKey = `_agent_history_${currentNode.id}`;
               const historySummaryKey = `_agent_history_summary_${currentNode.id}`;
@@ -1020,19 +1052,12 @@ export async function executeFlow(
                 : [];
 
               ({ history, memorySummary } = trimAndSummarizeHistory(history, memorySummary));
-
               history.push({ role: 'user', content: cleanedUserInput });
               ({ history, memorySummary } = trimAndSummarizeHistory(history, memorySummary));
-
-              // Autonomous Agent Integration: Resolve memory, tools, and model
-              console.log(`[Flow Engine] Inspecting connections for Agent ${currentNode.id}`);
 
               const incoming = connections.filter(c => c.to === currentNode.id);
               const outgoing = connections.filter(c => c.from === currentNode.id);
 
-              console.log(`[Flow Engine] Connections: Incoming=${incoming.length}, Outgoing=${outgoing.length}`);
-
-              // Allow Memory Node to be connected in either direction
               const memoryConnection =
                 incoming.find(c => c.targetHandle === 'memory') ||
                 outgoing.find(c => {
@@ -1045,30 +1070,95 @@ export async function executeFlow(
                 : null;
               const memorySettings = buildMemorySettings(memoryNode, session, currentWorkspace);
 
+              let routeDecision = await resolveAgentRouteDecision(cleanedUserInput);
+              if (detectExitIntent(cleanedUserInput) && routeDecision.route === 'UNKNOWN') {
+                routeDecision = {
+                  route: 'ENCERRAR',
+                  confidence: Math.max(routeDecision.confidence, 0.8),
+                  reason: 'Padrao de encerramento detectado por regra lexical.',
+                  matchedSignals: [...routeDecision.matchedSignals, 'exit_intent_pattern'],
+                  shouldExitFlow: true,
+                };
+              }
+
+              const agentStateKey = `_agent_state_${currentNode.id}`;
+              const previousAgentState = getProperty(session.flow_variables, agentStateKey);
+              const mergedAgentState: AgentConversationState = mergeAgentConversationState(
+                previousAgentState,
+                cleanedUserInput,
+                routeDecision.route
+              );
+              setProperty(session.flow_variables, agentStateKey, mergedAgentState);
+              setProperty(session.flow_variables, `_agent_route_${currentNode.id}`, routeDecision.route);
+              setProperty(session.flow_variables, `_agent_route_confidence_${currentNode.id}`, routeDecision.confidence);
+              setProperty(session.flow_variables, `_agent_route_reason_${currentNode.id}`, routeDecision.reason);
+
+              if (routeDecision.shouldExitFlow) {
+                const guarded = sanitizeAgentReply({
+                  rawReply: buildRouteRedirectMessage(routeDecision.route),
+                  userMessage: cleanedUserInput,
+                  preferredRoute: routeDecision.route,
+                });
+
+                const cleanedReply = cleanAndNormalizeText(guarded.reply);
+                const messageBlocks = splitIntoMessageBlocks(cleanedReply);
+                const replyForHistory = messageBlocks.length > 0 ? messageBlocks.join('\n\n') : cleanedReply;
+
+                setProperty(session.flow_variables, responseVarName, cleanedReply);
+                history.push({ role: 'assistant', content: replyForHistory });
+                ({ history, memorySummary } = trimAndSummarizeHistory(history, memorySummary));
+                setProperty(session.flow_variables, historyKey, history);
+                if (memorySummary) setProperty(session.flow_variables, historySummaryKey, memorySummary);
+
+                try {
+                  await recordMemory({
+                    settings: memorySettings,
+                    workspaceId: currentWorkspace.id,
+                    agentId: currentNode.id,
+                    userMessage: cleanedUserInput,
+                    assistantMessage: replyForHistory,
+                    systemPrompt,
+                    modelName,
+                  });
+                } catch (error) {
+                  console.warn(`[Flow Engine] Failed to record memory for routed exit in agent ${currentNode.id}`, error);
+                }
+
+                const blocksToSend = messageBlocks.length > 0 ? messageBlocks : [cleanedReply];
+                for (const block of blocksToSend) {
+                  await sendOmniChannelMessage(session, currentWorkspace, block);
+                }
+
+                setProperty(session.flow_variables, `_agent_completed_${currentNode.id}`, true);
+                setProperty(session.flow_variables, `_agent_route_exit_${currentNode.id}`, routeDecision.route);
+                nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+                shouldContinue = true;
+                break;
+              }
+
               let memoryContext: Awaited<ReturnType<typeof loadMemoryContext>> | undefined;
               try {
+                const memoryQuery = buildMemoryQueryFromTurn({
+                  userMessage: cleanedUserInput,
+                  history,
+                  state: mergedAgentState,
+                });
                 memoryContext = await loadMemoryContext({
                   settings: memorySettings,
                   workspaceId: currentWorkspace.id,
                   agentId: currentNode.id,
-                  query: cleanedUserInput,
+                  query: memoryQuery,
                 });
               } catch (error) {
                 console.warn(`[Flow Engine] Memory context unavailable for agent ${currentNode.id}`, error);
               }
 
-              // 1. Resolve Tools (Bidirectional)
               const connectedTools: any[] = [];
-
-              // Incoming to 'tools' handle
               const incomingTools = incoming.filter(c => c.targetHandle === 'tools');
-
-              // Outgoing to known tool types (Tool/Knowledge/HTTP)
               const outgoingTools = outgoing.filter(c => {
                 const target = findNodeById(c.to, currentWorkspace.nodes);
                 return target?.type === 'knowledge' || target?.type === 'http-tool' || target?.type === 'capability';
               });
-
               const toolConnections = [...incomingTools, ...outgoingTools];
 
               if (toolConnections.length > 0) {
@@ -1086,7 +1176,6 @@ export async function executeFlow(
                     try {
                       const extractVars = (str: string | undefined): string[] => {
                         if (!str) return [];
-                        // Basic regex for {{var}}
                         const matches = str.matchAll(/\{\{([^}]+)\}\}/g);
                         return Array.from(matches, m => m[1].trim());
                       };
@@ -1098,16 +1187,16 @@ export async function executeFlow(
                         ...(sourceNode.httpToolParams || []).flatMap((p: any) => extractVars(p.value)),
                         ...(sourceNode.httpToolFormData || []).flatMap((f: any) => extractVars(f.value)),
                         ...extractVars(sourceNode.httpToolAuthToken),
-                        ...extractVars(sourceNode.httpToolAuthKey)
+                        ...extractVars(sourceNode.httpToolAuthKey),
                       ]);
 
                       const properties: Record<string, any> = {};
-                      vars.forEach(v => properties[v] = { type: 'string' });
+                      vars.forEach(v => { properties[v] = { type: 'string' }; });
 
                       const inputSchema = JSON.stringify({
                         type: 'object',
                         properties,
-                        required: Array.from(vars)
+                        required: Array.from(vars),
                       });
 
                       const httpCap = {
@@ -1118,11 +1207,11 @@ export async function executeFlow(
                         version: '1.0.0',
                         contract: {
                           description: sourceNode.httpToolDescription || 'Performs an specific HTTP request.',
-                          inputSchema: inputSchema,
-                          outputSample: {}
+                          inputSchema,
+                          outputSample: {},
                         },
                         execution_config: {
-                          type: 'api', // Use the generic API executor which now supports substitution
+                          type: 'api',
                           apiUrl: sourceNode.httpToolUrl,
                           apiMethod: sourceNode.httpToolMethod || 'GET',
                           apiHeaders: (sourceNode.httpToolHeaders || []).reduce((acc: any, h: any) => ({ ...acc, [h.key]: h.value }), {}),
@@ -1133,9 +1222,9 @@ export async function executeFlow(
                           apiAuth: {
                             type: sourceNode.httpToolAuthType,
                             key: sourceNode.httpToolAuthKey,
-                            token: sourceNode.httpToolAuthToken
-                          }
-                        }
+                            token: sourceNode.httpToolAuthToken,
+                          },
+                        },
                       };
                       connectedTools.push(httpCap);
                       console.log(`[Flow Engine] Registered Tool Definition for Agent: ${httpCap.slug} (Available)`);
@@ -1152,25 +1241,25 @@ export async function executeFlow(
                         id: `knowledge-lookup-${sourceNode.id}`,
                         workspace_id: currentWorkspace.id,
                         name: sourceNode.title || 'Knowledge Base Lookup',
-                        slug: 'lookup_knowledge', // FIXED slug to match agent expectation
+                        slug: 'lookup_knowledge',
                         version: '1.0.0',
                         contract: {
-                          summary: 'Busca informações na base de conhecimento da empresa/agente',
-                          description: 'Use esta ferramenta para buscar qualquer informação sobre a empresa, como planos de internet, preços, regiões de cobertura, FAQs, políticas, produtos e serviços. Se o usuário perguntar "você tem...", "qual o preço", "como funciona", "tem internet em...", sempre use esta ferramenta.',
+                          summary: 'Busca informacoes na base de conhecimento da empresa/agente',
+                          description: 'Use esta ferramenta para buscar informacoes sobre a empresa, planos, precos, cobertura, FAQ e servicos.',
                           triggerPhrases: [
-                            'plano', 'planos', 'preço', 'preços', 'região', 'regiões', 'valor', 'valores',
-                            'internet', 'fibra', 'wifi', 'conexão', 'velocidade', 'mega', 'instalação',
-                            'atendemos', 'atende', 'cobertura', 'faq', 'ajuda', 'dúvida', 'informação', 'informações',
-                            'como funciona', 'quanto custa', 'qual o valor', 'sobre a empresa', 'você tem', 'vcs tem', 'gostaria de saber'
+                            'plano', 'planos', 'preco', 'precos', 'regiao', 'regioes', 'valor', 'valores',
+                            'internet', 'fibra', 'wifi', 'conexao', 'velocidade', 'mega', 'instalacao',
+                            'atendemos', 'atende', 'cobertura', 'faq', 'ajuda', 'duvida', 'informacao', 'informacoes',
+                            'como funciona', 'quanto custa', 'qual o valor', 'sobre a empresa', 'voce tem', 'vcs tem', 'gostaria de saber',
                           ],
                           inputSchema: JSON.stringify({
                             type: 'object',
                             properties: {
                               query: { type: 'string', description: 'Termo ou pergunta para buscar na base de conhecimento' },
-                              category: { type: 'string', description: 'Categoria opcional: plans, regions, faq, products, services' }
+                              category: { type: 'string', description: 'Categoria opcional: plans, regions, faq, products, services' },
                             },
-                            required: ['query']
-                          })
+                            required: ['query'],
+                          }),
                         },
                         execution_config: {
                           type: 'function',
@@ -1178,8 +1267,8 @@ export async function executeFlow(
                           _workspaceId: currentWorkspace.id,
                           _connectionString: connectionString,
                           _embeddingsModel: embeddingsModel,
-                          _category: sourceNode.knowledgeBaseId // Injected for strict isolation
-                        }
+                          _category: sourceNode.knowledgeBaseId,
+                        },
                       };
                       connectedTools.push(knowledgeCap);
                       console.log(`[Flow Engine] Registered Knowledge Tool for Agent: ${knowledgeCap.slug} (From explicit connection)`);
@@ -1189,19 +1278,11 @@ export async function executeFlow(
                   }
                 }
               } else {
-                // Fallback: If no tools connected, fetch ALL workspace capabilities (Legacy/Default behavior)
-                // Or we can decide to have NO tools if none connected. 
-                // User request implies "n8n style", so likely explicit only. 
-                // But for backward compatibility, maybe keep global if 0 connected?
-                // Let's stick to explicit only if the user is using the new handles. 
-                // Providing a fallback might be safer for existing flows.
-                console.log(`[Flow Engine] No tools explicitly connected. Falling back to all workspace capabilities.`);
+                console.log('[Flow Engine] No tools explicitly connected. Falling back to all workspace capabilities.');
                 const allCaps = await getCapabilitiesForWorkspace(currentWorkspace.id);
                 connectedTools.push(...allCaps);
               }
 
-              // Auto-inject lookup_knowledge tool if Memory Node is connected (Legacy/Fallback)
-              // Only inject if NOT already added by an explicit Knowledge Node connection
               if (memoryNode && !connectedTools.some(t => t.slug === 'lookup_knowledge')) {
                 const knowledgeLookupCap = {
                   id: `knowledge-lookup-${currentNode.id}`,
@@ -1210,43 +1291,36 @@ export async function executeFlow(
                   slug: 'lookup_knowledge',
                   version: '1.0.0',
                   contract: {
-                    summary: 'Busca informações na base de conhecimento da empresa/agente',
-                    description: 'Use esta ferramenta para buscar qualquer informação sobre a empresa, como planos de internet, preços, regiões de cobertura, FAQs, políticas, produtos e serviços. Se o usuário perguntar "você tem...", "qual o preço", "como funciona", "tem internet em...", sempre use esta ferramenta.',
+                    summary: 'Busca informacoes na base de conhecimento da empresa/agente',
+                    description: 'Use esta ferramenta para buscar informacoes sobre a empresa, planos, precos, cobertura, FAQ e servicos.',
                     triggerPhrases: [
-                      // Singular/Plural
-                      'plano', 'planos', 'preço', 'preços', 'região', 'regiões', 'valor', 'valores',
-                      // Domain specific
-                      'internet', 'fibra', 'wifi', 'conexão', 'velocidade', 'mega', 'instalação',
-                      // Intent
-                      'atendemos', 'atende', 'cobertura', 'faq', 'ajuda', 'dúvida', 'informação', 'informações',
-                      // Common questions
-                      'como funciona', 'quanto custa', 'qual o valor', 'sobre a empresa', 'você tem', 'vcs tem', 'gostaria de saber'
+                      'plano', 'planos', 'preco', 'precos', 'regiao', 'regioes', 'valor', 'valores',
+                      'internet', 'fibra', 'wifi', 'conexao', 'velocidade', 'mega', 'instalacao',
+                      'atendemos', 'atende', 'cobertura', 'faq', 'ajuda', 'duvida', 'informacao', 'informacoes',
+                      'como funciona', 'quanto custa', 'qual o valor', 'sobre a empresa', 'voce tem', 'vcs tem', 'gostaria de saber',
                     ],
                     inputSchema: JSON.stringify({
                       type: 'object',
                       properties: {
                         query: { type: 'string', description: 'Termo ou pergunta para buscar na base de conhecimento' },
-                        category: { type: 'string', description: 'Categoria opcional: plans, regions, faq, products, services' }
+                        category: { type: 'string', description: 'Categoria opcional: plans, regions, faq, products, services' },
                       },
-                      required: ['query']
-                    })
+                      required: ['query'],
+                    }),
                   },
                   execution_config: {
                     type: 'function',
                     functionName: 'lookupKnowledge',
-                    // Additional context injected at execution time
                     _workspaceId: currentWorkspace.id,
                     _connectionString: memorySettings.connectionString,
                     _embeddingsModel: memorySettings.embeddingsModel,
-                  }
+                  },
                 };
 
                 console.log(`[Flow Engine] Injected lookup_knowledge tool for agent ${currentNode.id}`);
                 connectedTools.push(knowledgeLookupCap);
               }
 
-              // Always inject the built-in 'finalizar_atendimento' tool
-              // The Agent can call this to signal it has completed its task and the flow should continue
               const finalizarCap = {
                 id: `finalizar-${currentNode.id}`,
                 workspace_id: currentWorkspace.id,
@@ -1254,63 +1328,60 @@ export async function executeFlow(
                 slug: 'finalizar_atendimento',
                 version: '1.0.0',
                 contract: {
-                  summary: 'Encerra o atendimento do agente e prossegue para o próximo passo do fluxo',
-                  description: 'Use esta ferramenta APENAS quando você tiver completado TODOS os passos do seu script/prompt. Ao chamar esta ferramenta, o fluxo irá prosseguir para o próximo nó. NÃO use antes de terminar todas as etapas.',
+                  summary: 'Encerra o atendimento do agente e prossegue para o proximo passo do fluxo',
+                  description: 'Use esta ferramenta apenas quando tiver concluido todas as etapas previstas no atendimento.',
                   inputSchema: JSON.stringify({
                     type: 'object',
                     properties: {
-                      motivo: { type: 'string', description: 'Motivo da finalização (ex: cadastro_completo, usuario_desistiu, transferencia)' }
+                      motivo: { type: 'string', description: 'Motivo da finalizacao (ex: cadastro_completo, usuario_desistiu, transferencia)' },
                     },
-                    required: ['motivo']
-                  })
+                    required: ['motivo'],
+                  }),
                 },
                 execution_config: {
-                  type: 'noop' // No-op: This tool doesn't actually do anything, it's just a signal
-                }
+                  type: 'noop',
+                },
               };
               connectedTools.push(finalizarCap);
-              console.log(`[Flow Engine] Injected 'finalizar_atendimento' tool for agent ${currentNode.id}`);
-              let targetModel = modelName;
-              let targetApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY; // Default fallback
 
+              let targetModel = modelName;
+              let targetApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
               const modelConnection = connections.find(c => c.to === currentNode.id && c.targetHandle === 'model');
               if (modelConnection) {
                 const modelNode = findNodeById(modelConnection.from, currentWorkspace.nodes);
                 if (modelNode?.type === 'ai-model-config') {
                   if (modelNode.aiModelName) targetModel = substituteVariablesInText(modelNode.aiModelName, session.flow_variables);
                   if (modelNode.aiApiKey) targetApiKey = substituteVariablesInText(modelNode.aiApiKey, session.flow_variables);
-                  // Provider logic can be added here if agenticFlow supports it
                 }
               }
 
-              // Process System Prompt to resolve @ToolName references
               let finalSystemPrompt = systemPrompt;
+              const statePromptFragment = buildAgentStatePromptFragment(mergedAgentState);
+              if (statePromptFragment) {
+                finalSystemPrompt = [finalSystemPrompt, statePromptFragment].filter(Boolean).join('\n\n');
+              }
+
               if (finalSystemPrompt && connectedTools.length > 0) {
                 connectedTools.forEach(tool => {
                   const slug = tool.slug;
                   const name = tool.name;
                   if (!slug) return;
-
-                  // Replace @slug (e.g. @tool_cipriano -> 'tool_cipriano')
                   const slugRegex = new RegExp(`@${slug}`, 'gi');
                   finalSystemPrompt = finalSystemPrompt.replace(slugRegex, `'${slug}'`);
-
-                  // Replace @name (e.g. @Cipriano -> 'tool_cipriano') if name exists
                   if (name) {
-                    const cleanName = name.replace(/\s+/g, ''); // Remove spaces
+                    const cleanName = name.replace(/\s+/g, '');
                     if (cleanName && cleanName.toLowerCase() !== slug.toLowerCase()) {
                       const nameRegex = new RegExp(`@${cleanName}`, 'gi');
                       finalSystemPrompt = finalSystemPrompt.replace(nameRegex, `'${slug}'`);
                     }
                   }
                 });
-                console.log(`[Flow Engine] Processed Agent System Prompt:`, finalSystemPrompt);
               }
 
               const agentReply = await agenticFlow({
                 userMessage: cleanedUserInput,
                 capabilities: connectedTools,
-                history: history,
+                history,
                 modelName: targetModel,
                 modelConfig: targetApiKey ? { apiKey: targetApiKey } : undefined,
                 systemPrompt: finalSystemPrompt,
@@ -1318,19 +1389,27 @@ export async function executeFlow(
                 memoryContext,
               });
 
-              const cleanedReply = cleanAndNormalizeText(agentReply.botReply);
+              const guardedReply = sanitizeAgentReply({
+                rawReply: agentReply.botReply,
+                userMessage: cleanedUserInput,
+                preferredRoute: routeDecision.route !== 'UNKNOWN' ? routeDecision.route : undefined,
+              });
+              const cleanedReply = cleanAndNormalizeText(guardedReply.reply);
+              const explicitRoute = detectExplicitRouteSignalFromReply(cleanedReply);
+              const resolvedRoute = explicitRoute !== 'UNKNOWN' ? explicitRoute : routeDecision.route;
+              if (guardedReply.fallbackApplied) {
+                setProperty(session.flow_variables, `_agent_guardrail_${currentNode.id}`, guardedReply.fallbackReason || 'fallback_applied');
+              }
+              setProperty(session.flow_variables, `_agent_route_${currentNode.id}`, resolvedRoute);
+
               const messageBlocks = splitIntoMessageBlocks(cleanedReply);
               const replyForHistory = messageBlocks.length > 0 ? messageBlocks.join('\n\n') : cleanedReply;
 
               setProperty(session.flow_variables, responseVarName, cleanedReply);
-
               history.push({ role: 'assistant', content: replyForHistory });
               ({ history, memorySummary } = trimAndSummarizeHistory(history, memorySummary));
-
               setProperty(session.flow_variables, historyKey, history);
-              if (memorySummary) {
-                setProperty(session.flow_variables, historySummaryKey, memorySummary);
-              }
+              if (memorySummary) setProperty(session.flow_variables, historySummaryKey, memorySummary);
 
               try {
                 await recordMemory({
@@ -1351,27 +1430,28 @@ export async function executeFlow(
                 await sendOmniChannelMessage(session, currentWorkspace, block);
               }
 
-              // Check if the Agent explicitly called the "exit" tool (finalizar_atendimento)
-              // This gives the LLM/Prompt full control over when to exit
               const calledExitTool = (agentReply.toolsCalled || []).includes('finalizar_atendimento');
-              if (calledExitTool) {
-                console.log(`[Flow Engine] Agent called 'finalizar_atendimento' - exiting to default path.`);
+              const shouldExitByRoute = resolvedRoute === 'SUPORTE' || resolvedRoute === 'FINANCEIRO' || resolvedRoute === 'ENCERRAR';
+              if (calledExitTool || shouldExitByRoute) {
                 setProperty(session.flow_variables, `_agent_completed_${currentNode.id}`, true);
                 nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
                 shouldContinue = true;
                 break;
               }
             } else {
+              const missingInputReply = 'Nao recebi sua mensagem corretamente. Pode enviar novamente, por favor?';
               console.warn(`[Flow Engine - ${session.session_id}] Intelligent Agent: Input variable '${inputVarName}' not found.`);
-              setProperty(session.flow_variables, responseVarName, 'Error: User input not found.');
+              setProperty(session.flow_variables, responseVarName, missingInputReply);
+              await sendOmniChannelMessage(session, currentWorkspace, missingInputReply);
             }
           } catch (e: any) {
+            const safeErrorReply = 'Tive uma instabilidade agora, mas sigo aqui com voce. Pode repetir a sua ultima mensagem?';
             console.error(`[Flow Engine - ${session.session_id}] Intelligent Agent Error:`, e);
-            setProperty(session.flow_variables, responseVarName, `Error with agent: ${e.message}`);
+            setProperty(session.flow_variables, responseVarName, safeErrorReply);
+            await sendOmniChannelMessage(session, currentWorkspace, safeErrorReply);
           }
         }
 
-        // Controle de turnos: se atingir o limite, siga o fluxo normal
         const agentTurnKey = `_agent_turns_${currentNode.id}`;
         const currentTurn = Number(getProperty(session.flow_variables, agentTurnKey) || 0) + 1;
         setProperty(session.flow_variables, agentTurnKey, currentTurn);
@@ -1381,7 +1461,6 @@ export async function executeFlow(
           break;
         }
 
-        // Mantém a conversa viva aguardando nova mensagem do usuário
         session.awaiting_input_type = 'input';
         session.awaiting_input_details = {
           variableToSave: inputVarName,
@@ -1490,3 +1569,4 @@ export async function executeFlow(
   }
   await saveSessionToDB(session);
 }
+

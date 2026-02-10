@@ -32,21 +32,36 @@ const memoryCompilerPrompt = ai.definePrompt({
   name: 'memoryCompilerPrompt',
   input: { schema: MemoryCompilerInputSchema },
   output: { schema: MemoryCompilerOutputSchema },
-  prompt: `You are a memory compiler for an AI agent.
+  prompt: `You are a high-precision memory compiler for an autonomous conversational agent.
 
-Rules:
-- Extract only durable, stable facts, preferences, constraints, or procedures.
-- Avoid transient chatter or per-turn details unless it affects future behavior.
-- Never store secrets or sensitive data (passwords, tokens, API keys, personal IDs).
-- Keep each memory item short and self-contained.
-- If there is nothing durable to store, return an empty items array.
+Primary objective:
+- Extract only memory that improves future turns.
+- Prioritize durable user profile data, business slots, constraints, and procedures.
+
+Strict rules:
+1. Keep each item atomic, short, and reusable in future turns.
+2. Ignore generic chatter, greetings, and low-value small talk.
+3. Never store secrets or sensitive values:
+   password, token, API key, CVV, full credit card, full personal documents.
+4. If a message is uncertain or inferred, mark confirmed=false and lower confidence.
+5. Prefer semantic for durable user/business facts, episodic for relevant recent events, procedural for stable instructions.
+6. If there is no durable value, return items: [].
+
+Domain emphasis (telecom/commercial flows):
+- Candidate durable slots include:
+  plan interest, billing day, installation shift, location shared, address intent, contact preferences.
+- Store factual slot intent in concise form, e.g. \"Billing day: 25\", \"Install shift: manha\".
+
+Scoring guidance:
+- importance: 0.0 to 1.0 (durability + utility for next turns).
+- confidence: 0.0 to 1.0 (certainty that the fact is explicit and correct).
 
 Context:
 System: {{systemPrompt}}
 User: {{{userMessage}}}
 Assistant: {{{assistantMessage}}}
 
-Return JSON that matches the schema.`,
+Return valid JSON matching the schema only.`,
 });
 
 export const memoryCompilerFlow = ai.defineFlow(

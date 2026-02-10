@@ -1,4 +1,4 @@
-{
+﻿{
   "version": "1.0",
   "name": "Fluxo Velpro Final",
   "nodes": [
@@ -7,7 +7,7 @@
       "y": 110,
       "id": "68dccee9-37ec-4f20-99b4-986440252fa1",
       "type": "start",
-      "title": "Início do Fluxo",
+      "title": "InÃ­cio do Fluxo",
       "triggers": [
         {
           "id": "d7228779-d4ab-4439-87f4-1cbf036ee6db",
@@ -36,6 +36,16 @@
               "id": "a1fe7d9f-718a-4604-b305-13283641023d",
               "jsonPath": "conversation.id",
               "flowVariable": "id_chat"
+            },
+            {
+              "id": "af959c10-049c-42d4-8731-dc0ef154aad2",
+              "jsonPath": "contact.phone_number",
+              "flowVariable": "id_estavel"
+            },
+            {
+              "id": "3abeb78a-eba4-47ed-807f-172846c69bbf",
+              "jsonPath": "contact.name",
+              "flowVariable": "nome_usuario"
             }
           ],
           "sessionTimeoutSeconds": 0
@@ -46,7 +56,7 @@
       "x": 2,
       "y": -208,
       "id": "a417828e-d19f-45ea-8184-f26348f588a8",
-      "text": "Olá, sou o assistente virtual da *Velpro Telecom.* Seja bem-vindo!",
+      "text": "OlÃ¡, sou o assistente virtual da *Velpro Telecom.* Seja bem-vindo!",
       "type": "message",
       "title": "Exibir Texto"
     },
@@ -59,28 +69,28 @@
       "options": [
         {
           "id": "6886987d-f0c2-414c-9771-4edd1ddcb64d",
-          "value": "🚀 Assinar Internet"
+          "value": "ðŸš€ Assinar Internet"
         },
         {
           "id": "bf7d3ca0-7bab-44b4-a599-5a722b69cf74",
-          "value": "🔄Transferência de Endereço"
+          "value": "ðŸ”„TransferÃªncia de EndereÃ§o"
         },
         {
           "id": "f9533055-942a-4dc3-941c-2c5e242e6185",
-          "value": "🛠 Suporte Técnico"
+          "value": "ðŸ›  Suporte TÃ©cnico"
         },
         {
           "id": "51aefe37-961c-42c9-824e-af8c7ca97a7f",
-          "value": "💰 Financeiro"
+          "value": "ðŸ’° Financeiro"
         },
         {
           "id": "fb47c06c-f54d-4f14-a6e4-7f7aa0c0e8f7",
-          "value": "❌ Encerrar Atendimento"
+          "value": "âŒ Encerrar Atendimento"
         }
       ],
       "aiEnabled": false,
-      "optionsList": "🚀 Assinar Internet\n🔄Transferência de Endereço\n🛠 Suporte Técnico\n💰 Financeiro\n❌ Encerrar Atendimento",
-      "questionText": "Digite a opção desejada: ✨",
+      "optionsList": "ðŸš€ Assinar Internet\nðŸ”„TransferÃªncia de EndereÃ§o\nðŸ›  Suporte TÃ©cnico\nðŸ’° Financeiro\nâŒ Encerrar Atendimento",
+      "questionText": "Digite a opÃ§Ã£o desejada: âœ¨",
       "apiResponseAsInput": false,
       "variableToSaveChoice": "escolha_usuario",
       "apiResponsePathForValue": "optionChoice"
@@ -90,9 +100,9 @@
       "y": -1170,
       "id": "b67f8821-c264-490b-89e6-ab8722bdcdd3",
       "type": "option",
-      "title": "Múltiplas Escolhas",
+      "title": "MÃºltiplas Escolhas",
       "aiEnabled": false,
-      "optionsList": "Google / Pesquisa no Google\nInstagram\nFacebook\nIndicação de amigo ou cliente\nOutdoor / Anúncio físico\nVendedor / Representante\nOutros (Panfleto, etc)",
+      "optionsList": "Google / Pesquisa no Google\nInstagram\nFacebook\nIndicaÃ§Ã£o de amigo ou cliente\nOutdoor / AnÃºncio fÃ­sico\nVendedor / Representante\nOutros (Panfleto, etc)",
       "questionText": "Antes de continuarmos, como conheceu a empresa?",
       "apiResponseAsInput": false,
       "variableToSaveChoice": "escolha_usuario",
@@ -136,9 +146,9 @@
       "y": -700,
       "id": "a7a9d87a-b148-42e9-896e-6b96ad0399a0",
       "type": "input",
-      "title": "Entrada do Usuário",
+      "title": "Entrada do UsuÃ¡rio",
       "inputType": "text",
-      "promptText": "✅ Ótimo! Para finalizar o pedido responda ao formulário abaixo EM APENAS UMA MENSAGEM\n\n[FORMULÁRIO]\nNome Completo:\nE-mail:\nCPF:\nRG:\nData de nascimento:\nCelular:\nWhatsapp:\nEndereço Completo:\nComo conheceu a empresa:\nPlano Escolhido:\nData de Vencimento:",
+      "promptText": "âœ… Ã“timo! Para finalizar o pedido responda ao formulÃ¡rio abaixo EM APENAS UMA MENSAGEM\n\n[FORMULÃRIO]\nNome Completo:\nE-mail:\nCPF:\nRG:\nData de nascimento:\nCelular:\nWhatsapp:\nEndereÃ§o Completo:\nComo conheceu a empresa:\nPlano Escolhido:\nData de Vencimento:",
       "apiResponseAsInput": false,
       "variableToSaveResponse": "nome_usuario",
       "apiResponsePathForValue": "responseText"
@@ -176,7 +186,7 @@
       "x": 2640,
       "y": 540,
       "id": "c6f70a76-fb40-42c2-b16d-23795232947a",
-      "text": "Nosso expediente de suporte técnico se encerrou por hoje. Nosso horário de atendimento é de segunda a sexta-feira, das 8h às 20h, aos sábados das 8h às 18h, e aos domingos e feriados, das 8h às 12h. Pedimos desculpas por qualquer inconveniente.",
+      "text": "Nosso expediente de suporte tÃ©cnico se encerrou por hoje. Nosso horÃ¡rio de atendimento Ã© de segunda a sexta-feira, das 8h Ã s 20h, aos sÃ¡bados das 8h Ã s 18h, e aos domingos e feriados, das 8h Ã s 12h. Pedimos desculpas por qualquerÂ inconveniente.",
       "type": "message",
       "title": "Exibir Texto"
     },
@@ -185,7 +195,7 @@
       "y": -315,
       "id": "b0ca8f89-f86b-4653-bcb6-11abfc89ca3e",
       "type": "option",
-      "title": "Múltiplas Escolhas",
+      "title": "MÃºltiplas Escolhas",
       "options": [
         {
           "id": "0bc584e2-4429-495f-aaef-04f30abc6219",
@@ -202,7 +212,7 @@
       ],
       "aiEnabled": false,
       "optionsList": "Problemas de sinal\nBoleto/Pagamento\nDesbloquear Internet",
-      "questionText": "👩🏽‍💻 Qual dos assuntos abaixo mais se aproxima do seu pedido?",
+      "questionText": "ðŸ‘©ðŸ½â€ðŸ’» Qual dos assuntos abaixo mais se aproxima do seu pedido?",
       "apiResponseAsInput": false,
       "variableToSaveChoice": "escolha_usuario_1",
       "apiResponsePathForValue": "optionChoice"
@@ -211,7 +221,7 @@
       "x": 3199,
       "y": -129,
       "id": "3df99771-1413-4413-972e-294a02deb895",
-      "text": "👩🏽‍💻 Sem problemas, parece que você está tendo um problema um pouco mais complicado, neste caso vou te encaminhar para o nosso atendimento humano agora mesmo!",
+      "text": "ðŸ‘©ðŸ½â€ðŸ’» Sem problemas, parece que vocÃª estÃ¡ tendo um problema um pouco mais complicado, neste caso vou te encaminhar para o nosso atendimento humanoÂ agoraÂ mesmo!",
       "type": "message",
       "title": "Exibir Texto"
     },
@@ -451,7 +461,7 @@
       "y": 3506,
       "id": "46cf004a-d04d-4c20-9d8b-9cedbf11b436",
       "type": "option",
-      "title": "Múltiplas Escolhas",
+      "title": "MÃºltiplas Escolhas",
       "options": [
         {
           "id": "14355c8c-6bd3-4a7c-98f3-433e51f747b5",
@@ -460,7 +470,7 @@
       ],
       "aiEnabled": false,
       "optionsList": "{{contratos_clientes}}",
-      "questionText": "Escolha uma opção:",
+      "questionText": "Escolha uma opÃ§Ã£o:",
       "apiResponseAsInput": false,
       "variableToSaveChoice": "contrato_escolhido",
       "apiResponsePathForValue": "optionChoice"
@@ -470,7 +480,7 @@
       "y": 2818,
       "id": "2c157dee-8679-4003-8264-4d17f2cfb4cf",
       "type": "input",
-      "title": "Entrada do Usuário",
+      "title": "Entrada do UsuÃ¡rio",
       "inputType": "number",
       "promptText": "Digite o CPF do titular",
       "questionText": "Digite o CPF do titular",
@@ -482,7 +492,7 @@
       "x": 4703,
       "y": 3604,
       "id": "eb574508-4c90-4555-9325-91bcfa27a614",
-      "text": "Olá, {{cliente_nome_fatura}}!\n\nO valor da sua fatura é R${{valor_fatura}}\n\nData de vencimento: {{vencimento_fatura}}",
+      "text": "OlÃ¡, {{cliente_nome_fatura}}!\n\nO valor da sua fatura Ã© R${{valor_fatura}}\n\nData de vencimento: {{vencimento_fatura}}",
       "type": "message",
       "title": "Exibir Texto"
     },
@@ -514,7 +524,7 @@
       "x": 5926,
       "y": 3470,
       "id": "6936cf8d-0820-4801-bc4c-65131905e557",
-      "text": "Qualquer dúvida, pode nos chamar novamente!",
+      "text": "Qualquer dÃºvida, pode nos chamar novamente!",
       "type": "message",
       "title": "Exibir Texto"
     },
@@ -530,36 +540,36 @@
       "y": 888,
       "id": "99ae0347-cb4d-45c8-98a3-8fb6c31e53e9",
       "type": "option",
-      "title": "Múltiplas Escolhas",
+      "title": "MÃºltiplas Escolhas",
       "options": [
         {
           "id": "f61e106c-5518-4417-b9dc-b29f6dfa0eec",
-          "value": "📄2° Via Fatura"
+          "value": "ðŸ“„2Â° Via Fatura"
         },
         {
           "id": "3a4b8c9b-5c34-4629-a465-4aa1b682d76f",
-          "value": "💸Negociar dívida"
+          "value": "ðŸ’¸Negociar dÃ­vida"
         },
         {
           "id": "ebc82b43-a03d-40c6-adf9-6e185b2893f0",
-          "value": "💰Informar Pagamento"
+          "value": "ðŸ’°Informar Pagamento"
         },
         {
           "id": "10c880ae-1719-47f5-9a76-7c5911a70c56",
-          "value": "❓Outros Assuntos"
+          "value": "â“Outros Assuntos"
         },
         {
           "id": "b285b1e1-46d5-4aaa-802d-7455ea3bed6c",
-          "value": "🔓Desbloqueio de confiança"
+          "value": "ðŸ”“Desbloqueio de confianÃ§a"
         },
         {
           "id": "ffb0f3e6-b555-46fd-8e96-2f0d71627242",
-          "value": "↩️Voltar"
+          "value": "â†©ï¸Voltar"
         }
       ],
       "aiEnabled": false,
-      "optionsList": "📄2° Via Fatura\n💸Negociar dívida\n💰Informar Pagamento\n❓Outros Assuntos\n🔓Desbloqueio de confiança",
-      "questionText": "Escolha uma opção:",
+      "optionsList": "ðŸ“„2Â° Via Fatura\nðŸ’¸Negociar dÃ­vida\nðŸ’°Informar Pagamento\nâ“Outros Assuntos\nðŸ”“Desbloqueio de confianÃ§a",
+      "questionText": "Escolha uma opÃ§Ã£o:",
       "apiResponseAsInput": false,
       "variableToSaveChoice": "escolha_usuario_2",
       "apiResponsePathForValue": "optionChoice"
@@ -582,7 +592,7 @@
       "x": 3090,
       "y": 1775,
       "id": "dfba00ef-5b34-4cd8-ac03-ce455dfcd407",
-      "text": "Infelizmente, o setor financeiro já se encerrou hoje. Nosso horário de atendimento do setor financeiro é de segunda a sábado, das 8h às 18h. Domingos e feriados não temos expediente no financeiro.",
+      "text": "Infelizmente, o setor financeiro jÃ¡ se encerrou hoje. Nosso horÃ¡rio de atendimento do setor financeiro Ã© de segunda a sÃ¡bado, das 8h Ã s 18h. Domingos e feriados nÃ£o temos expediente no financeiro.",
       "type": "message",
       "title": "Exibir Texto"
     },
@@ -616,7 +626,7 @@
       "x": 3135,
       "y": 1308,
       "id": "38ea2175-2948-4a86-a61c-fc6165287904",
-      "text": "🎆 Só um instantinho! ✨\n\nEstamos preparando tudo para te conectar com um de nossos atendentes.",
+      "text": "ðŸŽ† SÃ³ um instantinho! âœ¨\n\nEstamos preparando tudo para te conectar com um de nossos atendentes.",
       "type": "message",
       "title": "Exibir Texto"
     },
@@ -715,7 +725,7 @@
       "y": 1818,
       "id": "9a6acf0e-49cf-461c-b05b-029e259efe48",
       "type": "input",
-      "title": "Entrada do Usuário",
+      "title": "Entrada do UsuÃ¡rio",
       "inputType": "text",
       "promptText": "Digite o CPF do titular",
       "questionText": "Digite o CPF do titular",
@@ -775,7 +785,7 @@
       "y": 1816,
       "id": "0d8b4b59-2784-4b0b-b8cb-e295dbdd5387",
       "type": "option",
-      "title": "Múltiplas Escolhas",
+      "title": "MÃºltiplas Escolhas",
       "options": [
         {
           "id": "28a44df3-9215-43a0-a719-96a476ed10ba",
@@ -784,7 +794,7 @@
       ],
       "aiEnabled": false,
       "optionsList": "{{contratos_clientes}}",
-      "questionText": "Escolha uma opção:",
+      "questionText": "Escolha uma opÃ§Ã£o:",
       "apiResponseAsInput": false,
       "variableToSaveChoice": "contrato_escolhido",
       "apiResponsePathForValue": "optionChoice"
@@ -794,8 +804,8 @@
       "y": 1863,
       "id": "3e9ce131-6a0b-42a2-ab60-37ce8854e07b",
       "type": "code-execution",
-      "title": "Executar Código (JS)",
-      "codeSnippet": "function gerarDataMais3Dias() {\n  const hoje = new Date();\n  const diaSeguinte = new Date(hoje);\n  diaSeguinte.setDate(diaSeguinte.getDate() + 1);\n\n  const resultado = new Date(diaSeguinte);\n  resultado.setDate(resultado.getDate() + 3);\n\n  const ano = resultado.getFullYear();\n  const mes = String(resultado.getMonth() + 1).padStart(2, '0');\n  const dia = String(resultado.getDate()).padStart(2, '0');\n\n  return `${ano}-${mes}-${dia}`;\n}\n\n// devolve o valor para que o painel salve na variável\nreturn gerarDataMais3Dias();",
+      "title": "Executar CÃ³digo (JS)",
+      "codeSnippet": "function gerarDataMais3Dias() {\n  const hoje = new Date();\n  const diaSeguinte = new Date(hoje);\n  diaSeguinte.setDate(diaSeguinte.getDate() + 1);\n\n  const resultado = new Date(diaSeguinte);\n  resultado.setDate(resultado.getDate() + 3);\n\n  const ano = resultado.getFullYear();\n  const mes = String(resultado.getMonth() + 1).padStart(2, '0');\n  const dia = String(resultado.getDate()).padStart(2, '0');\n\n  return `${ano}-${mes}-${dia}`;\n}\n\n// devolve o valor para que o painel salve na variÃ¡vel\nreturn gerarDataMais3Dias();",
       "codeOutputVariable": "resultado_codigo"
     },
     {
@@ -811,7 +821,7 @@
       "y": 1894,
       "id": "30a27265-c50d-4e47-b8f5-a673e50ef986",
       "type": "set-variable",
-      "title": "Definir Variável",
+      "title": "Definir VariÃ¡vel",
       "variableName": "mes_tratado",
       "variableValue": "{{resultado_codigo}}"
     },
@@ -819,7 +829,7 @@
       "x": 3268,
       "y": -1205,
       "id": "c6cdfb32-5bdf-4d85-a141-56266c1a317a",
-      "text": "👩🏽‍💻 Vi que você tem interesse em contratar nossos serviços 🚀\nVou te conectar agora com um especialista para te explicar tudo direitinho.",
+      "text": "ðŸ‘©ðŸ½â€ðŸ’» Vi que vocÃª tem interesse em contratar nossos serviÃ§os ðŸš€\nVou te conectar agora com um especialista para te explicar tudo direitinho.",
       "type": "message",
       "title": "Exibir Texto"
     },
@@ -923,8 +933,8 @@
       "y": 2383,
       "id": "eb69168d-2b65-4a55-bbf8-0892e271ec83",
       "type": "code-execution",
-      "title": "Executar Código (JS)",
-      "codeSnippet": "const texto = \"{{contrato_escolhido}}\"; // ajuste para a sua variável\nconst match = texto.match(/^\\s*(\\d+)/);\nconst numeroContrato = match ? match[1] : \"\";\n\nreturn numeroContrato;",
+      "title": "Executar CÃ³digo (JS)",
+      "codeSnippet": "const texto = \"{{contrato_escolhido}}\"; // ajuste para a sua variÃ¡vel\nconst match = texto.match(/^\\s*(\\d+)/);\nconst numeroContrato = match ? match[1] : \"\";\n\nreturn numeroContrato;",
       "codeOutputVariable": "pega_contrato"
     },
     {
@@ -940,8 +950,8 @@
       "y": 3084,
       "id": "b126fef9-ecf2-4eb7-9f4c-dbac5bd34330",
       "type": "code-execution",
-      "title": "Executar Código (JS)",
-      "codeSnippet": "// garante que \"contratos_clientes\" é uma lista\nconst contratos = Array.isArray(variables[\"contratos_clientes\"])\n  ? variables[\"contratos_clientes\"]\n  : [];\n\n// conta contratos válidos (números ou strings não vazias)\nconst quantidade = contratos.filter(c => String(c).trim().length > 0).length;\n\nlet resultado;\n\nif (quantidade === 1) {\n  resultado = \"apenas_1_contrato\";\n} else if (quantidade > 1) {\n  resultado = \"mais_de_1_contrato\";\n} else {\n  resultado = \"nenhum_contrato\";\n}\n\nreturn resultado;",
+      "title": "Executar CÃ³digo (JS)",
+      "codeSnippet": "// garante que \"contratos_clientes\" Ã© uma lista\nconst contratos = Array.isArray(variables[\"contratos_clientes\"])\n  ? variables[\"contratos_clientes\"]\n  : [];\n\n// conta contratos vÃ¡lidos (nÃºmeros ou strings nÃ£o vazias)\nconst quantidade = contratos.filter(c => String(c).trim().length > 0).length;\n\nlet resultado;\n\nif (quantidade === 1) {\n  resultado = \"apenas_1_contrato\";\n} else if (quantidade > 1) {\n  resultado = \"mais_de_1_contrato\";\n} else {\n  resultado = \"nenhum_contrato\";\n}\n\nreturn resultado;",
       "codeOutputVariable": "resultado_codigo_1"
     },
     {
@@ -971,7 +981,7 @@
       "y": 3230,
       "id": "cef320f3-1110-498a-9585-7ecdf2788e00",
       "type": "set-variable",
-      "title": "Definir Variável",
+      "title": "Definir VariÃ¡vel",
       "variableName": "contrato_escolhido",
       "variableValue": "{{contratos_clientes}}"
     },
@@ -979,7 +989,7 @@
       "x": 1536,
       "y": 2260,
       "id": "3fcd5026-326b-4393-8842-dc536e562c64",
-      "text": "Infelizmente não foi possível, entre em contato com o setor financeiro!",
+      "text": "Infelizmente nÃ£o foi possÃ­vel, entre em contato com o setor financeiro!",
       "type": "message",
       "title": "Exibir Texto"
     },
@@ -988,7 +998,7 @@
       "y": 3849,
       "id": "f5b65cb6-1e8d-424e-aef2-32b89f08fcf5",
       "type": "option",
-      "title": "Múltiplas Escolhas",
+      "title": "MÃºltiplas Escolhas",
       "options": [
         {
           "id": "0f5ac6e5-b01d-4928-8c28-be4e4d6c3009",
@@ -1000,7 +1010,7 @@
         }
       ],
       "optionsList": "Tentar novamente\nEncerrar Atendimento",
-      "questionText": "Não encontramos nenhum contrato neste, o que deseja fazer?",
+      "questionText": "NÃ£o encontramos nenhum contrato neste, o que deseja fazer?",
       "apiResponseAsInput": false,
       "variableToSaveChoice": "escolha_usuario_3",
       "apiResponsePathForValue": "optionChoice"
@@ -1017,8 +1027,8 @@
       "y": 1811,
       "id": "5f164a10-5788-4c55-ac8d-0922c31a6f70",
       "type": "code-execution",
-      "title": "Executar Código (JS)",
-      "codeSnippet": "// garante que \"contratos_clientes\" é uma lista\nconst contratos = Array.isArray(variables[\"contratos_clientes\"])\n  ? variables[\"contratos_clientes\"]\n  : [];\n\n// conta contratos válidos (números ou strings não vazias)\nconst quantidade = contratos.filter(c => String(c).trim().length > 0).length;\n\nlet resultado;\n\nif (quantidade === 1) {\n  resultado = \"apenas_1_contrato\";\n} else if (quantidade > 1) {\n  resultado = \"mais_de_1_contrato\";\n} else {\n  resultado = \"nenhum_contrato\";\n}\n\nreturn resultado;",
+      "title": "Executar CÃ³digo (JS)",
+      "codeSnippet": "// garante que \"contratos_clientes\" Ã© uma lista\nconst contratos = Array.isArray(variables[\"contratos_clientes\"])\n  ? variables[\"contratos_clientes\"]\n  : [];\n\n// conta contratos vÃ¡lidos (nÃºmeros ou strings nÃ£o vazias)\nconst quantidade = contratos.filter(c => String(c).trim().length > 0).length;\n\nlet resultado;\n\nif (quantidade === 1) {\n  resultado = \"apenas_1_contrato\";\n} else if (quantidade > 1) {\n  resultado = \"mais_de_1_contrato\";\n} else {\n  resultado = \"nenhum_contrato\";\n}\n\nreturn resultado;",
       "codeOutputVariable": "resultado_codigo_1"
     },
     {
@@ -1049,7 +1059,7 @@
       "y": 2467,
       "id": "086d414c-f199-4d4d-bfc4-103f5cdb316b",
       "type": "option",
-      "title": "Múltiplas Escolhas",
+      "title": "MÃºltiplas Escolhas",
       "options": [
         {
           "id": "07251547-20dc-492f-8cb6-9096e369a70e",
@@ -1061,7 +1071,7 @@
         }
       ],
       "optionsList": "Tentar novamente\nEncerrar Atendimento",
-      "questionText": "Não encontramos nenhum contrato neste, o que deseja fazer?",
+      "questionText": "NÃ£o encontramos nenhum contrato neste, o que deseja fazer?",
       "apiResponseAsInput": false,
       "variableToSaveChoice": "escolha_usuario_3",
       "apiResponsePathForValue": "optionChoice"
@@ -1100,7 +1110,7 @@
       "x": 1533,
       "y": 1723,
       "id": "e55ff144-e984-48fa-a8af-83c96906b318",
-      "text": "Sua conexão ainda não foi bloqueada, pode utilizar normalmente!",
+      "text": "Sua conexÃ£o ainda nÃ£o foi bloqueada, pode utilizar normalmente!",
       "type": "message",
       "title": "Exibir Texto"
     },
@@ -1114,7 +1124,7 @@
       "apiMethod": "POST",
       "apiBodyRaw": "",
       "apiAuthType": "bearer",
-      "apiBodyJson": "{\n  \"chatId\": \"{{id_conversa}}\",\n  \"reasonTagId\": \"5a064503-1cca-4c42-983b-1556255061b1\",\n  \"notes\": \"Executou alguma ação como pegar uma fatura ou outros\"\n}",
+      "apiBodyJson": "{\n  \"chatId\": \"{{id_conversa}}\",\n  \"reasonTagId\": \"5a064503-1cca-4c42-983b-1556255061b1\",\n  \"notes\": \"Executou alguma aÃ§Ã£o como pegar uma fatura ou outros\"\n}",
       "apiBodyType": "json",
       "apiHeadersList": [
         {
@@ -1155,7 +1165,7 @@
       "apiMethod": "POST",
       "apiBodyRaw": "",
       "apiAuthType": "bearer",
-      "apiBodyJson": "{\n  \"chatId\": \"{{id_conversa}}\",\n  \"reasonTagId\": \"5a064503-1cca-4c42-983b-1556255061b1\",\n  \"notes\": \"Executou alguma ação como pegar uma fatura ou outros\"\n}",
+      "apiBodyJson": "{\n  \"chatId\": \"{{id_conversa}}\",\n  \"reasonTagId\": \"5a064503-1cca-4c42-983b-1556255061b1\",\n  \"notes\": \"Executou alguma aÃ§Ã£o como pegar uma fatura ou outros\"\n}",
       "apiBodyType": "json",
       "apiHeadersList": [
         {
@@ -1176,7 +1186,7 @@
       "y": 1560,
       "id": "b7003151-a5f9-4b8b-9bfc-d4a5630aedf0",
       "type": "set-variable",
-      "title": "Definir Variável",
+      "title": "Definir VariÃ¡vel",
       "variableName": "contrato_escolhido",
       "variableValue": "{{contratos_clientes}}"
     },
@@ -1190,7 +1200,7 @@
       "apiMethod": "POST",
       "apiBodyRaw": "",
       "apiAuthType": "bearer",
-      "apiBodyJson": "{\n  \"chatId\": \"{{id_conversa}}\",\n  \"reasonTagId\": \"5a064503-1cca-4c42-983b-1556255061b1\",\n  \"notes\": \"Executou alguma ação como pegar uma fatura ou outros\"\n}",
+      "apiBodyJson": "{\n  \"chatId\": \"{{id_conversa}}\",\n  \"reasonTagId\": \"5a064503-1cca-4c42-983b-1556255061b1\",\n  \"notes\": \"Executou alguma aÃ§Ã£o como pegar uma fatura ou outros\"\n}",
       "apiBodyType": "json",
       "apiHeadersList": [
         {
@@ -1214,7 +1224,7 @@
       "title": "Agente Inteligente",
       "agentName": "Assistente",
       "temperature": 0.21,
-      "agentSystemPrompt": "🆔 Identidade do Agente\n\nNome: Raquel\nFunção: Assistente Virtual do Setor Comercial – Velpro Telecom\n\nObjetivo principal:\nIdentificar o interesse inicial do cliente, conduzir a conversa de forma natural, apresentar os planos disponíveis, responder dúvidas técnico-comerciais, coletar informações essenciais somente quando fizer sentido e informar que um atendente humano do setor comercial entrará em contato.\n\n🧠 Personalidade e Tom\n\nVocê é Raquel, assistente virtual do setor comercial da Velpro Telecom.\n\nTom educado, simpático, claro e profissional\n\nLinguagem simples, natural e acessível\n\nComunicação curta, objetiva e amigável\n\nSempre focada em comercial e decisão de compra\n\nNunca diga que é IA ou robô — apenas “assistente virtual”\n\nRestrições absolutas\n\nNunca prometa valores, prazos ou condições específicas\n\nNunca finalize vendas\nNunca negocie preços\n\nNunca prometa instalação\n\nNunca confirme disponibilidade técnica\n\nNunca saia do papel comercial\n\n🗣️ Forma de Apresentação\n\n(obrigatória – apenas uma vez no início da conversa)\n\n“Olá! 😊\nEu sou a Raquel, assistente virtual do setor comercial da Velpro Telecom.”\n\n🧭 PASSO 1 – Identificar a intenção do cliente\n\nAntes de qualquer coleta de dados, sempre pergunte o que o cliente deseja, de forma aberta e natural:\n\n“Me conta, por favor 😊 \nO que você está procurando ou como posso te ajudar hoje?”\n\nIntenções esperadas\n\nInternet fibra\n\nInternet + TV\n\nInformações gerais\n\nContratar novo serviço\n\n⚠️ Importante:\n\nA Velpro Telecom não oferece apenas TV\n\nNão oferece Internet Móvel\n\nTrabalha somente com internet fibra óptica, com ou sem TV\n\n📡 PASSO 2 – Apresentação dos Planos (obrigatório antes de coletar dados)\n\nApós identificar a intenção, sempre apresente os planos disponíveis, consultando a Tool de base de conhecimento na tool \"contratar_plano_internet\", você deve mandar ele bem formatado igual está, não mude valores.\n\nEnvie as informações completas do plano\n\nUse linguagem clara e comercial\n\nExplique para que tipo de uso cada plano é indicado\n\nNão personalize valores\n\nNão prometa performance absoluta\nExemplo de abordagem correta:\n\n“De forma geral, temos planos que atendem desde uso básico até casas com muitos dispositivos conectados ao mesmo tempo 😊”\n\n🧠 PERMISSÃO ESPECIAL – Respostas Técnico-Comerciais (PODE RESPONDER)\n\nVocê PODE responder perguntas técnicas de nível comercial, desde que estejam ligadas à decisão de compra.\n\nExemplos do que você PODE explicar:\n\nPara quantas pessoas ou dispositivos o plano costuma atender\n\nDiferença entre Wi-Fi 5 e Wi-Fi 6\n\nQue os equipamentos normalmente são compatíveis com Wi-Fi 6 em planos superiores\n\nUso ideal para:\n\nStreaming\n\nJogos online\n\nHome office\n\nEmpresas\n\nDiferença entre planos residenciais e empresariais\n\n⚠️ Sempre use termos como:\n\n“em geral”, “normalmente”, “na maioria dos casos”, “costuma atender bem”\n\n🚫 O que é Técnico Profundo (NÃO RESPONDER)\n\nVocê NÃO deve responder quando envolver:\n\nAlcance do Wi-Fi dentro do imóvel\n\nMetros de cobertura\n\nDiagnóstico de sinal\n\nInterferência\n\nGarantia de velocidade no Wi-Fi\n\nConfirmação de equipamento específico do cliente\n\nDisponibilidade técnica no endereço\n\nNesses casos, redirecione para humano.\n\n🔁 Regras de Conversa\nPerguntas técnicas profundas\n\n“Um atendente do setor comercial vai conseguir te explicar tudo certinho 😊”\n\nPerguntas sobre valores\n\nConsulte a base de conhecimento (planos 2026)\n\nResponda de forma informativa e genérica\n\nNunca negocie ou personalize\n\nExemplo:\n\n“Os valores podem variar conforme a região e o tipo de plano 😊\nUm atendente do setor comercial confirma tudo certinho com você.”\n\n📋 PASSO 3 – Coleta de Informações Essenciais\n\n📋 Ficha de Cadastro Velpro\n(Preencha e envie junto com as fotos solicitadas apenas após o cliente selecionar o plano)\n\n✔️Endereço completo:\n✔️ Localização (se der)\n✔️2 Telefones (se der)\n✔️Dia de vencimento escolhido (5/10/15/20/25):\n✔️Turno para instalação (Manhã ou Tarde):\n\n⚠️ Importante: O titular precisa estar presente na instalação com documento físico com foto em mãos para assinatura do contrato online. 🤝\n\nPergunte um de cada vez\n\nSomente se ainda não tiver sido informado\n\nNunca repita dados que o cliente já informou espontaneamente\n\nProcure na base de conhecimento sobre as informacoes para contratar \"ficha_cliente\"\n\n✅ PASSO 4 - Encerramento Obrigatório\n\n(sempre usar após coletar as informações)\n\n“Perfeito! 🙌\nJá registrei suas informações.\nUm atendente do setor comercial da Velpro Telecom irá entrar em contato com você em breve para dar continuidade ao atendimento.\nObrigada pelo seu interesse! 💚”\n\nApós coletado os dados do cadastro, você deve usar a tool @enviar_atendimento_discord (http-tool) para enviar os dados do cadastro. E Então @finalizar_atendimento .\n\n🚫 Proibições Finais (regra absoluta)\n\nNão negociar preços\nNão prometer instalação\nNão confirmar cobertura\nNão sair do papel comercia\n\n@@@@@@@",
+      "agentSystemPrompt": "🆔 IDENTIDADE DO AGENTE\nNome: Raquel\nFunção: Assistente Virtual do Setor Comercial – Velpro Telecom\n\nO nome de quem você irá atender é {{nome_usuario}}\nO número para contato é {{id_estavel}}\n\nOBJETIVO PRINCIPAL\nIdentificar o interesse inicial do cliente, conduzir a conversa de forma natural, apresentar planos, responder dúvidas técnico-comerciais, coletar informações essenciais quando fizer sentido e informar que um atendente humano dará continuidade.\n\n🧠 PERSONALIDADE E TOM\n- Educado, simpático, claro e profissional\n- Linguagem simples, natural e acessível\n- Respostas curtas, objetivas e amigáveis\n- Foco comercial e decisão de compra\n- Nunca diga que é IA ou robô — apenas “assistente virtual”\n\n🚫 RESTRIÇÕES ABSOLUTAS\n- Não prometer valores, prazos ou condições específicas\n- Não alterar os preços\n- Não prometer instalação\n- Não confirmar disponibilidade técnica/cobertura\n- Sobre \"Metros de cobertura\" não prometer \"Alcance do Wi-Fi no imóvel\"\n- Você não deve dar detalhes do equipamento que utilizamos, mas diga que é ZTE uma marca renomada\n- Não sair do papel comercial\n- Você não deve dar garantia de velocidade no Wi-Fi\n- Não negociar preços\n\n🗣️ APRESENTAÇÃO (APENAS UMA VEZ NO INÍCIO)\n“Olá! 😊\nEu sou a Raquel, assistente virtual do setor comercial da Velpro Telecom.”\n\n━━━━━━━━━━━━━━━━━━━━━━\nPROTOCOLO OPERACIONAL (OBRIGATÓRIO)\n1) Entender o pedido do cliente (1 frase).\n2) Seguir o passo correto abaixo.\n3) Se precisar de dados/planos/valores, usar @lookup_knowledge antes de responder.\n4) Se faltar informação, perguntar de forma objetiva.\n5) Nunca inventar dados.\n6) Nunca deixar resposta vazia.\n━━━━━━━━━━━━━━━━━━━━━━\n\n🧭 PASSO 1 – IDENTIFICAR A INTENÇÃO\nSempre perguntar primeiro, de forma aberta:\n“Me conta, por favor 😊\nO que você está procurando ou como posso te ajudar hoje?”\n\nIntenções esperadas:\n- Internet fibra\n- Internet + TV\n- Informações gerais\n- Contratar novo serviço\n\n⚠️ Importante:\n- Não oferece apenas TV\n- Não oferece Internet móvel\n- Trabalha somente com internet fibra óptica (com ou sem TV)\n\n📡 PASSO 2 – APRESENTAR PLANOS (OBRIGATÓRIO ANTES DE COLETAR DADOS)\nApós identificar intenção:\n- Consultar @lookup_knowledge com a consulta correta (ex.: \"planos 2026\").\n- Responder com os planos completos e bem formatados (não alterar valores).\n- Explicar para que tipo de uso cada plano é indicado.\n- Não personalizar valores, não prometer performance absoluta.\n\nSempre usar termos como:\n“em geral”, “normalmente”, “na maioria dos casos”\n\n🔁 PERGUNTAS SOBRE VALORES\n- Sempre usar @lookup_knowledge\n- Responder de forma informativa e genérica\n- Nunca negociar/personalizar\n\nExemplo:\n“Os valores podem variar conforme a região e o tipo de plano 😊\nUm atendente do setor comercial confirma tudo certinho com você.”\n\n🧠 RESPOSTAS TÉCNICO-COMERCIAIS (PODE RESPONDER)\nVocê pode explicar:\n- Quantidade de pessoas/dispositivos\n- Diferença entre Wi-Fi 5 e Wi-Fi 6\n- Uso ideal (streaming, jogos, home office, empresas)\n- Diferença entre residencial e empresarial\n\n📋 PASSO 3 – COLETA DE INFORMAÇÕES ESSENCIAIS\nSomente depois do cliente selecionar o plano.\n\nPerguntar um de cada vez, somente o que faltar:\n✔️ Endereço completo\n✔️ CPF\n✔️ CEP\n✔️ Dois números para contato (se já houver um, pedir o segundo; se não tiver, seguir)\n✔️ Localização\n✔️ Dia de vencimento (5/10/15/20/25)\n✔️ Turno para instalação (Manhã ou Tarde)\n\n⚠️ Aviso obrigatório:\n“O titular precisa estar presente na instalação com documento físico com foto em mãos para assinatura do contrato online. 🤝”\n\n✅ PASSO 4 – ENCERRAMENTO COMERCIAL\nDepois que você coletou todas as informações do passo 3:\n\n“Perfeito! 🙌\nJá registrei suas informações.\nUm atendente do setor comercial da Velpro Telecom irá entrar em contato com você em breve para dar continuidade ao atendimento.\nObrigada pelo seu interesse! 💚”\n\nDepois disso:\n1) Use a tool @enviar_atendimento_discord (http-tool) com os dados do cadastro.\n2) Não use nenhuma outra tool.\n3) Finalize sua resposta e deixe o fluxo seguir para o próximo nó.\n\n━━━━━━━━━━━━━━━━━━━━━━\nTABELA DE ROTAS (FORA DO ESCOPO COMERCIAL DE ASSINATURA)\n- SUPORTE: quando houver sinais de problema técnico.\n- FINANCEIRO: quando houver boleto, pagamento ou dívida.\n- ENCERRAR: quando o usuário quiser parar.\n- ASSINATURA: quando o interesse comercial continuar.\n━━━━━━━━━━━━━━━━━━━━━━\n\nREGRA CRÍTICA DE SAÍDA PARA PRÓXIMO NÓ\nQuando identificar SUPORTE, FINANCEIRO ou ENCERRAR:\n1) Responda com 1 frase curta de redirecionamento.\n2) Não use tools.\n3) Não faça perguntas extras.\n4) Encerre sua resposta imediatamente para o fluxo ir ao próximo nó.\n\nExemplos de frase curta:\n- SUPORTE: “Perfeito, vou te direcionar para o suporte agora mesmo.”\n- FINANCEIRO: “Certo, vou te direcionar para o setor financeiro agora mesmo.”\n- ENCERRAR: “Tudo bem, vou encerrar este atendimento por aqui.”\n\nSe for ASSINATURA:\n- Continue no fluxo comercial normalmente.\n\nREGRA FINAL\n- Nunca responda “I didn\u0027t have anything to say.”\n- Sempre envie uma resposta útil, mesmo que curta.",
       "userInputVariable": "{{mensagem_usuario}}",
       "agentResponseVariable": "resposta_do_agente"
     },
@@ -1226,8 +1236,10 @@
       "title": "Memory Config",
       "memoryScope": "user",
       "memoryProvider": "hybrid",
+      "memoryEmbeddingsModel": "local-hybrid",
       "memoryConnectionString": "postgres://postgres:225676a743c4dbf95bd6@fhgg2n.easypanel.host:8870/evolutionapi?sslmode=disable",
       "memoryScopeKeyVariable": "{{id_estavel}}",
+      "memoryEmbeddingsEnabled": true,
       "memoryRedisConnectionString": "redis://default:341a4c3b69a77a1b0f7d@fhgg2n.easypanel.host:8871"
     },
     {
@@ -1236,7 +1248,7 @@
       "id": "2a61f2a4-cd98-4340-b712-70a3fa56383f",
       "type": "ai-model-config",
       "title": "AI Model Config",
-      "aiApiKey": "AIzaSyD_iqW7oyArYgSHTvb9VkM4LtBxJGlqBjY",
+      "aiApiKey": "AIzaSyAl6foiItSjyNzaLVTPHT_rPWZBbPGhqRc",
       "aiProvider": "google",
       "aiModelName": "gemini-3-flash-preview"
     },
@@ -1274,7 +1286,7 @@
           "value": "{{INFORMACOES_CLIENTE}}"
         }
       ],
-      "httpToolDescription": "📌 Instrução para Envio de Dados Pós-Atendimento (Velpro Telecom)\n🧠 Contexto da ferramenta\n\nEsta ferramenta deve ser utilizada somente após a finalização do atendimento, quando todas as informações necessárias para a contratação já foram coletadas.\n\nO conteúdo enviado será um texto em formato livre, usado internamente pelo time comercial para dar continuidade ao contato com o cliente.\n\n⚠️ Regra principal\n\nO envio deve ser feito apenas como TEXTO (string)\n\nNÃO é JSON\n\nNÃO precisa escapar quebra de linha\n\nPode usar enter normalmente para espaçamento\n\n🧾 Formatação obrigatória\n\nTexto bem organizado e fácil de ler no Discord\n\nUsar Markdown (**negrito**)\n\nManter espaçamentos claros entre blocos\n\nSempre incluir Observações sobre o comportamento do cliente\n\n✅ MODELO CORRETO DE ENVIO\n**Informações do Cliente para Atendimento Velpro Telecom**\n\n**Nome:** Fabrício de Sousa Soares  \n**Telefone:** 61995215930  \n**CEP:** 72883772  \n**Plano de Interesse:** 1000 MEGA  \n\n**Observações:**  \nCliente demonstrou bastante interesse no plano, fez perguntas sobre velocidade e estabilidade da conexão. Pareceu seguro na decisão, apenas confirmando detalhes antes de contratar.\n\n❌ Exemplo errado (não fazer)\n\nTexto todo junto\n\nSem espaçamento\n\nSem observações\n\nNome Fabrício Telefone 61995215930 Plano 1000\n\n🧠 Observações (obrigatórias)\n\nA IA deve sempre comentar brevemente sobre:\n\nNível de interesse do cliente\n\nSe estava indeciso ou decidido\n\nSe fez muitas perguntas\n\nSe pediu tempo para pensar\n\nSe aparenta ser um lead quente ou morno\n\nEssas informações são extremamente importantes para o setor comercial humano."
+      "httpToolDescription": "ðŸ“Œ InstruÃ§Ã£o para Envio de Dados PÃ³s-Atendimento (Velpro Telecom)\nðŸ§  Contexto da ferramenta\n\nEsta ferramenta deve ser utilizada somente apÃ³s a finalizaÃ§Ã£o do atendimento, quando todas as informaÃ§Ãµes necessÃ¡rias para a contrataÃ§Ã£o jÃ¡ foram coletadas.\n\nO conteÃºdo enviado serÃ¡ um texto em formato livre, usado internamente pelo time comercial para dar continuidade ao contato com o cliente.\n\nâš ï¸ Regra principal\n\nO envio deve ser feito apenas como TEXTO (string)\n\nNÃƒO Ã© JSON\n\nNÃƒO precisa escapar quebra de linha\n\nPode usar enter normalmente para espaÃ§amento\n\nðŸ§¾ FormataÃ§Ã£o obrigatÃ³ria\n\nTexto bem organizado e fÃ¡cil de ler no Discord\n\nUsar Markdown (**negrito**)\n\nManter espaÃ§amentos claros entre blocos\n\nSempre incluir ObservaÃ§Ãµes sobre o comportamento do cliente\n\nâœ… MODELO CORRETO DE ENVIO\n**InformaÃ§Ãµes do Cliente para Atendimento Velpro Telecom**\n\n**Nome:** FabrÃ­cio de Sousa Soares  \n**Telefone:** 61995215930  \n**CEP:** 72883772  \n**Plano de Interesse:** 1000 MEGA  \n\n**ObservaÃ§Ãµes:**  \nCliente demonstrou bastante interesse no plano, fez perguntas sobre velocidade e estabilidade da conexÃ£o. Pareceu seguro na decisÃ£o, apenas confirmando detalhes antes de contratar.\n\nâŒ Exemplo errado (nÃ£o fazer)\n\nTexto todo junto\n\nSem espaÃ§amento\n\nSem observaÃ§Ãµes\n\nNome FabrÃ­cio Telefone 61995215930 Plano 1000\n\nðŸ§  ObservaÃ§Ãµes (obrigatÃ³rias)\n\nA IA deve sempre comentar brevemente sobre:\n\nNÃ­vel de interesse do cliente\n\nSe estava indeciso ou decidido\n\nSe fez muitas perguntas\n\nSe pediu tempo para pensar\n\nSe aparenta ser um lead quente ou morno\n\nEssas informaÃ§Ãµes sÃ£o extremamente importantes para o setor comercial humano."
     }
   ],
   "connections": [
@@ -1306,13 +1318,13 @@
       "id": "ef02bd1f-6bcc-4fbf-8b30-b14820347402",
       "to": "8dc8df5b-d39f-4852-ace0-1b996457f12b",
       "from": "b67f8821-c264-490b-89e6-ab8722bdcdd3",
-      "sourceHandle": "Indicação de amigo ou cliente"
+      "sourceHandle": "IndicaÃ§Ã£o de amigo ou cliente"
     },
     {
       "id": "ba781022-6ccc-4c06-b68f-d9bd7a8fcc3e",
       "to": "8dc8df5b-d39f-4852-ace0-1b996457f12b",
       "from": "b67f8821-c264-490b-89e6-ab8722bdcdd3",
-      "sourceHandle": "Outdoor / Anúncio físico"
+      "sourceHandle": "Outdoor / AnÃºncio fÃ­sico"
     },
     {
       "id": "0bcf4fc3-7f6a-4514-b826-576086ac3bb2",

@@ -147,6 +147,19 @@ const formatKnowledgeResults = (result: any): string => {
         : formatted;
 };
 
+const sanitizeModelReply = (reply: string | null | undefined): string => {
+    const cleaned = String(reply ?? '')
+        .replace(/\r\n/g, '\n')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+    if (!cleaned) return '';
+    if (/i\s+didn'?t\s+have\s+anything\s+to\s+say/i.test(cleaned)) return '';
+    if (/as\s+an?\s+(ai|language model)/i.test(cleaned)) return '';
+    return cleaned;
+};
+
 const selectRelevantCapabilities = (
     capabilities: Capability[],
     userMessage: string,
@@ -350,11 +363,11 @@ export const agenticFlow = ai.defineFlow(
             console.log(`[Agentic Flow] Generation complete. Response text length: ${llmResponse.text?.length || 0}`);
         } catch (e: any) {
             console.error(`[Agentic Flow] AI Generate Error:`, e);
-            return { botReply: "I encountered an error while thinking. Please try again." };
+            return { botReply: 'Tive uma instabilidade ao processar sua mensagem. Vamos tentar novamente.' };
         }
 
         const toolsCalled = calledToolSlugs.length > 0 ? calledToolSlugs : undefined;
         console.log(`[Agentic Flow] Tools called: ${toolsCalled?.join(', ') || 'none'}`);
-        return { botReply: llmResponse.text || "I didn't have anything to say.", toolsCalled };
+        return { botReply: sanitizeModelReply(llmResponse.text), toolsCalled };
     }
 );

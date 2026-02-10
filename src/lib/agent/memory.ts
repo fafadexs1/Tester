@@ -54,7 +54,7 @@ const DEFAULT_SETTINGS: Omit<MemorySettings, 'scopeKey'> = {
   scope: 'session',
   retentionDays: 14,
   maxItems: 60,
-  minImportance: 0.35,
+  minImportance: 0.3,
   embeddingsEnabled: false,
 };
 
@@ -72,8 +72,13 @@ const SENSITIVE_PATTERNS = [
   /secret/i,
   /cvv/i,
   /credit card/i,
+  /cart[aã]o/i,
+  /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/,
+  /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/,
   /\b\d{3}-\d{2}-\d{4}\b/,
 ];
+
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
 const normalizeText = (text: string): string =>
   text.replace(/\s+/g, ' ').replace(/[ \t]+\n/g, '\n').trim();
@@ -202,6 +207,127 @@ const extractExplicitMemoryCandidates = (userMessage: string): MemoryCandidate[]
     }
   }
 
+  const phoneLooseMatches = normalized.match(/(\+?\d[\d\s().-]{8,}\d)/g) || [];
+  const normalizedPhones = Array.from(
+    new Set(
+      phoneLooseMatches
+        .map(phone => phone.replace(/\D/g, ''))
+        .filter(phone => phone.length >= 10 && phone.length <= 13)
+    )
+  );
+  if (normalizedPhones.length > 0) {
+    candidates.push({
+      type: 'semantic',
+      content: `Primary phone: ${normalizedPhones[0]}`,
+      importance: 0.82,
+      tags: ['contact', 'phone', 'primary'],
+      confirmed: true,
+      confidence: 0.88,
+    });
+  }
+  if (normalizedPhones.length > 1) {
+    candidates.push({
+      type: 'semantic',
+      content: `Secondary phone: ${normalizedPhones[1]}`,
+      importance: 0.78,
+      tags: ['contact', 'phone', 'secondary'],
+      confirmed: true,
+      confidence: 0.85,
+    });
+  }
+
+  const cepMatch = normalized.match(/\b(\d{5}-?\d{3})\b/);
+  if (cepMatch?.[1]) {
+    candidates.push({
+      type: 'semantic',
+      content: `CEP: ${cepMatch[1].replace(/\D/g, '')}`,
+      importance: 0.86,
+      tags: ['address', 'cep'],
+      confirmed: true,
+      confidence: 0.9,
+    });
+  }
+
+  const cpfMatch = normalized.match(/\b(\d{3}\.?\d{3}\.?\d{3}-?\d{2})\b/);
+  if (cpfMatch?.[1]) {
+    candidates.push({
+      type: 'semantic',
+      content: `CPF informado`,
+      importance: 0.88,
+      tags: ['document', 'cpf'],
+      confirmed: true,
+      confidence: 0.92,
+    });
+  }
+
+  const billingDayMatch = normalized.match(/\b(?:vencimento|dia)\b[^\d]{0,12}(5|10|15|20|25)\b/i);
+  if (billingDayMatch?.[1]) {
+    candidates.push({
+      type: 'semantic',
+      content: `Billing day: ${billingDayMatch[1]}`,
+      importance: 0.9,
+      tags: ['billing', 'vencimento'],
+      confirmed: true,
+      confidence: 0.94,
+    });
+  }
+
+  if (/\bmanha\b/i.test(normalized)) {
+    candidates.push({
+      type: 'semantic',
+      content: 'Install shift: manha',
+      importance: 0.87,
+      tags: ['installation', 'shift'],
+      confirmed: true,
+      confidence: 0.9,
+    });
+  }
+  if (/\btarde\b/i.test(normalized)) {
+    candidates.push({
+      type: 'semantic',
+      content: 'Install shift: tarde',
+      importance: 0.87,
+      tags: ['installation', 'shift'],
+      confirmed: true,
+      confidence: 0.9,
+    });
+  }
+
+  const planMatch = normalized.match(/\b(\d{2,4}\s*(?:mega|mb|gb))\b/i);
+  if (planMatch?.[1]) {
+    candidates.push({
+      type: 'semantic',
+      content: `Plan interest: ${planMatch[1].toUpperCase().replace(/\s+/g, ' ')}`,
+      importance: 0.8,
+      tags: ['plan', 'commercial'],
+      confirmed: true,
+      confidence: 0.85,
+    });
+  }
+
+  const locationMatch = normalized.match(/\b(-?\d{1,3}\.\d{4,})\s*,\s*(-?\d{1,3}\.\d{4,})\b/);
+  if (locationMatch?.[0]) {
+    candidates.push({
+      type: 'semantic',
+      content: `Location shared: ${locationMatch[0]}`,
+      importance: 0.84,
+      tags: ['location'],
+      confirmed: true,
+      confidence: 0.88,
+    });
+  }
+
+  if (/\b(rua|avenida|av|travessa|quadra|lote|bloco|casa|apartamento)\b/i.test(normalized) && normalized.length <= 220) {
+    candidates.push({
+      type: 'semantic',
+      content: `Address: ${truncateText(normalized, 160)}`,
+      importance: 0.82,
+      tags: ['address'],
+      confirmed: true,
+      confidence: 0.84,
+    });
+  }
+
   return candidates;
 };
 
@@ -224,14 +350,14 @@ export const normalizeMemorySettings = (input: Partial<MemorySettings>): MemoryS
   scope: input.scope ?? DEFAULT_SETTINGS.scope,
   scopeKey: input.scopeKey ?? 'session',
   connectionString: input.connectionString,
-  retentionDays: input.retentionDays ?? DEFAULT_SETTINGS.retentionDays,
-  maxItems: input.maxItems ?? DEFAULT_SETTINGS.maxItems,
-  minImportance: input.minImportance ?? DEFAULT_SETTINGS.minImportance,
-  hybridCacheTTL: input.hybridCacheTTL,
-  hybridWriteThrough: input.hybridWriteThrough,
+  retentionDays: clamp(input.retentionDays ?? DEFAULT_SETTINGS.retentionDays, 3, 365),
+  maxItems: clamp(input.maxItems ?? DEFAULT_SETTINGS.maxItems, 20, 500),
+  minImportance: clamp(input.minImportance ?? DEFAULT_SETTINGS.minImportance, 0.1, 0.95),
+  hybridCacheTTL: input.hybridCacheTTL ? clamp(input.hybridCacheTTL, 60, 86400) : undefined,
+  hybridWriteThrough: input.hybridWriteThrough ?? true,
   redisConnectionString: input.redisConnectionString,
   embeddingsEnabled: input.embeddingsEnabled ?? DEFAULT_SETTINGS.embeddingsEnabled,
-  embeddingsModel: input.embeddingsModel,
+  embeddingsModel: input.embeddingsModel || 'local-hybrid',
 });
 
 const heuristicMemoryCandidates = (userMessage: string, assistantMessage: string): MemoryCandidate[] => {
@@ -244,11 +370,11 @@ const heuristicMemoryCandidates = (userMessage: string, assistantMessage: string
     candidates.push({
       type: 'episodic',
       content: shortEpisode,
-      importance: 0.25,
-      ttlDays: 7,
+      importance: 0.42,
+      ttlDays: 14,
       tags: ['episode'],
       confirmed: false,
-      confidence: 0.3,
+      confidence: 0.45,
     });
   }
 
@@ -417,10 +543,14 @@ export const loadMemoryContext = async (params: {
     items = await store.query(queryParams);
   }
 
-  // Rerank or score items
-  const scored = items
-    .map(item => ({ item, score: scoreMemoryItem(item, params.query) }))
-    .sort((a, b) => b.score - a.score);
+  const toTimestamp = (isoDate: string | null | undefined): number => {
+    if (!isoDate) return 0;
+    const parsed = Date.parse(isoDate);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  // Strict chronological order: newest -> oldest
+  const chronologicallySorted = [...items].sort((a, b) => toTimestamp(b.createdAt) - toTimestamp(a.createdAt));
 
   const facts: MemoryItem[] = [];
   const episodes: MemoryItem[] = [];
@@ -430,7 +560,7 @@ export const loadMemoryContext = async (params: {
   const unconfirmedProcedures: MemoryItem[] = [];
   const touched: string[] = [];
 
-  for (const { item } of scored) {
+  const pushByType = (item: MemoryItem): void => {
     const confirmed = isConfirmedMemoryItem(item);
 
     if (item.type === 'semantic') {
@@ -445,16 +575,70 @@ export const loadMemoryContext = async (params: {
       if (confirmed && procedures.length < 3) procedures.push(item);
       if (!confirmed && unconfirmedProcedures.length < 2) unconfirmedProcedures.push(item);
     }
+  };
 
-    if (
-      facts.length >= 6 &&
-      episodes.length >= 4 &&
-      procedures.length >= 3 &&
-      unconfirmedFacts.length >= 3 &&
-      unconfirmedEpisodes.length >= 2 &&
-      unconfirmedProcedures.length >= 2
-    ) {
-      break;
+  const reachedHardCapacity = (): boolean =>
+    facts.length >= 6 &&
+    episodes.length >= 4 &&
+    procedures.length >= 3 &&
+    unconfirmedFacts.length >= 3 &&
+    unconfirmedEpisodes.length >= 2 &&
+    unconfirmedProcedures.length >= 2;
+
+  const selectedCount = (): number =>
+    facts.length +
+    episodes.length +
+    procedures.length +
+    unconfirmedFacts.length +
+    unconfirmedEpisodes.length +
+    unconfirmedProcedures.length;
+
+  const recentWindowSize = Math.min(
+    chronologicallySorted.length,
+    Math.max(24, Math.min(120, settings.maxItems * 2))
+  );
+  const recentItems = chronologicallySorted.slice(0, recentWindowSize);
+  const olderItems = chronologicallySorted.slice(recentWindowSize);
+
+  // Passo 1: sempre percorre recentes primeiro (estritamente cronológico)
+  for (const item of recentItems) {
+    pushByType(item);
+    if (reachedHardCapacity()) break;
+  }
+
+  const recentSelected = [
+    ...facts,
+    ...episodes,
+    ...procedures,
+    ...unconfirmedFacts,
+    ...unconfirmedEpisodes,
+    ...unconfirmedProcedures,
+  ];
+  const bestRecentScore = recentSelected.reduce(
+    (best, item) => Math.max(best, scoreMemoryItem(item, params.query)),
+    0
+  );
+
+  const hasMinimumCoverage = (): boolean => facts.length >= 2 && episodes.length >= 1;
+  const needOlderPass =
+    olderItems.length > 0 &&
+    (
+      !hasMinimumCoverage() ||
+      selectedCount() < 5 ||
+      (params.query.trim().length > 0 && bestRecentScore < 0.18)
+    );
+
+  // Passo 2: só percorre antigas se necessário
+  if (needOlderPass && !reachedHardCapacity()) {
+    for (const item of olderItems) {
+      const relevance = scoreMemoryItem(item, params.query);
+      const mustFillCoverage = !hasMinimumCoverage() || selectedCount() < 5;
+      if (!mustFillCoverage && relevance < 0.16) {
+        continue;
+      }
+
+      pushByType(item);
+      if (reachedHardCapacity()) break;
     }
   }
 
@@ -489,7 +673,7 @@ export const loadMemoryContext = async (params: {
     summarySections.push(`Unconfirmed Procedures (use only as hints):\n- ${unconfirmedProcedures.map(p => p.content).join('\n- ')}`);
   }
 
-  const summary = summarySections.join('\n\n').slice(0, 1600);
+  const summary = summarySections.join('\n\n').slice(0, 2600);
 
   return {
     summary,
@@ -509,9 +693,9 @@ const baseQueryParams = (params: any, settings: any): MemoryQuery => ({
   agentId: params.agentId,
   scope: settings.scope,
   scopeKey: settings.scopeKey,
-  limit: Math.min(settings.maxItems * 3, 200),
+  limit: Math.min(settings.maxItems * 3, 300),
   minImportance: settings.minImportance,
-  similarityThreshold: 0.5,
+  similarityThreshold: 0.42,
 });
 
 export const recordMemory = async (params: {

@@ -394,7 +394,7 @@ export interface CapabilityContract {
 }
 
 export interface CapabilityExecutionConfig {
-  type: 'api' | 'function';
+  type: 'api' | 'function' | 'noop';
   // API specific
   apiUrl?: string;
   apiMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
