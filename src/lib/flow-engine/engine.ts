@@ -601,7 +601,7 @@ export async function executeFlow(
       case 'rating-input':
       case 'option': {
         if (getProperty(session.flow_variables, '_invalidOption') === true) {
-          await sendOmniChannelMessage(session, currentWorkspace, "OpÃ§Ã£o invÃ¡lida. Por favor, tente novamente.");
+          await sendOmniChannelMessage(session, currentWorkspace, "Opção inválida. Por favor, tente novamente.");
           delete session.flow_variables['_invalidOption'];
           shouldContinue = false;
           break;
