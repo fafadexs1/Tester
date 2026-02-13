@@ -2,6 +2,7 @@
 'use server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { createHash } from 'node:crypto';
 import { getProperty, setProperty } from 'dot-prop';
 import {
   loadSessionFromDB,
@@ -9,6 +10,8 @@ import {
   deleteSessionFromDB,
   loadWorkspaceFromDB,
   listWorkspaceIdsForOrganization,
+  registerWebhookEventReceipt,
+  withSessionAdvisoryLock,
 } from '@/app/actions/databaseActions';
 import { executeFlow } from '@/lib/flow-engine/engine';
 import { storeRequestDetails } from '@/lib/flow-engine/webhook-handler';
@@ -39,6 +42,62 @@ const normalizeIncomingMessage = (value: string | null | undefined): string => {
 const normalizeVariableName = (name: string | null | undefined): string => {
   if (!name) return '';
   return name.replace(/\{\{|\}\}/g, '').trim();
+};
+
+const normalizeWebhookEventId = (value: unknown): string | null => {
+  if (value === undefined || value === null) return null;
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+  return normalized.length > 256 ? normalized.slice(0, 256) : normalized;
+};
+
+const extractWebhookEventId = (
+  request: NextRequest,
+  payload: any,
+  flowContext: string
+): string | null => {
+  let source = payload;
+  if (Array.isArray(source) && source.length > 0) {
+    source = source[0];
+  }
+
+  const eventIdPathsByContext: Record<string, string[]> = {
+    chatwoot: ['id', 'message.id', 'additional_attributes.event_id'],
+    dialogy: ['message.id', 'id', 'event_id', 'eventId'],
+    evolution: ['data.key.id', 'message.key.id', 'data.id', 'id'],
+  };
+
+  const contextPaths = eventIdPathsByContext[flowContext] || [];
+  const fallbackPaths = ['event_id', 'eventId', 'message.id', 'id'];
+
+  for (const path of [...contextPaths, ...fallbackPaths]) {
+    const value = normalizeWebhookEventId(getProperty(source, path));
+    if (value) return value;
+  }
+
+  const headerCandidates = [
+    'x-event-id',
+    'x-webhook-event-id',
+    'x-dialogy-event-id',
+    'x-chatwoot-event-id',
+    'x-request-id',
+  ];
+
+  for (const headerName of headerCandidates) {
+    const value = normalizeWebhookEventId(request.headers.get(headerName));
+    if (value) return value;
+  }
+
+  return null;
+};
+
+const hashPayloadForIdempotency = (payload: any): string | null => {
+  try {
+    const serialized = JSON.stringify(payload ?? {});
+    return createHash('sha256').update(serialized).digest('hex');
+  } catch {
+    return null;
+  }
 };
 
 async function readRequestPayload(
@@ -108,6 +167,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     console.log(`[DEBUG] Determined Flow Context: ${flowContext}`);
     console.log(`[DEBUG] Determined Session Key Identifier: ${sessionKeyIdentifier}`);
 
+    const eventId = extractWebhookEventId(request, loggedEntry.payload, flowContext);
+    if (eventId) {
+      const receipt = await registerWebhookEventReceipt({
+        workspaceId: webhookId,
+        flowContext,
+        sessionId: sessionKeyIdentifier,
+        eventId,
+        payloadHash: hashPayloadForIdempotency(loggedEntry.payload),
+      });
+
+      if (receipt.status === 'duplicate') {
+        console.log(`[API Evolution Trigger] Duplicate webhook event ignored (eventId="${eventId}", context="${flowContext}").`);
+        return NextResponse.json({ message: 'Duplicate webhook event ignored.' }, { status: 200 });
+      }
+
+      if (receipt.status === 'error') {
+        console.warn(`[API Evolution Trigger] Could not persist webhook event receipt. Continuing without hard dedupe. Error: ${receipt.error}`);
+      }
+    }
+
     // 2. Verificação IMEDIATA para PAUSAR O FLUXO por intervenção humana
     if (flowContext === 'dialogy') {
       const fromMe = getProperty(parsedBody, 'message.from_me');
@@ -143,20 +222,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     if (resumeSessionId) {
       console.log(`[API Evolution Trigger] Resume call detected for session ID: ${resumeSessionId}`);
-      const sessionToResume = await loadSessionFromDB(resumeSessionId);
-      if (sessionToResume) {
-        const workspaceForResume = await loadWorkspaceFromDB(sessionToResume.workspace_id);
-        if (workspaceForResume && workspaceForResume.nodes) {
-          const resumeVarName = normalizeVariableName(sessionToResume.awaiting_input_details?.variableToSave) || 'external_response_data';
-          sessionToResume.flow_variables[resumeVarName] = parsedBody;
-          sessionToResume.awaiting_input_type = null;
-          await executeFlow(sessionToResume, workspaceForResume);
-          return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
+      return await withSessionAdvisoryLock(String(resumeSessionId), async () => {
+        const sessionToResume = await loadSessionFromDB(resumeSessionId);
+        if (sessionToResume) {
+          const workspaceForResume = await loadWorkspaceFromDB(sessionToResume.workspace_id);
+          if (workspaceForResume && workspaceForResume.nodes) {
+            const resumeVarName = normalizeVariableName(sessionToResume.awaiting_input_details?.variableToSave) || 'external_response_data';
+            sessionToResume.flow_variables[resumeVarName] = parsedBody;
+            sessionToResume.awaiting_input_type = null;
+            await executeFlow(sessionToResume, workspaceForResume);
+            return NextResponse.json({ message: "Flow resumed." }, { status: 200 });
+          }
+        } else {
+          console.error(`[API Evolution Trigger] Could not find session ${resumeSessionId} to resume.`);
+          return NextResponse.json({ error: `Session to resume not found: ${resumeSessionId}` }, { status: 404 });
         }
-      } else {
-        console.error(`[API Evolution Trigger] Could not find session ${resumeSessionId} to resume.`);
-        return NextResponse.json({ error: `Session to resume not found: ${resumeSessionId}` }, { status: 404 });
-      }
+
+        return NextResponse.json({ error: `Workspace for resumed session "${resumeSessionId}" not found.` }, { status: 404 });
+      });
     }
 
     if (!sessionKeyIdentifier) {
@@ -164,6 +247,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ message: "Webhook logged, but no session identifier found." }, { status: 200 });
     }
 
+    return await withSessionAdvisoryLock(sessionKeyIdentifier, async () => {
     let workspace: WorkspaceData | null = null;
     let session: FlowSession | null = await loadSessionFromDB(sessionKeyIdentifier);
     let startExecution = false;
@@ -475,6 +559,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     return NextResponse.json({ message: "Webhook processed." }, { status: 200 });
+    });
 
   } catch (error: any) {
     console.error(`[API Evolution Trigger - POST ERROR] Error for webhook ID "${webhookId}":`, error.message, error.stack);

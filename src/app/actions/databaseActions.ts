@@ -626,6 +626,22 @@ async function initializeDatabaseSchema(): Promise<void> {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_flow_logs_workspace_id_timestamp ON flow_logs (workspace_id, timestamp DESC);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_flow_logs_log_type ON flow_logs (log_type);`);
 
+    // Webhook event receipts (idempotency key store)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS webhook_event_receipts (
+        id BIGSERIAL PRIMARY KEY,
+        workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        flow_context TEXT NOT NULL,
+        session_id TEXT,
+        event_id TEXT NOT NULL,
+        payload_hash TEXT,
+        received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(workspace_id, flow_context, event_id)
+      );
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_webhook_event_receipts_session_id ON webhook_event_receipts (session_id, received_at DESC);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_webhook_event_receipts_received_at ON webhook_event_receipts (received_at DESC);`);
+
     // Agent Memories
     await client.query(`
       CREATE TABLE IF NOT EXISTS agent_memories (
@@ -717,6 +733,7 @@ async function initializeDatabaseSchema(): Promise<void> {
     await ensureUuidColumn(client, 'capabilities', 'workspace_id');
     await ensureUuidColumn(client, 'capabilities', 'created_by_id');
     await ensureUuidColumn(client, 'flow_logs', 'workspace_id');
+    await ensureUuidColumn(client, 'webhook_event_receipts', 'workspace_id');
     await ensureUuidColumn(client, 'agent_memories', 'workspace_id');
 
     await client.query('COMMIT');
@@ -770,6 +787,83 @@ export async function getFlowLogsForWorkspace(
 
   const result = await runQuery<FlowLog>(query, params);
   return result.rows;
+}
+
+type WebhookEventReceiptInput = {
+  workspaceId: string;
+  flowContext: string;
+  sessionId?: string | null;
+  eventId: string;
+  payloadHash?: string | null;
+};
+
+type WebhookEventReceiptResult =
+  | { status: 'accepted' }
+  | { status: 'duplicate' }
+  | { status: 'error'; error: string };
+
+export async function registerWebhookEventReceipt(
+  input: WebhookEventReceiptInput
+): Promise<WebhookEventReceiptResult> {
+  const normalizedEventId = String(input.eventId || '').trim();
+  if (!normalizedEventId) {
+    return { status: 'error', error: 'eventId vazio ou invalido.' };
+  }
+
+  try {
+    const query = `
+      INSERT INTO webhook_event_receipts (
+        workspace_id, flow_context, session_id, event_id, payload_hash, received_at
+      )
+      VALUES ($1, $2, $3, $4, $5, NOW())
+      ON CONFLICT (workspace_id, flow_context, event_id) DO NOTHING
+      RETURNING id;
+    `;
+
+    const result = await runQuery<{ id: number }>(query, [
+      input.workspaceId,
+      input.flowContext,
+      input.sessionId || null,
+      normalizedEventId,
+      input.payloadHash || null,
+    ]);
+
+    if ((result.rowCount ?? 0) > 0) {
+      return { status: 'accepted' };
+    }
+    return { status: 'duplicate' };
+  } catch (error: any) {
+    console.error('[DB Actions] registerWebhookEventReceipt Error:', error);
+    return { status: 'error', error: error?.message || 'Erro desconhecido ao registrar evento.' };
+  }
+}
+
+export async function withSessionAdvisoryLock<T>(
+  sessionKey: string,
+  action: () => Promise<T>
+): Promise<T> {
+  const normalizedSessionKey = String(sessionKey || '').trim();
+  if (!normalizedSessionKey) {
+    return action();
+  }
+
+  const client = await getDbPool().connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1)::bigint);', [normalizedSessionKey]);
+    const result = await action();
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('[DB Actions] withSessionAdvisoryLock rollback failed:', rollbackError);
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 
@@ -1418,6 +1512,24 @@ export async function deleteAllSessionsForOwnerFromDB(ownerId: string, workspace
 }
 
 // --- Chatwoot Instance Actions ---
+export async function loadEvolutionInstanceFromDB(instanceId: string): Promise<EvolutionInstance | null> {
+  const result = await runQuery<any>(
+    'SELECT id, name, base_url, api_key FROM evolution_instances WHERE id = $1',
+    [instanceId]
+  );
+  if (result.rows.length > 0) {
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      name: row.name,
+      baseUrl: row.base_url,
+      apiKey: row.api_key,
+      status: 'unconfigured'
+    };
+  }
+  return null;
+}
+
 export async function getChatwootInstancesForUser(userId: string): Promise<{ data?: ChatwootInstance[]; error?: string }> {
   try {
     const result = await runQuery<ChatwootInstance>(

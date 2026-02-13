@@ -8,10 +8,10 @@ import {
   loadSessionFromDB,
   saveSessionToDB,
   deleteSessionFromDB,
+  loadEvolutionInstanceFromDB,
   loadChatwootInstanceFromDB,
   loadDialogyInstanceFromDB,
   saveFlowLog,
-  loadWorkspaceFromDB,
   getCapabilityById,
   getCapabilitiesForWorkspace,
 } from '@/app/actions/databaseActions';
@@ -442,6 +442,16 @@ async function executeUserCodeSnippet(
   return toJSONSafe(result);
 }
 
+const assertMessageSent = (
+  channel: 'dialogy' | 'chatwoot' | 'evolution',
+  sessionId: string,
+  result: { success: boolean; error?: string } | null | undefined
+) => {
+  if (result?.success) return;
+  const reason = result?.error || 'Unknown send error';
+  throw new Error(`[sendOmniChannelMessage][${channel}] Failed to send message for session ${sessionId}: ${reason}`);
+};
+
 async function sendOmniChannelMessage(
   session: FlowSession,
   workspace: WorkspaceData,
@@ -458,78 +468,80 @@ async function sendOmniChannelMessage(
   console.log(`[sendOmniChannelMessage] Initiating send for session ${session.session_id} with context ${ctx}`);
 
   if (ctx === 'dialogy') {
-    let chatId =
+    const chatId =
       getProperty(session.flow_variables, 'dialogy_conversation_id') ||
       getProperty(session.flow_variables, 'webhook_payload.conversation.id') ||
       (session.session_id.startsWith('dialogy_conv_')
         ? session.session_id.replace('dialogy_conv_', '')
         : null);
 
-    if (workspace.dialogy_instance_id && chatId) {
-      const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
-      if (dialogyInstance) {
-        console.log(`[sendOmniChannelMessage] Roteando para Dialogy (chatId=${chatId})`);
-        await sendDialogyMessageAction({
-          baseUrl: dialogyInstance.baseUrl,
-          apiKey: dialogyInstance.apiKey,
-          chatId: String(chatId),
-          content
-        });
-        // Small delay to ensure message order is preserved by the API
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return;
-      } else {
-        console.error(`[sendOmniChannelMessage] InstÃ¢ncia Dialogy ${workspace.dialogy_instance_id} nÃ£o encontrada na base.`);
-        return;
-      }
+    if (!workspace.dialogy_instance_id || !chatId) {
+      throw new Error(`[sendOmniChannelMessage][dialogy] Missing Dialogy instance or chatId (instance=${workspace.dialogy_instance_id}, chatId=${chatId}).`);
     }
-    console.error(`[sendOmniChannelMessage] Falha ao enviar pela Dialogy. InstÃ¢ncia (${workspace.dialogy_instance_id}) ou Chat ID (${chatId}) ausente.`);
+
+    const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
+    if (!dialogyInstance) {
+      throw new Error(`[sendOmniChannelMessage][dialogy] Dialogy instance ${workspace.dialogy_instance_id} not found.`);
+    }
+
+    console.log(`[sendOmniChannelMessage] Roteando para Dialogy (chatId=${chatId})`);
+    const result = await sendDialogyMessageAction({
+      baseUrl: dialogyInstance.baseUrl,
+      apiKey: dialogyInstance.apiKey,
+      chatId: String(chatId),
+      content
+    });
+    assertMessageSent('dialogy', session.session_id, result);
+    await new Promise(resolve => setTimeout(resolve, 500));
     return;
   }
 
   if (ctx === 'chatwoot') {
     const accountId = getProperty(session.flow_variables, 'chatwoot_account_id');
     const conversationId = getProperty(session.flow_variables, 'chatwoot_conversation_id');
-    if (workspace.chatwoot_instance_id && accountId && conversationId) {
-      const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
-      if (chatwootInstance) {
-        console.log(`[sendOmniChannelMessage] Roteando para Chatwoot (conv=${conversationId})`);
-        await sendChatwootMessageAction({
-          baseUrl: chatwootInstance.baseUrl,
-          apiAccessToken: chatwootInstance.apiAccessToken,
-          accountId: Number(accountId),
-          conversationId: Number(conversationId),
-          content
-        });
-        // Small delay to ensure message order is preserved by the API
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return;
-      }
+
+    if (!workspace.chatwoot_instance_id || !accountId || !conversationId) {
+      throw new Error(`[sendOmniChannelMessage][chatwoot] Missing Chatwoot instance/account/conversation (instance=${workspace.chatwoot_instance_id}, accountId=${accountId}, conversationId=${conversationId}).`);
     }
-    console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Chatwoot. InstÃ¢ncia, Account ID ou Conversation ID ausente.`);
+
+    const chatwootInstance = await loadChatwootInstanceFromDB(workspace.chatwoot_instance_id);
+    if (!chatwootInstance) {
+      throw new Error(`[sendOmniChannelMessage][chatwoot] Chatwoot instance ${workspace.chatwoot_instance_id} not found.`);
+    }
+
+    console.log(`[sendOmniChannelMessage] Roteando para Chatwoot (conv=${conversationId})`);
+    const result = await sendChatwootMessageAction({
+      baseUrl: chatwootInstance.baseUrl,
+      apiAccessToken: chatwootInstance.apiAccessToken,
+      accountId: Number(accountId),
+      conversationId: Number(conversationId),
+      content
+    });
+    assertMessageSent('chatwoot', session.session_id, result);
+    await new Promise(resolve => setTimeout(resolve, 500));
     return;
   }
 
-  // Se nÃ£o for nenhum dos contextos acima, assume-se Evolution/WhatsApp como padrÃ£o
   const recipientPhoneNumber = session.flow_variables.whatsapp_sender_jid || session.session_id.split('@@')[0].replace('evolution_jid_', '');
-  const evoWorkspace = workspace; // Usa o workspace jÃ¡ carregado
-
-  if (evoWorkspace && evoWorkspace.evolution_instance_id && recipientPhoneNumber) {
-    // Aqui, precisamos buscar os detalhes da instÃ¢ncia evolution a partir do ID
-    const evoDetails = await loadWorkspaceFromDB(evoWorkspace.id); // Esta chamada parece incorreta, deveria ser uma busca de instÃ¢ncia
-    // A lÃ³gica para buscar detalhes da instÃ¢ncia precisa ser revista
-    console.error(`[sendOmniChannelMessage] LÃ³gica para buscar detalhes da instÃ¢ncia Evolution precisa de revisÃ£o. Assumindo que o workspace tem os detalhes.`);
-    // Assumindo por enquanto que o workspace tem os detalhes necessÃ¡rios, o que nÃ£o Ã© o caso ideal
-    // Em uma refatoraÃ§Ã£o futura, loadEvolutionInstanceFromDB(evoWorkspace.evolution_instance_id) seria o correto.
-
-    console.log(`[sendOmniChannelMessage] Roteando para Evolution (jid=${recipientPhoneNumber})`);
-    // A aÃ§Ã£o de envio de mensagem do Evolution precisa da URL base e API key, que nÃ£o estÃ£o diretamente no objeto workspace.
-    // Esta parte da lÃ³gica estÃ¡ quebrada e precisa ser consertada no futuro.
-    // Por agora, vamos pular o envio se nÃ£o tivermos os detalhes.
-    console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Evolution. A lÃ³gica para obter detalhes da instÃ¢ncia (URL, API Key) a partir do workspace precisa ser implementada.`);
-  } else {
-    console.error(`[sendOmniChannelMessage] Falha ao enviar pelo Evolution. InstÃ¢ncia (${evoWorkspace?.evolution_instance_id}) ou JID do destinatÃ¡rio (${recipientPhoneNumber}) ausente.`);
+  if (!workspace.evolution_instance_id || !recipientPhoneNumber) {
+    throw new Error(`[sendOmniChannelMessage][evolution] Missing Evolution instance or recipient (instance=${workspace.evolution_instance_id}, recipient=${recipientPhoneNumber}).`);
   }
+
+  const evolutionInstance = await loadEvolutionInstanceFromDB(workspace.evolution_instance_id);
+  if (!evolutionInstance) {
+    throw new Error(`[sendOmniChannelMessage][evolution] Evolution instance ${workspace.evolution_instance_id} not found.`);
+  }
+
+  console.log(`[sendOmniChannelMessage] Roteando para Evolution (jid=${recipientPhoneNumber})`);
+  const result = await sendWhatsAppMessageAction({
+    baseUrl: evolutionInstance.baseUrl,
+    apiKey: evolutionInstance.apiKey,
+    instanceName: evolutionInstance.name,
+    recipientPhoneNumber: String(recipientPhoneNumber),
+    messageType: 'text',
+    textContent: content,
+  });
+  assertMessageSent('evolution', session.session_id, result);
 }
 
 
