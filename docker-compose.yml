@@ -1,0 +1,20 @@
+services:
+  app:
+    container_name: nexusflow-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - TRANSFORMERS_CACHE_DIR=/tmp/transformers-cache
+    ports:
+      - "9967:9967"
+    volumes:
+      - transformers_cache:/tmp/transformers-cache
+    restart: unless-stopped
+
+volumes:
+  transformers_cache:
+

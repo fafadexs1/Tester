@@ -1,10 +1,13 @@
 
 import OpenAI from 'openai';
 import { pipeline, env } from '@xenova/transformers';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // Configure transformers.js to use local cache and not unnecessary remote checks if possible
 // env.localModelPath = ... (optional: default is usually fine)
 env.allowLocalModels = false; // Set to true if you are loading from FS, false allows downloading from HF Hub
+env.cacheDir = process.env.TRANSFORMERS_CACHE_DIR || join(tmpdir(), 'transformers-cache');
 
 // Simple interface for embedding response
 export interface EmbeddingResult {

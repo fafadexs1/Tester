@@ -1,4 +1,4 @@
-﻿'use server';
+'use server';
 import { getProperty, setProperty } from 'dot-prop';
 import vm from 'node:vm';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
@@ -42,11 +42,11 @@ import jsonata from 'jsonata';
 const CODE_EXECUTION_TIMEOUT_MS = 2000;
 const MAX_AGENT_HISTORY_MESSAGES = 50;
 const MAX_AGENT_MEMORY_SUMMARY_CHARS = 4000;
-const MOJIBAKE_HINT_REGEX = /(Ãƒ.|Ã¢.|)/;
+const MOJIBAKE_HINT_REGEX = /(Ã.|â.|)/;
 
 type AgentHistoryEntry = { role: 'user' | 'assistant' | 'system'; content: string };
 const EXIT_INTENT_PATTERNS = [
-  'nÃ£o quero', 'nao quero', 'nÃ£o desejo', 'nao desejo',
+  'não quero', 'nao quero', 'não desejo', 'nao desejo',
   'encerrar', 'encerra', 'encerrando', 'encerrar atendimento', 'finalizar', 'finaliza',
   'cancelar', 'cancelamento', 'cancela',
   'parar', 'chega', 'sair', 'sair do atendimento', 'tchau', 'adeus', 'obrigado, mas', 'obrigada, mas'
@@ -85,7 +85,7 @@ const repairMojibake = (text: string): string => {
   try {
     const candidate = Buffer.from(text, 'latin1').toString('utf8');
     const hasReplacement = candidate.includes('');
-    const hasPortugueseAccents = /[Ã¡Ã Ã£Ã¢Ã©ÃªÃ­Ã³Ã´ÃµÃºÃ¼Ã§ÃÃ€ÃƒÃ‚Ã‰ÃŠÃÃ“Ã”Ã•ÃšÃœÃ‡]/.test(candidate);
+    const hasPortugueseAccents = /[áàãâéêíóôõúüçÁÀÃÂÉÊÍÓÔÕÚÜÇ]/.test(candidate);
     if (!hasReplacement && hasPortugueseAccents) {
       return candidate;
     }
@@ -220,7 +220,21 @@ const detectExitIntent = (text: string): boolean => {
   return EXIT_INTENT_PATTERNS.some(pattern => normalized.includes(pattern));
 };
 
-const resolveAgentRouteDecision = async (userInput: string): Promise<AgentRouteDecision> => {
+const resolveGoogleApiKey = (): string | undefined => {
+  return (
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GOOGLE_GENAI_API_KEY ||
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+    undefined
+  );
+};
+
+const resolveAgentRouteDecision = async (
+  userInput: string,
+  modelName?: string,
+  modelApiKey?: string
+): Promise<AgentRouteDecision> => {
   const heuristic = inferAgentRouteFromText(userInput);
   const shouldCallClassifier =
     userInput.trim().length >= 4 &&
@@ -234,7 +248,8 @@ const resolveAgentRouteDecision = async (userInput: string): Promise<AgentRouteD
     const llmResult = await classifyIntent({
       userMessage: userInput,
       intents: AGENT_ROUTE_INTENTS,
-      modelName: 'googleai/gemini-2.0-flash',
+      modelName: modelName || 'googleai/gemini-2.0-flash',
+      modelConfig: modelApiKey ? { apiKey: modelApiKey } : undefined,
     });
 
     const candidateRoute = llmResult.matchedIntentId?.toUpperCase?.() || '';
@@ -613,7 +628,7 @@ export async function executeFlow(
       case 'rating-input':
       case 'option': {
         if (getProperty(session.flow_variables, '_invalidOption') === true) {
-          await sendOmniChannelMessage(session, currentWorkspace, "Opção inválida. Por favor, tente novamente.");
+          await sendOmniChannelMessage(session, currentWorkspace, "Op��o inv�lida. Por favor, tente novamente.");
           delete session.flow_variables['_invalidOption'];
           shouldContinue = false;
           break;
@@ -751,7 +766,7 @@ export async function executeFlow(
             break;
           }
           default:
-            console.warn(`[Flow Engine] Operador de condiÃ§Ã£o desconhecido: "${currentNode.conditionOperator}" (normalizado: "${op}")`);
+            console.warn(`[Flow Engine] Operador de condição desconhecido: "${currentNode.conditionOperator}" (normalizado: "${op}")`);
             conditionMet = false;
         }
 
@@ -787,7 +802,7 @@ export async function executeFlow(
               isInTimeRange = now.getTime() >= startDate.getTime() && now.getTime() <= endDate.getTime();
             }
           } else {
-            console.warn(`[Flow Engine - ${session.session_id}] time-of-day: horÃ¡rios invÃ¡lidos ou ausentes (start="${startTimeStr}" end="${endTimeStr}"). Considerando fora do intervalo.`);
+            console.warn(`[Flow Engine - ${session.session_id}] time-of-day: horários inválidos ou ausentes (start="${startTimeStr}" end="${endTimeStr}"). Considerando fora do intervalo.`);
             isInTimeRange = false;
           }
 
@@ -1009,13 +1024,13 @@ export async function executeFlow(
               session.flow_variables
             );
             setProperty(session.flow_variables, varName, result);
-            console.log(`[Flow Engine Code] VariÃ¡vel "${varName}" definida com sucesso.`);
+            console.log(`[Flow Engine Code] Variável "${varName}" definida com sucesso.`);
           } catch (e: any) {
-            console.error(`[Flow Engine - ${session.session_id}] Erro ao executar cÃ³digo no sandbox:`, e);
+            console.error(`[Flow Engine - ${session.session_id}] Erro ao executar código no sandbox:`, e);
             setProperty(session.flow_variables, varName, { error: e.message });
           }
         } else {
-          console.warn(`[Flow Engine] NÃ³ 'Executar CÃ³digo' sem script ou variÃ¡vel de saÃ­da definida.`);
+          console.warn(`[Flow Engine] Nó 'Executar Código' sem script ou variável de saída definida.`);
         }
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
@@ -1041,6 +1056,21 @@ export async function executeFlow(
         const responseVarName = currentNode.agentResponseVariable;
         const inputVarName = currentNode.userInputVariable?.replace(/\{\{|\}\}/g, '').trim();
         const modelName = currentNode.aiModelName;
+        let targetModel = modelName;
+        let targetApiKey = resolveGoogleApiKey();
+        const modelConnection = connections.find(c => c.to === currentNode.id && c.targetHandle === 'model');
+        if (modelConnection) {
+          const modelNode = findNodeById(modelConnection.from, currentWorkspace.nodes);
+          if (modelNode?.type === 'ai-model-config') {
+            if (modelNode.aiModelName) {
+              targetModel = substituteVariablesInText(modelNode.aiModelName, session.flow_variables);
+            }
+            if (modelNode.aiApiKey) {
+              targetApiKey = substituteVariablesInText(modelNode.aiApiKey, session.flow_variables);
+            }
+          }
+        }
+        const modelConfig = targetApiKey ? { apiKey: targetApiKey } : undefined;
         const maxTurns = currentNode.maxConversationTurns ?? null;
         const systemPrompt = substituteVariablesInText(currentNode.agentSystemPrompt, session.flow_variables);
 
@@ -1049,7 +1079,7 @@ export async function executeFlow(
             const userInputForAgent = getProperty(session.flow_variables, inputVarName);
             if (userInputForAgent) {
               const cleanedUserInput = cleanAndNormalizeText(String(userInputForAgent));
-              console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: input "${cleanedUserInput}" (model: ${modelName || 'default'})`);
+              console.log(`[Flow Engine - ${session.session_id}] Intelligent Agent: input "${cleanedUserInput}" (model: ${targetModel || 'default'})`);
 
               const historyKey = `_agent_history_${currentNode.id}`;
               const historySummaryKey = `_agent_history_summary_${currentNode.id}`;
@@ -1082,7 +1112,7 @@ export async function executeFlow(
                 : null;
               const memorySettings = buildMemorySettings(memoryNode, session, currentWorkspace);
 
-              let routeDecision = await resolveAgentRouteDecision(cleanedUserInput);
+              let routeDecision = await resolveAgentRouteDecision(cleanedUserInput, targetModel, targetApiKey);
               if (detectExitIntent(cleanedUserInput) && routeDecision.route === 'UNKNOWN') {
                 routeDecision = {
                   route: 'ENCERRAR',
@@ -1130,7 +1160,8 @@ export async function executeFlow(
                     userMessage: cleanedUserInput,
                     assistantMessage: replyForHistory,
                     systemPrompt,
-                    modelName,
+                    modelName: targetModel,
+                    modelApiKey: targetApiKey,
                   });
                 } catch (error) {
                   console.warn(`[Flow Engine] Failed to record memory for routed exit in agent ${currentNode.id}`, error);
@@ -1356,17 +1387,6 @@ export async function executeFlow(
               };
               connectedTools.push(finalizarCap);
 
-              let targetModel = modelName;
-              let targetApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-              const modelConnection = connections.find(c => c.to === currentNode.id && c.targetHandle === 'model');
-              if (modelConnection) {
-                const modelNode = findNodeById(modelConnection.from, currentWorkspace.nodes);
-                if (modelNode?.type === 'ai-model-config') {
-                  if (modelNode.aiModelName) targetModel = substituteVariablesInText(modelNode.aiModelName, session.flow_variables);
-                  if (modelNode.aiApiKey) targetApiKey = substituteVariablesInText(modelNode.aiApiKey, session.flow_variables);
-                }
-              }
-
               let finalSystemPrompt = systemPrompt;
               const statePromptFragment = buildAgentStatePromptFragment(mergedAgentState);
               if (statePromptFragment) {
@@ -1395,7 +1415,7 @@ export async function executeFlow(
                 capabilities: connectedTools,
                 history,
                 modelName: targetModel,
-                modelConfig: targetApiKey ? { apiKey: targetApiKey } : undefined,
+                modelConfig,
                 systemPrompt: finalSystemPrompt,
                 temperature: currentNode.temperature,
                 memoryContext,
@@ -1406,7 +1426,11 @@ export async function executeFlow(
                 userMessage: cleanedUserInput,
                 preferredRoute: routeDecision.route !== 'UNKNOWN' ? routeDecision.route : undefined,
               });
-              const cleanedReply = cleanAndNormalizeText(guardedReply.reply);
+              let cleanedReply = cleanAndNormalizeText(guardedReply.reply);
+              if (!cleanedReply) {
+                cleanedReply = 'Tive uma pequena instabilidade, mas ja voltei! Pode repetir o que disse?';
+                console.warn("[Flow Engine - ${session.session_id}] Agent final reply was empty. Using fallback to prevent ghosting.");
+              }
               const explicitRoute = detectExplicitRouteSignalFromReply(cleanedReply);
               const resolvedRoute = explicitRoute !== 'UNKNOWN' ? explicitRoute : routeDecision.route;
               if (guardedReply.fallbackApplied) {
@@ -1432,6 +1456,7 @@ export async function executeFlow(
                   assistantMessage: replyForHistory,
                   systemPrompt,
                   modelName: targetModel,
+                  modelApiKey: targetApiKey,
                 });
               } catch (error) {
                 console.warn(`[Flow Engine] Failed to record memory for agent ${currentNode.id}`, error);

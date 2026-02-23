@@ -18,6 +18,7 @@ const MemoryCompilerInputSchema = z.object({
   assistantMessage: z.string(),
   systemPrompt: z.string().optional(),
   modelName: z.string().optional(),
+  modelConfig: z.any().optional(),
 });
 
 const MemoryCompilerOutputSchema = z.object({
@@ -78,7 +79,11 @@ export const memoryCompilerFlow = ai.defineFlow(
         effectiveModel = 'googleai/gemini-2.0-flash';
       }
 
-      const { output } = await memoryCompilerPrompt(input, { model: effectiveModel });
+      const promptOptions: { model: string; config?: any } = { model: effectiveModel };
+      if (input.modelConfig && typeof input.modelConfig === 'object') {
+        promptOptions.config = input.modelConfig;
+      }
+      const { output } = await memoryCompilerPrompt(input, promptOptions);
       if (!output) {
         return { items: [], summary: undefined };
       }

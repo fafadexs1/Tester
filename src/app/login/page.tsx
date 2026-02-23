@@ -100,14 +100,14 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="username">Usuário</Label>
+                <Label htmlFor="username">{isLoginView ? 'Usuario ou e-mail' : 'Usuario'}</Label>
                  <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="username"
                       name="username"
                       type="text"
-                      placeholder="seu-usuario"
+                      placeholder={isLoginView ? 'seu-usuario ou seu@email.com' : 'seu-usuario'}
                       required
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
@@ -215,3 +215,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

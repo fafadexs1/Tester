@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { User, Organization } from '@/lib/types';
 import { loginAction, logoutAction, registerAction } from '@/app/actions/authActions';
@@ -14,7 +13,7 @@ interface AuthContextType {
   organizations: Organization[];
   currentOrganization: (Organization & { is_owner: boolean }) | null;
   login: (formData: FormData) => Promise<{ success: boolean; error?: string; user?: User }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   register: (formData: FormData) => Promise<{ success: boolean; error?: string; user?: User }>;
   setCurrentOrganization: (org: Organization) => void;
   refreshAuth: () => Promise<void>;
@@ -27,26 +26,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [currentOrganization, setCurrentOrganization] = useState<(Organization & { is_owner: boolean }) | null>(null);
+  const [isProcessingSSO, setIsProcessingSSO] = useState(false);
+
+  const authRequestIdRef = useRef(0);
+  const isLoggingOutRef = useRef(false);
+
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const fetchUserAndOrgs = useCallback(async () => {
-    console.log('[AuthProvider] Iniciando verificação de sessão e organizações...');
+    const requestId = ++authRequestIdRef.current;
+    console.log('[AuthProvider] Iniciando verificacao de sessao e organizacoes...');
+
     try {
       const sessionUser = await getCurrentUser();
-      console.log('[AuthProvider] Usuário da sessão:', sessionUser);
+      if (requestId !== authRequestIdRef.current) return;
+
+      console.log('[AuthProvider] Usuario da sessao:', sessionUser);
       setUser(sessionUser);
 
-      if (sessionUser) {
-        const orgsResult = await getOrganizationsForUserAction();
-        if (orgsResult.success && orgsResult.data) {
-          setOrganizations(orgsResult.data);
-          const activeOrg = orgsResult.data.find(org => org.id === sessionUser.current_organization_id);
-          if (activeOrg) {
-            setCurrentOrganization({ ...activeOrg, is_owner: activeOrg.owner_id === sessionUser.id });
-          } else if (orgsResult.data.length > 0) {
-            // Se não houver org atual, mas houver orgs, talvez definir a primeira como padrão?
-            console.warn(`[AuthProvider] Usuário ${sessionUser.username} não tem organização atual válida, mas pertence a outras.`)
+      if (!sessionUser) {
+        setOrganizations([]);
+        setCurrentOrganization(null);
+        return;
+      }
+
+      const orgsResult = await getOrganizationsForUserAction();
+      if (requestId !== authRequestIdRef.current) return;
+
+      if (orgsResult.success && orgsResult.data) {
+        setOrganizations(orgsResult.data);
+        const activeOrg = orgsResult.data.find((org) => org.id === sessionUser.current_organization_id);
+
+        if (activeOrg) {
+          setCurrentOrganization({ ...activeOrg, is_owner: activeOrg.owner_id === sessionUser.id });
+        } else {
+          setCurrentOrganization(null);
+          if (orgsResult.data.length > 0) {
+            console.warn(`[AuthProvider] Usuario ${sessionUser.username} nao tem organizacao atual valida.`);
           }
         }
       } else {
@@ -54,12 +72,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentOrganization(null);
       }
     } catch (e) {
-      console.error("[AuthProvider] Falha ao verificar sessão/organizações.", e);
+      if (requestId !== authRequestIdRef.current) return;
+      console.error('[AuthProvider] Falha ao verificar sessao/organizacoes.', e);
       setUser(null);
       setOrganizations([]);
       setCurrentOrganization(null);
     } finally {
-      console.log('[AuthProvider] Verificação finalizada.');
+      if (requestId !== authRequestIdRef.current) return;
+      console.log('[AuthProvider] Verificacao finalizada.');
       setLoading(false);
     }
   }, []);
@@ -68,92 +88,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetchUserAndOrgs();
   }, [fetchUserAndOrgs]);
 
-  // --- SSO Logic Start ---
-  const searchParams = useSearchParams();
-  const [isProcessingSSO, setIsProcessingSSO] = useState(false);
-
   useEffect(() => {
     const authParam = searchParams.get('auth');
-    // Check if we have an auth param.
-    // Proceed if:
-    // 1. We are not currently processing SSO.
-    // 2. AND (We are not logged in OR The logged-in user is different from the param user)
-    // We need to decode first to check the email mismatch, so we move logic inside.
+    if (!authParam || isProcessingSSO || isLoggingOutRef.current) return;
+    const encodedAuthParam = authParam;
 
-    if (authParam && !isProcessingSSO) {
+    async function runSSO() {
+      try {
+        const base64 = decodeURIComponent(encodedAuthParam);
+        const uriEncoded = atob(base64);
+        const jsonStr = decodeURIComponent(uriEncoded);
+        const decoded = JSON.parse(jsonStr);
+        const { user: incomingUser } = decoded;
 
-      async function runSSO() {
-        try {
-          // Unicode-safe Decoding
-          // Sender: encodeURIComponent -> btoa -> encodeURIComponent (query)
-          // Receiver:
-          // 1. decodeURIComponent (query) -> btoa string
-          // 2. atob() -> encodedURIComponent string
-          // 3. decodeURIComponent() -> JSON string
-
-          // Note: searchParams.get() already does one level of decoding for the component,
-          // but depending on how it was passed, safe decoding is best.
-          const base64 = decodeURIComponent(authParam!);
-          const uriEncoded = atob(base64);
-          const jsonStr = decodeURIComponent(uriEncoded);
-
-          const decoded = JSON.parse(jsonStr);
-          const { user: incomingUser } = decoded;
-
-          // If we are already logged in, check if it's the same user
-          if (user && incomingUser && user.email === incomingUser.email) {
-            // Already logged in as the correct user.
-            // Just clean the URL if needed.
-            const newUrl = new URL(window.location.href);
-            if (newUrl.searchParams.has('auth')) {
-              newUrl.searchParams.delete('auth');
-              window.history.replaceState({}, '', newUrl.toString());
-            }
-            return;
+        if (user && incomingUser && user.email === incomingUser.email) {
+          const newUrl = new URL(window.location.href);
+          if (newUrl.searchParams.has('auth')) {
+            newUrl.searchParams.delete('auth');
+            window.history.replaceState({}, '', newUrl.toString());
           }
-
-          if (incomingUser) {
-            setIsProcessingSSO(true);
-            console.log('[AuthProvider] Auth param detected. Attempting SSO for:', incomingUser.email);
-
-            const { ssoLoginAction } = await import('@/app/actions/authActions');
-            const result = await ssoLoginAction(incomingUser);
-
-            if (result.success && result.user) {
-              console.log('[AuthProvider] SSO Success:', result.user.username);
-              await fetchUserAndOrgs(); // Refetch new session
-
-              const newUrl = new URL(window.location.href);
-              newUrl.searchParams.delete('auth');
-              window.history.replaceState({}, '', newUrl.toString());
-            } else {
-              console.error('[AuthProvider] SSO Failed:', result.error);
-            }
-          }
-        } catch (err) {
-          console.error('[AuthProvider] SSO Error:', err);
-        } finally {
-          setIsProcessingSSO(false);
+          return;
         }
+
+        if (!incomingUser) return;
+
+        setIsProcessingSSO(true);
+        console.log('[AuthProvider] Auth param detected. Attempting SSO for:', incomingUser.email);
+
+        const { ssoLoginAction } = await import('@/app/actions/authActions');
+        const result = await ssoLoginAction(incomingUser);
+
+        if (result.success && result.user) {
+          console.log('[AuthProvider] SSO Success:', result.user.username);
+          await fetchUserAndOrgs();
+
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.delete('auth');
+          window.history.replaceState({}, '', newUrl.toString());
+        } else {
+          console.error('[AuthProvider] SSO Failed:', result.error);
+        }
+      } catch (err) {
+        console.error('[AuthProvider] SSO Error:', err);
+      } finally {
+        setIsProcessingSSO(false);
       }
-      runSSO();
     }
+
+    runSSO();
   }, [searchParams, user, isProcessingSSO, fetchUserAndOrgs]);
-  // --- SSO Logic End ---
 
   useEffect(() => {
-    if (loading || isProcessingSSO) return; // Wait for SSO
+    if (loading || isProcessingSSO || isLoggingOutRef.current) return;
 
-    // Pages that don't require authentication redirect logic
     const noRedirectPages = ['/login', '/logout', '/profile', '/admin', '/presentation'];
-    const isNoRedirectPage = noRedirectPages.some(p => pathname === p) || pathname.startsWith('/flow/');
-
+    const isNoRedirectPage = noRedirectPages.some((p) => pathname === p) || pathname.startsWith('/flow/');
     const isAuthPage = pathname === '/login';
 
     if (user && isAuthPage) {
       router.push('/');
-    } else if (!user && !isNoRedirectPage) {
-      // PRESERVE QUERY PARAMS on redirect
+      return;
+    }
+
+    if (!user && !isNoRedirectPage) {
       const currentSearch = searchParams.toString();
       const nextUrl = currentSearch ? `/login?${currentSearch}` : '/login';
       router.push(nextUrl);
@@ -163,7 +160,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
     const result = await loginAction(formData);
     if (result.success) {
-      await fetchUserAndOrgs(); // Refetch everything after login
+      isLoggingOutRef.current = false;
+      await fetchUserAndOrgs();
     }
     return result;
   }, [fetchUserAndOrgs]);
@@ -171,13 +169,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
     const result = await registerAction(formData);
     if (result.success) {
-      await fetchUserAndOrgs(); // Refetch everything after register
+      isLoggingOutRef.current = false;
+      await fetchUserAndOrgs();
     }
     return result;
   }, [fetchUserAndOrgs]);
 
-  const logout = useCallback(() => {
-    router.push('/logout');
+  const logout = useCallback(async () => {
+    isLoggingOutRef.current = true;
+    authRequestIdRef.current += 1;
+
+    setLoading(false);
+    setUser(null);
+    setOrganizations([]);
+    setCurrentOrganization(null);
+
+    try {
+      await logoutAction();
+    } catch (error) {
+      console.error('[AuthProvider] Erro ao executar logoutAction:', error);
+    } finally {
+      router.replace('/login');
+      router.refresh();
+
+      setTimeout(() => {
+        isLoggingOutRef.current = false;
+      }, 400);
+    }
   }, [router]);
 
   const handleSetCurrentOrg = (org: Organization) => {
@@ -198,8 +216,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshAuth: fetchUserAndOrgs,
   };
 
-  // Return children directly - let AppShell handle the loading display
-  // This prevents the UI from freezing when loading/redirect states get stuck
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
@@ -210,3 +226,4 @@ export function useAuth() {
   }
   return context;
 }
+

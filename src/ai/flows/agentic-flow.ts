@@ -204,13 +204,8 @@ const selectRelevantCapabilities = (
     });
 
     const filtered = scored.filter(entry => entry.score >= Math.min(JACCARD_THRESHOLD, OVERLAP_THRESHOLD));
-    // Wait, we want to Pass if (jaccard > 0.1 OR overlap > 0.3)
-    // Ideally we define 'passed' boolean logic. 
-
-    // PERMISSIVE: Always expose ALL tools to the LLM. Let it decide based on context.
-    // The LLM has the full System Prompt and conversation history, so it can make better decisions.
-    // We only sort by relevance and cap the count to avoid overwhelming the model.
-    return scored
+    // ESTRITO: Apenas passar as ferramentas que atinjam o threshold mínimo de relevância. Caso nenhuma atinja, o LLM não recebe contexto inútil.
+    return filtered
         .sort((a, b) => b.score - a.score)
         .slice(0, MAX_TOOL_COUNT)
         .map(entry => entry.cap);

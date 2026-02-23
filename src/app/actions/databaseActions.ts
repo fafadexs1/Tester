@@ -2006,9 +2006,10 @@ export async function getListingDetails(listingId: string): Promise<{ data?: Mar
 
 // --- SSO Queries ---
 export async function findUserByEmail(email: string): Promise<User | null> {
+  const normalizedEmail = email.trim().toLowerCase();
   const result = await runQuery<User>(
-    'SELECT id, username, email, full_name, role, password_hash, current_organization_id FROM users WHERE email = $1',
-    [email]
+    'SELECT id, username, email, full_name, role, password_hash, current_organization_id FROM users WHERE LOWER(email) = $1',
+    [normalizedEmail]
   );
   if (result.rows.length > 0) {
     return result.rows[0];

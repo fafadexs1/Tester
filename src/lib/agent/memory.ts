@@ -386,6 +386,7 @@ const compileMemoryCandidates = async (params: {
   assistantMessage: string;
   systemPrompt?: string;
   modelName?: string;
+  modelApiKey?: string;
 }): Promise<MemoryCandidate[]> => {
   const explicitCandidates = extractExplicitMemoryCandidates(params.userMessage);
   const explicitMap = new Map<string, MemoryCandidate>();
@@ -400,6 +401,7 @@ const compileMemoryCandidates = async (params: {
       assistantMessage: params.assistantMessage,
       systemPrompt: params.systemPrompt,
       modelName: params.modelName,
+      modelConfig: params.modelApiKey ? { apiKey: params.modelApiKey } : undefined,
     });
     if (response?.items?.length) {
       const merged: MemoryCandidate[] = response.items.map(item => {
@@ -706,6 +708,7 @@ export const recordMemory = async (params: {
   assistantMessage: string;
   systemPrompt?: string;
   modelName?: string;
+  modelApiKey?: string;
 }): Promise<void> => {
   const settings = normalizeMemorySettings(params.settings);
   const store = createMemoryStore(settings.provider, settings.connectionString, {
@@ -719,6 +722,7 @@ export const recordMemory = async (params: {
     assistantMessage: params.assistantMessage,
     systemPrompt: params.systemPrompt,
     modelName: params.modelName,
+    modelApiKey: params.modelApiKey,
   });
 
   const filtered = filterCandidates(candidates, settings.minImportance);

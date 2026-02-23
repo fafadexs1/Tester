@@ -13,6 +13,7 @@ const IntentionClassificationInputSchema = z.object({
     userMessage: z.string().describe('The message sent by the user.'),
     intents: z.array(IntentSchema).describe('The list of defined intents with their descriptions.'),
     modelName: z.string().optional().describe('Optional model name to use for classification.'),
+    modelConfig: z.any().optional().describe('Optional model config (e.g. apiKey override).'),
 });
 
 // We return the ID of the matched intent, or null if no match found.
@@ -67,7 +68,11 @@ export const intentionClassificationFlow = ai.defineFlow(
     },
     async (input) => {
         try {
-            const { output } = await classificationPrompt(input, { model: input.modelName });
+            const promptOptions: { model?: string; config?: any } = { model: input.modelName };
+            if (input.modelConfig && typeof input.modelConfig === 'object') {
+                promptOptions.config = input.modelConfig;
+            }
+            const { output } = await classificationPrompt(input, promptOptions);
 
             if (!output) {
                 console.error('[intentionClassificationFlow] LLM returned empty output.');

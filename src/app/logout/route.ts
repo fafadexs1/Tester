@@ -9,5 +9,6 @@ export async function GET(request: NextRequest) {
   // Redirect to the login page after logging out
   const url = request.nextUrl.clone();
   url.pathname = '/login';
+  url.search = '';
   return NextResponse.redirect(url);
 }

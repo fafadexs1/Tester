@@ -43,7 +43,7 @@ import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/components/auth/AuthProvider';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
 import type { Organization } from '@/lib/types';
 import { getOrganizationsForUserAction, createOrganizationAction } from '@/app/actions/organizationActions';
@@ -227,8 +227,7 @@ const OrgNav = () => {
 }
 
 const OrganizationSwitcher = () => {
-  const { user, login } = useAuth(); // Usando login para "re-logar" e atualizar a sessão
-  const router = useRouter();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -237,17 +236,25 @@ const OrganizationSwitcher = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchOrgs = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setOrganizations([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     const result = await getOrganizationsForUserAction();
     if (result.success && result.data) {
       setOrganizations(result.data);
     } else {
-      toast({
-        title: "Erro ao carregar organizações",
-        description: result.error || "Não foi possível buscar os dados das suas organizações.",
-        variant: "destructive",
-      });
+      const normalizedError = (result.error || '').toLowerCase();
+      const isAuthError = normalizedError.includes('nao autenticado') || normalizedError.includes('não autenticado');
+      if (!isAuthError) {
+        toast({
+          title: "Erro ao carregar organizações",
+          description: result.error || "Não foi possível buscar os dados das suas organizações.",
+          variant: "destructive",
+        });
+      }
     }
     setIsLoading(false);
   }, [user, toast]);
