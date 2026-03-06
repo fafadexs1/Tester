@@ -239,6 +239,7 @@ export interface NodeData {
   agentSystemPrompt?: string;
   userInputVariable?: string;
   agentResponseVariable?: string;
+  agentRouteLock?: 'none' | 'ASSINATURA' | 'SUPORTE' | 'FINANCEIRO';
   maxConversationTurns?: number;
   temperature?: number;
 

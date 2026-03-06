@@ -44,7 +44,7 @@ export const ModelNode: React.FC<NodeComponentProps> = ({ node, onUpdate }) => {
                     <Label className="text-[10px] text-zinc-400">Model Name</Label>
                     <div className="relative">
                         <Input
-                            placeholder="e.g. gemini-2.0-flash"
+                            placeholder="e.g. gemini-3-flash-preview"
                             value={node.aiModelName || ''}
                             onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })}
                             className="h-7 text-xs pr-7 bg-black/20 border-white/5"

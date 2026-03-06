@@ -1,6 +1,12 @@
 'use server';
 
 import { ai } from '@/ai/genkit';
+import {
+  buildAuxiliaryGenkitModelCandidates,
+  getGeminiErrorMessage,
+  isMissingGeminiModelError,
+  isRetryableGeminiError,
+} from '@/lib/agent/gemini-models';
 import { z } from 'genkit';
 
 const MemoryCandidateSchema = z.object({
@@ -72,25 +78,45 @@ export const memoryCompilerFlow = ai.defineFlow(
     outputSchema: MemoryCompilerOutputSchema,
   },
   async (input) => {
-    try {
-      // Fallback for known invalid models or default to configured model
-      let effectiveModel = input.modelName;
-      if (!effectiveModel || effectiveModel === 'gemini-3-flash-preview') {
-        effectiveModel = 'googleai/gemini-2.0-flash';
-      }
+    const modelCandidates = buildAuxiliaryGenkitModelCandidates(input.modelName);
+    let lastError: any;
 
-      const promptOptions: { model: string; config?: any } = { model: effectiveModel };
-      if (input.modelConfig && typeof input.modelConfig === 'object') {
-        promptOptions.config = input.modelConfig;
+    try {
+      for (let index = 0; index < modelCandidates.length; index += 1) {
+        const effectiveModel = modelCandidates[index];
+        try {
+          const promptOptions: { model: string; config?: any } = { model: effectiveModel };
+          if (input.modelConfig && typeof input.modelConfig === 'object') {
+            promptOptions.config = input.modelConfig;
+          }
+
+          const { output } = await memoryCompilerPrompt(input, promptOptions);
+          if (!output) {
+            return { items: [], summary: undefined };
+          }
+
+          return output;
+        } catch (error: any) {
+          lastError = error;
+          const canFallback =
+            index < modelCandidates.length - 1 &&
+            (isMissingGeminiModelError(error) || isRetryableGeminiError(error));
+
+          if (canFallback) {
+            console.warn(
+              `[memoryCompilerFlow] Model ${effectiveModel} failed (${getGeminiErrorMessage(error)}). Retrying with fallback model ${modelCandidates[index + 1]}.`
+            );
+            continue;
+          }
+
+          throw error;
+        }
       }
-      const { output } = await memoryCompilerPrompt(input, promptOptions);
-      if (!output) {
-        return { items: [], summary: undefined };
-      }
-      return output;
     } catch (error: any) {
-      console.error('[memoryCompilerFlow] Error compiling memory:', error);
+      console.error('[memoryCompilerFlow] Error compiling memory:', lastError || error);
       return { items: [], summary: undefined };
     }
+
+    return { items: [], summary: undefined };
   }
 );

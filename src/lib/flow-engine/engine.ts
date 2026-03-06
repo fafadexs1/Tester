@@ -22,16 +22,20 @@ import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 import { agenticFlow } from '@/ai/flows/agentic-flow';
 import { intelligentChoice } from '@/ai/flows/intelligent-choice-flow';
 import { classifyIntent } from '@/ai/flows/intention-classification-flow';
+import { DEFAULT_GEMINI_AUX_MODEL } from '@/lib/agent/gemini-models';
 import { loadMemoryContext, normalizeMemorySettings, recordMemory, type MemorySettings } from '@/lib/agent/memory';
 import { DEFAULT_EMBEDDINGS_MODEL } from '@/lib/agent/memory/models';
 import {
   buildAgentStatePromptFragment,
   buildMemoryQueryFromTurn,
   buildRouteRedirectMessage,
+  detectExplicitExitIntent,
+  detectScopedDataRefusal,
   detectExplicitRouteSignalFromReply,
   inferAgentRouteFromText,
   mergeAgentConversationState,
   sanitizeAgentReply,
+  shouldPreserveCommercialSignupRoute,
   type AgentConversationState,
   type AgentRoute,
   type AgentRouteDecision,
@@ -81,6 +85,69 @@ const AGENT_ROUTE_INTENTS = [
 ];
 
 const AGENT_ROUTE_LLM_THRESHOLD = 0.72;
+const COMMERCIAL_AGENT_HINTS = [
+  'setor comercial',
+  'assistente virtual do setor comercial',
+  'papel comercial',
+  'foco comercial',
+  'decisao de compra',
+  'contratar novo servico',
+  'internet fibra',
+];
+const COMMERCIAL_ENTRY_SIGNALS = [
+  'internet',
+  'fibra',
+  'plano',
+  'planos',
+  'tv',
+  'combo',
+  'wifi',
+  'mega',
+  'assinar',
+  'contratar',
+  'novo servico',
+  'informacao',
+  'informacoes',
+  'valor',
+  'valores',
+  'preco',
+  'precos',
+  'velocidade',
+  'cobertura',
+];
+const EXPLICIT_SUPPORT_ISSUE_SIGNALS = [
+  'sem internet',
+  'internet caiu',
+  'internet lenta',
+  'lentidao',
+  'instabilidade',
+  'sinal ruim',
+  'roteador',
+  'modem',
+  'tecnico',
+  'queda de conexao',
+  'wifi ruim',
+];
+const EXPLICIT_FINANCIAL_SIGNALS = [
+  'boleto',
+  'fatura',
+  'segunda via',
+  '2 via',
+  'pagamento',
+  'vencimento',
+  'debito',
+  'divida',
+  'negociar',
+  'juros',
+];
+const HARD_COMMERCIAL_ROUTE_LOCK_HINTS = [
+  'nao sair do papel comercial',
+  'somente setor comercial',
+  'apenas setor comercial',
+  'nao sair do comercial',
+];
+
+type AgentRouteLock = 'ASSINATURA' | 'SUPORTE' | 'FINANCEIRO';
 
 const isRoute = (value: string): value is AgentRoute =>
   value === 'SUPORTE' || value === 'FINANCEIRO' || value === 'ENCERRAR' || value === 'ASSINATURA' || value === 'UNKNOWN';
@@ -107,6 +174,55 @@ const cleanAndNormalizeText = (content: string): string => {
   cleaned = cleaned.replace(/[ \t]{2,}/g, ' ').replace(/\s+([,.;!?])/g, '$1').trim();
   return cleaned.normalize('NFC');
 };
+
+const normalizeForRouting = (text: string): string =>
+  cleanAndNormalizeText(text)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const isCommercialAgentPrompt = (systemPrompt?: string): boolean => {
+  const normalized = normalizeForRouting(systemPrompt || '');
+  return COMMERCIAL_AGENT_HINTS.some(signal => normalized.includes(signal));
+};
+
+const shouldBiasCommercialIntent = (userInput: string, systemPrompt?: string): boolean => {
+  if (!isCommercialAgentPrompt(systemPrompt)) return false;
+  const normalized = normalizeForRouting(userInput || '');
+  if (!normalized) return false;
+  if (EXPLICIT_SUPPORT_ISSUE_SIGNALS.some(signal => normalized.includes(signal))) return false;
+  if (EXPLICIT_FINANCIAL_SIGNALS.some(signal => normalized.includes(signal))) return false;
+  return COMMERCIAL_ENTRY_SIGNALS.some(signal => normalized.includes(signal));
+};
+
+const normalizeAgentRouteLock = (value: unknown): AgentRouteLock | undefined => {
+  const text = String(value || '').trim().toUpperCase();
+  if (text === 'ASSINATURA' || text === 'SUPORTE' || text === 'FINANCEIRO') {
+    return text;
+  }
+  return undefined;
+};
+
+const inferAutomaticRouteLock = (systemPrompt?: string): AgentRouteLock | undefined => {
+  const normalized = normalizeForRouting(systemPrompt || '');
+  if (!normalized) return undefined;
+  if (
+    isCommercialAgentPrompt(systemPrompt) &&
+    HARD_COMMERCIAL_ROUTE_LOCK_HINTS.some(signal => normalized.includes(signal))
+  ) {
+    return 'ASSINATURA';
+  }
+  return undefined;
+};
+
+const resolveAgentRouteLock = (
+  configuredLock: unknown,
+  systemPrompt?: string
+): AgentRouteLock | undefined =>
+  normalizeAgentRouteLock(configuredLock) || inferAutomaticRouteLock(systemPrompt);
 
 const mergeMemorySummary = (currentSummary: string | undefined, addition: string): string => {
   const sanitizedAddition = cleanAndNormalizeText(addition);
@@ -220,9 +336,7 @@ const trimAndSummarizeHistory = (
 };
 
 const detectExitIntent = (text: string): boolean => {
-  if (!text) return false;
-  const normalized = text.toLowerCase();
-  return EXIT_INTENT_PATTERNS.some(pattern => normalized.includes(pattern));
+  return detectExplicitExitIntent(text);
 };
 
 const resolveGoogleApiKey = (): string | undefined => {
@@ -238,9 +352,23 @@ const resolveGoogleApiKey = (): string | undefined => {
 const resolveAgentRouteDecision = async (
   userInput: string,
   modelName?: string,
-  modelApiKey?: string
+  modelApiKey?: string,
+  systemPrompt?: string
 ): Promise<AgentRouteDecision> => {
   const heuristic = inferAgentRouteFromText(userInput);
+  if (
+    shouldBiasCommercialIntent(userInput, systemPrompt) &&
+    (heuristic.route === 'UNKNOWN' || heuristic.route === 'ASSINATURA')
+  ) {
+    return {
+      route: 'ASSINATURA',
+      confidence: Math.max(heuristic.confidence, 0.86),
+      reason: 'Prompt comercial do agente e intencao inicial compatível com venda/consulta comercial.',
+      matchedSignals: [...heuristic.matchedSignals, 'commercial_agent_prompt'],
+      shouldExitFlow: false,
+    };
+  }
+
   const shouldCallClassifier =
     userInput.trim().length >= 4 &&
     (heuristic.route === 'UNKNOWN' || heuristic.confidence < AGENT_ROUTE_LLM_THRESHOLD);
@@ -253,7 +381,7 @@ const resolveAgentRouteDecision = async (
     const llmResult = await classifyIntent({
       userMessage: userInput,
       intents: AGENT_ROUTE_INTENTS,
-      modelName: modelName || 'googleai/gemini-2.0-flash',
+      modelName: modelName || DEFAULT_GEMINI_AUX_MODEL,
       modelConfig: modelApiKey ? { apiKey: modelApiKey } : undefined,
     });
 
@@ -633,7 +761,7 @@ export async function executeFlow(
       case 'rating-input':
       case 'option': {
         if (getProperty(session.flow_variables, '_invalidOption') === true) {
-          await sendOmniChannelMessage(session, currentWorkspace, "Op��o inv�lida. Por favor, tente novamente.");
+          await sendOmniChannelMessage(session, currentWorkspace, "Opção inválida. Por favor, tente novamente.");
           delete session.flow_variables['_invalidOption'];
           shouldContinue = false;
           break;
@@ -1078,6 +1206,7 @@ export async function executeFlow(
         const modelConfig = targetApiKey ? { apiKey: targetApiKey } : undefined;
         const maxTurns = currentNode.maxConversationTurns ?? null;
         const systemPrompt = substituteVariablesInText(currentNode.agentSystemPrompt, session.flow_variables);
+        const routeLock = resolveAgentRouteLock(currentNode.agentRouteLock, systemPrompt);
 
         if (responseVarName && inputVarName) {
           try {
@@ -1119,9 +1248,43 @@ export async function executeFlow(
                 ? (findNodeById(memoryConnection.from === currentNode.id ? memoryConnection.to : memoryConnection.from, currentWorkspace.nodes) || null)
                 : null;
               const memorySettings = buildMemorySettings(memoryNode, session, currentWorkspace);
+              const agentStateKey = `_agent_state_${currentNode.id}`;
+              const previousAgentState = getProperty(session.flow_variables, agentStateKey);
+              const isScopedRefusal = detectScopedDataRefusal(cleanedUserInput, history);
+              const hasExplicitExitIntent = detectExplicitExitIntent(cleanedUserInput, history);
+              const shouldStayOnCommercialSignup = shouldPreserveCommercialSignupRoute({
+                userMessage: cleanedUserInput,
+                history,
+                state: previousAgentState,
+              });
 
-              let routeDecision = await resolveAgentRouteDecision(cleanedUserInput, targetModel, targetApiKey);
-              if (detectExitIntent(cleanedUserInput) && routeDecision.route === 'UNKNOWN') {
+              let routeDecision = await resolveAgentRouteDecision(cleanedUserInput, targetModel, targetApiKey, systemPrompt);
+              if (routeLock && !hasExplicitExitIntent) {
+                routeDecision = {
+                  route: routeLock,
+                  confidence: 0.99,
+                  reason: `Rota travada em ${routeLock}.`,
+                  matchedSignals: [...routeDecision.matchedSignals, 'route_lock'],
+                  shouldExitFlow: false,
+                };
+              } else if (shouldStayOnCommercialSignup && !hasExplicitExitIntent) {
+                routeDecision = {
+                  route: 'ASSINATURA',
+                  confidence: Math.max(routeDecision.confidence, 0.88),
+                  reason: 'Resposta de coleta de dados do fluxo comercial em andamento.',
+                  matchedSignals: [...routeDecision.matchedSignals, 'commercial_signup_step'],
+                  shouldExitFlow: false,
+                };
+              } else if (isScopedRefusal && routeDecision.route === 'ENCERRAR') {
+                routeDecision = {
+                  ...routeDecision,
+                  route: 'UNKNOWN',
+                  confidence: Math.min(routeDecision.confidence, 0.35),
+                  reason: 'Recusa contextual de dado especifico detectada; nao caracteriza encerramento.',
+                  matchedSignals: routeDecision.matchedSignals.filter(signal => signal !== 'encerrar' && signal !== 'finalizar'),
+                  shouldExitFlow: false,
+                };
+              } else if (hasExplicitExitIntent && routeDecision.route === 'UNKNOWN') {
                 routeDecision = {
                   route: 'ENCERRAR',
                   confidence: Math.max(routeDecision.confidence, 0.8),
@@ -1131,15 +1294,21 @@ export async function executeFlow(
                 };
               }
 
-              const agentStateKey = `_agent_state_${currentNode.id}`;
-              const previousAgentState = getProperty(session.flow_variables, agentStateKey);
               const mergedAgentState: AgentConversationState = mergeAgentConversationState(
                 previousAgentState,
                 cleanedUserInput,
-                routeDecision.route
+                routeDecision.shouldExitFlow || routeDecision.route === 'ASSINATURA'
+                  ? routeDecision.route
+                  : undefined
               );
               setProperty(session.flow_variables, agentStateKey, mergedAgentState);
-              setProperty(session.flow_variables, `_agent_route_${currentNode.id}`, routeDecision.route);
+              setProperty(
+                session.flow_variables,
+                `_agent_route_${currentNode.id}`,
+                routeDecision.shouldExitFlow || routeDecision.route === 'ASSINATURA'
+                  ? routeDecision.route
+                  : 'UNKNOWN'
+              );
               setProperty(session.flow_variables, `_agent_route_confidence_${currentNode.id}`, routeDecision.confidence);
               setProperty(session.flow_variables, `_agent_route_reason_${currentNode.id}`, routeDecision.reason);
 
@@ -1379,8 +1548,17 @@ export async function executeFlow(
                 slug: 'finalizar_atendimento',
                 version: '1.0.0',
                 contract: {
-                  summary: 'Encerra o atendimento do agente e prossegue para o proximo passo do fluxo',
-                  description: 'Use esta ferramenta apenas quando tiver concluido todas as etapas previstas no atendimento.',
+                  summary: 'Encerra o atendimento do agente e prossegue para o proximo passo do fluxo apenas quando a conversa realmente terminou',
+                  description: 'Use esta ferramenta apenas quando tiver concluido todas as etapas previstas no atendimento ou quando o usuario pedir explicitamente para encerrar. Nao use quando o usuario apenas recusar um dado especifico, como email, CPF ou telefone secundario.',
+                  triggerPhrases: [
+                    'encerrar atendimento',
+                    'finalizar atendimento',
+                    'pode encerrar',
+                    'quero encerrar',
+                    'quero parar',
+                    'cadastro concluido',
+                    'atendimento concluido',
+                  ],
                   inputSchema: JSON.stringify({
                     type: 'object',
                     properties: {
@@ -1432,15 +1610,35 @@ export async function executeFlow(
               const guardedReply = sanitizeAgentReply({
                 rawReply: agentReply.botReply,
                 userMessage: cleanedUserInput,
-                preferredRoute: routeDecision.route !== 'UNKNOWN' ? routeDecision.route : undefined,
+                preferredRoute: routeDecision.shouldExitFlow && routeDecision.route !== 'UNKNOWN'
+                  ? routeDecision.route
+                  : undefined,
               });
+              const exitToolWasCalled = (agentReply.toolsCalled || []).includes('finalizar_atendimento');
               let cleanedReply = cleanAndNormalizeText(guardedReply.reply);
               if (!cleanedReply) {
                 cleanedReply = 'Tive uma pequena instabilidade, mas ja voltei! Pode repetir o que disse?';
                 console.warn("[Flow Engine - ${session.session_id}] Agent final reply was empty. Using fallback to prevent ghosting.");
               }
-              const explicitRoute = detectExplicitRouteSignalFromReply(cleanedReply);
-              const resolvedRoute = explicitRoute !== 'UNKNOWN' ? explicitRoute : routeDecision.route;
+              if (isScopedRefusal && exitToolWasCalled) {
+                cleanedReply = 'Tudo bem, voce nao precisa informar esse dado agora. Podemos continuar com as informacoes que voce preferir compartilhar.';
+              }
+              let explicitRoute = detectExplicitRouteSignalFromReply(cleanedReply);
+              if (routeLock && explicitRoute !== 'UNKNOWN' && explicitRoute !== routeLock && explicitRoute !== 'ENCERRAR') {
+                explicitRoute = 'UNKNOWN';
+                cleanedReply = buildRouteRedirectMessage(routeLock);
+              }
+              if (isScopedRefusal && explicitRoute === 'ENCERRAR') {
+                explicitRoute = 'UNKNOWN';
+                cleanedReply = 'Tudo bem, voce nao precisa informar esse dado agora. Podemos continuar com as informacoes que voce preferir compartilhar.';
+              }
+              const resolvedRoute = explicitRoute !== 'UNKNOWN'
+                ? explicitRoute
+                : routeDecision.shouldExitFlow
+                  ? routeDecision.route
+                  : routeDecision.route === 'ASSINATURA'
+                    ? 'ASSINATURA'
+                    : 'UNKNOWN';
               if (guardedReply.fallbackApplied) {
                 setProperty(session.flow_variables, `_agent_guardrail_${currentNode.id}`, guardedReply.fallbackReason || 'fallback_applied');
               }
@@ -1481,9 +1679,11 @@ export async function executeFlow(
                 await sendOmniChannelMessage(session, currentWorkspace, block);
               }
 
-              const calledExitTool = (agentReply.toolsCalled || []).includes('finalizar_atendimento');
-              const shouldExitByRoute = resolvedRoute === 'SUPORTE' || resolvedRoute === 'FINANCEIRO' || resolvedRoute === 'ENCERRAR';
-              if (calledExitTool || shouldExitByRoute) {
+              const calledExitTool = exitToolWasCalled;
+              const shouldIgnoreExit = isScopedRefusal && (calledExitTool || resolvedRoute === 'ENCERRAR');
+              const shouldExitByExplicitRoute = explicitRoute === 'SUPORTE' || explicitRoute === 'FINANCEIRO' || explicitRoute === 'ENCERRAR';
+              const shouldExitByDecision = routeDecision.shouldExitFlow && (resolvedRoute === 'SUPORTE' || resolvedRoute === 'FINANCEIRO' || resolvedRoute === 'ENCERRAR');
+              if (!shouldIgnoreExit && (calledExitTool || shouldExitByExplicitRoute || shouldExitByDecision)) {
                 setProperty(session.flow_variables, `_agent_completed_${currentNode.id}`, true);
                 nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
                 shouldContinue = true;
@@ -1558,7 +1758,7 @@ export async function executeFlow(
           const classification = await classifyIntent({
             userMessage: String(userMessage),
             intents: intents,
-            modelName: 'googleai/gemini-2.0-flash' // Could be made configurable later
+            modelName: DEFAULT_GEMINI_AUX_MODEL,
           });
 
           if (classification.matchedIntentId) {

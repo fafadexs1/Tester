@@ -1,6 +1,12 @@
 'use server';
 
 import { ai } from '@/ai/genkit';
+import {
+    buildAuxiliaryGenkitModelCandidates,
+    getGeminiErrorMessage,
+    isMissingGeminiModelError,
+    isRetryableGeminiError,
+} from '@/lib/agent/gemini-models';
 import { z } from 'genkit';
 
 const IntentSchema = z.object({
@@ -67,22 +73,47 @@ export const intentionClassificationFlow = ai.defineFlow(
         outputSchema: IntentionClassificationOutputSchema,
     },
     async (input) => {
+        const modelCandidates = buildAuxiliaryGenkitModelCandidates(input.modelName);
+        let lastError: any;
+
         try {
-            const promptOptions: { model?: string; config?: any } = { model: input.modelName };
-            if (input.modelConfig && typeof input.modelConfig === 'object') {
-                promptOptions.config = input.modelConfig;
-            }
-            const { output } = await classificationPrompt(input, promptOptions);
+            for (let index = 0; index < modelCandidates.length; index += 1) {
+                const model = modelCandidates[index];
+                try {
+                    const promptOptions: { model?: string; config?: any } = { model };
+                    if (input.modelConfig && typeof input.modelConfig === 'object') {
+                        promptOptions.config = input.modelConfig;
+                    }
 
-            if (!output) {
-                console.error('[intentionClassificationFlow] LLM returned empty output.');
-                return { matchedIntentId: null, reasoning: 'Model failure' };
-            }
+                    const { output } = await classificationPrompt(input, promptOptions);
+                    if (!output) {
+                        console.error('[intentionClassificationFlow] LLM returned empty output.');
+                        return { matchedIntentId: null, reasoning: 'Model failure' };
+                    }
 
-            return output;
+                    return output;
+                } catch (error: any) {
+                    lastError = error;
+                    const canFallback =
+                        index < modelCandidates.length - 1 &&
+                        (isMissingGeminiModelError(error) || isRetryableGeminiError(error));
+
+                    if (canFallback) {
+                        console.warn(
+                            `[intentionClassificationFlow] Model ${model} failed (${getGeminiErrorMessage(error)}). Retrying with fallback model ${modelCandidates[index + 1]}.`
+                        );
+                        continue;
+                    }
+
+                    throw error;
+                }
+            }
         } catch (error: any) {
-            console.error('[intentionClassificationFlow] Error during classification:', error);
-            return { matchedIntentId: null, reasoning: `Error: ${error.message}` };
+            const effectiveError = lastError || error;
+            console.error('[intentionClassificationFlow] Error during classification:', effectiveError);
+            return { matchedIntentId: null, reasoning: `Error: ${effectiveError.message}` };
         }
+
+        return { matchedIntentId: null, reasoning: 'Model failure' };
     }
 );

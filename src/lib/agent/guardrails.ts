@@ -37,6 +37,21 @@ export interface AgentConversationState {
   slots: AgentStateSlots;
 }
 
+const COMMERCIAL_DATA_REQUEST_SIGNALS = [
+  'cpf',
+  'cep',
+  'endereco',
+  'localizacao',
+  'dia de vencimento',
+  'vencimento',
+  'turno',
+  'instalacao',
+  'telefone',
+  'numero para contato',
+  'segundo numero',
+  'telefone secundario',
+];
+
 const NORMALIZE_REGEX = /[^\p{L}\p{N}\s]/gu;
 const MULTI_SPACE_REGEX = /\s+/g;
 const AMBIGUOUS_SHORT_REPLY_REGEX = /^(sim|nao|não|ok|certo|isso|esse|essa|quero|pode|fechado|de manha|de manhã|a tarde|à tarde|25|20|15|10|5)$/i;
@@ -98,6 +113,66 @@ const ROUTE_SIGNALS: Record<Exclude<AgentRoute, 'UNKNOWN'>, string[]> = {
     'wifi 6',
   ],
 };
+
+const EXPLICIT_EXIT_SIGNALS = [
+  'encerrar atendimento',
+  'quero encerrar',
+  'pode encerrar',
+  'pode finalizar',
+  'finaliza ai',
+  'finaliza por aqui',
+  'encerrar por aqui',
+  'parar por aqui',
+  'quero parar',
+  'nao quero continuar',
+  'nao desejo continuar',
+  'nao quero prosseguir',
+  'nao quero seguir',
+  'nao tenho mais interesse',
+  'quero cancelar atendimento',
+  'cancelar atendimento',
+  'sair do atendimento',
+  'tchau',
+  'adeus',
+  'obrigado mas nao',
+  'obrigada mas nao',
+];
+
+const DATA_REFUSAL_FIELD_SIGNALS = [
+  'email',
+  'e mail',
+  'segundo numero',
+  'segundo telefone',
+  'telefone secundario',
+  'telefone secundario',
+  'outro numero',
+  'numero adicional',
+  'telefone adicional',
+  'cpf',
+  'rg',
+  'documento',
+  'cep',
+  'endereco',
+  'localizacao',
+  'bairro',
+  'comprovante',
+];
+
+const DATA_REFUSAL_CUES = [
+  'nao quero passar',
+  'nao quero informar',
+  'nao quero fornecer',
+  'nao quero compartilhar',
+  'nao vou passar',
+  'nao vou informar',
+  'nao vou fornecer',
+  'prefiro nao passar',
+  'prefiro nao informar',
+  'prefiro nao fornecer',
+  'nao tenho',
+  'nao possuo',
+  'sem ',
+];
 
 const FALLBACK_BLOCKED_PATTERNS: RegExp[] = [
   /i\s+didn'?t\s+have\s+anything\s+to\s+say/i,
@@ -199,6 +274,47 @@ const stripInternalArtifacts = (text: string): string => {
 const countSignalMatches = (normalizedText: string, route: Exclude<AgentRoute, 'UNKNOWN'>): { count: number; matched: string[] } => {
   const matched = ROUTE_SIGNALS[route].filter(signal => normalizedText.includes(signal));
   return { count: matched.length, matched };
+};
+
+const getLastAssistantMessage = (history: AgentHistoryLike[] = []): string => {
+  const lastAssistant = [...history]
+    .reverse()
+    .find(item => item.role === 'assistant' && String(item.content || '').trim().length > 0);
+  return normalizeForMatch(lastAssistant?.content || '');
+};
+
+export const detectScopedDataRefusal = (
+  userMessage: string,
+  history: AgentHistoryLike[] = []
+): boolean => {
+  const normalized = normalizeForMatch(userMessage || '');
+  if (!normalized) return false;
+
+  const hasExitCue = EXPLICIT_EXIT_SIGNALS.some(signal => normalized.includes(signal));
+  if (hasExitCue) return false;
+
+  const hasRefusalCue = DATA_REFUSAL_CUES.some(signal => normalized.includes(signal));
+  if (!hasRefusalCue) return false;
+
+  const matchedFields = DATA_REFUSAL_FIELD_SIGNALS.filter(signal => normalized.includes(signal));
+  if (matchedFields.length > 0) return true;
+
+  const lastAssistant = getLastAssistantMessage(history);
+  if (!lastAssistant) return false;
+
+  const assistantAskedSensitiveField = DATA_REFUSAL_FIELD_SIGNALS.some(signal => lastAssistant.includes(signal));
+  const shortRefusal = normalized.length <= 48;
+  return assistantAskedSensitiveField && shortRefusal;
+};
+
+export const detectExplicitExitIntent = (
+  userMessage: string,
+  history: AgentHistoryLike[] = []
+): boolean => {
+  const normalized = normalizeForMatch(userMessage || '');
+  if (!normalized) return false;
+  if (detectScopedDataRefusal(normalized, history)) return false;
+  return EXPLICIT_EXIT_SIGNALS.some(signal => normalized.includes(signal));
 };
 
 const confidenceThresholdForExit = (route: AgentRoute): number => {
@@ -415,6 +531,44 @@ export const mergeAgentConversationState = (
   };
 
   return merged;
+};
+
+export const shouldPreserveCommercialSignupRoute = (params: {
+  userMessage: string;
+  history: AgentHistoryLike[];
+  state?: unknown;
+}): boolean => {
+  const typedState =
+    params.state && typeof params.state === 'object'
+      ? (params.state as AgentConversationState)
+      : undefined;
+
+  const hasCommercialContext = Boolean(
+    typedState?.lastRoute === 'ASSINATURA' ||
+    typedState?.slots?.planInterest ||
+    typedState?.slots?.address ||
+    typedState?.slots?.cep ||
+    typedState?.slots?.cpf ||
+    typedState?.slots?.billingDay ||
+    typedState?.slots?.installShift ||
+    typedState?.slots?.primaryPhone
+  );
+
+  if (!hasCommercialContext) return false;
+
+  const lastAssistant = getLastAssistantMessage(params.history || []);
+  const assistantAskedForCommercialData = COMMERCIAL_DATA_REQUEST_SIGNALS.some(signal => lastAssistant.includes(signal));
+  if (!assistantAskedForCommercialData) return false;
+
+  const extractedSlots = extractAgentSlotsFromMessage(params.userMessage);
+  const repliedWithStructuredData = Object.values(extractedSlots).some(value =>
+    value !== undefined && value !== null && String(value).trim() !== ''
+  );
+  const normalized = normalizeForMatch(params.userMessage || '');
+  const mentionsBillingOrShift = /\b(?:5|10|15|20|25)\b/.test(normalized) || /\bmanha\b|\btarde\b/.test(normalized);
+  const scopedRefusal = detectScopedDataRefusal(params.userMessage, params.history);
+
+  return repliedWithStructuredData || mentionsBillingOrShift || scopedRefusal;
 };
 
 export const buildAgentStatePromptFragment = (state: unknown): string => {

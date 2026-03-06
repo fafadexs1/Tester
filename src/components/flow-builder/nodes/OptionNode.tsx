@@ -154,7 +154,7 @@ export const OptionNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avail
                             <Sparkles className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary pointer-events-none" />
                             <Input
                                 id={`${node.id}-aiModelName`}
-                                placeholder="googleai/gemini-2.0-flash"
+                                placeholder="googleai/gemini-2.5-flash"
                                 value={node.aiModelName || ""}
                                 onChange={(e) => onUpdate(node.id, { aiModelName: e.target.value })}
                                 className="pl-8 h-7 text-xs bg-black/20 border-white/5 focus:border-primary/50"

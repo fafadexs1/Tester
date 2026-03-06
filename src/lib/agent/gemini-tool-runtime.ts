@@ -1,5 +1,11 @@
 import { Capability } from '@/lib/types';
 import { executeCapability } from '@/lib/capability-executor';
+import {
+  buildNativeGeminiModelCandidates,
+  getGeminiErrorMessage,
+  isMissingGeminiModelError,
+  isRetryableGeminiError,
+} from '@/lib/agent/gemini-models';
 
 export interface GeminiRuntimePart {
   text?: string;
@@ -54,12 +60,10 @@ const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models
 const DEFAULT_MAX_STEPS = 6;
 const MAX_TOOL_RESPONSE_CHARS = 6000;
 const MAX_TOOL_TEXT_CHARS = 2500;
+const RETRY_DELAYS_MS = [900, 1800];
 
 const isObject = (value: unknown): value is Record<string, any> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-
-const normalizeGeminiModelName = (model: string): string =>
-  String(model || 'gemini-2.5-flash').replace(/^googleai\//, '').trim();
 
 const sanitizeToolName = (raw: string): string => {
   const cleaned = String(raw || '')
@@ -178,6 +182,9 @@ const extractTextParts = (parts: GeminiRuntimePart[] | undefined): string => {
     .join('\n')
     .trim();
 };
+
+const sleep = async (ms: number): Promise<void> =>
+  new Promise(resolve => setTimeout(resolve, ms));
 
 const buildToolDescriptors = (capabilities: Capability[]): ToolDescriptor[] => {
   const usedNames = new Set<string>();
@@ -331,10 +338,73 @@ const callGeminiGenerateContent = async (params: {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const errorText = payload?.error?.message || response.statusText || 'Gemini API error';
-    throw new Error(errorText);
+    const error = new Error(errorText) as Error & { status?: number; model?: string };
+    error.status = response.status;
+    error.model = params.model;
+    throw error;
   }
 
   return payload;
+};
+
+const callGeminiGenerateContentWithRecovery = async (params: {
+  apiKey: string;
+  models: string[];
+  systemInstruction?: string;
+  contents: GeminiRuntimeContent[];
+  functionDeclarations: Record<string, any>[];
+  toolConfig?: Record<string, any>;
+  temperature?: number;
+}): Promise<{ payload: any; model: string }> => {
+  let lastError: any;
+
+  for (let modelIndex = 0; modelIndex < params.models.length; modelIndex += 1) {
+    const model = params.models[modelIndex];
+
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
+      try {
+        const payload = await callGeminiGenerateContent({
+          apiKey: params.apiKey,
+          model,
+          systemInstruction: params.systemInstruction,
+          contents: params.contents,
+          functionDeclarations: params.functionDeclarations,
+          toolConfig: params.toolConfig,
+          temperature: params.temperature,
+        });
+
+        return { payload, model };
+      } catch (error: any) {
+        lastError = error;
+        const canRetrySameModel =
+          isRetryableGeminiError(error) && attempt < RETRY_DELAYS_MS.length;
+
+        if (canRetrySameModel) {
+          const waitMs = RETRY_DELAYS_MS[attempt];
+          console.warn(
+            `[Gemini Runtime] Model ${model} overloaded (${getGeminiErrorMessage(error)}). Retrying in ${waitMs}ms.`
+          );
+          await sleep(waitMs);
+          continue;
+        }
+
+        const canFallbackModel =
+          modelIndex < params.models.length - 1 &&
+          (isMissingGeminiModelError(error) || isRetryableGeminiError(error));
+
+        if (canFallbackModel) {
+          console.warn(
+            `[Gemini Runtime] Model ${model} failed (${getGeminiErrorMessage(error)}). Falling back to ${params.models[modelIndex + 1]}.`
+          );
+          break;
+        }
+
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || new Error('Gemini API error');
 };
 
 const extractModelContent = (payload: any): GeminiRuntimeContent => {
@@ -428,7 +498,7 @@ export const runGeminiToolRuntime = async (
     throw new Error('Gemini API key is missing.');
   }
 
-  const model = normalizeGeminiModelName(input.model);
+  let modelCandidates = buildNativeGeminiModelCandidates(input.model);
   const descriptors = buildToolDescriptors(input.capabilities);
   const toolMap = new Map(descriptors.map(descriptor => [descriptor.functionName, descriptor]));
   const requiredToolNames = descriptors
@@ -454,15 +524,22 @@ export const runGeminiToolRuntime = async (
   const maxSteps = Math.max(1, Math.min(input.maxSteps || DEFAULT_MAX_STEPS, 10));
 
   for (let step = 0; step < maxSteps; step += 1) {
-    const payload = await callGeminiGenerateContent({
+    const { payload, model } = await callGeminiGenerateContentWithRecovery({
       apiKey,
-      model,
+      models: modelCandidates,
       systemInstruction: input.systemInstruction,
       contents,
       functionDeclarations: descriptors.map(descriptor => descriptor.declaration),
       toolConfig,
       temperature: input.temperature,
     });
+    const resolvedIndex = Math.max(0, modelCandidates.indexOf(model));
+    modelCandidates = [
+      model,
+      ...modelCandidates
+        .slice(resolvedIndex + 1)
+        .filter(candidate => candidate !== model),
+    ];
 
     const modelContent = extractModelContent(payload);
     contents.push(modelContent);

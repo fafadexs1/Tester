@@ -2,6 +2,7 @@ import { ai } from '../genkit';
 import { z } from 'zod';
 import { Capability } from '@/lib/types';
 import { executeCapability } from '@/lib/capability-executor';
+import { DEFAULT_GEMINI_MODEL, isGeminiModelName } from '@/lib/agent/gemini-models';
 import { runGeminiToolRuntime } from '@/lib/agent/gemini-tool-runtime';
 
 // Helper to convert JSON schema to Zod is complex.
@@ -201,9 +202,6 @@ const sanitizeModelReply = (reply: string | null | undefined): string => {
     return cleaned;
 };
 
-const isGeminiModel = (modelName: string): boolean =>
-    /(^|\/)gemini/i.test(modelName);
-
 const selectRelevantCapabilities = (
     capabilities: Capability[],
     userMessage: string,
@@ -359,9 +357,14 @@ export const agenticFlow = ai.defineFlow(
         });
 
         const knowledgeToolName = toolNameBySlug.get('lookup_knowledge');
+        const finalizationToolName = toolNameBySlug.get('finalizar_atendimento');
         const knowledgeToolInstruction = knowledgeToolName
             ? `IMPORTANT: You have access to tools/capabilities. If the user asks about the company, plans, prices, services, or coverage, you MUST use the '${knowledgeToolName}' tool to find the answer. Do NOT answer "As a large language model I cannot...". Instead, use the tool to find the info.`
             : 'IMPORTANT: You have access to tools/capabilities. Use them when they help you answer. Do NOT answer "As a large language model I cannot...".';
+        const refusalHandlingInstruction = 'IMPORTANT: If the user refuses to provide a specific piece of data such as email, secondary phone, CPF, CEP, address, or location, do NOT interpret that as a request to end the conversation. Acknowledge the refusal, avoid pressuring the user, and continue with the next viable step.';
+        const finalizationSafetyInstruction = finalizationToolName
+            ? `IMPORTANT: Only use the '${finalizationToolName}' tool when the user explicitly asks to stop/end the conversation or when the workflow is genuinely complete. Never use it just because the user refused a specific field or personal datum.`
+            : '';
         const hasUnconfirmedMemory = Boolean(
             memoryContext?.unconfirmedFacts?.length ||
             memoryContext?.unconfirmedEpisodes?.length ||
@@ -377,6 +380,8 @@ export const agenticFlow = ai.defineFlow(
             `IMPORTANT: You are an autonomous agent. If you use a tool, you MUST use its output to formulate a response to the user. Do not stop after using a tool. Read your System Instructions to decide what to do next. If the tool result is successful, explain it to the user or ask the next logical question.`,
             responseFormatInstruction,
             knowledgeToolInstruction,
+            refusalHandlingInstruction,
+            finalizationSafetyInstruction,
             memorySafetyInstruction,
             formatMemoryContext(memoryContext),
             knowledgeContext,
@@ -389,16 +394,16 @@ export const agenticFlow = ai.defineFlow(
             .join('\n\n');
 
         // Determine Model to use
-        let modelToUse = modelName || 'googleai/gemini-2.5-flash';
+        let modelToUse = modelName || DEFAULT_GEMINI_MODEL;
         const requestedModel = modelToUse.includes('/') ? modelToUse : `googleai/${modelToUse}`;
 
         const hasToolsExposed = selectedCapabilities.length > 0;
-        const shouldUseNativeGeminiToolRuntime = hasToolsExposed && isGeminiModel(requestedModel);
+        const shouldUseNativeGeminiToolRuntime = hasToolsExposed && isGeminiModelName(requestedModel);
 
         // Keep the downgrade only for the legacy Genkit tool path.
         if (!shouldUseNativeGeminiToolRuntime && hasToolsExposed && (modelToUse.includes('gemini-3') || modelToUse.includes('preview') || modelToUse.includes('thinking'))) {
-            console.warn(`[Agentic Flow] Downgrading model ${modelToUse} to gemini-2.5-flash for tool compatibility.`);
-            modelToUse = 'googleai/gemini-2.5-flash';
+            console.warn(`[Agentic Flow] Downgrading model ${modelToUse} to ${DEFAULT_GEMINI_MODEL} for tool compatibility.`);
+            modelToUse = DEFAULT_GEMINI_MODEL;
         }
 
         const effectiveModel = modelToUse.includes('/') ? modelToUse : `googleai/${modelToUse}`;
@@ -425,6 +430,8 @@ export const agenticFlow = ai.defineFlow(
                     `IMPORTANT: You are an autonomous agent. If you use a tool, you MUST use its output to formulate a response to the user. Do not stop after using a tool. Read your System Instructions to decide what to do next. If the tool result is successful, explain it to the user or ask the next logical question.`,
                     responseFormatInstruction,
                     knowledgeToolInstruction,
+                    refusalHandlingInstruction,
+                    finalizationSafetyInstruction,
                     memorySafetyInstruction,
                     formatMemoryContext(memoryContext),
                     knowledgeGuidance,
