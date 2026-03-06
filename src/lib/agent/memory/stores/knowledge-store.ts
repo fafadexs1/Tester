@@ -1,6 +1,13 @@
 import { Pool } from 'pg';
 import { getPostgresPool } from '../db-pools';
 import { generateEmbedding } from '../embedding';
+import {
+    createVectorColumnPayload,
+    getVectorColumnDefinitions,
+    getVectorColumnForEmbedding,
+    getVectorIndexDefinitions,
+    VECTOR_COLUMN_SPECS,
+} from '../vector-columns';
 
 export interface KnowledgeEntry {
     id: string;
@@ -94,6 +101,9 @@ export class KnowledgeStore {
         }
 
         // 2. Create table
+        const vectorDefinitions = this.supportsVector
+            ? `${getVectorColumnDefinitions().map(definition => `                ${definition}`).join(',\n')},\n`
+            : '';
         await this.execute(`
             CREATE TABLE IF NOT EXISTS agent_knowledge (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -103,8 +113,7 @@ export class KnowledgeStore {
                 title TEXT NOT NULL,
                 content TEXT NOT NULL,
                 metadata JSONB,
-                ${this.supportsVector ? 'embedding vector(1536),' : ''}
-                ${this.supportsVector ? 'embedding_384 vector(384),' : ''}
+${vectorDefinitions}
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW(),
                 UNIQUE (workspace_id, category, key)
@@ -113,23 +122,26 @@ export class KnowledgeStore {
 
         // 3. Add embedding columns if they don't exist (migration)
         if (this.supportsVector) {
-            try {
-                await this.execute(`ALTER TABLE agent_knowledge ADD COLUMN IF NOT EXISTS embedding vector(1536)`);
-            } catch (e) { /* ignore */ }
-            try {
-                await this.execute(`ALTER TABLE agent_knowledge ADD COLUMN IF NOT EXISTS embedding_384 vector(384)`);
-            } catch (e) { /* ignore */ }
+            for (const spec of VECTOR_COLUMN_SPECS) {
+                try {
+                    await this.execute(
+                        `ALTER TABLE agent_knowledge ADD COLUMN IF NOT EXISTS ${spec.column} vector(${spec.dimension})`
+                    );
+                } catch (e) {
+                    console.warn(`[KnowledgeStore] Could not add ${spec.column} column:`, e);
+                }
+            }
         }
 
         // 4. Create indexes
+        const vectorIndexes = this.supportsVector
+            ? `\n                ${getVectorIndexDefinitions('agent_knowledge').join('\n                ')}`
+            : '';
         await this.execute(`
             CREATE INDEX IF NOT EXISTS idx_agent_knowledge_workspace ON agent_knowledge (workspace_id);
             CREATE INDEX IF NOT EXISTS idx_agent_knowledge_category ON agent_knowledge (workspace_id, category);
             CREATE INDEX IF NOT EXISTS idx_agent_knowledge_key ON agent_knowledge (workspace_id, category, key);
-            ${this.supportsVector ? `
-                CREATE INDEX IF NOT EXISTS idx_agent_knowledge_embedding ON agent_knowledge USING ivfflat (embedding vector_cosine_ops);
-                CREATE INDEX IF NOT EXISTS idx_agent_knowledge_embedding_384 ON agent_knowledge USING ivfflat (embedding_384 vector_cosine_ops);
-            ` : ''}
+            ${vectorIndexes}
         `);
 
         this.hasCheckedSchema = true;
@@ -142,18 +154,13 @@ export class KnowledgeStore {
         await this.ensureSchema();
 
         // Generate embedding if model is specified and content exists
-        let embedding1536: string | null = null;
-        let embedding384: string | null = null;
+        let vectorPayload = createVectorColumnPayload();
 
         if (this.supportsVector && embeddingsModel && entry.content) {
             try {
-                const result = await generateEmbedding(entry.content, embeddingsModel);
+                const result = await generateEmbedding(entry.content, embeddingsModel, { role: 'document' });
                 if (result) {
-                    if (result.embedding.length === 1536) {
-                        embedding1536 = JSON.stringify(result.embedding);
-                    } else if (result.embedding.length === 384) {
-                        embedding384 = JSON.stringify(result.embedding);
-                    }
+                    vectorPayload = createVectorColumnPayload(result.embedding);
                 }
             } catch (e) {
                 console.warn('[KnowledgeStore] Failed to generate embedding:', e);
@@ -174,14 +181,19 @@ export class KnowledgeStore {
         ];
 
         if (this.supportsVector) {
-            columns.push('embedding', 'embedding_384');
-            values.push(embedding1536, embedding384);
+            columns.push(...VECTOR_COLUMN_SPECS.map(spec => spec.column));
+            VECTOR_COLUMN_SPECS.forEach(spec => values.push(vectorPayload[spec.column]));
         }
 
         const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
         const updateSet = columns
             .filter(c => c !== 'workspace_id' && c !== 'category' && c !== 'key')
-            .map(c => `${c} = EXCLUDED.${c}`)
+            .map(c => {
+                const isVectorColumn = VECTOR_COLUMN_SPECS.some(spec => spec.column === c);
+                return isVectorColumn
+                    ? `${c} = COALESCE(EXCLUDED.${c}, agent_knowledge.${c})`
+                    : `${c} = EXCLUDED.${c}`;
+            })
             .join(', ');
 
         const query = `
@@ -296,9 +308,12 @@ export class KnowledgeStore {
         // Try semantic search first if embeddings are available
         if (this.supportsVector && params.embeddingsModel && params.query) {
             try {
-                const result = await generateEmbedding(params.query, params.embeddingsModel);
+                const result = await generateEmbedding(params.query, params.embeddingsModel, { role: 'query' });
                 if (result) {
-                    const vectorCol = result.embedding.length === 384 ? 'embedding_384' : 'embedding';
+                    const vectorCol = getVectorColumnForEmbedding(result.embedding);
+                    if (!vectorCol) {
+                        throw new Error(`Unsupported embedding dimension: ${result.embedding.length}`);
+                    }
                     idx++;
                     values.push(JSON.stringify(result.embedding));
 

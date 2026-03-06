@@ -13,6 +13,7 @@ import { testPostgresConnection, testRedisConnection } from '@/app/actions/conne
 import { Loader2, Play } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from "@/hooks/use-toast";
+import { DEFAULT_EMBEDDINGS_MODEL, EMBEDDING_MODEL_OPTIONS } from '@/lib/agent/memory/models';
 
 export const MemoryNode: React.FC<NodeComponentProps> = ({ node, onUpdate }) => {
     const { toast } = useToast();
@@ -176,22 +177,21 @@ export const MemoryNode: React.FC<NodeComponentProps> = ({ node, onUpdate }) => 
                             <div>
                                 <Label className="text-[9px] text-zinc-500">Embedding Model</Label>
                                 <Select
-                                    value={node.memoryEmbeddingsModel || 'openai-text-embedding-3-small'}
+                                    value={node.memoryEmbeddingsModel || DEFAULT_EMBEDDINGS_MODEL}
                                     onValueChange={(v) => onUpdate(node.id, { memoryEmbeddingsModel: v })}
                                 >
                                     <SelectTrigger className="h-6 text-[10px] bg-zinc-950 border-zinc-800 text-zinc-300">
                                         <SelectValue placeholder="Select Model" />
                                     </SelectTrigger>
                                     <SelectContent className="dark bg-zinc-950 border-zinc-800">
-                                        <SelectItem value="openai-text-embedding-3-small">OpenAI (text-embedding-3-small)</SelectItem>
-                                        <SelectItem value="openai-text-embedding-3-large">OpenAI (text-embedding-3-large)</SelectItem>
-                                        <SelectItem value="start-mistral-embed">Mistral (embed)</SelectItem>
-                                        <SelectItem value="start-mistral-embed">Mistral (embed)</SelectItem>
-                                        <SelectItem value="local-minilm">Local (MiniLM-L6 - Fast)</SelectItem>
-                                        <SelectItem value="local-e5">Local (E5-Small - High Quality)</SelectItem>
-                                        <SelectItem value="local-hybrid">Local (Smart Hybrid: MiniLM + E5)</SelectItem>
+                                        {EMBEDDING_MODEL_OPTIONS.map(option => (
+                                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
+                                <p className="text-[9px] text-zinc-600 mt-1">
+                                    EmbeddingGemma 768d is the recommended local default for agent memory.
+                                </p>
                             </div>
                         )}
                     </div>

@@ -6,6 +6,7 @@ This build introduces a plug-and-play agent block with a modern memory system an
 
 - Memory Lattice: layered memory (semantic, episodic, procedural) with ranked retrieval.
 - Memory Compiler: LLM-backed extraction of durable facts with a safety filter for sensitive data.
+- EmbeddingGemma local embeddings (768d) as the default vector retrieval path.
 - Tool Shortlisting: auto-selects the most relevant tools per prompt to reduce noise.
 - Target Handles: model/tools/memory connections are now stored in flow connections.
 
@@ -24,7 +25,8 @@ If no memory node is connected:
 - Scope: session
 - Retention: 14 days
 - Max items: 60
-- Min importance: 0.35
+- Min importance: 0.30
+- Embeddings: enabled by default with `local-embeddinggemma` (768d)
 
 ## How to use
 
@@ -42,6 +44,7 @@ If no memory node is connected:
 
 - Sensitive tokens (passwords, keys, IDs) are filtered out before storing.
 - Episodic memory is time-bound by default.
+- If the first local model download is gated by Hugging Face, set `HF_TOKEN` in the environment.
 
 ## Next ideas
 

@@ -23,6 +23,7 @@ import { agenticFlow } from '@/ai/flows/agentic-flow';
 import { intelligentChoice } from '@/ai/flows/intelligent-choice-flow';
 import { classifyIntent } from '@/ai/flows/intention-classification-flow';
 import { loadMemoryContext, normalizeMemorySettings, recordMemory, type MemorySettings } from '@/lib/agent/memory';
+import { DEFAULT_EMBEDDINGS_MODEL } from '@/lib/agent/memory/models';
 import {
   buildAgentStatePromptFragment,
   buildMemoryQueryFromTurn,
@@ -44,7 +45,11 @@ const MAX_AGENT_HISTORY_MESSAGES = 50;
 const MAX_AGENT_MEMORY_SUMMARY_CHARS = 4000;
 const MOJIBAKE_HINT_REGEX = /(Ã.|â.|)/;
 
-type AgentHistoryEntry = { role: 'user' | 'assistant' | 'system'; content: string };
+type AgentHistoryEntry = {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  geminiContents?: Array<{ role: 'user' | 'model'; parts: any[] }>;
+};
 const EXIT_INTENT_PATTERNS = [
   'não quero', 'nao quero', 'não desejo', 'nao desejo',
   'encerrar', 'encerra', 'encerrando', 'encerrar atendimento', 'finalizar', 'finaliza',
@@ -372,7 +377,7 @@ const buildMemorySettings = (
     hybridCacheTTL: memoryNode?.memoryHybridCacheTTL,
     hybridWriteThrough: memoryNode?.memoryHybridWriteThrough ?? true,
     embeddingsEnabled: memoryNode?.memoryEmbeddingsEnabled ?? true,
-    embeddingsModel: memoryNode?.memoryEmbeddingsModel || 'local-hybrid',
+    embeddingsModel: memoryNode?.memoryEmbeddingsModel || DEFAULT_EMBEDDINGS_MODEL,
   });
 };
 
@@ -1086,10 +1091,13 @@ export async function executeFlow(
               const existingHistory = getProperty(session.flow_variables, historyKey) as AgentHistoryEntry[] | undefined;
               let memorySummary = getProperty(session.flow_variables, historySummaryKey) as string | undefined;
 
-              let history = Array.isArray(existingHistory)
-                ? existingHistory.map(entry => ({
+              let history: AgentHistoryEntry[] = Array.isArray(existingHistory)
+                ? existingHistory.map((entry): AgentHistoryEntry => ({
                   role: entry.role,
                   content: cleanAndNormalizeText(String(entry.content ?? '')),
+                  geminiContents: Array.isArray((entry as any).geminiContents)
+                    ? (entry as any).geminiContents
+                    : undefined,
                 }))
                 : [];
 
@@ -1278,7 +1286,7 @@ export async function executeFlow(
                     try {
                       const memoryNodeForInheritance = currentWorkspace.nodes.find(n => n.type === 'ai-memory-config');
                       const connectionString = sourceNode.knowledgeConnectionString || memoryNodeForInheritance?.memoryConnectionString;
-                      const embeddingsModel = sourceNode.knowledgeEmbeddingsModel || memoryNodeForInheritance?.memoryEmbeddingsModel || 'local-hybrid';
+                      const embeddingsModel = sourceNode.knowledgeEmbeddingsModel || memoryNodeForInheritance?.memoryEmbeddingsModel || DEFAULT_EMBEDDINGS_MODEL;
 
                       const knowledgeCap = {
                         id: `knowledge-lookup-${sourceNode.id}`,
@@ -1442,7 +1450,13 @@ export async function executeFlow(
               const replyForHistory = messageBlocks.length > 0 ? messageBlocks.join('\n\n') : cleanedReply;
 
               setProperty(session.flow_variables, responseVarName, cleanedReply);
-              history.push({ role: 'assistant', content: replyForHistory });
+              history.push({
+                role: 'assistant',
+                content: replyForHistory,
+                geminiContents: Array.isArray((agentReply as any).geminiContents)
+                  ? (agentReply as any).geminiContents
+                  : undefined,
+              });
               ({ history, memorySummary } = trimAndSummarizeHistory(history, memorySummary));
               setProperty(session.flow_variables, historyKey, history);
               if (memorySummary) setProperty(session.flow_variables, historySummaryKey, memorySummary);

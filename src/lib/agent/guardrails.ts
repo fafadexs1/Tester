@@ -39,6 +39,7 @@ export interface AgentConversationState {
 
 const NORMALIZE_REGEX = /[^\p{L}\p{N}\s]/gu;
 const MULTI_SPACE_REGEX = /\s+/g;
+const AMBIGUOUS_SHORT_REPLY_REGEX = /^(sim|nao|não|ok|certo|isso|esse|essa|quero|pode|fechado|de manha|de manhã|a tarde|à tarde|25|20|15|10|5)$/i;
 
 const ROUTE_SIGNALS: Record<Exclude<AgentRoute, 'UNKNOWN'>, string[]> = {
   SUPORTE: [
@@ -104,6 +105,14 @@ const FALLBACK_BLOCKED_PATTERNS: RegExp[] = [
   /i\s+cannot\s+help\s+with\s+that/i,
 ];
 
+const INTERNAL_LEAK_PATTERNS: RegExp[] = [
+  /\btool\s*:/i,
+  /\bferramenta\s*:/i,
+  /\btool[_\s-]?call\b/i,
+  /\btool[_\s-]?result\b/i,
+  /```(?:json|javascript|js|yaml|xml)?/i,
+];
+
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
 
 const normalizeForMatch = (text: string): string =>
@@ -114,6 +123,78 @@ const normalizeForMatch = (text: string): string =>
     .replace(NORMALIZE_REGEX, ' ')
     .replace(MULTI_SPACE_REGEX, ' ')
     .trim();
+
+const prettifyFieldLabel = (field: string): string =>
+  field
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, char => char.toUpperCase());
+
+const toFlatReplyValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  try {
+    const serialized = JSON.stringify(value);
+    if (!serialized) return '';
+    return serialized.length > 120 ? `${serialized.slice(0, 117)}...` : serialized;
+  } catch {
+    return String(value);
+  }
+};
+
+const looksLikeJsonPayload = (text: string): boolean => {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return false;
+  return /"[^"]+"\s*:/.test(trimmed);
+};
+
+const humanizeJsonPayload = (text: string): string | null => {
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+
+    const entries = Object.entries(parsed as Record<string, unknown>)
+      .map(([key, value]) => [prettifyFieldLabel(key), toFlatReplyValue(value)] as const)
+      .filter(([, value]) => value.length > 0);
+
+    if (!entries.length) return null;
+    if (entries.length > 12) {
+      return 'Perfeito. Recebi os dados e vou seguir com o atendimento.';
+    }
+
+    const lines = entries.map(([key, value]) => `- ${key}: ${value}`);
+    return `Perfeito, organizei as informacoes que voce compartilhou:\n${lines.join('\n')}`;
+  } catch {
+    return null;
+  }
+};
+
+const stripInternalArtifacts = (text: string): string => {
+  let cleaned = text
+    .replace(/```(?:json|javascript|js|yaml|xml)?[\s\S]*?```/gi, '\n')
+    .replace(/\(\s*tool\s*:[^)]+\)/gi, '')
+    .replace(/\(\s*ferramenta\s*:[^)]+\)/gi, '')
+    .replace(/^\s*\(?\s*tool\s*:[^)]+?\)?\s*$/gim, '')
+    .replace(/^\s*\(?\s*ferramenta\s*:[^)]+?\)?\s*$/gim, '')
+    .replace(/^\s*(?:executando|chamando|usando)\s+(?:a\s+)?(?:tool|ferramenta)\b.*$/gim, '')
+    .replace(/^\s*(?:tool[_\s-]?call|tool[_\s-]?result|function[_\s-]?call)\b.*$/gim, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  if (looksLikeJsonPayload(cleaned)) {
+    const humanized = humanizeJsonPayload(cleaned);
+    cleaned = humanized || '';
+  }
+
+  return cleaned
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
 
 const countSignalMatches = (normalizedText: string, route: Exclude<AgentRoute, 'UNKNOWN'>): { count: number; matched: string[] } => {
   const matched = ROUTE_SIGNALS[route].filter(signal => normalizedText.includes(signal));
@@ -216,21 +297,29 @@ export const sanitizeAgentReply = (params: {
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+  cleaned = stripInternalArtifacts(cleaned);
 
-  const blocked = FALLBACK_BLOCKED_PATTERNS.some(pattern => pattern.test(cleaned));
+  const blockedByFallbackPattern = FALLBACK_BLOCKED_PATTERNS.some(pattern => pattern.test(cleaned));
+  const blockedByInternalLeak = INTERNAL_LEAK_PATTERNS.some(pattern => pattern.test(raw));
+  const blocked = blockedByFallbackPattern || blockedByInternalLeak;
   if (!cleaned || blocked) {
     const preferredRoute = params.preferredRoute ?? 'ASSINATURA';
+    const fallbackReason = blockedByInternalLeak
+      ? 'internal_artifact_reply'
+      : blockedByFallbackPattern
+        ? 'blocked_english_fallback'
+        : 'empty_reply';
     if (preferredRoute !== 'ASSINATURA' && preferredRoute !== 'UNKNOWN') {
       return {
         reply: buildRouteRedirectMessage(preferredRoute),
         fallbackApplied: true,
-        fallbackReason: blocked ? 'blocked_english_fallback' : 'empty_reply',
+        fallbackReason,
       };
     }
     return {
       reply: 'Perfeito, entendi. Me diga rapidamente o que voce precisa agora para eu te ajudar.',
       fallbackApplied: true,
-      fallbackReason: blocked ? 'blocked_english_fallback' : 'empty_reply',
+      fallbackReason,
     };
   }
 
@@ -349,6 +438,22 @@ export const buildAgentStatePromptFragment = (state: unknown): string => {
   return `Estado operacional atual (fonte: memoria estruturada do fluxo):\n- ${lines.join('\n- ')}`;
 };
 
+const trimForQuery = (text: string, maxChars = 220): string => {
+  const cleaned = String(text || '').replace(/\s+/g, ' ').trim();
+  if (cleaned.length <= maxChars) return cleaned;
+  return `${cleaned.slice(0, maxChars - 3).trimEnd()}...`;
+};
+
+const buildRecentHistoryFragment = (history: AgentHistoryLike[]): string => {
+  const recent = history
+    .filter(item => String(item.content || '').trim().length > 0)
+    .slice(-3)
+    .map(item => `${item.role.toUpperCase()}: ${trimForQuery(item.content, 160)}`);
+
+  if (!recent.length) return '';
+  return `Historico recente relevante:\n${recent.join('\n')}`;
+};
+
 export const buildMemoryQueryFromTurn = (params: {
   userMessage: string;
   history: AgentHistoryLike[];
@@ -358,15 +463,35 @@ export const buildMemoryQueryFromTurn = (params: {
   const lastAssistant = [...(params.history || [])]
     .reverse()
     .find(item => item.role === 'assistant' && String(item.content || '').trim().length > 0);
+  const lastUser = [...(params.history || [])]
+    .reverse()
+    .find(item => item.role === 'user' && String(item.content || '').trim().length > 0);
 
   const stateFragment = buildAgentStatePromptFragment(params.state);
+  const recentHistoryFragment = buildRecentHistoryFragment(params.history || []);
+  const normalizedUserMessage = normalizeForMatch(userMessage);
   const isShortUserReply = userMessage.length > 0 && userMessage.length <= 24;
+  const isAmbiguousReply =
+    (userMessage.length > 0 && userMessage.length <= 32) ||
+    AMBIGUOUS_SHORT_REPLY_REGEX.test(normalizedUserMessage);
 
-  if (isShortUserReply && lastAssistant) {
-    const base = `Pergunta anterior do agente: ${lastAssistant.content}\nResposta atual do usuario: ${userMessage}`;
-    return stateFragment ? `${base}\n${stateFragment}` : base;
+  if ((isShortUserReply || isAmbiguousReply) && lastAssistant) {
+    const fragments = [
+      lastUser ? `Ultima mensagem util do usuario: ${trimForQuery(lastUser.content, 160)}` : '',
+      `Pergunta anterior do agente: ${trimForQuery(lastAssistant.content, 200)}`,
+      `Resposta atual do usuario: ${trimForQuery(userMessage, 120)}`,
+      stateFragment,
+      recentHistoryFragment,
+    ].filter(Boolean);
+
+    return fragments.join('\n');
   }
 
-  return stateFragment ? `${userMessage}\n${stateFragment}` : userMessage;
-};
+  const fragments = [
+    trimForQuery(userMessage, 220),
+    stateFragment,
+    userMessage.length <= 120 ? recentHistoryFragment : '',
+  ].filter(Boolean);
 
+  return fragments.join('\n');
+};

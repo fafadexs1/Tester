@@ -1,5 +1,6 @@
 import { Capability, CapabilityExecutionConfig } from '@/lib/types';
 import { KnowledgeStore } from '@/lib/agent/memory/stores/knowledge-store';
+import { DEFAULT_EMBEDDINGS_MODEL } from '@/lib/agent/memory/models';
 
 // Registry for local function execution
 const functionRegistry: Record<string, (input: any) => Promise<any>> = {
@@ -75,7 +76,7 @@ const functionRegistry: Record<string, (input: any) => Promise<any>> = {
                 query,
                 category,
                 limit: 5,
-                embeddingsModel: embeddingsModel || 'openai-text-embedding-3-small'
+                embeddingsModel: embeddingsModel || DEFAULT_EMBEDDINGS_MODEL
             });
 
             if (results.length === 0) {

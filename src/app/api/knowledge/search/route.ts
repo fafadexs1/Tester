@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { KnowledgeStore } from '@/lib/agent/memory/stores/knowledge-store';
+import { DEFAULT_EMBEDDINGS_MODEL } from '@/lib/agent/memory/models';
 
 /**
  * POST /api/knowledge/search - Search knowledge base
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
             query,
             category,
             limit: limit || 5,
-            embeddingsModel: embeddingsModel || 'openai-text-embedding-3-small'
+            embeddingsModel: embeddingsModel || DEFAULT_EMBEDDINGS_MODEL
         });
 
         return NextResponse.json({

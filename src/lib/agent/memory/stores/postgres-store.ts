@@ -3,6 +3,13 @@ import { MemoryStore, MemoryProvider, MemoryWrite, MemoryQuery, MemoryItem } fro
 import { hashMemoryContent, normalizeImportance } from '../utils';
 import { Pool } from 'pg';
 import { getPostgresPool } from '../db-pools';
+import {
+    createVectorColumnPayload,
+    getVectorColumnDefinitions,
+    getVectorColumnForEmbedding,
+    getVectorIndexDefinitions,
+    VECTOR_COLUMN_SPECS,
+} from '../vector-columns';
 
 export class PostgresMemoryStore implements MemoryStore {
     provider: MemoryProvider = 'postgres';
@@ -45,6 +52,10 @@ export class PostgresMemoryStore implements MemoryStore {
         }
 
         // 2. Ensure table exists with new columns
+        const vectorDefinitions = this.supportsVector
+            ? `${getVectorColumnDefinitions().map(definition => `        ${definition}`).join(',\n')},\n`
+            : '';
+
         await this.execute(`
       CREATE TABLE IF NOT EXISTS agent_memories (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -62,7 +73,7 @@ export class PostgresMemoryStore implements MemoryStore {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         last_accessed_at TIMESTAMPTZ,
         expires_at TIMESTAMPTZ,
-        ${this.supportsVector ? 'embedding vector(1536),' : ''}
+${vectorDefinitions}
         is_compressed BOOLEAN DEFAULT FALSE,
         summary_of_ids UUID[] DEFAULT NULL,
         UNIQUE (workspace_id, agent_id, scope, scope_key, type, content_hash)
@@ -82,27 +93,26 @@ export class PostgresMemoryStore implements MemoryStore {
 
         // 2.5 Ensure embedding columns exist (manual migration for existing tables)
         if (this.supportsVector) {
-            try {
-                // OpenAI standard
-                await this.execute(`ALTER TABLE agent_memories ADD COLUMN IF NOT EXISTS embedding vector(1536)`);
-            } catch (e) { /* ignore */ }
-            try {
-                // Local models (MiniLM, E5)
-                await this.execute(`ALTER TABLE agent_memories ADD COLUMN IF NOT EXISTS embedding_384 vector(384)`);
-            } catch (e) {
-                console.warn('[PostgresMemoryStore] Could not add embedding_384 column:', e);
+            for (const spec of VECTOR_COLUMN_SPECS) {
+                try {
+                    await this.execute(
+                        `ALTER TABLE agent_memories ADD COLUMN IF NOT EXISTS ${spec.column} vector(${spec.dimension})`
+                    );
+                } catch (e) {
+                    console.warn(`[PostgresMemoryStore] Could not add ${spec.column} column:`, e);
+                }
             }
         }
 
         // 3. Ensure indexes exist
+        const vectorIndexes = this.supportsVector
+            ? `\n      ${getVectorIndexDefinitions('agent_memories').join('\n      ')}`
+            : '';
         await this.execute(`
       CREATE INDEX IF NOT EXISTS idx_agent_memories_lookup ON agent_memories (workspace_id, agent_id, scope, scope_key);
       CREATE INDEX IF NOT EXISTS idx_agent_memories_type ON agent_memories (type);
       CREATE INDEX IF NOT EXISTS idx_agent_memories_expires ON agent_memories (expires_at);
-      ${this.supportsVector ? `
-          CREATE INDEX IF NOT EXISTS idx_agent_memories_embedding ON agent_memories USING ivfflat (embedding vector_cosine_ops);
-          CREATE INDEX IF NOT EXISTS idx_agent_memories_embedding_384 ON agent_memories USING ivfflat (embedding_384 vector_cosine_ops);
-      ` : ''}
+      ${vectorIndexes}
     `);
 
         this.hasCheckedSchema = true;
@@ -118,8 +128,7 @@ export class PostgresMemoryStore implements MemoryStore {
         ];
 
         if (this.supportsVector) {
-            columns.push('embedding');
-            columns.push('embedding_384');
+            columns.push(...VECTOR_COLUMN_SPECS.map(spec => spec.column));
         }
 
         const values: any[] = [];
@@ -127,14 +136,7 @@ export class PostgresMemoryStore implements MemoryStore {
             const hash = hashMemoryContent(item.type, item.content);
             const base = index * columns.length;
 
-            // Handle embedding columns based on dimension
-            let embed1536 = null;
-            let embed384 = null;
-
-            if (item.embedding) {
-                if (item.embedding.length === 1536) embed1536 = JSON.stringify(item.embedding);
-                else if (item.embedding.length === 384) embed384 = JSON.stringify(item.embedding);
-            }
+            const vectorPayload = createVectorColumnPayload(item.embedding);
 
             // Normalize tags to ensure it's always a string array
             let normalizedTags: string[] | null = null;
@@ -163,8 +165,7 @@ export class PostgresMemoryStore implements MemoryStore {
             );
 
             if (this.supportsVector) {
-                values.push(embed1536);
-                values.push(embed384);
+                VECTOR_COLUMN_SPECS.forEach(spec => values.push(vectorPayload[spec.column]));
             }
 
             const placeholders = columns.map((_, colIndex) => `$${base + colIndex + 1}`);
@@ -182,8 +183,9 @@ export class PostgresMemoryStore implements MemoryStore {
         expires_at = COALESCE(EXCLUDED.expires_at, agent_memories.expires_at),
         source = COALESCE(EXCLUDED.source, agent_memories.source),
         ${this.supportsVector ? `
-            embedding = COALESCE(EXCLUDED.embedding, agent_memories.embedding),
-            embedding_384 = COALESCE(EXCLUDED.embedding_384, agent_memories.embedding_384),
+            ${VECTOR_COLUMN_SPECS.map(spec =>
+                `${spec.column} = COALESCE(EXCLUDED.${spec.column}, agent_memories.${spec.column})`
+            ).join(',\n            ')},
         ` : ''}
         last_accessed_at = NOW();
     `;
@@ -202,17 +204,15 @@ export class PostgresMemoryStore implements MemoryStore {
         ];
         let idx = params.length;
 
-        // Determine which embedding column to use based on query vector length
-        let vectorCol = 'embedding'; // default
-        if (query.embedding && query.embedding.length === 384) {
-            vectorCol = 'embedding_384';
-        }
+        const vectorCol = getVectorColumnForEmbedding(query.embedding);
+        const canUseVectorSearch = Boolean(query.embedding && this.supportsVector && vectorCol);
+        let embeddingParamIdx: number | null = null;
 
         let sql = `
       SELECT
         id, workspace_id, agent_id, scope, scope_key, type, content,
         importance, tags, metadata, created_at, last_accessed_at, expires_at, source
-        ${query.embedding && this.supportsVector ? `, 1 - (${vectorCol} <=> $${idx + 1}) as similarity` : ''}
+        ${canUseVectorSearch ? `, 1 - (${vectorCol} <=> $${idx + 1}) as similarity` : ''}
       FROM agent_memories
       WHERE workspace_id = $1
         AND agent_id = $2
@@ -221,8 +221,9 @@ export class PostgresMemoryStore implements MemoryStore {
         AND (expires_at IS NULL OR expires_at > NOW())
     `;
 
-        if (query.embedding && this.supportsVector) {
+        if (canUseVectorSearch) {
             idx += 1;
+            embeddingParamIdx = idx;
             params.push(JSON.stringify(query.embedding));
         }
 
@@ -238,22 +239,14 @@ export class PostgresMemoryStore implements MemoryStore {
             sql += ` AND importance >= $${idx}`;
         }
 
-        if (query.embedding && query.similarityThreshold && this.supportsVector) {
-            // Re-use current param index for embedding if possible, but here we just added threshold
-            // Actually, we need to refer to embedding param index again or structure differently.
-            // Simplified: WHERE 1 - (col <=> $embedding) > $threshold
-            // We already pushed embedding at idx (which was params.length before push, so it is at params[idx-1] now?)
-            // Let's use the explicit indices.
-
-            // Embedding param is at $5 (initial params=4 + 1)
-            const embeddingParamIdx = 5;
+        if (canUseVectorSearch && query.similarityThreshold && embeddingParamIdx !== null) {
             idx += 1;
             params.push(query.similarityThreshold);
             sql += ` AND 1 - (${vectorCol} <=> $${embeddingParamIdx}) >= $${idx}`;
         }
 
         // Order
-        if (query.embedding && this.supportsVector) {
+        if (canUseVectorSearch) {
             sql += ` ORDER BY similarity DESC`;
         } else {
             sql += ` ORDER BY created_at DESC`;
@@ -279,6 +272,7 @@ export class PostgresMemoryStore implements MemoryStore {
             createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
             lastAccessedAt: row.last_accessed_at instanceof Date ? row.last_accessed_at.toISOString() : row.last_accessed_at,
             expiresAt: row.expires_at instanceof Date ? row.expires_at.toISOString() : row.expires_at,
+            similarity: row.similarity !== undefined && row.similarity !== null ? Number(row.similarity) : undefined,
         }));
     }
 

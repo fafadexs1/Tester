@@ -2,6 +2,7 @@ import { ai } from '../genkit';
 import { z } from 'zod';
 import { Capability } from '@/lib/types';
 import { executeCapability } from '@/lib/capability-executor';
+import { runGeminiToolRuntime } from '@/lib/agent/gemini-tool-runtime';
 
 // Helper to convert JSON schema to Zod is complex.
 // For now, we will use a generic object schema for tool inputs to avoid validation errors during this proof-of-concept phase.
@@ -9,6 +10,8 @@ import { executeCapability } from '@/lib/capability-executor';
 const GenericToolInputSchema = z.record(z.any());
 const MAX_TOOL_COUNT = 8;
 const MAX_KNOWLEDGE_CHARS = 2000;
+const ALWAYS_EXPOSED_TOOL_SLUGS = ['finalizar_atendimento'];
+const STRICT_SCRIPT_TEMPERATURE_CAP = 0.35;
 const DEFAULT_KNOWLEDGE_KEYWORDS = [
     'plano', 'planos', 'preco', 'precos', 'valor', 'valores', 'empresa',
     'servico', 'servicos', 'cobertura', 'internet', 'fibra', 'wifi',
@@ -40,6 +43,7 @@ export const AgenticFlowInputSchema = z.object({
 export const AgenticFlowOutputSchema = z.object({
     botReply: z.string(),
     toolsCalled: z.array(z.string()).optional(),
+    geminiContents: z.array(z.any()).optional(),
 });
 
 const tokenize = (text: string): string[] =>
@@ -57,6 +61,43 @@ const normalizeForMatch = (text: string): string =>
         .replace(/[^\p{L}\p{N}\s]/gu, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+
+const detectStrictScriptPrompt = (systemPrompt?: string): boolean => {
+    const normalized = normalizeForMatch(systemPrompt || '');
+    if (!normalized) return false;
+    const strictSignals = [
+        'protocolo operacional',
+        'obrigatorio',
+        'seguir roteiro',
+        'passo 1',
+        'passo 2',
+        'passo 3',
+        'passo 4',
+    ];
+    return strictSignals.some(signal => normalized.includes(signal));
+};
+
+const buildForcedToolSlugSet = (capabilities: Capability[], systemPrompt?: string): Set<string> => {
+    const forced = new Set<string>(ALWAYS_EXPOSED_TOOL_SLUGS);
+    const normalizedPrompt = normalizeForMatch(systemPrompt || '');
+    if (!normalizedPrompt) return forced;
+
+    capabilities.forEach(cap => {
+        const slug = String(cap.slug || '').trim();
+        if (!slug) return;
+
+        const normalizedSlug = normalizeForMatch(slug);
+        const normalizedName = normalizeForMatch(String(cap.name || ''));
+        if (
+            (normalizedSlug && normalizedPrompt.includes(normalizedSlug)) ||
+            (normalizedName && normalizedPrompt.includes(normalizedName))
+        ) {
+            forced.add(slug);
+        }
+    });
+
+    return forced;
+};
 
 const jaccardSimilarity = (a: string[], b: string[]): number => {
     if (!a.length || !b.length) return 0;
@@ -160,10 +201,14 @@ const sanitizeModelReply = (reply: string | null | undefined): string => {
     return cleaned;
 };
 
+const isGeminiModel = (modelName: string): boolean =>
+    /(^|\/)gemini/i.test(modelName);
+
 const selectRelevantCapabilities = (
     capabilities: Capability[],
     userMessage: string,
-    memoryContext?: z.infer<typeof MemoryContextSchema>
+    memoryContext?: z.infer<typeof MemoryContextSchema>,
+    forcedSlugs: Set<string> = new Set()
 ): Capability[] => {
     // STRICTER FILTERING: Filter by relevance to avoid hallucination.
     const contextTokens = tokenize(userMessage);
@@ -203,12 +248,23 @@ const selectRelevantCapabilities = (
         return { cap, score };
     });
 
-    const filtered = scored.filter(entry => entry.score >= Math.min(JACCARD_THRESHOLD, OVERLAP_THRESHOLD));
-    // ESTRITO: Apenas passar as ferramentas que atinjam o threshold mínimo de relevância. Caso nenhuma atinja, o LLM não recebe contexto inútil.
-    return filtered
+    const minScore = Math.min(JACCARD_THRESHOLD, OVERLAP_THRESHOLD);
+    const forcedCapabilities = capabilities.filter(cap => forcedSlugs.has(cap.slug));
+    const rankedCapabilities = scored
+        .filter(entry => entry.score >= minScore && !forcedSlugs.has(entry.cap.slug))
         .sort((a, b) => b.score - a.score)
-        .slice(0, MAX_TOOL_COUNT)
         .map(entry => entry.cap);
+
+    const merged = [...forcedCapabilities, ...rankedCapabilities];
+    const deduped: Capability[] = [];
+    const seen = new Set<string>();
+    for (const cap of merged) {
+        if (!cap?.slug || seen.has(cap.slug)) continue;
+        seen.add(cap.slug);
+        deduped.push(cap);
+    }
+    // ESTRITO: Apenas passar as ferramentas que atinjam o threshold mínimo de relevância. Caso nenhuma atinja, o LLM não recebe contexto inútil.
+    return deduped.slice(0, MAX_TOOL_COUNT);
 };
 
 export const agenticFlow = ai.defineFlow(
@@ -222,8 +278,9 @@ export const agenticFlow = ai.defineFlow(
         const typedCapabilities = capabilities as Capability[];
         const knowledgeCap = typedCapabilities.find(cap => cap.slug === 'lookup_knowledge');
         const shouldLookupKnowledge = shouldPrefetchKnowledge(knowledgeCap, userMessage);
+        const forcedToolSlugs = buildForcedToolSlugSet(typedCapabilities, systemPrompt);
 
-        let selectedCapabilities = selectRelevantCapabilities(typedCapabilities, userMessage, memoryContext);
+        let selectedCapabilities = selectRelevantCapabilities(typedCapabilities, userMessage, memoryContext, forcedToolSlugs);
         if (knowledgeCap && shouldLookupKnowledge && !selectedCapabilities.some(cap => cap.slug === 'lookup_knowledge')) {
             selectedCapabilities = [knowledgeCap, ...selectedCapabilities].slice(0, MAX_TOOL_COUNT);
         }
@@ -262,6 +319,9 @@ export const agenticFlow = ai.defineFlow(
         } else {
             console.log(`[Agentic Flow] NO tools exposed to LLM (filtered out due to low relevance)`);
         }
+        if (forcedToolSlugs.size > 0) {
+            console.log(`[Agentic Flow] Forced tools by policy/prompt: ${Array.from(forcedToolSlugs).join(', ')}`);
+        }
 
         // Define tools dynamically
         const tools = selectedCapabilities.map((cap, index) => {
@@ -279,8 +339,7 @@ export const agenticFlow = ai.defineFlow(
             return ai.defineTool(
                 {
                     name: toolName,
-                    description: (cap.contract.description || cap.contract.summary || `Execute ${cap.name}`) +
-                        (cap.contract.inputSchema ? `\n\nInput Schema: ${JSON.stringify(cap.contract.inputSchema)}` : ''),
+                    description: cap.contract.description || cap.contract.summary || `Execute ${cap.name}`,
                     inputSchema: GenericToolInputSchema,
                 },
                 async (toolInput) => {
@@ -311,10 +370,12 @@ export const agenticFlow = ai.defineFlow(
         const memorySafetyInstruction = hasUnconfirmedMemory
             ? 'IMPORTANT: Memory Context includes UNCONFIRMED hints. Use them only to guide questions; do NOT state them as facts. Only treat Confirmed Facts/Procedures as reliable.'
             : '';
+        const responseFormatInstruction = 'IMPORTANT OUTPUT FORMAT: Respond in natural Brazilian Portuguese for the end user. NEVER expose tool names, internal actions, JSON, code blocks, payloads, schemas, or markers like "Tool:" and "@tool".';
 
         const promptSections = [
             systemPrompt ? `System Instructions:\n${systemPrompt}` : 'You are an autonomous assistant.',
             `IMPORTANT: You are an autonomous agent. If you use a tool, you MUST use its output to formulate a response to the user. Do not stop after using a tool. Read your System Instructions to decide what to do next. If the tool result is successful, explain it to the user or ask the next logical question.`,
+            responseFormatInstruction,
             knowledgeToolInstruction,
             memorySafetyInstruction,
             formatMemoryContext(memoryContext),
@@ -329,10 +390,13 @@ export const agenticFlow = ai.defineFlow(
 
         // Determine Model to use
         let modelToUse = modelName || 'googleai/gemini-2.5-flash';
+        const requestedModel = modelToUse.includes('/') ? modelToUse : `googleai/${modelToUse}`;
 
-        // Force fallback ONLY if unstable model AND tools are exposed (tool calls cause thought_signature errors)
         const hasToolsExposed = selectedCapabilities.length > 0;
-        if (hasToolsExposed && (modelToUse.includes('gemini-3') || modelToUse.includes('preview') || modelToUse.includes('thinking'))) {
+        const shouldUseNativeGeminiToolRuntime = hasToolsExposed && isGeminiModel(requestedModel);
+
+        // Keep the downgrade only for the legacy Genkit tool path.
+        if (!shouldUseNativeGeminiToolRuntime && hasToolsExposed && (modelToUse.includes('gemini-3') || modelToUse.includes('preview') || modelToUse.includes('thinking'))) {
             console.warn(`[Agentic Flow] Downgrading model ${modelToUse} to gemini-2.5-flash for tool compatibility.`);
             modelToUse = 'googleai/gemini-2.5-flash';
         }
@@ -344,15 +408,78 @@ export const agenticFlow = ai.defineFlow(
             console.log(`[Agentic Flow] Tool shortlist: ${selectedCapabilities.length}/${typedCapabilities.length}`);
         }
 
+        const strictScriptMode = detectStrictScriptPrompt(systemPrompt);
+        const requestedTemperature = typeof input.temperature === 'number' ? input.temperature : 0.45;
+        const boundedTemperature = Math.max(0, Math.min(1, requestedTemperature));
+        const effectiveTemperature = strictScriptMode
+            ? Math.min(boundedTemperature, STRICT_SCRIPT_TEMPERATURE_CAP)
+            : boundedTemperature;
+        if (strictScriptMode && boundedTemperature > STRICT_SCRIPT_TEMPERATURE_CAP) {
+            console.log(`[Agentic Flow] Strict script mode active. Temperature capped to ${STRICT_SCRIPT_TEMPERATURE_CAP}.`);
+        }
+
+        if (shouldUseNativeGeminiToolRuntime) {
+            try {
+                const nativeSystemInstruction = [
+                    systemPrompt ? `System Instructions:\n${systemPrompt}` : 'You are an autonomous assistant.',
+                    `IMPORTANT: You are an autonomous agent. If you use a tool, you MUST use its output to formulate a response to the user. Do not stop after using a tool. Read your System Instructions to decide what to do next. If the tool result is successful, explain it to the user or ask the next logical question.`,
+                    responseFormatInstruction,
+                    knowledgeToolInstruction,
+                    memorySafetyInstruction,
+                    formatMemoryContext(memoryContext),
+                    knowledgeGuidance,
+                ]
+                    .filter(Boolean)
+                    .join('\n\n');
+
+                const nativeUserMessage = [
+                    knowledgeContext,
+                    `Mensagem atual do usuario:\n${userMessage}`,
+                ]
+                    .filter(Boolean)
+                    .join('\n\n');
+
+                const requiredToolSlugs = [
+                    ...(knowledgeCap && shouldLookupKnowledge ? ['lookup_knowledge'] : []),
+                ];
+
+                const mergedModelConfig = input.modelConfig && typeof input.modelConfig === 'object' ? input.modelConfig : {};
+                const runtimeResult = await runGeminiToolRuntime({
+                    apiKey: mergedModelConfig.apiKey,
+                    model: effectiveModel,
+                    userMessage: nativeUserMessage,
+                    systemInstruction: nativeSystemInstruction,
+                    temperature: effectiveTemperature,
+                    capabilities: selectedCapabilities,
+                    history: (history || []) as any,
+                    forcedToolSlugs: Array.from(forcedToolSlugs),
+                    shouldRequireToolNames: requiredToolSlugs,
+                    maxSteps: 6,
+                });
+
+                const toolsCalled = runtimeResult.toolsCalled.length > 0 ? runtimeResult.toolsCalled : undefined;
+                console.log(`[Agentic Flow] Native Gemini runtime complete. Tools called: ${toolsCalled?.join(', ') || 'none'}`);
+                return {
+                    botReply: sanitizeModelReply(runtimeResult.text),
+                    toolsCalled,
+                    geminiContents: runtimeResult.geminiContents,
+                };
+            } catch (e: any) {
+                console.error(`[Agentic Flow] Native Gemini tool runtime error:`, e);
+                return { botReply: 'Tive uma instabilidade ao processar sua mensagem. Vamos tentar novamente.' };
+            }
+        }
+
         let llmResponse;
         try {
+            const mergedModelConfig = input.modelConfig && typeof input.modelConfig === 'object' ? input.modelConfig : {};
             llmResponse = await ai.generate({
                 model: effectiveModel,
                 prompt: promptSections,
                 tools: tools.length > 0 ? tools : undefined, // Pass undefined if no tools, to avoid library issues
                 config: {
-                    temperature: input.temperature ?? 0.7,
-                    ...(input.modelConfig && typeof input.modelConfig === 'object' ? input.modelConfig : {}),
+                    ...mergedModelConfig,
+                    temperature: effectiveTemperature,
                 },
             });
             console.log(`[Agentic Flow] Generation complete. Response text length: ${llmResponse.text?.length || 0}`);

@@ -17,6 +17,7 @@ export interface MemoryItem {
     createdAt: string;
     lastAccessedAt?: string | null;
     expiresAt?: string | null;
+    similarity?: number;
     // New fields for advanced capabilities
     embedding?: number[];
     isCompressed?: boolean;

@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2, Edit2, Book, List, Save, Loader2, Search, FolderOpen } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+import { DEFAULT_EMBEDDINGS_MODEL, EMBEDDING_MODEL_OPTIONS } from '@/lib/agent/memory/models';
 
 interface KnowledgeEntry {
     id: string;
@@ -58,7 +59,7 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
     const knowledgeBaseId = node.knowledgeBaseId || ''; // Default to empty (global/mixed) if not set, or specific behavior
     const memoryNode = activeWorkspace?.nodes?.find(n => n.type === 'ai-memory-config');
     const connectionString = node.knowledgeConnectionString || memoryNode?.memoryConnectionString;
-    const embeddingsModel = node.knowledgeEmbeddingsModel || memoryNode?.memoryEmbeddingsModel || 'local-hybrid';
+    const embeddingsModel = node.knowledgeEmbeddingsModel || memoryNode?.memoryEmbeddingsModel || DEFAULT_EMBEDDINGS_MODEL;
 
     // Load entries
     const loadEntries = useCallback(async () => {
@@ -298,20 +299,21 @@ export const KnowledgeNode: React.FC<NodeComponentProps> = ({ node, onUpdate, ac
             <div className="space-y-1">
                 <Label className="text-[10px] text-zinc-400">Modelo de Embeddings</Label>
                 <Select
-                    value={node.knowledgeEmbeddingsModel || 'local-hybrid'}
+                    value={node.knowledgeEmbeddingsModel || DEFAULT_EMBEDDINGS_MODEL}
                     onValueChange={(v) => onUpdate(node.id, { knowledgeEmbeddingsModel: v })}
                 >
                     <SelectTrigger className="h-7 text-xs bg-black/20 border-white/5">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="local-hybrid">Local (Smart Hybrid: MiniLM + E5)</SelectItem>
-                        <SelectItem value="local-minilm">Local (MiniLM)</SelectItem>
-                        <SelectItem value="local-e5">Local (E5)</SelectItem>
-                        <SelectItem value="openai-text-embedding-3-small">OpenAI (small)</SelectItem>
-                        <SelectItem value="openai-text-embedding-3-large">OpenAI (large)</SelectItem>
+                        {EMBEDDING_MODEL_OPTIONS.map(option => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                        ))}
                     </SelectContent>
                 </Select>
+                <p className="text-[9px] text-zinc-600">
+                    Use the same embedding model in memory and knowledge to keep retrieval consistent.
+                </p>
             </div>
 
             <div className="h-px bg-white/5" />

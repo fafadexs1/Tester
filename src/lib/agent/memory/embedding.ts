@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { pipeline, env } from '@xenova/transformers';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DEFAULT_EMBEDDINGS_MODEL } from './models';
 
 // Configure transformers.js to use local cache and not unnecessary remote checks if possible
 // env.localModelPath = ... (optional: default is usually fine)
@@ -15,9 +16,41 @@ export interface EmbeddingResult {
     model: string;
 }
 
+export interface EmbeddingOptions {
+    role?: 'query' | 'document';
+}
+
 const openai = process.env.OPENAI_API_KEY
     ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
     : null;
+
+interface LocalEmbeddingModelSpec {
+    modelName: string;
+    quantized?: boolean;
+    dimension: number;
+    queryPrefix?: string;
+    documentPrefix?: string;
+}
+
+const LOCAL_MODEL_SPECS: Record<string, LocalEmbeddingModelSpec> = {
+    'local-embeddinggemma': {
+        modelName: 'onnx-community/embeddinggemma-300m-ONNX',
+        quantized: true,
+        dimension: 768,
+    },
+    'local-minilm': {
+        modelName: 'Xenova/all-MiniLM-L6-v2',
+        quantized: true,
+        dimension: 384,
+    },
+    'local-e5': {
+        modelName: 'Xenova/e5-small',
+        quantized: true,
+        dimension: 384,
+        queryPrefix: 'query: ',
+        documentPrefix: 'passage: ',
+    },
+};
 
 // Singleton service to hold the pipeline in memory (simulating the 'worker')
 class LocalEmbeddingService {
@@ -35,48 +68,65 @@ class LocalEmbeddingService {
         return LocalEmbeddingService.instance;
     }
 
-    private getCacheKey(text: string, model: string): string {
-        return `${model}:${text}`; // Simple hash key
+    private getCacheKey(text: string, model: string, role: 'query' | 'document'): string {
+        return `${model}:${role}:${text}`; // Simple hash key
     }
 
-    public async getEmbedding(text: string, modelAlias: string): Promise<number[] | null> {
+    private prepareInput(text: string, spec: LocalEmbeddingModelSpec, role: 'query' | 'document'): string {
+        const cleaned = text.replace(/\s+/g, ' ').trim();
+        if (!cleaned) return '';
+        if (role === 'query' && spec.queryPrefix) return `${spec.queryPrefix}${cleaned}`;
+        if (role === 'document' && spec.documentPrefix) return `${spec.documentPrefix}${cleaned}`;
+        return cleaned;
+    }
+
+    public async getEmbedding(
+        text: string,
+        modelAlias: string,
+        options: EmbeddingOptions = {}
+    ): Promise<number[] | null> {
+        const spec = LOCAL_MODEL_SPECS[modelAlias];
+        if (!spec) return null;
+
+        const role = options.role || 'document';
+        const preparedInput = this.prepareInput(text, spec, role);
+        if (!preparedInput) return null;
+
         // 1. Check Cache
-        const cacheKey = this.getCacheKey(text, modelAlias);
+        const cacheKey = this.getCacheKey(preparedInput, modelAlias, role);
         if (this.embeddingCache.has(cacheKey)) {
             // console.log('[Memory] Cache hit for embedding');
             return this.embeddingCache.get(cacheKey)!;
         }
 
-        // 2. Map aliases to HF models
-        let modelName = 'Xenova/all-MiniLM-L6-v2'; // Default safe fallback
-        if (modelAlias === 'local-minilm') modelName = 'Xenova/all-MiniLM-L6-v2';
-        if (modelAlias === 'local-e5') modelName = 'Xenova/e5-small'; // Use Xenova quantized version
-
-        // 3. Load Pipeline (Lazy Loading)
+        // 2. Load Pipeline (Lazy Loading)
         if (!this.pipelines[modelAlias]) {
-            console.log(`[Memory] Loading local embedding model: ${modelName} (${modelAlias})...`);
+            console.log(`[Memory] Loading local embedding model: ${spec.modelName} (${modelAlias})...`);
             try {
                 // "feature-extraction" is the task for embeddings
-                this.pipelines[modelAlias] = await pipeline('feature-extraction', modelName);
-                console.log(`[Memory] Model ${modelName} loaded successfully.`);
+                this.pipelines[modelAlias] = await pipeline('feature-extraction', spec.modelName, {
+                    quantized: spec.quantized ?? true,
+                });
+                console.log(`[Memory] Model ${spec.modelName} loaded successfully.`);
             } catch (e) {
-                console.error(`[Memory] Failed to load model ${modelName}:`, e);
+                console.error(`[Memory] Failed to load model ${spec.modelName}:`, e);
                 return null;
             }
         }
 
-        // 4. Generate Embedding
+        // 3. Generate embedding
         try {
             const pipe = this.pipelines[modelAlias];
-            // E5 models require "query: " or "passage: " prefix usually, but for raw similarity we often use raw text or generic prefix.
-            // For standard memory, raw text is often sufficient. User can prepend prefixes if needed.
+            const output = await pipe(preparedInput, { pooling: 'mean', normalize: true });
 
-            const output = await pipe(text, { pooling: 'mean', normalize: true });
-
-            // Output is a Tensor, we need array
             const embedding = Array.from(output.data) as number[];
+            if (embedding.length !== spec.dimension) {
+                console.warn(
+                    `[Memory] Unexpected embedding dimension for ${modelAlias}. Expected ${spec.dimension}, got ${embedding.length}.`
+                );
+            }
 
-            // 5. Update Cache
+            // 4. Update cache
             if (this.embeddingCache.size >= this.cacheLimit) {
                 const firstKey = this.embeddingCache.keys().next().value;
                 if (firstKey) this.embeddingCache.delete(firstKey);
@@ -93,13 +143,16 @@ class LocalEmbeddingService {
 
 export const generateEmbedding = async (
     text: string,
-    model: string = 'openai-text-embedding-3-small'
+    model: string = DEFAULT_EMBEDDINGS_MODEL,
+    options: EmbeddingOptions = {}
 ): Promise<EmbeddingResult | null> => {
     if (!text) return null;
 
+    const effectiveModel = model === 'local-hybrid' ? 'local-e5' : model;
+
     try {
         // 1. OpenAI Providers
-        if (model.startsWith('openai-')) {
+        if (effectiveModel.startsWith('openai-')) {
             if (!openai) {
                 // Fail silently or warn? For now warn if someone specifically requested OpenAI but no key
                 // console.warn('[Memory] OpenAI API key not found for openai model.');
@@ -107,7 +160,7 @@ export const generateEmbedding = async (
                 return null;
             }
 
-            const openAiModel = model.replace('openai-', '');
+            const openAiModel = effectiveModel.replace('openai-', '');
             const response = await openai.embeddings.create({
                 model: openAiModel,
                 input: text.replace(/\n/g, ' '),
@@ -115,19 +168,19 @@ export const generateEmbedding = async (
             });
             return {
                 embedding: response.data[0].embedding,
-                model: model
+                model: effectiveModel
             };
         }
 
         // 2. Local Providers (MiniLM / E5)
-        if (model.startsWith('local-')) {
+        if (effectiveModel.startsWith('local-')) {
             const service = LocalEmbeddingService.getInstance();
-            const embedding = await service.getEmbedding(text, model);
+            const embedding = await service.getEmbedding(text, effectiveModel, options);
 
             if (embedding) {
                 return {
                     embedding,
-                    model
+                    model: effectiveModel
                 };
             }
             return null;
@@ -135,7 +188,7 @@ export const generateEmbedding = async (
 
         return null;
     } catch (error) {
-        console.error(`[Memory] Failed to generate embedding with model ${model}:`, error);
+        console.error(`[Memory] Failed to generate embedding with model ${effectiveModel}:`, error);
         return null;
     }
 };

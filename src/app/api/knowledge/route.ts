@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { KnowledgeStore, KnowledgeWrite } from '@/lib/agent/memory/stores/knowledge-store';
+import { DEFAULT_EMBEDDINGS_MODEL } from '@/lib/agent/memory/models';
 
 /**
  * GET /api/knowledge - List knowledge entries
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest) {
             title,
             content,
             metadata
-        }, embeddingsModel);
+        }, embeddingsModel || DEFAULT_EMBEDDINGS_MODEL);
 
         return NextResponse.json({
             success: true,

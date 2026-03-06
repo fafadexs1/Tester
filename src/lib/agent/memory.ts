@@ -10,6 +10,7 @@ import {
   MemoryWrite,
 } from './memory/types';
 import { generateEmbedding } from './memory/embedding';
+import { DEFAULT_EMBEDDINGS_MODEL } from './memory/models';
 import { memoryCompilerFlow } from '@/ai/flows/memory-compiler-flow';
 
 export interface MemorySettings {
@@ -55,7 +56,8 @@ const DEFAULT_SETTINGS: Omit<MemorySettings, 'scopeKey'> = {
   retentionDays: 14,
   maxItems: 60,
   minImportance: 0.3,
-  embeddingsEnabled: false,
+  embeddingsEnabled: true,
+  embeddingsModel: DEFAULT_EMBEDDINGS_MODEL,
 };
 
 const STOPWORDS = new Set([
@@ -113,25 +115,22 @@ const recencyScore = (isoDate: string | null | undefined, halfLifeDays: number):
 };
 
 const scoreMemoryItem = (item: MemoryItem, query: string): number => {
-  // If we have similarity from vector search, use it heavily
-  // The query method in PostgresStore returns 'similarity' if available, but it might not be in the MemoryItem interface strictly unless we added it?
-  // Wait, MemoryItem doesn't have 'similarity'. 
-  // Usually vector stores return it as metadata or we handle it in retrieval order.
-  // Ideally, if vector search was used, the items are ALREADY sorted by similarity.
-  // So we might just trust the order or use a simpler score.
-
   // For now, let's keep the heuristic score as a fallback or hybrid rerank.
   const queryTokens = tokenize(query);
   const contentTokens = tokenize(item.content);
-  const relevance = jaccardSimilarity(queryTokens, contentTokens);
+  const lexicalRelevance = jaccardSimilarity(queryTokens, contentTokens);
+  const vectorSimilarity = clamp(item.similarity ?? 0, 0, 1);
+  const relevance = vectorSimilarity > 0
+    ? clamp(vectorSimilarity * 0.78 + lexicalRelevance * 0.22, 0, 1)
+    : lexicalRelevance;
   const importance = Math.max(0, Math.min(1, item.importance ?? 0.5));
   const recency = recencyScore(item.createdAt, item.type === 'episodic' ? 7 : 30);
 
   const weights = item.type === 'semantic'
-    ? { relevance: 0.5, importance: 0.4, recency: 0.1 }
+    ? { relevance: 0.58, importance: 0.3, recency: 0.12 }
     : item.type === 'procedural'
-      ? { relevance: 0.6, importance: 0.3, recency: 0.1 }
-      : { relevance: 0.4, importance: 0.2, recency: 0.4 };
+      ? { relevance: 0.62, importance: 0.24, recency: 0.14 }
+      : { relevance: 0.48, importance: 0.16, recency: 0.36 };
 
   return relevance * weights.relevance + importance * weights.importance + recency * weights.recency;
 };
@@ -357,7 +356,7 @@ export const normalizeMemorySettings = (input: Partial<MemorySettings>): MemoryS
   hybridWriteThrough: input.hybridWriteThrough ?? true,
   redisConnectionString: input.redisConnectionString,
   embeddingsEnabled: input.embeddingsEnabled ?? DEFAULT_SETTINGS.embeddingsEnabled,
-  embeddingsModel: input.embeddingsModel || 'local-hybrid',
+  embeddingsModel: input.embeddingsModel || DEFAULT_EMBEDDINGS_MODEL,
 });
 
 const heuristicMemoryCandidates = (userMessage: string, assistantMessage: string): MemoryCandidate[] => {
@@ -471,6 +470,48 @@ const filterCandidates = (items: MemoryCandidate[], minImportance: number): Memo
   return Array.from(dedup.values());
 };
 
+const dedupeMemoryItems = (items: MemoryItem[]): MemoryItem[] => {
+  const deduped = new Map<string, MemoryItem>();
+
+  for (const item of items) {
+    const existing = deduped.get(item.id);
+    if (!existing) {
+      deduped.set(item.id, item);
+      continue;
+    }
+
+    const existingSimilarity = existing.similarity ?? -1;
+    const currentSimilarity = item.similarity ?? -1;
+    if (currentSimilarity > existingSimilarity) {
+      deduped.set(item.id, item);
+    }
+  }
+
+  return Array.from(deduped.values());
+};
+
+const toTimestamp = (isoDate: string | null | undefined): number => {
+  if (!isoDate) return 0;
+  const parsed = Date.parse(isoDate);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const runQueryWithFallback = async (
+  store: ReturnType<typeof createMemoryStore>,
+  query: MemoryQuery
+): Promise<MemoryItem[]> => {
+  const primary = await store.query(query);
+  if (primary.length > 0 || !query.embedding) return primary;
+
+  const relaxed = await store.query({
+    ...query,
+    similarityThreshold: undefined,
+  });
+  if (relaxed.length > 0) return relaxed;
+
+  return [];
+};
+
 export const loadMemoryContext = async (params: {
   settings: MemorySettings;
   workspaceId: string;
@@ -486,16 +527,24 @@ export const loadMemoryContext = async (params: {
 
   await store.deleteExpired?.();
 
+  const baseParams = baseQueryParams(params, settings);
+  const fallbackQueryWithoutEmbedding = async (): Promise<MemoryItem[]> =>
+    store.query({
+      ...baseParams,
+      embedding: undefined,
+      similarityThreshold: undefined,
+    });
+
   let items: MemoryItem[] = [];
 
   // Hybrid Strategy: Run two queries if needed
   if (settings.embeddingsEnabled && params.query && settings.embeddingsModel === 'local-hybrid') {
     // 1. Query for Semantic/Procedural using E5
     const p1 = (async () => {
-      const e5Result = await generateEmbedding(params.query, 'local-e5');
+      const e5Result = await generateEmbedding(params.query, 'local-e5', { role: 'query' });
       if (e5Result) {
-        return store.query({
-          ...baseQueryParams(params, settings),
+        return runQueryWithFallback(store, {
+          ...baseParams,
           embedding: e5Result.embedding,
           types: ['semantic', 'procedural'] // Target facts
         });
@@ -505,10 +554,10 @@ export const loadMemoryContext = async (params: {
 
     // 2. Query for Episodic using MiniLM
     const p2 = (async () => {
-      const miniLMResult = await generateEmbedding(params.query, 'local-minilm');
+      const miniLMResult = await generateEmbedding(params.query, 'local-minilm', { role: 'query' });
       if (miniLMResult) {
-        return store.query({
-          ...baseQueryParams(params, settings),
+        return runQueryWithFallback(store, {
+          ...baseParams,
           embedding: miniLMResult.embedding,
           types: ['episodic'] // Target chat history
         });
@@ -517,42 +566,34 @@ export const loadMemoryContext = async (params: {
     })();
 
     const [r1, r2] = await Promise.all([p1, p2]);
-    items = [...r1, ...r2];
-
-    // Remove duplicates just in case (though types are disjoint here)
-    const seen = new Set();
-    items = items.filter(i => {
-      if (seen.has(i.id)) return false;
-      seen.add(i.id);
-      return true;
-    });
+    items = dedupeMemoryItems([...r1, ...r2]);
+    if (items.length === 0) {
+      items = await fallbackQueryWithoutEmbedding();
+    }
 
   } else {
     // Standard single model approach
     let queryEmbedding: number[] | undefined;
     if (settings.embeddingsEnabled && params.query) {
-      const result = await generateEmbedding(params.query, settings.embeddingsModel);
+      const result = await generateEmbedding(params.query, settings.embeddingsModel, { role: 'query' });
       if (result) {
         queryEmbedding = result.embedding;
       }
     }
 
     const queryParams: MemoryQuery = {
-      ...baseQueryParams(params, settings),
+      ...baseParams,
       embedding: queryEmbedding,
     };
 
-    items = await store.query(queryParams);
+    items = await runQueryWithFallback(store, queryParams);
+    if (items.length === 0) {
+      items = await fallbackQueryWithoutEmbedding();
+    }
   }
 
-  const toTimestamp = (isoDate: string | null | undefined): number => {
-    if (!isoDate) return 0;
-    const parsed = Date.parse(isoDate);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-
-  // Strict chronological order: newest -> oldest
-  const chronologicallySorted = [...items].sort((a, b) => toTimestamp(b.createdAt) - toTimestamp(a.createdAt));
+  const chronologicallySorted = dedupeMemoryItems(items)
+    .sort((a, b) => toTimestamp(b.createdAt) - toTimestamp(a.createdAt));
 
   const facts: MemoryItem[] = [];
   const episodes: MemoryItem[] = [];
@@ -595,17 +636,39 @@ export const loadMemoryContext = async (params: {
     unconfirmedEpisodes.length +
     unconfirmedProcedures.length;
 
+  const rankedByScore = (source: MemoryItem[]): MemoryItem[] =>
+    [...source].sort((a, b) => {
+      const scoreDelta = scoreMemoryItem(b, params.query) - scoreMemoryItem(a, params.query);
+      if (Math.abs(scoreDelta) > 0.0001) return scoreDelta;
+      return toTimestamp(b.createdAt) - toTimestamp(a.createdAt);
+    });
+
   const recentWindowSize = Math.min(
     chronologicallySorted.length,
     Math.max(24, Math.min(120, settings.maxItems * 2))
   );
   const recentItems = chronologicallySorted.slice(0, recentWindowSize);
   const olderItems = chronologicallySorted.slice(recentWindowSize);
+  const continuitySeed = chronologicallySorted.slice(0, Math.min(8, chronologicallySorted.length));
+  const seededIds = new Set(continuitySeed.map(item => item.id));
 
-  // Passo 1: sempre percorre recentes primeiro (estritamente cronológico)
-  for (const item of recentItems) {
+  // Seed with the freshest memories so the agent keeps conversational continuity.
+  for (const item of continuitySeed) {
     pushByType(item);
     if (reachedHardCapacity()) break;
+  }
+
+  if (!reachedHardCapacity()) {
+    for (const item of rankedByScore(recentItems.filter(candidate => !seededIds.has(candidate.id)))) {
+      const score = scoreMemoryItem(item, params.query);
+      const mustFillCoverage = selectedCount() < 5;
+      if (!mustFillCoverage && score < 0.18) {
+        continue;
+      }
+
+      pushByType(item);
+      if (reachedHardCapacity()) break;
+    }
   }
 
   const recentSelected = [
@@ -632,7 +695,7 @@ export const loadMemoryContext = async (params: {
 
   // Passo 2: só percorre antigas se necessário
   if (needOlderPass && !reachedHardCapacity()) {
-    for (const item of olderItems) {
+    for (const item of rankedByScore(olderItems)) {
       const relevance = scoreMemoryItem(item, params.query);
       const mustFillCoverage = !hasMinimumCoverage() || selectedCount() < 5;
       if (!mustFillCoverage && relevance < 0.16) {
@@ -744,7 +807,7 @@ export const recordMemory = async (params: {
         }
       }
 
-      const result = await generateEmbedding(candidate.content, modelToUse);
+      const result = await generateEmbedding(candidate.content, modelToUse, { role: 'document' });
       if (result) embedding = result.embedding;
     }
 
