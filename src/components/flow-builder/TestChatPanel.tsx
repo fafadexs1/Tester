@@ -6,19 +6,25 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Send, Play, RotateCcw, MessageSquare, Loader2, LogOut, Webhook as WebhookIcon, FileJson2 } from 'lucide-react';
-import type { WorkspaceData, NodeData, StartNodeTrigger } from '@/lib/types';
+import type { WorkspaceData, NodeData, ResolvedOption, StartNodeTrigger } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { useToast } from '@/hooks/use-toast';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
 import { getProperty, setProperty } from 'dot-prop';
 import { classifyIntent } from '@/ai/flows/intention-classification-flow';
+import {
+  getOptionDisplayText,
+  getOptionId,
+  getOptionValue,
+  matchOptionByHeuristics,
+  type OptionLike,
+} from '@/lib/flow-engine/option-matching';
 import jsonata from 'jsonata';
 
 
@@ -26,7 +32,7 @@ interface Message {
   id: string;
   text: string | React.ReactNode;
   sender: 'user' | 'bot';
-  options?: (string | { id: string; value: string })[];
+  options?: OptionLike[];
   // New property to store the chosen option's ID for user messages
   chosenOptionId?: string;
 }
@@ -129,7 +135,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
   const [isSimulateWebhookDialogOpen, setIsSimulateWebhookDialogOpen] = useState(false);
   const [webhookDialogJsonInput, setWebhookDialogJsonInput] = useState<string>('');
-  const [currentOptions, setCurrentOptions] = useState<any[]>([]);
+  const [currentOptions, setCurrentOptions] = useState<OptionLike[]>([]);
 
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const activeFlowVariablesRef = useRef(flowVariables);
@@ -272,6 +278,69 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     });
     return substitutedText;
   }, []);
+
+  const splitResolvedOptionParts = useCallback((template: string | undefined, resolvedValue: string): string[] => {
+    if (!template) {
+      return [''];
+    }
+
+    if (template.includes('{{')) {
+      const splitValues = normalizeOptionsFromString(resolvedValue);
+      if (splitValues.length > 1) {
+        return splitValues;
+      }
+    }
+
+    return [resolvedValue];
+  }, [normalizeOptionsFromString]);
+
+  const buildOptionDisplayText = useCallback((value: string, label?: string): string => {
+    const trimmedValue = String(value || '').trim();
+    const trimmedLabel = String(label || '').trim();
+    if (!trimmedLabel) {
+      return trimmedValue;
+    }
+    return trimmedValue ? `${trimmedValue} - ${trimmedLabel}` : trimmedLabel;
+  }, []);
+
+  const resolveNodeOptions = useCallback((node: NodeData, currentActiveFlowVariables: Record<string, any>): OptionLike[] => {
+    if (Array.isArray(node.options) && node.options.length > 0) {
+      return node.options.flatMap((option) => {
+        const resolvedValue = substituteVariables(option.value, currentActiveFlowVariables);
+        const resolvedLabel = substituteVariables(option.label, currentActiveFlowVariables);
+        const valueParts = splitResolvedOptionParts(option.value, resolvedValue).filter(Boolean);
+        const labelParts = splitResolvedOptionParts(option.label, resolvedLabel);
+        const optionCount = Math.max(valueParts.length, labelParts.filter(Boolean).length, 1);
+
+        return Array.from({ length: optionCount }, (_, index) => {
+          const value = valueParts[index]
+            ?? valueParts[valueParts.length - 1]
+            ?? '';
+          const label = labelParts[index]
+            ?? labelParts[labelParts.length - 1]
+            ?? '';
+          const displayText = buildOptionDisplayText(value, label);
+          const resolvedOption: ResolvedOption = {
+            id: optionCount > 1 ? `${option.id}_${index}` : option.id,
+            value,
+          };
+
+          if (label.trim().length > 0) {
+            resolvedOption.description = label;
+          }
+
+          if (displayText && displayText !== value) {
+            resolvedOption.displayText = displayText;
+          }
+
+          return resolvedOption;
+        });
+      }).filter(option => getOptionDisplayText(option).trim().length > 0);
+    }
+
+    const substitutedOptions = substituteVariables(node.optionsList, currentActiveFlowVariables);
+    return normalizeOptionsFromString(substitutedOptions);
+  }, [buildOptionDisplayText, normalizeOptionsFromString, splitResolvedOptionParts, substituteVariables]);
 
 
   const getSupabaseClient = (): SupabaseClient | null => {
@@ -432,24 +501,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
 
       case 'option': {
         const questionText = substituteVariables(node.questionText, updatedVarsForNextNode);
-
-        let optionsList: (string | { id: string; value: string })[] = [];
-        if (Array.isArray(node.options) && node.options.length > 0) {
-          optionsList = node.options.flatMap(opt => {
-            const val = substituteVariables(opt.value, updatedVarsForNextNode);
-            // Only split if variable was present
-            if (opt.value && opt.value.includes('{{')) {
-              const splitVals = normalizeOptionsFromString(val);
-              if (splitVals.length > 1) {
-                return splitVals.map((v, i) => ({ id: `${opt.id}_${i}`, value: v }));
-              }
-            }
-            return [{ id: opt.id, value: val }];
-          });
-        } else {
-          const substitutedOptions = substituteVariables(node.optionsList, updatedVarsForNextNode);
-          optionsList = normalizeOptionsFromString(substitutedOptions);
-        }
+        const optionsList = resolveNodeOptions(node, updatedVarsForNextNode);
 
         if (questionText && optionsList.length > 0) {
           setMessages(prev => [...prev, {
@@ -1012,6 +1064,70 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
         break;
       }
 
+      case 'dialogy-close-chat':
+        setMessages(prev => [
+          ...prev,
+          { id: uuidv4(), text: 'Dialogy (simulado): chat encerrado e fluxo finalizado.', sender: 'bot' },
+        ]);
+        autoAdvance = false;
+        handleEndChatTest();
+        break;
+
+      case 'dialogy-transfer-team':
+      case 'dialogy-transfer-ai': {
+        const isTeam = node.type === 'dialogy-transfer-team';
+        const targetId = substituteVariables(
+          isTeam ? node.dialogyTeamId : node.dialogySystemAgentId,
+          updatedVarsForNextNode
+        );
+        setMessages(prev => [
+          ...prev,
+          {
+            id: uuidv4(),
+            text: `Dialogy (simulado): transferência para ${isTeam ? 'equipe' : 'IA'} ${targetId || '(não configurada)'}.`,
+            sender: 'bot',
+          },
+        ]);
+        nextNodeId = findNextNodeId(node.id, 'default');
+        break;
+      }
+
+      case 'dialogy-sgp-second-copy': {
+        const autoVariable = `_sgp_payment_code_${node.id.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+        updatedVarsForNextNode = {
+          ...updatedVarsForNextNode,
+          [autoVariable]: '00020126...CODIGO_PIX_SIMULADO',
+        };
+        setMessages(prev => [
+          ...prev,
+          { id: uuidv4(), text: 'SGP (simulado): contrato ativo selecionado.', sender: 'bot' },
+          { id: uuidv4(), text: 'SGP (simulado): fatura em aberto selecionada.', sender: 'bot' },
+          { id: uuidv4(), text: `SGP (simulado): código salvo em {{${autoVariable}}}.`, sender: 'bot' },
+        ]);
+        nextNodeId = findNextNodeId(node.id, 'success') ?? findNextNodeId(node.id, 'default');
+        break;
+      }
+
+      case 'dialogy-sgp-payment-promise': {
+        const autoVariable = `_sgp_payment_promise_${node.id.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+        updatedVarsForNextNode = {
+          ...updatedVarsForNextNode,
+          [autoVariable]: {
+            status: 1,
+            liberado: true,
+            protocolo: '9999999999999',
+            data_promessa: new Date().toISOString().slice(0, 10),
+          },
+        };
+        setMessages(prev => [
+          ...prev,
+          { id: uuidv4(), text: 'SGP (simulado): contrato elegível selecionado automaticamente.', sender: 'bot' },
+          { id: uuidv4(), text: 'SGP (simulado): status 1, conexão liberada provisoriamente.', sender: 'bot' },
+        ]);
+        nextNodeId = findNextNodeId(node.id, 'status-1') ?? findNextNodeId(node.id, 'default');
+        break;
+      }
+
       case 'redirect':
         setMessages(prev => [...prev, { id: uuidv4(), text: `Simulando redirecionamento para: ${substituteVariables(node.redirectUrl, updatedVarsForNextNode)}`, sender: 'bot' }]);
         autoAdvance = false;
@@ -1100,7 +1216,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     } else if (autoAdvance && !nextNodeId && node.type !== 'end-flow' && node.type !== 'redirect') {
       await processNode(null, updatedVarsForNextNode);
     }
-  }, [activeWorkspace, getNodeById, findNextNodeId, substituteVariables, handleEndChatTest, toast, setFlowVariables]);
+  }, [activeWorkspace, getNodeById, findNextNodeId, substituteVariables, handleEndChatTest, toast, setFlowVariables, resolveNodeOptions]);
 
 
   const handleStartTest = useCallback(async (triggerNameOverride?: string, initialVarsOverride?: Record<string, any>) => {
@@ -1160,21 +1276,22 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     setCurrentOptions([]);
   }, []);
 
-  const handleOptionClick = useCallback(async (option: string | { id: string; value: string }) => {
+  const handleOptionClick = useCallback(async (option: OptionLike) => {
     // Note: checks removed here to allow calling from handleSendMessage
     // if (!awaitingInputFor || awaitingInputType !== 'option' || isProcessingNode) return;
 
-    const optionText = typeof option === 'string' ? option : option.value;
-    const optionId = typeof option === 'string' ? option : option.id;
+    const optionDisplayText = getOptionDisplayText(option);
+    const optionValue = getOptionValue(option);
+    const optionId = getOptionId(option);
 
-    console.log('[TestChatPanel] handleOptionClick triggered. Option chosen:', optionText, 'ID:', optionId);
-    setMessages(prev => [...prev, { id: uuidv4(), text: `Você escolheu: ${optionText}`, sender: 'user' }]);
+    console.log('[TestChatPanel] handleOptionClick triggered. Option chosen:', optionDisplayText, 'ID:', optionId);
+    setMessages(prev => [...prev, { id: uuidv4(), text: `Você escolheu: ${optionDisplayText}`, sender: 'user' }]);
 
     let currentVarsSnapshot = { ...activeFlowVariablesRef.current };
     if (awaitingInputFor?.variableToSaveChoice && awaitingInputFor.variableToSaveChoice.trim() !== '') {
       const varName = awaitingInputFor.variableToSaveChoice as string;
-      console.log(`[TestChatPanel] Saving choice to variable: ${varName} = ${optionText}`);
-      currentVarsSnapshot = { ...currentVarsSnapshot, [varName]: optionText };
+      console.log(`[TestChatPanel] Saving choice to variable: ${varName} = ${optionValue}`);
+      currentVarsSnapshot = { ...currentVarsSnapshot, [varName]: optionValue };
     }
 
     setAwaitingInputFor(null);
@@ -1187,8 +1304,8 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
     let nextNodeIdAfterOption = findNextNodeId(awaitingInputFor?.id || '', optionId);
 
     // Fallback: checks if there's a connection matching the text if ID failed (legacy support)
-    if (!nextNodeIdAfterOption && optionId !== optionText) {
-      nextNodeIdAfterOption = findNextNodeId(awaitingInputFor?.id || '', optionText);
+    if (!nextNodeIdAfterOption && optionId !== optionValue) {
+      nextNodeIdAfterOption = findNextNodeId(awaitingInputFor?.id || '', optionValue);
     }
 
     if (!nextNodeIdAfterOption) {
@@ -1240,46 +1357,35 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
       setInputValue('');
 
       // 1. Try Number Match (Strict)
-      if (/^\d+$/.test(userMessageText)) {
-        const indexMatch = parseInt(userMessageText);
-        if (!isNaN(indexMatch) && indexMatch >= 1 && indexMatch <= currentOptions.length) {
-          await handleOptionClick(currentOptions[indexMatch - 1]);
-          return;
-        }
-      }
-
-      // 2. Try Exact Text Match
-      const textMatch = currentOptions.find(opt => {
-        const val = typeof opt === 'string' ? opt : opt.value;
-        return val.toLowerCase() === userMessageText.toLowerCase();
-      });
-      if (textMatch) {
-        await handleOptionClick(textMatch);
+      const heuristicMatch = matchOptionByHeuristics(currentOptions, userMessageText);
+      if (heuristicMatch) {
+        await handleOptionClick(heuristicMatch.option);
         return;
       }
 
-      // 3. Try AI Match
+      // 2. Try AI Match
       if (freshNode.aiEnabled) {
         setMessages(prev => [...prev, { id: uuidv4(), text: "Analisando sua resposta com IA...", sender: 'bot' }]);
 
         const intents = currentOptions.map(opt => {
-          const val = typeof opt === 'string' ? opt : opt.value;
-          const id = typeof opt === 'string' ? opt : opt.id;
-          return { id, label: val, description: val };
+          const label = getOptionDisplayText(opt);
+          return { id: getOptionId(opt), label, description: label };
         });
 
         try {
           const aiResult = await classifyIntent({
             userMessage: userMessageText,
             intents,
-            modelName: freshNode.aiModelName
+            modelName: freshNode.aiModelName,
+            organizationId: activeWorkspace?.organization_id,
+            apiKeyId: freshNode.aiKeyId,
           });
 
           if (aiResult.matchedIntentId) {
-            const matchedOpt = currentOptions.find(opt => (typeof opt === 'string' ? opt : opt.id) === aiResult.matchedIntentId);
+            const matchedOpt = currentOptions.find(opt => getOptionId(opt) === aiResult.matchedIntentId);
             if (matchedOpt) {
               // Remove the "Analyzing..." message? Or just append result.
-              setMessages(prev => [...prev, { id: uuidv4(), text: `(IA) Entendi que você quis dizer "${typeof matchedOpt === 'string' ? matchedOpt : matchedOpt.value}".`, sender: 'bot' }]);
+              setMessages(prev => [...prev, { id: uuidv4(), text: `(IA) Entendi que você quis dizer "${getOptionDisplayText(matchedOpt)}".`, sender: 'bot' }]);
               await handleOptionClick(matchedOpt);
               return;
             }
@@ -1466,7 +1572,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
           </Button>
         </CardHeader>
         <CardContent className="flex-1 p-0 overflow-hidden">
-          <ScrollArea className="h-full p-4" type="always">
+          <div className="h-full overflow-y-auto overscroll-contain p-4">
             {messages.length === 0 && !isTesting && (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <MessageSquare className="w-12 h-12 text-muted-foreground mb-4" />
@@ -1504,7 +1610,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
                   {msg.sender === 'bot' && msg.options && msg.options.length > 0 && awaitingInputType === 'option' && (
                     <div className="mt-2.5 w-full space-y-2">
                       {msg.options.map((opt, index) => {
-                        const text = typeof opt === 'string' ? opt : opt.value;
+                        const text = getOptionDisplayText(opt);
                         return (
                           <button
                             key={index} // Changed from opt to index to avoid duplicate keys if options are identical
@@ -1530,7 +1636,7 @@ const TestChatPanel: React.FC<TestChatPanelProps> = ({ activeWorkspace }) => {
               )}
             </div>
             <div ref={messagesEndRef} />
-          </ScrollArea>
+          </div>
         </CardContent>
         <CardFooter className="p-4 border-t">
           {renderChatInputArea()}

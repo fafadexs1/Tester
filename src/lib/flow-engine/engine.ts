@@ -3,7 +3,16 @@ import { getProperty, setProperty } from 'dot-prop';
 import vm from 'node:vm';
 import { sendWhatsAppMessageAction } from '@/app/actions/evolutionApiActions';
 import { sendChatwootMessageAction } from '@/app/actions/chatwootApiActions';
-import { sendDialogyMessageAction } from '@/app/actions/dialogyApiActions';
+import {
+  closeDialogyChatAction,
+  sendDialogyListMessageAction,
+  sendDialogyMessageAction,
+  sendDialogyTemplateMessageAction,
+  transferDialogyChatToAiAction,
+  transferDialogyChatToTeamAction,
+} from '@/app/actions/dialogyApiActions';
+import { fetchSGPPaymentPromiseAction, fetchSGPSecondCopyAction } from '@/app/actions/sgpFlowActions';
+import { loadDialogySGPApplicationConfig } from '@/lib/dialogy/sgp-config';
 import {
   loadSessionFromDB,
   saveSessionToDB,
@@ -14,15 +23,17 @@ import {
   saveFlowLog,
   getCapabilityById,
   getCapabilitiesForWorkspace,
+  getOrganizationAiKeysForRuntime,
 } from '@/app/actions/databaseActions';
 import { executeCapability } from '@/lib/capability-executor';
-import type { NodeData, Connection, FlowSession, WorkspaceData, ApiResponseMapping, FlowLog } from '@/lib/types';
+import type { NodeData, Connection, FlowSession, WorkspaceData, ApiResponseMapping, FlowLog, OrganizationAiKeyRecord, ResolvedOption } from '@/lib/types';
 import { genericTextGenerationFlow } from '@/ai/flows/generic-text-generation-flow';
 import { simpleChatReply } from '@/ai/flows/simple-chat-reply-flow';
 import { agenticFlow } from '@/ai/flows/agentic-flow';
 import { intelligentChoice } from '@/ai/flows/intelligent-choice-flow';
 import { classifyIntent } from '@/ai/flows/intention-classification-flow';
 import { DEFAULT_GEMINI_AUX_MODEL } from '@/lib/agent/gemini-models';
+import { resolveOrganizationGeminiApiKey } from '@/lib/agent/organization-ai-keys';
 import { loadMemoryContext, normalizeMemorySettings, recordMemory, type MemorySettings } from '@/lib/agent/memory';
 import { DEFAULT_EMBEDDINGS_MODEL } from '@/lib/agent/memory/models';
 import {
@@ -40,6 +51,7 @@ import {
   type AgentRoute,
   type AgentRouteDecision,
 } from '@/lib/agent/guardrails';
+import { getOptionDescription, getOptionDisplayText, getOptionId, getOptionValue } from './option-matching';
 import { findNodeById, findNextNodeId, substituteVariablesInText, coerceToDate, compareDates, evaluateExpression } from './utils';
 import jsonata from 'jsonata';
 
@@ -339,16 +351,6 @@ const detectExitIntent = (text: string): boolean => {
   return detectExplicitExitIntent(text);
 };
 
-const resolveGoogleApiKey = (): string | undefined => {
-  return (
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.GOOGLE_GENAI_API_KEY ||
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
-    undefined
-  );
-};
-
 const resolveAgentRouteDecision = async (
   userInput: string,
   modelName?: string,
@@ -445,6 +447,75 @@ const normalizeOptionsFromString = (raw: string): string[] => {
   return [validLine];
 };
 
+const splitResolvedOptionParts = (template: string | undefined, resolvedValue: string): string[] => {
+  if (!template) {
+    return [''];
+  }
+
+  if (template.includes('{{')) {
+    const splitValues = normalizeOptionsFromString(resolvedValue);
+    if (splitValues.length > 1) {
+      return splitValues;
+    }
+  }
+
+  return [resolvedValue];
+};
+
+const buildOptionDisplayText = (value: string, label?: string): string => {
+  const trimmedValue = String(value || '').trim();
+  const trimmedLabel = String(label || '').trim();
+  if (!trimmedLabel) {
+    return trimmedValue;
+  }
+  return trimmedValue ? `${trimmedValue} - ${trimmedLabel}` : trimmedLabel;
+};
+
+const resolveStructuredNodeOptions = async (
+  options: NodeData['options'],
+  variables: Record<string, any>
+): Promise<ResolvedOption[]> => {
+  if (!Array.isArray(options) || options.length === 0) {
+    return [];
+  }
+
+  const resolvedOptions = await Promise.all(options.map(async (option) => {
+    const resolvedValue = await substituteVariablesInText(option.value, variables);
+    const resolvedLabel = await substituteVariablesInText(option.label, variables);
+    const valueParts = splitResolvedOptionParts(option.value, resolvedValue).filter(Boolean);
+    const labelParts = splitResolvedOptionParts(option.label, resolvedLabel);
+    const optionCount = Math.max(valueParts.length, labelParts.filter(Boolean).length, 1);
+
+    return Array.from({ length: optionCount }, (_, index) => {
+      const value = valueParts[index]
+        ?? valueParts[valueParts.length - 1]
+        ?? '';
+      const label = labelParts[index]
+        ?? labelParts[labelParts.length - 1]
+        ?? '';
+      const displayText = buildOptionDisplayText(value, label);
+      const resolvedOption: ResolvedOption = {
+        id: optionCount > 1 ? `${option.id}_${index}` : option.id,
+        value,
+      };
+
+      if (label.trim().length > 0) {
+        resolvedOption.description = label;
+      }
+
+      if (displayText && displayText !== value) {
+        resolvedOption.displayText = displayText;
+      }
+
+      return resolvedOption;
+    });
+  }));
+
+  return resolvedOptions
+    .flat()
+    .filter(option => getOptionDisplayText(option).trim().length > 0);
+};
+
 const normalizeStableId = (value: unknown): string | undefined => {
   if (value === null || value === undefined) return undefined;
   const text = String(value).trim();
@@ -457,6 +528,13 @@ const normalizeWhatsappId = (value: unknown): string | undefined => {
   const withoutPrefix = text.replace(/^evolution_jid_/, '');
   const atIndex = withoutPrefix.indexOf('@');
   return atIndex > 0 ? withoutPrefix.slice(0, atIndex) : withoutPrefix;
+};
+
+const normalizeDialogyPhoneNumber = (value: unknown): string | undefined => {
+  const normalized = normalizeWhatsappId(value);
+  if (!normalized) return undefined;
+  const digitsOnly = normalized.replace(/\D/g, '');
+  return digitsOnly || normalized;
 };
 
 const resolveMemoryScopeKey = (
@@ -600,6 +678,321 @@ const assertMessageSent = (
   throw new Error(`[sendOmniChannelMessage][${channel}] Failed to send message for session ${sessionId}: ${reason}`);
 };
 
+const shouldSendDialogyWhatsappList = (session: FlowSession): boolean => {
+  const ctx = session.flow_context || (
+    session.session_id.startsWith('dialogy_conv_') ? 'dialogy' :
+      session.session_id.startsWith('chatwoot_conv_') ? 'chatwoot' :
+        'evolution'
+  );
+  if (ctx !== 'dialogy') {
+    return false;
+  }
+
+  const channel = String(
+    getProperty(session.flow_variables, 'dialogy_channel') ||
+    getProperty(session.flow_variables, 'webhook_payload.conversation.channel') ||
+    ''
+  ).trim().toLowerCase();
+  return !channel || channel === 'whatsapp';
+};
+
+const resolveDialogyChatId = (session: FlowSession): string => String(
+  getProperty(session.flow_variables, 'dialogy_conversation_id') ||
+  getProperty(session.flow_variables, 'webhook_payload.conversation.id') ||
+  (session.session_id.startsWith('dialogy_conv_') ? session.session_id.replace('dialogy_conv_', '') : '')
+).trim();
+
+const buildDialogyOptionListPayload = (
+  session: FlowSession,
+  questionText: string,
+  options: Array<string | ResolvedOption>,
+  footerText?: string,
+  fallbackSectionTitle?: string
+) => {
+  const phoneNumber =
+    normalizeDialogyPhoneNumber(getProperty(session.flow_variables, 'contact_phone')) ||
+    normalizeDialogyPhoneNumber(getProperty(session.flow_variables, 'webhook_payload.contact.phone_number'));
+  const instance =
+    normalizeStableId(getProperty(session.flow_variables, 'dialogy_instance_name')) ||
+    normalizeStableId(getProperty(session.flow_variables, 'webhook_payload.conversation.instance_name'));
+  const description = String(questionText || '').trim();
+  const footer = footerText === undefined || footerText === null ? '' : String(footerText);
+  const sectionTitle = normalizeStableId(fallbackSectionTitle) || 'Opções';
+  const rows = options.map(option => {
+    const desc = getOptionDescription(option).trim();
+    const displayText = getOptionDisplayText(option).trim();
+    return {
+      // Evolution/WhatsApp limits list row titles and descriptions. Keeping
+      // the opaque value in rowId lets the runtime show a friendly label
+      // without losing the exact value that resumes the flow.
+      title: displayText.slice(0, 24),
+      description: desc.length > 0 ? desc.slice(0, 72) : '\u200B',
+      rowId: getOptionId(option).slice(0, 200),
+    };
+  }).filter(row => row.title.trim().length > 0 && row.rowId.trim().length > 0);
+
+  if (!phoneNumber || !instance || !description || rows.length === 0) {
+    return null;
+  }
+
+  return {
+    phoneNumber,
+    instance,
+    list: {
+      title: description,
+      description: 'Selecione uma opção abaixo.',
+      buttonText: 'Ver opções',
+      footerText: footer,
+      delay: 1200,
+      sections: [
+        {
+          title: sectionTitle.length > 0 ? sectionTitle : '\u200B',
+          rows,
+        },
+      ],
+    },
+  };
+};
+
+const trySendDialogyOptionListMessage = async (
+  session: FlowSession,
+  workspace: WorkspaceData,
+  questionText: string,
+  options: Array<string | ResolvedOption>,
+  footerText?: string,
+  fallbackSectionTitle?: string
+): Promise<boolean> => {
+  if (!shouldSendDialogyWhatsappList(session)) {
+    return false;
+  }
+
+  if (!workspace.dialogy_instance_id) {
+    return false;
+  }
+
+  const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
+  if (!dialogyInstance) {
+    return false;
+  }
+
+  const payload = buildDialogyOptionListPayload(session, questionText, options, footerText, fallbackSectionTitle);
+  if (!payload) {
+    console.warn(`[Flow Engine - ${session.session_id}] Dialogy list payload incomplete. Falling back to text message.`);
+    return false;
+  }
+
+  const result = await sendDialogyListMessageAction({
+    baseUrl: dialogyInstance.baseUrl,
+    apiKey: dialogyInstance.apiKey,
+    phoneNumber: payload.phoneNumber,
+    instance: payload.instance,
+    list: payload.list,
+  });
+
+  if (!result.success) {
+    console.warn(`[Flow Engine - ${session.session_id}] Dialogy list send failed. Falling back to text message.`, result.error);
+    return false;
+  }
+
+  await new Promise(resolve => setTimeout(resolve, 500));
+  return true;
+};
+
+type SGPSecondCopyStage = 'contract' | 'invoice' | 'payment-method' | 'complete';
+
+type SGPSecondCopyState = {
+  stage: SGPSecondCopyStage;
+  payload: any;
+  client: any;
+  contracts: any[];
+  invoices: any[];
+  selectedContractId?: string;
+  selectedInvoiceId?: string;
+  selectedPaymentMethod?: 'pix' | 'boleto' | 'link';
+  invalidSelection?: boolean;
+};
+
+type SGPPaymentPromiseState = {
+  stage: 'contract' | 'execute' | 'complete';
+  payload: any;
+  client: any;
+  contracts: any[];
+  selectedContractId?: string;
+  invalidSelection?: boolean;
+};
+
+const sgpStateVariableName = (nodeId: string) => `_sgp_second_copy_${nodeId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+const sgpCodeVariableName = (nodeId: string) => `_sgp_payment_code_${nodeId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+const sgpPromiseVariableName = (nodeId: string) => `_sgp_payment_promise_${nodeId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+
+const getSaoPauloISODate = (): string => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+};
+
+const normalizeSGPStatus = (value: unknown) => String(value ?? '').trim().toLowerCase()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+const isEligibleSGPContract = (contract: any): boolean => {
+  const status = normalizeSGPStatus(contract?.status);
+  return ['1', '4', '7', 'ativo', 'suspenso', 'ativo v. reduzida', 'ativo v reduzida'].includes(status);
+};
+
+const formatSGPContractStatus = (contract: any): 'Ativo' | 'Suspenso' => {
+  const status = normalizeSGPStatus(contract?.status);
+  return ['4', 'suspenso'].includes(status) ? 'Suspenso' : 'Ativo';
+};
+
+const isOpenSGPInvoice = (invoice: any): boolean => {
+  const status = normalizeSGPStatus(invoice?.status);
+  if (invoice?.dataPagamento || ['pago', 'paga', 'cancelado', 'cancelada'].includes(status)) return false;
+  return Boolean(invoice?.codigoPix || invoice?.linhaDigitavel || invoice?.codigoBarras || invoice?.link);
+};
+
+const formatSGPAddress = (address: any): string => {
+  const street = [address?.logradouro, address?.numero].filter(Boolean).join(', ');
+  return [street, address?.bairro, address?.cidade, address?.uf].filter(Boolean).join(' - ') || 'Endereço não informado';
+};
+
+const formatSGPDate = (value: unknown): string => {
+  const text = String(value || '').trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : text || 'sem vencimento';
+};
+
+const formatSGPMonth = (value: unknown): string => {
+  const text = String(value || '').trim();
+  const match = /^(\d{4})-(\d{2})/.exec(text);
+  return match ? `${match[2]}/${match[1]}` : 'Fatura';
+};
+
+const formatBRL = (value: unknown): string => {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '';
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(number);
+};
+
+const buildSGPContractOptions = (contracts: any[]): ResolvedOption[] => contracts.map(contract => {
+  const address = formatSGPAddress(contract.endereco);
+  const status = formatSGPContractStatus(contract);
+  return {
+    id: `contract-${String(contract.id)}`,
+    value: String(contract.id),
+    displayText: `${String(contract.id)} (${status}) - ${address}`,
+    description: address,
+  };
+});
+
+const buildSGPInvoiceOptions = (invoices: any[]): ResolvedOption[] => invoices.map(invoice => ({
+  id: `invoice-${String(invoice.id)}`,
+  value: String(invoice.id),
+  displayText: `${formatSGPMonth(invoice.dataVencimento)} - ${formatBRL(invoice.valorCorrigido ?? invoice.valor)}`,
+  description: `Vencimento ${formatSGPDate(invoice.dataVencimento)}`,
+}));
+
+async function sendSGPChoicePrompt(
+  session: FlowSession,
+  workspace: WorkspaceData,
+  deliveryMode: 'list' | 'legacy' | 'cloud-template',
+  question: string,
+  options: ResolvedOption[]
+) {
+  const useInteractiveList = deliveryMode !== 'legacy';
+  if (useInteractiveList) {
+    const sent = await trySendDialogyOptionListMessage(session, workspace, question, options, '', 'Opções');
+    if (sent) return;
+  }
+  const text = `${question}\n\n${options.map((option, index) => `${index + 1}. ${option.displayText || option.value}`).join('\n')}`;
+  await sendOmniChannelMessage(session, workspace, text);
+}
+
+const pauseForSGPChoice = (
+  session: FlowSession,
+  nodeId: string,
+  stateVariable: string,
+  stage: 'contract' | 'invoice' | 'payment-method',
+  options: ResolvedOption[],
+  workflowKind: 'sgp-second-copy' | 'sgp-payment-promise' = 'sgp-second-copy'
+) => {
+  session.awaiting_input_type = 'option';
+  session.awaiting_input_details = {
+    variableToSave: `${stateVariable}.lastChoice`,
+    options,
+    originalNodeId: nodeId,
+    workflowKind,
+    workflowStage: stage,
+    workflowStateVariable: stateVariable,
+  };
+  session.current_node_id = nodeId;
+};
+
+const getDialogyPhoneAndInstance = (session: FlowSession) => ({
+  phoneNumber:
+    normalizeDialogyPhoneNumber(getProperty(session.flow_variables, 'contact_phone')) ||
+    normalizeDialogyPhoneNumber(getProperty(session.flow_variables, 'webhook_payload.contact.phone_number')),
+  instance:
+    normalizeStableId(getProperty(session.flow_variables, 'dialogy_instance_name')) ||
+    normalizeStableId(getProperty(session.flow_variables, 'webhook_payload.conversation.instance_name')),
+});
+
+async function transferDialogyConversation(
+  session: FlowSession,
+  workspace: WorkspaceData,
+  target: 'team' | 'ai',
+  targetId: string
+): Promise<void> {
+  const chatId = resolveDialogyChatId(session);
+  if (!workspace.dialogy_instance_id || !chatId || !targetId) {
+    throw new Error(`[Dialogy transfer] Configuração incompleta (chatId=${chatId}, targetId=${targetId}).`);
+  }
+
+  const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
+  if (!dialogyInstance) {
+    throw new Error(`[Dialogy transfer] Instância ${workspace.dialogy_instance_id} não encontrada.`);
+  }
+
+  const params = {
+    baseUrl: dialogyInstance.baseUrl,
+    apiKey: dialogyInstance.apiKey,
+    chatId,
+    targetId,
+  };
+  const result = target === 'team'
+    ? await transferDialogyChatToTeamAction(params)
+    : await transferDialogyChatToAiAction(params);
+
+  if (!result.success) {
+    throw new Error(`[Dialogy transfer] ${result.error || 'Falha ao transferir conversa.'}`);
+  }
+}
+
+async function closeDialogyConversation(session: FlowSession, workspace: WorkspaceData): Promise<void> {
+  const chatId = resolveDialogyChatId(session);
+  if (!workspace.dialogy_instance_id || !chatId) {
+    throw new Error(`[Dialogy close] Configuração incompleta (instance=${workspace.dialogy_instance_id}, chatId=${chatId}).`);
+  }
+
+  const dialogyInstance = await loadDialogyInstanceFromDB(workspace.dialogy_instance_id);
+  if (!dialogyInstance) {
+    throw new Error(`[Dialogy close] Instância ${workspace.dialogy_instance_id} não encontrada.`);
+  }
+
+  const result = await closeDialogyChatAction({
+    baseUrl: dialogyInstance.baseUrl,
+    apiKey: dialogyInstance.apiKey,
+    chatId,
+  });
+  if (!result.success) {
+    throw new Error(`[Dialogy close] ${result.error || 'Falha ao encerrar conversa.'}`);
+  }
+}
+
 async function sendOmniChannelMessage(
   session: FlowSession,
   workspace: WorkspaceData,
@@ -616,12 +1009,7 @@ async function sendOmniChannelMessage(
   console.log(`[sendOmniChannelMessage] Initiating send for session ${session.session_id} with context ${ctx}`);
 
   if (ctx === 'dialogy') {
-    const chatId =
-      getProperty(session.flow_variables, 'dialogy_conversation_id') ||
-      getProperty(session.flow_variables, 'webhook_payload.conversation.id') ||
-      (session.session_id.startsWith('dialogy_conv_')
-        ? session.session_id.replace('dialogy_conv_', '')
-        : null);
+    const chatId = resolveDialogyChatId(session);
 
     if (!workspace.dialogy_instance_id || !chatId) {
       throw new Error(`[sendOmniChannelMessage][dialogy] Missing Dialogy instance or chatId (instance=${workspace.dialogy_instance_id}, chatId=${chatId}).`);
@@ -712,6 +1100,27 @@ export async function executeFlow(
   console.log(`[Flow Engine] Starting execution loop. Start Node: ${currentNodeId}`);
   console.log(`[Flow Engine DEBUG] Workspace "${currentWorkspace.name}" has ${nodes.length} nodes and ${connections.length} connections.`);
 
+  let cachedOrganizationGeminiKeys: OrganizationAiKeyRecord[] | null = null;
+  const resolveGeminiApiKey = async (params: {
+    selectedKeyId?: string | null;
+    legacyApiKey?: string | null;
+    modelName?: string;
+    provider?: 'google' | 'openai' | 'anthropic' | 'groq';
+  }): Promise<string | undefined> => {
+    if (!cachedOrganizationGeminiKeys && currentWorkspace?.organization_id) {
+      cachedOrganizationGeminiKeys = await getOrganizationAiKeysForRuntime(currentWorkspace.organization_id, 'google');
+    }
+
+    return resolveOrganizationGeminiApiKey({
+      organizationId: currentWorkspace?.organization_id,
+      selectedKeyId: params.selectedKeyId,
+      legacyApiKey: params.legacyApiKey,
+      modelName: params.modelName,
+      provider: params.provider,
+      cachedKeys: cachedOrganizationGeminiKeys || undefined,
+    });
+  };
+
   while (currentNodeId && shouldContinue) {
     const currentNode = findNodeById(currentNodeId, nodes);
     if (!currentNode) {
@@ -749,7 +1158,7 @@ export async function executeFlow(
       }
 
       case 'message': {
-        const messageText = substituteVariablesInText(currentNode.text, session.flow_variables);
+        const messageText = await substituteVariablesInText(currentNode.text, session.flow_variables);
         await sendOmniChannelMessage(session, currentWorkspace, messageText);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
@@ -768,50 +1177,45 @@ export async function executeFlow(
         }
 
         if (nodeType === 'option') {
-          const q = substituteVariablesInText(currentNode.questionText, session.flow_variables);
+          const q = await substituteVariablesInText(currentNode.questionText, session.flow_variables);
 
-          let optionsList: Array<string | { id: string; value: string }> = [];
+          let optionsList: Array<string | ResolvedOption> = [];
           // New structured options
           if (Array.isArray(currentNode.options) && currentNode.options.length > 0) {
-            optionsList = currentNode.options.flatMap(opt => {
-              const val = substituteVariablesInText(opt.value, session.flow_variables);
-              if (opt.value && opt.value.includes('{{')) {
-                const splitVals = normalizeOptionsFromString(val);
-                if (splitVals.length > 1) {
-                  return splitVals.map((v, i) => ({ id: `${opt.id}_${i}`, value: v }));
-                }
-              }
-              return [{ id: opt.id, value: val }];
-            });
+            optionsList = await resolveStructuredNodeOptions(currentNode.options, session.flow_variables);
           } else {
             // Legacy string-based options
-            const substitutedOptions = substituteVariablesInText(currentNode.optionsList || '', session.flow_variables);
+            const substitutedOptions = await substituteVariablesInText(currentNode.optionsList || '', session.flow_variables);
             optionsList = normalizeOptionsFromString(substitutedOptions);
           }
 
           if (q && optionsList.length > 0) {
             let messageWithOptions = q + '\n\n';
             optionsList.forEach((opt, index) => {
-              const text = typeof opt === 'string' ? opt : opt.value;
+              const text = getOptionDisplayText(opt);
               messageWithOptions += `${index + 1}. ${text}\n`;
             });
 
-            let finalMessage = messageWithOptions.trim();
-            if (session.flow_context !== 'chatwoot') {
-              finalMessage += "\nResponda com o numero da opcao desejada ou o texto exato da opcao.";
-              if (currentNode.aiEnabled) {
-                finalMessage += "\nPode responder em texto livre; vou entender sua intencao.";
-              }
-            }
+            const sentAsDialogyList = await trySendDialogyOptionListMessage(
+              session,
+              currentWorkspace,
+              q,
+              optionsList,
+              await substituteVariablesInText(currentNode.optionFooterText || '', session.flow_variables),
+              undefined
+            );
 
-            await sendOmniChannelMessage(session, currentWorkspace, finalMessage);
+            if (!sentAsDialogyList) {
+              await sendOmniChannelMessage(session, currentWorkspace, messageWithOptions.trim());
+            }
             session.awaiting_input_type = 'option';
             session.awaiting_input_details = {
               variableToSave: currentNode.variableToSaveChoice || 'last_user_choice',
               options: optionsList,
               originalNodeId: currentNode.id,
               aiEnabled: currentNode.aiEnabled || false,
-              aiModelName: currentNode.aiModelName
+              aiModelName: currentNode.aiModelName,
+              aiKeyId: currentNode.aiKeyId,
             };
             shouldContinue = false;
           } else {
@@ -824,7 +1228,7 @@ export async function executeFlow(
                 nodeType === 'file-upload' ? 'uploadPromptText' :
                   'ratingQuestionText';
 
-          const promptText = substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
+          const promptText = await substituteVariablesInText(currentNode[promptFieldName], session.flow_variables);
           if (promptText) await sendOmniChannelMessage(session, currentWorkspace, promptText);
 
           session.awaiting_input_type = nodeType as any;
@@ -850,7 +1254,7 @@ export async function executeFlow(
         let rawValA = varPath ? getProperty(session.flow_variables, varPath) : currentNode.conditionVariable;
         if (rawValA === undefined) rawValA = currentNode.conditionVariable;
 
-        const rawValB = substituteVariablesInText(currentNode.conditionValue, session.flow_variables);
+        const rawValB = await substituteVariablesInText(currentNode.conditionValue, session.flow_variables);
 
         const isDateOp = op === 'isdateafter' || op === 'isdatebefore';
         const dataType = (currentNode.conditionDataType || 'string').toString().toLowerCase();
@@ -952,12 +1356,14 @@ export async function executeFlow(
       case 'switch': {
         const switchVarName = currentNode.switchVariable?.replace(/\{\{|\}\}/g, '').trim();
 
-        const switchActualValue = switchVarName ? evaluateExpression(switchVarName, session.flow_variables) : undefined;
+        const switchActualValue = switchVarName
+          ? await evaluateExpression(switchVarName, session.flow_variables)
+          : undefined;
         let matchedCase = false;
 
         if (Array.isArray(currentNode.switchCases)) {
           for (const caseItem of currentNode.switchCases) {
-            const caseValue = substituteVariablesInText(caseItem.value, session.flow_variables);
+            const caseValue = await substituteVariablesInText(caseItem.value, session.flow_variables);
             if (String(switchActualValue) === String(caseValue)) {
               console.log(`[Flow Engine - ${session.session_id}] Switch: Matched case '${caseValue}'`);
               nextNodeId = findNextNodeId(currentNode.id, caseItem.id, connections);
@@ -969,14 +1375,17 @@ export async function executeFlow(
 
         if (!matchedCase) {
           console.log(`[Flow Engine - ${session.session_id}] Switch: No case matched. Using default 'otherwise' path.`);
-          nextNodeId = findNextNodeId(currentNode.id, 'otherwise', connections);
+          // New editors use `otherwise`; keep `default` as a fallback for flows
+          // created by the legacy canvas before the handle id was normalized.
+          nextNodeId = findNextNodeId(currentNode.id, 'otherwise', connections)
+            || findNextNodeId(currentNode.id, 'default', connections);
         }
         break;
       }
 
       case 'set-variable': {
         if (currentNode.variableName) {
-          const valueToSet = substituteVariablesInText(currentNode.variableValue, session.flow_variables);
+          const valueToSet = await substituteVariablesInText(currentNode.variableValue, session.flow_variables);
           setProperty(session.flow_variables, currentNode.variableName, valueToSet);
           console.log(`[Flow Engine - ${session.session_id}] Variable "${currentNode.variableName}" set to "${valueToSet}"`);
         }
@@ -991,39 +1400,52 @@ export async function executeFlow(
 
         let url = '';
         try {
-          url = substituteVariablesInText(currentNode.apiUrl, session.flow_variables);
+          url = await substituteVariablesInText(currentNode.apiUrl, session.flow_variables);
           const method = currentNode.apiMethod || 'GET';
           const headers = new Headers();
-          (currentNode.apiHeadersList || []).forEach(h => headers.append(substituteVariablesInText(h.key, session.flow_variables), substituteVariablesInText(h.value, session.flow_variables)));
+          for (const h of currentNode.apiHeadersList || []) {
+            headers.append(
+              await substituteVariablesInText(h.key, session.flow_variables),
+              await substituteVariablesInText(h.value, session.flow_variables)
+            );
+          }
 
           if (currentNode.apiAuthType === 'bearer' && currentNode.apiAuthBearerToken) {
-            headers.append('Authorization', `Bearer ${substituteVariablesInText(currentNode.apiAuthBearerToken, session.flow_variables)}`);
+            headers.append(
+              'Authorization',
+              `Bearer ${await substituteVariablesInText(currentNode.apiAuthBearerToken, session.flow_variables)}`
+            );
           } else if (currentNode.apiAuthType === 'basic' && currentNode.apiAuthBasicUser && currentNode.apiAuthBasicPassword) {
-            const user = substituteVariablesInText(currentNode.apiAuthBasicUser, session.flow_variables);
-            const pass = substituteVariablesInText(currentNode.apiAuthBasicPassword, session.flow_variables);
+            const user = await substituteVariablesInText(currentNode.apiAuthBasicUser, session.flow_variables);
+            const pass = await substituteVariablesInText(currentNode.apiAuthBasicPassword, session.flow_variables);
             headers.append('Authorization', `Basic ${btoa(`${user}:${pass}`)}`);
           }
 
           const queryParams = new URLSearchParams();
-          (currentNode.apiQueryParamsList || []).forEach(p => queryParams.append(substituteVariablesInText(p.key, session.flow_variables), substituteVariablesInText(p.value, session.flow_variables)));
+          for (const p of currentNode.apiQueryParamsList || []) {
+            queryParams.append(
+              await substituteVariablesInText(p.key, session.flow_variables),
+              await substituteVariablesInText(p.value, session.flow_variables)
+            );
+          }
           const queryString = queryParams.toString();
           if (queryString) url += (url.includes('?') ? '&' : '?') + queryString;
 
           let body: BodyInit | null = null;
           if (method !== 'GET' && method !== 'HEAD') {
             if (currentNode.apiBodyType === 'json' && currentNode.apiBodyJson) {
-              body = substituteVariablesInText(currentNode.apiBodyJson, session.flow_variables);
+              body = await substituteVariablesInText(currentNode.apiBodyJson, session.flow_variables);
               if (!headers.has('Content-Type')) headers.append('Content-Type', 'application/json');
             } else if (currentNode.apiBodyType === 'raw' && currentNode.apiBodyRaw) {
-              body = substituteVariablesInText(currentNode.apiBodyRaw, session.flow_variables);
+              body = await substituteVariablesInText(currentNode.apiBodyRaw, session.flow_variables);
             } else if (currentNode.apiBodyType === 'form-data') {
               const formData = new FormData();
-              (currentNode.apiBodyFormDataList || []).forEach(field => {
-                const key = substituteVariablesInText(field.key, session.flow_variables);
-                if (!key) return;
-                const value = substituteVariablesInText(field.value, session.flow_variables);
+              for (const field of currentNode.apiBodyFormDataList || []) {
+                const key = await substituteVariablesInText(field.key, session.flow_variables);
+                if (!key) continue;
+                const value = await substituteVariablesInText(field.value, session.flow_variables);
                 formData.append(key, value);
-              });
+              }
               body = formData;
             }
           }
@@ -1105,6 +1527,90 @@ export async function executeFlow(
         break;
       }
 
+
+
+
+      case 'db-select':
+      case 'db-insert':
+      case 'db-update':
+      case 'db-delete': {
+        const dbOperation = currentNode.dbOperation || nodeType.replace('db-', '') as 'select' | 'insert' | 'update' | 'delete';
+        const dbConnections = currentWorkspace.databaseConnections || [];
+        const dbConn = dbConnections.find((c: any) => c.id === currentNode.dbConnectionId);
+
+        if (!dbConn) {
+          console.error(`[Flow Engine - ${session.session_id}] DB: Connection not found: ${currentNode.dbConnectionId}`);
+          if (currentNode.dbResultVariable) {
+            setProperty(session.flow_variables, currentNode.dbResultVariable, { error: 'Database connection not configured' });
+          }
+          nextNodeId = findNextNodeId(currentNode.id, 'error', connections) || findNextNodeId(currentNode.id, 'default', connections);
+          break;
+        }
+
+        let dbResult: any = null;
+        let dbError: any = null;
+
+        try {
+          let parsedData: Record<string, any> | undefined;
+          if (currentNode.dbDataJson) {
+            const substitutedJson = await substituteVariablesInText(currentNode.dbDataJson, session.flow_variables);
+            try { parsedData = JSON.parse(substitutedJson); } catch { throw new Error(`Invalid JSON data: ${substitutedJson}`); }
+          }
+
+          const resolvedFilters = [];
+          if (currentNode.dbFilters) {
+            for (const filter of currentNode.dbFilters) {
+              const resolvedValue = await substituteVariablesInText(filter.value, session.flow_variables);
+              resolvedFilters.push({ ...filter, value: resolvedValue });
+            }
+          }
+
+          const { executeDatabaseOperation } = await import('@/lib/database/executor');
+          const result = await executeDatabaseOperation({
+            connection: dbConn,
+            operation: dbOperation,
+            table: currentNode.dbTableName || '',
+            columns: currentNode.dbColumnsToSelect,
+            data: parsedData,
+            filters: resolvedFilters.length > 0 ? resolvedFilters : undefined,
+          });
+
+          if (!result.success) throw new Error(result.error || 'Database operation failed');
+
+          dbResult = result;
+          if (currentNode.dbResultVariable) {
+            setProperty(session.flow_variables, currentNode.dbResultVariable, result.data ?? []);
+          }
+          console.log(`[Flow Engine - ${session.session_id}] DB ${dbOperation.toUpperCase()} on ${currentNode.dbTableName}: ${result.rowCount} rows`);
+
+        } catch (error: any) {
+          console.error(`[Flow Engine - ${session.session_id}] DB Error:`, error.message);
+          dbError = { error: error.message };
+          if (currentNode.dbResultVariable) setProperty(session.flow_variables, currentNode.dbResultVariable, dbError);
+        } finally {
+          const logEntry: Omit<FlowLog, 'id'> = {
+            workspace_id: currentWorkspace.id, log_type: 'api-call', session_id: session.session_id,
+            timestamp: new Date().toISOString(),
+            details: { nodeId: currentNode.id, nodeTitle: currentNode.title, dbOperation, table: currentNode.dbTableName, connectionName: dbConn.name, response: dbResult, error: dbError }
+          };
+          saveFlowLog(logEntry).catch(e => console.error("[Flow Engine] Failed to save DB log:", e));
+        }
+
+        if (dbError) {
+          if (currentNode.dbOnError === 'continue') {
+            nextNodeId = findNextNodeId(currentNode.id, 'error', connections) || findNextNodeId(currentNode.id, 'default', connections);
+          } else if (currentNode.dbOnError === 'goto' && currentNode.dbOnErrorNodeId) {
+            nextNodeId = currentNode.dbOnErrorNodeId;
+          } else {
+            nextNodeId = findNextNodeId(currentNode.id, 'error', connections);
+            if (!nextNodeId) { console.error(`[Flow Engine - ${session.session_id}] DB error, no handler. Stopping.`); shouldContinue = false; }
+          }
+        } else {
+          nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+        }
+        break;
+      }
+
       case 'capability': {
         const outputVar = currentNode.capabilityOutputVariable;
         const capId = currentNode.capabilityId;
@@ -1173,9 +1679,14 @@ export async function executeFlow(
         const varName = currentNode.aiOutputVariable;
         if (varName && currentNode.aiPromptText) {
           try {
-            const promptText = substituteVariablesInText(currentNode.aiPromptText, session.flow_variables);
+            const promptText = await substituteVariablesInText(currentNode.aiPromptText, session.flow_variables);
             console.log(`[Flow Engine - ${session.session_id}] AI Text Gen: Calling genericTextGenerationFlow with prompt: "${promptText}"`);
-            const aiResponse = await genericTextGenerationFlow({ promptText });
+            const aiResponse = await genericTextGenerationFlow({
+              promptText,
+              modelName: currentNode.aiModelName,
+              organizationId: currentWorkspace.organization_id,
+              apiKeyId: currentNode.aiKeyId,
+            });
             setProperty(session.flow_variables, varName, aiResponse.generatedText);
           } catch (e: any) {
             console.error(`[Flow Engine - ${session.session_id}] AI Text Gen Error:`, e);
@@ -1190,22 +1701,30 @@ export async function executeFlow(
         const inputVarName = currentNode.userInputVariable?.replace(/\{\{|\}\}/g, '').trim();
         const modelName = currentNode.aiModelName;
         let targetModel = modelName;
-        let targetApiKey = resolveGoogleApiKey();
+        let targetApiKey = await resolveGeminiApiKey({
+          modelName: targetModel,
+          provider: 'google',
+        });
         const modelConnection = connections.find(c => c.to === currentNode.id && c.targetHandle === 'model');
         if (modelConnection) {
           const modelNode = findNodeById(modelConnection.from, currentWorkspace.nodes);
           if (modelNode?.type === 'ai-model-config') {
             if (modelNode.aiModelName) {
-              targetModel = substituteVariablesInText(modelNode.aiModelName, session.flow_variables);
+              targetModel = await substituteVariablesInText(modelNode.aiModelName, session.flow_variables);
             }
-            if (modelNode.aiApiKey) {
-              targetApiKey = substituteVariablesInText(modelNode.aiApiKey, session.flow_variables);
-            }
+            targetApiKey = await resolveGeminiApiKey({
+              selectedKeyId: modelNode.aiKeyId,
+              legacyApiKey: modelNode.aiApiKey
+                ? await substituteVariablesInText(modelNode.aiApiKey, session.flow_variables)
+                : undefined,
+              modelName: targetModel,
+              provider: modelNode.aiProvider || 'google',
+            });
           }
         }
         const modelConfig = targetApiKey ? { apiKey: targetApiKey } : undefined;
         const maxTurns = currentNode.maxConversationTurns ?? null;
-        const systemPrompt = substituteVariablesInText(currentNode.agentSystemPrompt, session.flow_variables);
+        const systemPrompt = await substituteVariablesInText(currentNode.agentSystemPrompt, session.flow_variables);
         const routeLock = resolveAgentRouteLock(currentNode.agentRouteLock, systemPrompt);
 
         if (responseVarName && inputVarName) {
@@ -1377,7 +1896,7 @@ export async function executeFlow(
               const incomingTools = incoming.filter(c => c.targetHandle === 'tools');
               const outgoingTools = outgoing.filter(c => {
                 const target = findNodeById(c.to, currentWorkspace.nodes);
-                return target?.type === 'knowledge' || target?.type === 'http-tool' || target?.type === 'capability';
+                return target?.type === 'knowledge' || target?.type === 'http-tool' || target?.type === 'capability' || target?.type === 'db-tool';
               });
               const toolConnections = [...incomingTools, ...outgoingTools];
 
@@ -1494,6 +2013,59 @@ export async function executeFlow(
                       console.log(`[Flow Engine] Registered Knowledge Tool for Agent: ${knowledgeCap.slug} (From explicit connection)`);
                     } catch (err) {
                       console.error(`[Flow Engine] Failed to build Knowledge Tool ${sourceNode.id}`, err);
+                    }
+                  } else if (sourceNode?.type === 'db-tool') {
+                    try {
+                      const dbToolName = sourceNode.dbToolName || `db_tool_${sourceNode.id.substring(0, 4)}`;
+                      const dbToolDesc = sourceNode.dbToolDescription || `Database ${sourceNode.dbOperation || 'select'} operation on table ${sourceNode.dbTableName || 'unknown'}`;
+                      const dbOperation = sourceNode.dbOperation || 'select';
+
+                      const properties: Record<string, any> = {};
+                      if (dbOperation === 'select') {
+                        properties.filter_column = { type: 'string', description: 'Column to filter by (optional)' };
+                        properties.filter_value = { type: 'string', description: 'Value to filter by (optional)' };
+                      } else if (dbOperation === 'insert' || dbOperation === 'update') {
+                        properties.data = { type: 'string', description: 'JSON string with key/value pairs for the operation' };
+                        if (dbOperation === 'update') {
+                          properties.filter_column = { type: 'string', description: 'Column to identify rows to update' };
+                          properties.filter_value = { type: 'string', description: 'Value to identify rows to update' };
+                        }
+                      } else if (dbOperation === 'delete') {
+                        properties.filter_column = { type: 'string', description: 'Column to identify rows to delete' };
+                        properties.filter_value = { type: 'string', description: 'Value to identify rows to delete' };
+                      }
+
+                      const dbCap = {
+                        id: `db-tool-${sourceNode.id}`,
+                        workspace_id: currentWorkspace.id,
+                        name: dbToolName,
+                        slug: dbToolName.toLowerCase().replace(/[^a-z0-9_]/g, ''),
+                        version: '1.0.0',
+                        contract: {
+                          description: dbToolDesc,
+                          inputSchema: JSON.stringify({
+                            type: 'object',
+                            properties,
+                            required: Object.keys(properties),
+                          }),
+                        },
+                        execution_config: {
+                          type: 'function',
+                          functionName: 'executeDatabaseTool',
+                          _dbConnectionId: sourceNode.dbConnectionId,
+                          _dbTableName: sourceNode.dbTableName,
+                          _dbOperation: dbOperation,
+                          _dbFilters: sourceNode.dbFilters,
+                          _dbColumnsToSelect: sourceNode.dbColumnsToSelect,
+                          _dbDataJson: sourceNode.dbDataJson,
+                          _workspaceId: currentWorkspace.id,
+                          _databaseConnections: currentWorkspace.databaseConnections,
+                        },
+                      };
+                      connectedTools.push(dbCap);
+                      console.log(`[Flow Engine] Registered DB Tool for Agent: ${dbCap.slug} (${dbOperation} on ${sourceNode.dbTableName})`);
+                    } catch (err) {
+                      console.error(`[Flow Engine] Failed to build DB Tool ${sourceNode.id}`, err);
                     }
                   }
                 }
@@ -1730,16 +2302,371 @@ export async function executeFlow(
       }
 
       case 'log-console': {
-        console.log(`[FLOW LOG - ${session.session_id}] ${substituteVariablesInText(currentNode.logMessage, session.flow_variables)}`);
+        console.log(`[FLOW LOG - ${session.session_id}] ${await substituteVariablesInText(currentNode.logMessage, session.flow_variables)}`);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
       }
 
       case 'dialogy-send-message': {
-        const content = substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables);
+        const content = await substituteVariablesInText(currentNode.dialogyMessageContent, session.flow_variables);
         await sendOmniChannelMessage(session, currentWorkspace, content);
         nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
         break;
+      }
+
+      case 'dialogy-close-chat': {
+        await closeDialogyConversation(session, currentWorkspace);
+        console.log(`[Flow Engine - ${session.session_id}] Dialogy chat closed. Ending flow session.`);
+        session.current_node_id = null;
+        session.awaiting_input_type = null;
+        session.awaiting_input_details = null;
+        delete session.flow_variables.__flowPaused;
+        shouldContinue = false;
+        flowEnded = true;
+        nextNodeId = null;
+        break;
+      }
+
+      case 'dialogy-transfer-team': {
+        const teamId = await substituteVariablesInText(currentNode.dialogyTeamId, session.flow_variables);
+        await transferDialogyConversation(session, currentWorkspace, 'team', teamId.trim());
+        nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+        break;
+      }
+
+      case 'dialogy-transfer-ai': {
+        const systemAgentId = await substituteVariablesInText(currentNode.dialogySystemAgentId, session.flow_variables);
+        await transferDialogyConversation(session, currentWorkspace, 'ai', systemAgentId.trim());
+        nextNodeId = findNextNodeId(currentNode.id, 'default', connections);
+        break;
+      }
+
+      case 'dialogy-sgp-second-copy': {
+        const stateVariable = sgpStateVariableName(currentNode.id);
+        const codeVariable = sgpCodeVariableName(currentNode.id);
+        const deliveryMode = currentNode.sgpSecondCopyDeliveryMode || 'list';
+        let state = getProperty(session.flow_variables, stateVariable) as SGPSecondCopyState | undefined;
+        const resultRoute = (handle: 'success' | 'error') =>
+          findNextNodeId(currentNode.id, handle, connections) || findNextNodeId(currentNode.id, 'default', connections);
+
+        try {
+        if (!state) {
+          if (!currentWorkspace.dialogy_instance_id) {
+            throw new Error('[Segunda via SGP] Instância Dialogy não configurada na workspace.');
+          }
+          const dialogySGP = await loadDialogySGPApplicationConfig(currentWorkspace.dialogy_instance_id);
+          if (!dialogySGP.success || !dialogySGP.config) {
+            throw new Error(`[Segunda via SGP] ${dialogySGP.error || 'Integração SGP da Dialogy não configurada.'}`);
+          }
+          const cpfCnpj = await substituteVariablesInText(currentNode.sgpSecondCopyCpfCnpj || '', session.flow_variables);
+          const lookup = await fetchSGPSecondCopyAction({
+            endpoint: dialogySGP.config.endpoint,
+            token: dialogySGP.config.token,
+            app: dialogySGP.config.app,
+            cpfCnpj,
+          });
+          if (!lookup.success) {
+            throw new Error(`[Segunda via SGP] ${lookup.error || 'Falha ao consultar cliente.'}`);
+          }
+
+          const clients = Array.isArray(lookup.data?.clientes) ? lookup.data.clientes : [];
+          const client = clients[0];
+          if (!client) {
+            await sendOmniChannelMessage(session, currentWorkspace, 'Não encontrei cliente no SGP para o CPF/CNPJ informado.');
+            nextNodeId = resultRoute('error');
+            break;
+          }
+          const contracts = (Array.isArray(client.contratos) ? client.contratos : []).filter(isEligibleSGPContract);
+          state = {
+            stage: 'contract',
+            payload: lookup.data,
+            client,
+            contracts,
+            invoices: [],
+          };
+          setProperty(session.flow_variables, stateVariable, state);
+        }
+        if (!state) throw new Error('[Segunda via SGP] Estado da consulta não foi inicializado.');
+
+        if (state.invalidSelection) {
+          await sendOmniChannelMessage(session, currentWorkspace, 'Opção inválida. Escolha uma das opções apresentadas.');
+          state.invalidSelection = false;
+          setProperty(session.flow_variables, stateVariable, state);
+        }
+
+        if (state.stage === 'contract') {
+          const options = buildSGPContractOptions(state.contracts);
+          if (options.length === 0) {
+            await sendOmniChannelMessage(session, currentWorkspace, 'Não encontrei contratos ativos ou suspensos para este cliente.');
+            nextNodeId = resultRoute('error');
+            break;
+          }
+          if (options.length === 1) {
+            state.selectedContractId = options[0].value;
+            state.stage = 'invoice';
+            setProperty(session.flow_variables, stateVariable, state);
+          } else {
+            await sendSGPChoicePrompt(session, currentWorkspace, deliveryMode, 'Por favor, informe o contrato:', options);
+            pauseForSGPChoice(session, currentNode.id, stateVariable, 'contract', options);
+            shouldContinue = false;
+            nextNodeId = currentNode.id;
+            break;
+          }
+        }
+
+        if (state.stage === 'invoice') {
+          const invoices = (Array.isArray(state.client?.titulos) ? state.client.titulos : [])
+            .filter((invoice: any) => String(invoice?.clientecontrato_id) === String(state!.selectedContractId))
+            .filter(isOpenSGPInvoice)
+            .sort((left: any, right: any) => String(right?.dataVencimento || '').localeCompare(String(left?.dataVencimento || '')));
+          state.invoices = invoices;
+          setProperty(session.flow_variables, stateVariable, state);
+          const options = buildSGPInvoiceOptions(invoices);
+          if (options.length === 0) {
+            await sendOmniChannelMessage(session, currentWorkspace, 'Este contrato não possui faturas em aberto para segunda via.');
+            nextNodeId = resultRoute('error');
+            break;
+          }
+          await sendSGPChoicePrompt(session, currentWorkspace, deliveryMode, 'Qual fatura você deseja pagar?', options);
+          pauseForSGPChoice(session, currentNode.id, stateVariable, 'invoice', options);
+          shouldContinue = false;
+          nextNodeId = currentNode.id;
+          break;
+        }
+
+        if (state.stage === 'payment-method') {
+          const selectedInvoice = state.invoices.find(invoice => String(invoice?.id) === String(state!.selectedInvoiceId));
+          const methods: ResolvedOption[] = [];
+          if (selectedInvoice?.codigoPix) methods.push({ id: 'payment-pix', value: 'pix', displayText: 'PIX', description: 'Receber o código PIX copia e cola' });
+          if (selectedInvoice?.linhaDigitavel || selectedInvoice?.codigoBarras) {
+            methods.push({ id: 'payment-boleto', value: 'boleto', displayText: 'Boleto', description: 'Receber a linha digitável ou o código de barras' });
+          }
+          if (methods.length === 0) {
+            const paymentLink = String(selectedInvoice?.link || '').trim();
+            if (paymentLink) {
+              state.selectedPaymentMethod = 'link';
+              state.stage = 'complete';
+              setProperty(session.flow_variables, codeVariable, paymentLink);
+              setProperty(session.flow_variables, stateVariable, state);
+              await sendOmniChannelMessage(
+                session,
+                currentWorkspace,
+                `Esta fatura não possui PIX nem código de boleto disponível. Acesse a segunda via pelo link:\n\n${paymentLink}`
+              );
+              nextNodeId = resultRoute('success');
+              break;
+            }
+            await sendOmniChannelMessage(session, currentWorkspace, 'A fatura selecionada não possui PIX nem boleto disponível.');
+            nextNodeId = resultRoute('error');
+            break;
+          }
+          await sendSGPChoicePrompt(session, currentWorkspace, deliveryMode, 'Como deseja receber a segunda via?', methods);
+          pauseForSGPChoice(session, currentNode.id, stateVariable, 'payment-method', methods);
+          shouldContinue = false;
+          nextNodeId = currentNode.id;
+          break;
+        }
+
+        const invoice = state.invoices.find(item => String(item?.id) === String(state!.selectedInvoiceId));
+        const paymentMethod = state.selectedPaymentMethod;
+        const paymentCode = paymentMethod === 'pix'
+          ? String(invoice?.codigoPix || '').trim()
+          : String(invoice?.linhaDigitavel || invoice?.codigoBarras || invoice?.link || '').trim();
+
+        setProperty(session.flow_variables, codeVariable, paymentCode);
+        state.stage = 'complete';
+        setProperty(session.flow_variables, stateVariable, state);
+
+        if (!paymentCode) {
+          await sendOmniChannelMessage(session, currentWorkspace, `Não encontrei o código de ${paymentMethod === 'pix' ? 'PIX' : 'boleto'} desta fatura.`);
+          nextNodeId = resultRoute('error');
+          break;
+        } else if (deliveryMode === 'cloud-template') {
+          if (!currentWorkspace.dialogy_instance_id) throw new Error('[Segunda via SGP] Instância Dialogy não configurada.');
+          const dialogyInstance = await loadDialogyInstanceFromDB(currentWorkspace.dialogy_instance_id);
+          if (!dialogyInstance) throw new Error('[Segunda via SGP] Instância Dialogy não encontrada.');
+          const contact = getDialogyPhoneAndInstance(session);
+          const pixTemplateKey = [
+            currentNode.sgpSecondCopyPixTemplateInstance,
+            currentNode.sgpSecondCopyPixTemplateName,
+            currentNode.sgpSecondCopyPixTemplateLanguage,
+          ].join('::');
+          const boletoTemplateKey = [
+            currentNode.sgpSecondCopyBoletoTemplateInstance,
+            currentNode.sgpSecondCopyBoletoTemplateName,
+            currentNode.sgpSecondCopyBoletoTemplateLanguage,
+          ].join('::');
+          if (!currentNode.sgpSecondCopyPixTemplateName || !currentNode.sgpSecondCopyBoletoTemplateName) {
+            throw new Error('[Segunda via SGP] Configure um template para PIX e outro para boleto.');
+          }
+          if (
+            !currentNode.sgpSecondCopyPixTemplateBodyParameterCount ||
+            !currentNode.sgpSecondCopyBoletoTemplateBodyParameterCount
+          ) {
+            throw new Error('[Segunda via SGP] Os templates PIX e boleto precisam ter ao menos uma variável no BODY.');
+          }
+          if (pixTemplateKey === boletoTemplateKey) {
+            throw new Error('[Segunda via SGP] PIX e boleto devem usar templates diferentes.');
+          }
+          const isPix = paymentMethod === 'pix';
+          const templateInstance = (isPix
+            ? currentNode.sgpSecondCopyPixTemplateInstance
+            : currentNode.sgpSecondCopyBoletoTemplateInstance) || contact.instance;
+          const templateName = isPix
+            ? currentNode.sgpSecondCopyPixTemplateName
+            : currentNode.sgpSecondCopyBoletoTemplateName;
+          const templateLanguage = (isPix
+            ? currentNode.sgpSecondCopyPixTemplateLanguage
+            : currentNode.sgpSecondCopyBoletoTemplateLanguage) || 'pt_BR';
+          const configuredParameter = isPix
+            ? currentNode.sgpSecondCopyPixTemplateBodyParameter
+            : currentNode.sgpSecondCopyBoletoTemplateBodyParameter;
+          const configuredParameterCount = isPix
+            ? currentNode.sgpSecondCopyPixTemplateBodyParameterCount
+            : currentNode.sgpSecondCopyBoletoTemplateBodyParameterCount;
+          if (!contact.phoneNumber || !templateInstance || !templateName) {
+            throw new Error(`[Segunda via SGP] Telefone, instância ou template ${isPix ? 'PIX' : 'boleto'} não configurado.`);
+          }
+          const parameterCount = Math.max(1, configuredParameterCount || configuredParameter || 1);
+          const selectedPosition = Math.min(parameterCount, Math.max(1, configuredParameter || 1));
+          const parameters = Array.from({ length: parameterCount }, (_, index) => ({
+            type: 'text',
+            text: index + 1 === selectedPosition ? paymentCode : '-',
+          }));
+          const templateResult = await sendDialogyTemplateMessageAction({
+            baseUrl: dialogyInstance.baseUrl,
+            apiKey: dialogyInstance.apiKey,
+            phoneNumber: contact.phoneNumber,
+            instance: templateInstance,
+            name: templateName,
+            language: templateLanguage,
+            components: [{ type: 'body', parameters }],
+          });
+          assertMessageSent('dialogy', session.session_id, templateResult);
+        } else {
+          const label = paymentMethod === 'pix' ? 'PIX copia e cola' : 'Boleto';
+          await sendOmniChannelMessage(session, currentWorkspace, `${label}:\n\n${paymentCode}`);
+        }
+
+        nextNodeId = resultRoute('success');
+        break;
+        } catch (error: any) {
+          console.error(`[Segunda via SGP - ${session.session_id}]`, error);
+          try {
+            await sendOmniChannelMessage(session, currentWorkspace, `Não foi possível concluir a segunda via: ${error?.message || 'erro inesperado'}`);
+          } catch (sendError) {
+            console.error(`[Segunda via SGP - ${session.session_id}] Falha ao avisar o cliente:`, sendError);
+          }
+          nextNodeId = resultRoute('error');
+          break;
+        }
+      }
+
+      case 'dialogy-sgp-payment-promise': {
+        const stateVariable = sgpPromiseVariableName(currentNode.id);
+        const deliveryMode = currentNode.sgpPaymentPromiseDeliveryMode || 'list';
+        let state = getProperty(session.flow_variables, stateVariable) as SGPPaymentPromiseState | undefined;
+        const resultRoute = (handle: 'status-0' | 'status-1' | 'status-2' | 'error') =>
+          findNextNodeId(currentNode.id, handle, connections) || findNextNodeId(currentNode.id, 'default', connections);
+
+        try {
+          if (!currentWorkspace.dialogy_instance_id) {
+            throw new Error('Instância Dialogy não configurada na workspace.');
+          }
+          const dialogySGP = await loadDialogySGPApplicationConfig(currentWorkspace.dialogy_instance_id);
+          if (!dialogySGP.success || !dialogySGP.config) {
+            throw new Error(dialogySGP.error || 'Integração SGP da Dialogy não configurada.');
+          }
+
+          if (!state) {
+            const cpfCnpj = await substituteVariablesInText(currentNode.sgpPaymentPromiseCpfCnpj || '', session.flow_variables);
+            const lookup = await fetchSGPSecondCopyAction({
+              endpoint: dialogySGP.config.endpoint,
+              token: dialogySGP.config.token,
+              app: dialogySGP.config.app,
+              cpfCnpj,
+            });
+            if (!lookup.success) throw new Error(lookup.error || 'Falha ao consultar os contratos do cliente.');
+
+            const clients = Array.isArray(lookup.data?.clientes) ? lookup.data.clientes : [];
+            const client = clients[0];
+            if (!client) throw new Error('Cliente não encontrado no SGP para o CPF/CNPJ informado.');
+            const contracts = (Array.isArray(client.contratos) ? client.contratos : []).filter(isEligibleSGPContract);
+            state = {
+              stage: 'contract',
+              payload: lookup.data,
+              client,
+              contracts,
+            };
+            setProperty(session.flow_variables, stateVariable, state);
+          }
+
+          if (state.invalidSelection) {
+            await sendOmniChannelMessage(session, currentWorkspace, 'Opção inválida. Escolha um dos contratos apresentados.');
+            state.invalidSelection = false;
+            setProperty(session.flow_variables, stateVariable, state);
+          }
+
+          if (state.stage === 'contract') {
+            const options = buildSGPContractOptions(state.contracts);
+            if (options.length === 0) throw new Error('Nenhum contrato ativo ou suspenso foi encontrado para este cliente.');
+            if (options.length === 1) {
+              state.selectedContractId = options[0].value;
+              state.stage = 'execute';
+              setProperty(session.flow_variables, stateVariable, state);
+            } else {
+              await sendSGPChoicePrompt(session, currentWorkspace, deliveryMode, 'Por favor, informe o contrato:', options);
+              pauseForSGPChoice(session, currentNode.id, stateVariable, 'contract', options, 'sgp-payment-promise');
+              shouldContinue = false;
+              nextNodeId = currentNode.id;
+              break;
+            }
+          }
+
+          if (state.stage !== 'execute' || !state.selectedContractId) {
+            throw new Error('Contrato da promessa de pagamento não selecionado.');
+          }
+
+          const promiseDate = getSaoPauloISODate();
+          const promiseResult = await fetchSGPPaymentPromiseAction({
+            endpoint: dialogySGP.config.paymentPromiseEndpoint,
+            token: dialogySGP.config.token,
+            app: dialogySGP.config.app,
+            contract: state.selectedContractId,
+            promiseDate,
+          });
+          if (!promiseResult.success) throw new Error(promiseResult.error || 'O SGP recusou a promessa de pagamento.');
+
+          const status = Number(promiseResult.data?.status);
+          setProperty(session.flow_variables, stateVariable, {
+            ...promiseResult.data,
+            data_promessa: promiseDate,
+            contratoSelecionado: state.selectedContractId,
+          });
+
+          if (status === 0) {
+            await sendOmniChannelMessage(session, currentWorkspace, 'A conexão do cliente não foi bloqueada.');
+            nextNodeId = resultRoute('status-0');
+          } else if (status === 1) {
+            await sendOmniChannelMessage(session, currentWorkspace, 'A conexão foi liberada provisoriamente. Assim que o pagamento constar, continuará liberada.');
+            nextNodeId = resultRoute('status-1');
+          } else if (status === 2) {
+            await sendOmniChannelMessage(session, currentWorkspace, 'Não foi possível realizar a liberação provisória. O contrato pode estar suspenso há mais de 30 dias; fale com o financeiro.');
+            nextNodeId = resultRoute('status-2');
+          } else {
+            throw new Error(`Status inesperado retornado pelo SGP: ${String(promiseResult.data?.status)}`);
+          }
+          break;
+        } catch (error: any) {
+          console.error(`[Promessa de pagamento SGP - ${session.session_id}]`, error);
+          try {
+            await sendOmniChannelMessage(session, currentWorkspace, `Não foi possível registrar a promessa de pagamento: ${error?.message || 'erro inesperado'}`);
+          } catch (sendError) {
+            console.error(`[Promessa de pagamento SGP - ${session.session_id}] Falha ao avisar o cliente:`, sendError);
+          }
+          nextNodeId = resultRoute('error');
+          break;
+        }
       }
 
       case 'intention-router': {
@@ -1759,6 +2686,8 @@ export async function executeFlow(
             userMessage: String(userMessage),
             intents: intents,
             modelName: DEFAULT_GEMINI_AUX_MODEL,
+            organizationId: currentWorkspace.organization_id,
+            apiKeyId: currentNode.aiKeyId,
           });
 
           if (classification.matchedIntentId) {

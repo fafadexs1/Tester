@@ -50,8 +50,10 @@ export async function sendWhatsAppMessageAction(
     body.mediaMessage = {
       mediaType: params.messageType,
       url: params.mediaUrl,
-      caption: params.caption,
     };
+    if (params.caption && String(params.caption).trim() !== '') {
+      body.mediaMessage.caption = params.caption;
+    }
     if (params.messageType === 'document' && params.caption) {
        body.mediaMessage.filename = params.caption;
     }

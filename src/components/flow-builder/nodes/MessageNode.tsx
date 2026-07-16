@@ -7,8 +7,9 @@ import { VariableInserter } from '../components/VariableInserter';
 import { TextFormatToolbar } from '../components/TextFormatToolbar';
 import { cn } from "@/lib/utils";
 import { NODE_HEADER_CONNECTOR_Y_OFFSET } from '@/lib/constants';
+import { FlowHandle } from './FlowHandle';
 
-export const MessageNode: React.FC<NodeComponentProps> = ({ node, onUpdate, availableVariables, onStartConnection }) => {
+export const MessageNode: React.FC<NodeComponentProps> = ({ node, onUpdate, availableVariables, renderHandles = true }) => {
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const [localText, setLocalText] = React.useState(node.text || '');
 
@@ -38,7 +39,7 @@ export const MessageNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
     }, [localText, node.id, onUpdate, node.text]);
 
     return (
-        <div data-no-drag="true" className="group/node-content">
+        <div data-no-drag="true" className="nodrag nowheel group/node-content">
             <div className="bg-black/40 rounded-2xl border border-white/5 p-1 relative group-hover:border-primary/20 transition-all duration-300">
                 <Textarea
                     ref={textAreaRef}
@@ -82,17 +83,12 @@ export const MessageNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                 Wait, NodeCard uses SELF_CONTAINED_NODES to decide.
                 MessageNode is in SELF_CONTAINED_NODES. So I must render the handle here.
             */}
-            <div
-                className="absolute -right-2.5 top-11 z-30 flex items-center justify-center group/h-out"
+            {renderHandles && <div
+                className="group/connector absolute -right-1.5 top-11 z-30 flex items-center justify-center"
                 title="Saída"
             >
-                <div className="absolute inset-0 bg-primary/40 rounded-full blur-lg opacity-0 group-hover/h-out:opacity-100 transition-opacity" />
-                <div
-                    className="w-2.5 h-2.5 rounded-full bg-primary border-2 border-black group-hover/h-out:scale-150 transition-all cursor-crosshair shadow-[0_0_10px_rgba(139,92,246,0.5)]"
-                    onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}
-                    data-connector="true" data-handle-id="default"
-                />
-            </div>
+                <FlowHandle id="default" title="Saída" colorClass="bg-primary" />
+            </div>}
         </div>
     );
 };

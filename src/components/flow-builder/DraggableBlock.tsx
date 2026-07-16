@@ -33,7 +33,7 @@ const DraggableBlock = React.memo(React.forwardRef<HTMLDivElement, DraggableBloc
       <div
         ref={combinedRef}
         className={cn(
-          "relative flex items-center p-3 transition-all duration-300 cursor-grab active:cursor-grabbing group",
+          "group relative flex cursor-grab items-center p-3 transition-[background-color,border-color,box-shadow,opacity] duration-150 active:cursor-grabbing",
           "bg-white/[0.03] border border-white/10 rounded-2xl overflow-hidden",
           "hover:bg-white/[0.08] hover:border-white/20 hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.05)]",
           isDragging ? "opacity-40 grayscale" : "opacity-100"
@@ -46,7 +46,7 @@ const DraggableBlock = React.memo(React.forwardRef<HTMLDivElement, DraggableBloc
         {/* Glow Background Effect */}
         <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
-        <div className="p-2.5 rounded-xl bg-black/40 border border-white/5 ring-1 ring-white/5 group-hover:ring-primary/20 transition-all duration-300">
+        <div className="rounded-xl border border-white/5 bg-black/40 p-2.5 ring-1 ring-white/5 transition-shadow duration-150 group-hover:ring-primary/20">
           {icon}
         </div>
 
@@ -62,7 +62,7 @@ const DraggableBlock = React.memo(React.forwardRef<HTMLDivElement, DraggableBloc
         </div>
 
         {/* Action Hint */}
-        <div className="w-1 h-4 bg-white/10 rounded-full opacity-0 group-hover:opacity-100 transition-all -mr-1" />
+        <div className="-mr-1 h-4 w-1 rounded-full bg-white/10 opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
       </div>
     );
   }

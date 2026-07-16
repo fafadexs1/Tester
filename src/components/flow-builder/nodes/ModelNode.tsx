@@ -6,9 +6,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from '@/components/ui/input';
 import { VariableInserter } from '../components/VariableInserter';
-import { Bot, Key, Settings2 } from 'lucide-react';
+import { GeminiKeySelector } from '../components/GeminiKeySelector';
+import { Bot } from 'lucide-react';
 
-export const ModelNode: React.FC<NodeComponentProps> = ({ node, onUpdate }) => {
+export const ModelNode: React.FC<NodeComponentProps> = ({ node, onUpdate, organizationGeminiKeys }) => {
     return (
         <div className="space-y-3" data-no-drag="true">
             <div className="flex items-center gap-2 mb-2">
@@ -53,19 +54,20 @@ export const ModelNode: React.FC<NodeComponentProps> = ({ node, onUpdate }) => {
                     </div>
                 </div>
 
-                <div>
-                    <Label className="text-[10px] text-zinc-400">API Key (Optional Override)</Label>
-                    <div className="relative">
-                        <Input
-                            type="password"
-                            placeholder="Defaults to ENV"
-                            value={node.aiApiKey || ''}
-                            onChange={(e) => onUpdate(node.id, { aiApiKey: e.target.value })}
-                            className="h-7 text-xs pr-7 bg-black/20 border-white/5"
-                        />
-                        <VariableInserter fieldName="aiApiKey" isIconTrigger onInsert={(v) => onUpdate(node.id, { aiApiKey: (node.aiApiKey || '') + v })} />
-                    </div>
-                </div>
+                {(node.aiProvider || 'google') === 'google' && (
+                    <GeminiKeySelector
+                        triggerId={`${node.id}-gemini-key`}
+                        value={node.aiKeyId}
+                        onChange={(value) => onUpdate(node.id, { aiKeyId: value })}
+                        keys={organizationGeminiKeys}
+                    />
+                )}
+
+                {(node.aiProvider || 'google') !== 'google' && (
+                    <p className="text-[10px] text-muted-foreground">
+                        O seletor centralizado desta etapa cobre as chaves Gemini. Os outros providers ainda nao usam esta integracao.
+                    </p>
+                )}
             </div>
         </div>
     );

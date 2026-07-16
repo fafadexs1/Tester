@@ -9,30 +9,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { VariableInserter } from '../components/VariableInserter';
 import { NodeData } from '@/lib/types';
 import { cn } from "@/lib/utils";
+import { FlowHandle } from './FlowHandle';
 
-const Handle = ({ onMouseDown, handleId, color = "primary", label }: { onMouseDown: (e: React.MouseEvent) => void, handleId: string, color?: string, label: string }) => (
+const ConditionHandle = ({ handleId, color = "primary", label }: { handleId: string, color?: string, label: string }) => (
     <div className="flex items-center group/handle gap-2">
         <span className={cn("text-[9px] font-bold uppercase tracking-widest opacity-20 group-hover/handle:opacity-100 transition-opacity", `text-${color}`)}>{label}</span>
-        <div
-            className="w-2.5 h-2.5 rounded-full bg-black border-2 transition-all duration-300 hover:scale-150 cursor-crosshair shadow-[0_0_10px_rgba(0,0,0,0.5)]"
-            style={{ borderColor: `var(--${color === 'primary' ? 'neon-purple' : color === 'green' ? 'neon-green' : 'destructive'})` }}
-            onMouseDown={onMouseDown}
-            data-connector="true" data-handle-type="source" data-handle-id={handleId}
-        />
+        <FlowHandle id={handleId} className="!border-2 !border-solid !bg-black" colorClass="bg-transparent" style={{ borderColor: `hsl(var(--${color === 'primary' ? 'neon-purple' : color === 'green' ? 'neon-green' : 'destructive'}))` }} />
     </div>
 );
 
-export const ConditionNode: React.FC<NodeComponentProps> = ({ node, onUpdate, availableVariables, onStartConnection }) => {
+export const ConditionNode: React.FC<NodeComponentProps> = ({ node, onUpdate, availableVariables, renderHandles = true }) => {
 
-    const renderHandles = () => (
-        <div className="absolute -right-2.5 top-11 flex flex-col gap-8">
-            <Handle onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'true'); }} handleId="true" color="green" label="Yes" />
-            <Handle onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'false'); }} handleId="false" color="red" label="No" />
+    const renderConditionHandles = () => (
+        <div className="absolute -right-1.5 top-11 flex flex-col gap-8">
+            <ConditionHandle handleId="true" color="green" label="Yes" />
+            <ConditionHandle handleId="false" color="red" label="No" />
         </div>
     );
 
     return (
-        <div className="space-y-4" data-no-drag="true">
+        <div className="nodrag nowheel space-y-4" data-no-drag="true">
             <div className="p-3 bg-white/[0.03] rounded-2xl border border-white/5 space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
@@ -104,7 +100,7 @@ export const ConditionNode: React.FC<NodeComponentProps> = ({ node, onUpdate, av
                     </div>
                 )}
             </div>
-            {renderHandles()}
+            {renderHandles && renderConditionHandles()}
         </div>
     );
 };

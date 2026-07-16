@@ -39,33 +39,11 @@ import {
 } from '../utils/nodeUtils';
 import ApiCallLogsViewer from '../logs/ApiCallLogsViewer';
 import { NODE_HEADER_CONNECTOR_Y_OFFSET } from '@/lib/constants';
-
-const ConnectorDot = ({
-    onMouseDown,
-    handleId,
-    title,
-    colorClass = "bg-zinc-400 group-hover/connector:bg-primary"
-}: {
-    onMouseDown: (e: React.MouseEvent) => void,
-    handleId: string,
-    title?: string,
-    colorClass?: string
-}) => (
-    <div
-        className="w-3 h-3 rounded-full shadow-lg ring-2 ring-zinc-900 transition-all duration-300 group-hover/connector:w-4 group-hover/connector:h-4 group-hover/connector:ring-primary/30 cursor-crosshair"
-        onMouseDown={onMouseDown}
-        data-connector="true"
-        data-handle-type="source"
-        data-handle-id={handleId}
-        title={title}
-    >
-        <div className={cn("w-full h-full rounded-full transition-colors duration-300", colorClass)} />
-    </div>
-);
+import { FlowHandle } from './FlowHandle';
 
 const API_PREVIEW_KEY_PRIMARY = '__primary__';
 
-export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, availableVariables, onStartConnection, activeWorkspace }) => {
+export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, availableVariables, activeWorkspace, renderHandles = true }) => {
     const { toast } = useToast();
 
     const [apiSampleInput, setApiSampleInput] = useState('');
@@ -733,12 +711,12 @@ export const ApiCallNode: React.FC<NodeComponentProps> = ({ node, onUpdate, avai
                 </DialogContent>
             </Dialog>
 
-            <div className="absolute -right-3 z-20 flex items-center justify-center group/connector" style={{ top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`, transform: 'translateY(-50%)' }}>
-                <ConnectorDot onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }} handleId="default" title="Sucesso" colorClass="bg-green-500 group-hover/connector:bg-green-400" />
-            </div>
-            <div className="absolute -right-3 z-20 flex items-center justify-center group/connector" style={{ top: `${NODE_HEADER_CONNECTOR_Y_OFFSET + 25}px`, transform: 'translateY(-50%)' }}>
-                <ConnectorDot onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'error'); }} handleId="error" title="Falha/Erro" colorClass="bg-red-500 group-hover/connector:bg-red-400" />
-            </div>
+            {renderHandles && <div className="absolute -right-1.5 z-20 flex items-center justify-center group/connector" style={{ top: `${NODE_HEADER_CONNECTOR_Y_OFFSET}px`, transform: 'translateY(-50%)' }}>
+                <FlowHandle id="default" title="Sucesso" colorClass="bg-green-500 group-hover/connector:bg-green-400" />
+            </div>}
+            {renderHandles && <div className="absolute -right-1.5 z-20 flex items-center justify-center group/connector" style={{ top: `${NODE_HEADER_CONNECTOR_Y_OFFSET + 25}px`, transform: 'translateY(-50%)' }}>
+                <FlowHandle id="error" title="Falha/Erro" colorClass="bg-red-500 group-hover/connector:bg-red-400" />
+            </div>}
         </div>
     );
 };

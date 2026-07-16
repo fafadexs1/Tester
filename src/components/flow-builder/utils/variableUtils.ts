@@ -113,13 +113,11 @@ export const buildVariableOptions = (availableVariables: string[], workspace?: W
                 case 'code-execution':
                     registerHint(node.codeOutputVariable, 'value');
                     break;
-                case 'supabase-read-row':
-                    registerHint(node.supabaseResultVariable, 'array');
-                    break;
-                case 'supabase-create-row':
-                case 'supabase-update-row':
-                case 'supabase-delete-row':
-                    registerHint(node.supabaseResultVariable, 'object');
+                case 'db-select':
+                case 'db-insert':
+                case 'db-update':
+                case 'db-delete':
+                    registerHint(node.dbResultVariable, 'array');
                     break;
                 default:
                     break;

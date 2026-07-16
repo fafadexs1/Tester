@@ -7,6 +7,7 @@ import {
     isMissingGeminiModelError,
     isRetryableGeminiError,
 } from '@/lib/agent/gemini-models';
+import { resolveOrganizationGeminiApiKey } from '@/lib/agent/organization-ai-keys';
 import { z } from 'genkit';
 
 const IntentSchema = z.object({
@@ -19,6 +20,8 @@ const IntentionClassificationInputSchema = z.object({
     userMessage: z.string().describe('The message sent by the user.'),
     intents: z.array(IntentSchema).describe('The list of defined intents with their descriptions.'),
     modelName: z.string().optional().describe('Optional model name to use for classification.'),
+    organizationId: z.string().optional().describe('Optional organization id to resolve the Gemini key.'),
+    apiKeyId: z.string().optional().describe('Optional named Gemini key id configured for the organization.'),
     modelConfig: z.any().optional().describe('Optional model config (e.g. apiKey override).'),
 });
 
@@ -75,14 +78,30 @@ export const intentionClassificationFlow = ai.defineFlow(
     async (input) => {
         const modelCandidates = buildAuxiliaryGenkitModelCandidates(input.modelName);
         let lastError: any;
+        const resolvedApiKey = await resolveOrganizationGeminiApiKey({
+            organizationId: input.organizationId,
+            selectedKeyId: input.apiKeyId,
+            legacyApiKey: input.modelConfig?.apiKey,
+            modelName: input.modelName,
+            provider: 'google',
+        });
 
         try {
             for (let index = 0; index < modelCandidates.length; index += 1) {
                 const model = modelCandidates[index];
                 try {
                     const promptOptions: { model?: string; config?: any } = { model };
-                    if (input.modelConfig && typeof input.modelConfig === 'object') {
-                        promptOptions.config = input.modelConfig;
+                    const mergedModelConfig =
+                        input.modelConfig && typeof input.modelConfig === 'object'
+                            ? { ...input.modelConfig }
+                            : {};
+
+                    if (resolvedApiKey) {
+                        mergedModelConfig.apiKey = resolvedApiKey;
+                    }
+
+                    if (Object.keys(mergedModelConfig).length > 0) {
+                        promptOptions.config = mergedModelConfig;
                     }
 
                     const { output } = await classificationPrompt(input, promptOptions);

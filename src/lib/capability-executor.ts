@@ -105,6 +105,52 @@ const functionRegistry: Record<string, (input: any) => Promise<any>> = {
                 results: []
             };
         }
+    },
+
+    executeDatabaseTool: async (input: any) => {
+        const {
+            filter_column, filter_value, data,
+            _dbConnectionId, _dbTableName, _dbOperation,
+            _dbFilters, _dbColumnsToSelect, _dbDataJson,
+            _workspaceId, _databaseConnections,
+        } = input;
+
+        const connections = _databaseConnections || [];
+        const connection = connections.find((c: any) => c.id === _dbConnectionId);
+        if (!connection) {
+            return { error: `Database connection not found: ${_dbConnectionId}`, success: false };
+        }
+
+        const operation = _dbOperation || 'select';
+        const table = _dbTableName || '';
+
+        const filters: any[] = [];
+        if (_dbFilters && Array.isArray(_dbFilters)) filters.push(..._dbFilters);
+        if (filter_column && filter_value) {
+            filters.push({ id: 'agent-filter', column: filter_column, operator: '=', value: filter_value });
+        }
+
+        let operationData: Record<string, any> | undefined;
+        if (data) {
+            try { operationData = typeof data === 'string' ? JSON.parse(data) : data; } catch { operationData = undefined; }
+        } else if (_dbDataJson) {
+            try { operationData = JSON.parse(_dbDataJson); } catch { operationData = undefined; }
+        }
+
+        try {
+            const { executeDatabaseOperation } = await import('@/lib/database/executor');
+            const result = await executeDatabaseOperation({
+                connection, operation, table,
+                columns: _dbColumnsToSelect,
+                data: operationData,
+                filters: filters.length > 0 ? filters : undefined,
+            });
+            console.log(`[executeDatabaseTool] ${operation.toUpperCase()} on ${table}: ${result.rowCount} rows`);
+            return result;
+        } catch (error: any) {
+            console.error('[executeDatabaseTool] Error:', error);
+            return { error: error.message || 'Database operation failed', success: false };
+        }
     }
 };
 

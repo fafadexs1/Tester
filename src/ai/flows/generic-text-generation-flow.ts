@@ -1,18 +1,15 @@
-
 'use server';
-/**
- * @fileOverview A Genkit flow for generic text generation.
- *
- * - genericTextGenerationFlow - Generates text based on a given prompt.
- * - GenericTextGenerationInput - The input type for the flow.
- * - GenericTextGenerationOutput - The output type for the flow.
- */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { ai } from '@/ai/genkit';
+import { resolveOrganizationGeminiApiKey } from '@/lib/agent/organization-ai-keys';
+import { z } from 'genkit';
 
 const GenericTextGenerationInputSchema = z.object({
   promptText: z.string().describe('The prompt to generate text from.'),
+  modelName: z.string().optional().describe('Optional Gemini model name.'),
+  organizationId: z.string().optional().describe('Optional organization id to resolve the Gemini key.'),
+  apiKeyId: z.string().optional().describe('Optional named Gemini key id configured for the organization.'),
+  modelConfig: z.any().optional().describe('Optional model config, including apiKey overrides.'),
 });
 export type GenericTextGenerationInput = z.infer<typeof GenericTextGenerationInputSchema>;
 
@@ -21,34 +18,51 @@ const GenericTextGenerationOutputSchema = z.object({
 });
 export type GenericTextGenerationOutput = z.infer<typeof GenericTextGenerationOutputSchema>;
 
-// This is the function that will be imported and called by other parts of the application.
 export async function genericTextGenerationFlow(input: GenericTextGenerationInput): Promise<GenericTextGenerationOutput> {
-  // It calls the Genkit-defined flow.
   return definedGenericTextGenerationFlow(input);
 }
 
 const prompt = ai.definePrompt({
   name: 'genericTextGenerationPrompt',
-  input: {schema: GenericTextGenerationInputSchema},
-  output: {schema: GenericTextGenerationOutputSchema},
+  input: { schema: GenericTextGenerationInputSchema },
+  output: { schema: GenericTextGenerationOutputSchema },
   prompt: `{{{promptText}}}
 
 Por favor, gere uma resposta para o prompt acima.`,
 });
 
-// This is the Genkit-defined flow. It's not directly exported for external use,
-// but called by the wrapper function above.
 const definedGenericTextGenerationFlow = ai.defineFlow(
   {
-    name: 'genericTextGenerationFlow', // This name is for Genkit's internal registration
+    name: 'genericTextGenerationFlow',
     inputSchema: GenericTextGenerationInputSchema,
     outputSchema: GenericTextGenerationOutputSchema,
   },
   async (input) => {
-    const {output} = await prompt(input);
+    const resolvedApiKey = await resolveOrganizationGeminiApiKey({
+      organizationId: input.organizationId,
+      selectedKeyId: input.apiKeyId,
+      legacyApiKey: input.modelConfig?.apiKey,
+      modelName: input.modelName,
+      provider: 'google',
+    });
+
+    const mergedModelConfig =
+      input.modelConfig && typeof input.modelConfig === 'object'
+        ? { ...input.modelConfig }
+        : {};
+
+    if (resolvedApiKey) {
+      mergedModelConfig.apiKey = resolvedApiKey;
+    }
+
+    const { output } = await prompt(input, {
+      model: input.modelName,
+      config: Object.keys(mergedModelConfig).length > 0 ? mergedModelConfig : undefined,
+    });
+
     if (!output) {
       console.error('[genericTextGenerationFlow] LLM did not return a valid output structure. Returning default reply.');
-      return { generatedText: "Desculpe, não consegui gerar uma resposta no momento." };
+      return { generatedText: 'Desculpe, nao consegui gerar uma resposta no momento.' };
     }
     return output;
   }

@@ -6,7 +6,7 @@ import {
   MoreHorizontal, Copy, Trash2, CheckCircle2, AlertCircle, Play, MessageSquare, TextCursorInput,
   List, Split, GitMerge, Link2, Database, Code2, Replace, FileInput, Calendar,
   Star, Clock, TerminalSquare, Variable, UploadCloud, Webhook,
-  Bot, Mail, Sheet, LayoutTemplate, MonitorSmartphone, MessageCircle, Mic, Image as ImageIcon, Users, BrainCircuit, Blocks, Sparkles, ChevronDown, Rocket, Command, Book
+  Bot, Mail, Sheet, LayoutTemplate, MonitorSmartphone, MessageCircle, Mic, Image as ImageIcon, Users, BrainCircuit, Blocks, Sparkles, ChevronDown, Rocket, Command, Book, ReceiptText, CalendarCheck2, StopCircle
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
@@ -15,8 +15,9 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { cn } from "@/lib/utils";
-import { NodeData, WorkspaceData } from '@/lib/types';
+import { NodeData, OrganizationAiKeySummary, WorkspaceData } from '@/lib/types';
 import { NodeComponentProps } from './NodeProps';
+import { Handle, Position } from '@xyflow/react';
 
 // Import all node components
 import { StartNode } from './nodes/StartNode';
@@ -46,11 +47,15 @@ import { SendEmailNode } from './nodes/SendEmailNode';
 import { GoogleSheetsAppendNode } from './nodes/GoogleSheetsAppendNode';
 import { IntelligentAgentNode } from './nodes/IntelligentAgentNode';
 import { DialogySendMessageNode } from './nodes/DialogySendMessageNode';
+import { DialogyCloseChatNode } from './nodes/DialogyCloseChatNode';
+import { DialogyTransferAiNode, DialogyTransferTeamNode } from './nodes/DialogyTransferNode';
+import { DialogySGPSecondCopyNode } from './nodes/DialogySGPSecondCopyNode';
+import { DialogySGPPaymentPromiseNode } from './nodes/DialogySGPPaymentPromiseNode';
 import { TimeOfDayNode } from './nodes/TimeOfDayNode';
 import { MediaDisplayNode } from './nodes/MediaDisplayNode';
 import {
-  SupabaseCreateRowNode, SupabaseReadRowNode, SupabaseUpdateRowNode, SupabaseDeleteRowNode
-} from './nodes/SupabaseNode';
+  DbSelectNode, DbInsertNode, DbUpdateNode, DbDeleteNode, DbToolNode
+} from './nodes/DatabaseNode';
 import { IntentionRouterNode } from './nodes/IntentionRouterNode';
 import { ModelNode } from './nodes/ModelNode';
 import { MemoryNode } from './nodes/MemoryNode';
@@ -69,31 +74,36 @@ export const NODE_COMPONENTS: Record<string, React.FC<NodeComponentProps>> = {
   'ai-text-generation': AiTextGenerationNode, 'send-email': SendEmailNode,
   'google-sheets-append': GoogleSheetsAppendNode, 'intelligent-agent': IntelligentAgentNode,
   'dialogy-send-message': DialogySendMessageNode, 'time-of-day': TimeOfDayNode,
-  'media-display': MediaDisplayNode, 'supabase-create-row': SupabaseCreateRowNode,
-  'supabase-read-row': SupabaseReadRowNode, 'supabase-update-row': SupabaseUpdateRowNode,
-  'supabase-delete-row': SupabaseDeleteRowNode, 'intention-router': IntentionRouterNode,
+  'dialogy-close-chat': DialogyCloseChatNode,
+  'dialogy-transfer-team': DialogyTransferTeamNode, 'dialogy-transfer-ai': DialogyTransferAiNode,
+  'dialogy-sgp-second-copy': DialogySGPSecondCopyNode,
+  'dialogy-sgp-payment-promise': DialogySGPPaymentPromiseNode,
+  'media-display': MediaDisplayNode, 'db-select': DbSelectNode,
+  'db-insert': DbInsertNode, 'db-update': DbUpdateNode,
+  'db-delete': DbDeleteNode, 'db-tool': DbToolNode, 'intention-router': IntentionRouterNode,
   'ai-model-config': ModelNode,
   'ai-memory-config': MemoryNode,
   'http-tool': HttpToolNode,
   'knowledge': KnowledgeNode,
 };
 
-const SELF_CONTAINED_NODES = ['start', 'option', 'condition', 'switch', 'time-of-day', 'intention-router', 'api-call', 'message', 'input', 'end-flow', 'http-tool', 'knowledge'];
+const SELF_CONTAINED_NODES = ['start', 'option', 'condition', 'switch', 'time-of-day', 'intention-router', 'api-call', 'message', 'input', 'end-flow', 'http-tool', 'knowledge', 'dialogy-close-chat', 'dialogy-sgp-second-copy', 'dialogy-sgp-payment-promise'];
 
 interface NodeCardProps {
   node: NodeData;
   isSelected: boolean;
-  onSelect: (id: string, shiftKey: boolean) => void;
-  onDragStart: (e: React.MouseEvent, id: string) => void;
+  onSelect?: (id: string, shiftKey: boolean) => void;
+  onDragStart?: (e: React.MouseEvent, id: string) => void;
   onUpdatePosition: (id: string, x: number, y: number) => void;
   onUpdateNode: (id: string, data: Partial<NodeData>) => void;
   onDeleteNode: (id: string) => void;
   onDuplicateNode: (id: string) => void;
-  onStartConnection: (e: React.MouseEvent, node: NodeData, handleId: string) => void;
-  onEndConnection: (e: React.MouseEvent, node: NodeData) => void;
+  onStartConnection?: (e: React.MouseEvent, node: NodeData, handleId: string) => void;
+  onEndConnection?: (e: React.MouseEvent, node: NodeData) => void;
   onConfigure?: (id: string) => void;
   availableVariables: string[];
   activeWorkspace?: WorkspaceData | null;
+  organizationGeminiKeys?: OrganizationAiKeySummary[];
 }
 
 const renderNodeIcon = (type: string) => {
@@ -112,18 +122,25 @@ const renderNodeIcon = (type: string) => {
     case 'end-flow': return <CheckCircle2 className={cn(iconClass, "text-rose-500")} />;
     case 'ai-memory-config': return <Database className={cn(iconClass, "text-blue-400")} />;
     case 'ai-model-config': return <BrainCircuit className={cn(iconClass, "text-violet-400")} />;
+    case 'dialogy-send-message': return <Rocket className={cn(iconClass, "text-orange-400")} />;
+    case 'dialogy-close-chat': return <StopCircle className={cn(iconClass, "text-red-400")} />;
+    case 'dialogy-transfer-team': return <Users className={cn(iconClass, "text-orange-400")} />;
+    case 'dialogy-transfer-ai': return <BrainCircuit className={cn(iconClass, "text-orange-400")} />;
+    case 'dialogy-sgp-second-copy': return <ReceiptText className={cn(iconClass, "text-emerald-400")} />;
+    case 'dialogy-sgp-payment-promise': return <CalendarCheck2 className={cn(iconClass, "text-sky-400")} />;
+    case 'db-tool': return <Database className={cn(iconClass, "text-sky-400")} />;
     default: return <Command className={cn(iconClass, "text-zinc-500")} />;
   }
 };
 
 const NodeCard = memo(({
-  node, isSelected, onSelect, onDragStart, onUpdateNode, onDeleteNode, onDuplicateNode, onStartConnection, onEndConnection, onConfigure, availableVariables, activeWorkspace
+  node, isSelected, onSelect, onDragStart, onUpdateNode, onDeleteNode, onDuplicateNode, onStartConnection, onEndConnection, onConfigure, availableVariables, activeWorkspace, organizationGeminiKeys
 }: NodeCardProps) => {
   const NodeComponent = NODE_COMPONENTS[node.type];
   const showInputHandle = node.type !== 'start' && node.type !== 'http-tool';
 
   // N8N-style sub-nodes that should be circular
-  const SUB_NODE_TYPES = ['ai-memory-config', 'ai-model-config', 'capability', 'http-tool', 'knowledge'];
+  const SUB_NODE_TYPES = ['ai-memory-config', 'ai-model-config', 'capability', 'http-tool', 'knowledge', 'db-tool'];
   const isSubNode = SUB_NODE_TYPES.includes(node.type);
   const isCompactSubNode = isSubNode; // Always compact/circular
 
@@ -140,6 +157,8 @@ const NodeCard = memo(({
         return { label: node.httpToolName || 'API Tool', iconColor: 'text-rose-400', bgColor: 'from-rose-950/20 to-zinc-950', borderColor: 'border-rose-900/50', glowColor: 'rgba(244, 63, 94, 0.2)' };
       case 'knowledge':
         return { label: 'Knowledge Base', iconColor: 'text-amber-400', bgColor: 'from-amber-950/20 to-zinc-950', borderColor: 'border-amber-900/50', glowColor: 'rgba(245, 158, 11, 0.2)' };
+      case 'db-tool':
+        return { label: node.dbToolName || 'DB Tool', iconColor: 'text-sky-400', bgColor: 'from-sky-950/20 to-zinc-950', borderColor: 'border-sky-900/50', glowColor: 'rgba(56, 189, 248, 0.2)' };
       default:
         return { label: 'Node', iconColor: 'text-zinc-400', bgColor: 'from-zinc-900 to-zinc-950', borderColor: 'border-zinc-800', glowColor: 'rgba(0,0,0,0)' };
     }
@@ -149,15 +168,14 @@ const NodeCard = memo(({
   return (
     <div
       className={cn(
-        "relative w-full rounded-[2rem] transition-[transform,colors,box-shadow] duration-300 group/card will-change-transform",
+        "relative w-full rounded-[2rem] transition-[border-color,box-shadow] duration-200 group/card",
         isCompactSubNode ? "bg-transparent shadow-none border-none" : "neo-glass border-white/[0.05]",
         isSelected
           ? (isCompactSubNode
-            ? "z-30 scale-105" // For circular nodes, just scale up slightly and bring to front, NO borders/rectangles
-            : "scale-[1.02] border-primary/40 ring-1 ring-primary/20 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.8)] z-30")
+            ? "z-30"
+            : "border-primary/40 ring-1 ring-primary/20 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.8)] z-30")
           : "hover:border-white/10 hover:shadow-2xl z-20"
       )}
-      onMouseDown={(e) => { e.stopPropagation(); onSelect(node.id, e.shiftKey); }}
       onDoubleClick={(e) => {
         e.stopPropagation();
         if (isSubNode && onConfigure) {
@@ -167,10 +185,9 @@ const NodeCard = memo(({
       data-node-id={node.id}
     >
       {/* Aurora Glow behind card - Disable for compact nodes */}
-      {!isCompactSubNode && (
+      {!isCompactSubNode && isSelected && (
         <div className={cn(
-          "absolute -inset-1 rounded-[2.5rem] opacity-0 blur-lg transition-opacity duration-300 -z-10 bg-primary/5 will-change-[opacity]",
-          isSelected && "opacity-100"
+          "absolute -inset-1 rounded-[2.5rem] opacity-100 blur-lg -z-10 bg-primary/5"
         )} />
       )}
 
@@ -179,7 +196,7 @@ const NodeCard = memo(({
           className={cn(
             "flex items-center justify-between p-4 cursor-grab active:cursor-grabbing rounded-t-[2rem] border-b border-white/[0.03] bg-white/[0.01]",
           )}
-          onMouseDown={(e) => onDragStart(e, node.id)}
+          onMouseDown={(e) => onDragStart?.(e, node.id)}
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-black/40 border border-white/5 shadow-inner">
@@ -222,14 +239,15 @@ const NodeCard = memo(({
 
       {/* Target Handle (Input) */}
       {showInputHandle && !isCompactSubNode && (
-        <div
-          className="absolute -left-2 top-11 z-30 flex items-center justify-center group/h-in w-4 h-4"
-          onMouseUp={(e) => { e.stopPropagation(); onEndConnection(e, node); }}
-          data-connector="true" data-handle-type="target" data-handle-id="default" data-node-id={node.id}
+        <Handle
+          id="default"
+          type="target"
+          position={Position.Left}
+          className="!absolute !left-0 !top-11 !h-4 !w-4 !-translate-x-1/2 !-translate-y-1/2 z-30 flex items-center justify-center group/h-in"
         >
-          <div className="absolute inset-0 bg-primary/20 rounded-full blur-md opacity-0 group-hover/h-in:opacity-100 transition-opacity" />
+          <div className="absolute inset-0 bg-primary/20 rounded-full opacity-0 group-hover/h-in:opacity-100 transition-opacity" />
           <div className="w-2 h-2 rounded-full border-2 border-primary bg-black group-hover/h-in:scale-125 transition-all" />
-        </div>
+        </Handle>
       )}
 
       {/* Node Body */}
@@ -246,8 +264,13 @@ const NodeCard = memo(({
                   subNodeConfig.borderColor
                 )}
                 // Removed manual boxShadow/glow from here to rely on class shadow-xl or none
-                onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}
-                data-connector="true" data-handle-type="source" data-handle-id="default" data-node-id={node.id}
+                title="Arraste para conectar"
+              />
+              <Handle
+                id="default"
+                type="source"
+                position={Position.Right}
+                className="!absolute !right-0 !top-1/2 !h-4 !w-4 !translate-x-1/2 !-translate-y-1/2 z-30 rounded-full !border-2 !border-black !bg-primary cursor-crosshair shadow-[0_0_10px_rgba(139,92,246,0.5)]"
                 title="Arraste para conectar"
               />
 
@@ -256,7 +279,7 @@ const NodeCard = memo(({
                   "absolute inset-3 rounded-full bg-black/80 border flex items-center justify-center cursor-grab active:cursor-grabbing z-10 transition-colors",
                   subNodeConfig.borderColor
                 )}
-                onMouseDown={(e) => onDragStart(e, node.id)}
+                onMouseDown={(e) => onDragStart?.(e, node.id)}
               >
                 <div className={cn("transform scale-125", subNodeConfig.iconColor)}>
                   {renderNodeIcon(node.type)}
@@ -264,17 +287,18 @@ const NodeCard = memo(({
               </div>
 
               {/* Explicit Top Target Handle for incoming connection */}
-              <div
+              <Handle
+                id="default"
+                type="target"
+                position={Position.Top}
                 className={cn(
-                  "absolute -top-1.5 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 bg-black z-50 cursor-crosshair transition-transform hover:scale-125",
+                  "!absolute !left-1/2 !top-0 !h-4 !w-4 !-translate-x-1/2 !-translate-y-1/2 rounded-full border-2 bg-black z-50 cursor-crosshair",
                   subNodeConfig.borderColor
                 )}
-                onMouseUp={(e) => { e.stopPropagation(); onEndConnection(e, node); }}
-                data-connector="true" data-handle-type="target" data-handle-id="default" data-node-id={node.id}
                 title="Solte para conectar"
               >
                 <div className={cn("absolute inset-0.5 rounded-full opacity-50", "bg-zinc-500")} />
-              </div>
+              </Handle>
 
               {/* Delete Button - Visible on Hover */}
               <button
@@ -294,7 +318,7 @@ const NodeCard = memo(({
                 {node.type === 'ai-memory-config'
                   ? (node.memoryProvider || 'postgres')
                   : node.type === 'ai-model-config'
-                    ? ('openai') // Default for now until modelProvider is added to NodeData
+                    ? (node.aiProvider || 'google')
                     : node.capabilityVersion ? `v${node.capabilityVersion}` : node.type
                 }
               </p>
@@ -306,9 +330,11 @@ const NodeCard = memo(({
         ) : NodeComponent ? (
           <NodeComponent
             node={node} activeWorkspace={activeWorkspace} availableVariables={availableVariables}
+            organizationGeminiKeys={organizationGeminiKeys}
             onUpdate={onUpdateNode as any} onStartConnection={onStartConnection}
-            onEndConnection={(e: React.MouseEvent, n: NodeData, hId?: string) => onEndConnection(e, n)}
+            onEndConnection={onEndConnection}
             activeNodeId={isSelected ? node.id : undefined}
+            renderHandles
           />
         ) : (
           <div className="text-[10px] text-red-400 p-3 bg-red-400/5 border border-red-400/10 rounded-2xl italic">
@@ -319,21 +345,23 @@ const NodeCard = memo(({
 
       {/* Source Handle (Output) */}
       {!SELF_CONTAINED_NODES.includes(node.type) && !isCompactSubNode && (
-        <div
-          className="absolute -right-2 top-11 z-30 flex items-center justify-center group/h-out w-4 h-4 cursor-crosshair"
-          onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, 'default'); }}
-          data-connector="true" data-handle-type="source" data-handle-id="default" data-node-id={node.id}
+        <Handle
+          id="default"
+          type="source"
+          position={Position.Right}
+          className="!absolute !right-0 !top-11 !h-4 !w-4 !translate-x-1/2 !-translate-y-1/2 z-30 flex items-center justify-center group/h-out cursor-crosshair"
         >
-          <div className="absolute inset-0 bg-primary/40 rounded-full blur-lg opacity-0 group-hover/h-out:opacity-100 transition-opacity" />
+          <div className="absolute inset-0 bg-primary/40 rounded-full opacity-0 group-hover/h-out:opacity-100 transition-opacity" />
           <div className="w-2.5 h-2.5 rounded-full bg-primary border-2 border-black group-hover/h-out:scale-150 transition-all shadow-[0_0_10px_rgba(139,92,246,0.5)]" />
-        </div>
+        </Handle>
       )}
     </div>
   );
 }, (prev, next) => {
   return prev.isSelected === next.isSelected &&
     prev.node === next.node &&
-    prev.availableVariables === next.availableVariables;
+    prev.availableVariables === next.availableVariables &&
+    prev.organizationGeminiKeys === next.organizationGeminiKeys;
 });
 
 NodeCard.displayName = 'NodeCard';

@@ -157,6 +157,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, pathname, router, isProcessingSSO, searchParams]);
 
+  useEffect(() => {
+    if (loading || isProcessingSSO || !user || typeof window === 'undefined' || window.parent === window) {
+      return;
+    }
+
+    let targetOrigin = '*';
+    try {
+      if (document.referrer) {
+        targetOrigin = new URL(document.referrer).origin;
+      }
+    } catch {
+      // A wildcard keeps local and proxied deployments working when no valid referrer is available.
+    }
+
+    window.parent.postMessage({ type: 'NEXUS_READY' }, targetOrigin);
+  }, [isProcessingSSO, loading, user]);
+
   const login = useCallback(async (formData: FormData): Promise<{ success: boolean; error?: string; user?: User }> => {
     const result = await loginAction(formData);
     if (result.success) {

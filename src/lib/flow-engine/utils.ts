@@ -79,11 +79,11 @@ function resolveAliasValue(expression: string, variables: Record<string, any>): 
   return { found: false };
 }
 
-export function evaluateExpression(rawExpression: string, variables: Record<string, any>) {
+export async function evaluateExpression(rawExpression: string, variables: Record<string, any>) {
   return evaluateExpressionSegment(rawExpression, variables);
 }
 
-function evaluateExpressionSegment(rawExpression: string, variables: Record<string, any>) {
+async function evaluateExpressionSegment(rawExpression: string, variables: Record<string, any>) {
   const expression = rawExpression.trim();
   if (!expression) return '';
 
@@ -108,22 +108,43 @@ function evaluateExpressionSegment(rawExpression: string, variables: Record<stri
 
   try {
     const expressionEvaluator = jsonata(expression);
-    return expressionEvaluator.evaluate({ vars: variables, json: variables, data: variables });
+    return await expressionEvaluator.evaluate({ vars: variables, json: variables, data: variables });
   } catch (error) {
     console.warn(`[Flow Engine] Failed to evaluate expression "{{${expression}}}":`, error);
     return '';
   }
 }
 
-export function substituteVariablesInText(text: string | undefined, variables: Record<string, any>): string {
+export async function substituteVariablesInText(text: string | undefined, variables: Record<string, any>): Promise<string> {
   if (text === undefined || text === null) return '';
   const source = String(text);
   if (!source.includes('{{')) {
     return source;
   }
-  return source.replace(EXPRESSION_REGEX, (_match, expression) =>
-    formatEvaluatedValue(evaluateExpressionSegment(String(expression), variables), expression)
-  );
+
+  const matches = Array.from(source.matchAll(EXPRESSION_REGEX));
+  if (matches.length === 0) {
+    return source;
+  }
+
+  let result = '';
+  let cursor = 0;
+
+  for (const match of matches) {
+    const fullMatch = match[0];
+    const expression = String(match[1] ?? '');
+    const start = typeof match.index === 'number'
+      ? match.index
+      : source.indexOf(fullMatch, cursor);
+    const end = start + fullMatch.length;
+
+    result += source.slice(cursor, start);
+    result += formatEvaluatedValue(await evaluateExpressionSegment(expression, variables), expression);
+    cursor = end;
+  }
+
+  result += source.slice(cursor);
+  return result;
 }
 
 export function coerceToDate(raw: any): Date | null {

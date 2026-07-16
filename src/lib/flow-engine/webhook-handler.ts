@@ -4,6 +4,7 @@ import { getProperty } from 'dot-prop';
 import type { NextRequest } from 'next/server';
 import type { FlowContextType, FlowLog } from '@/lib/types';
 import { saveFlowLog } from '@/app/actions/databaseActions';
+import { extractDialogyIncomingMessageValue } from './dialogy-utils';
 
 const IMPORTANT_HEADER_KEYS = new Set([
   'content-type',
@@ -92,7 +93,7 @@ export async function storeRequestDetails(
     } else if (dialogyEvent === 'message.created' && dialogyConversationId) {
       flowContext = 'dialogy';
       sessionKeyIdentifier = `dialogy_conv_${dialogyConversationId}`;
-      extractedMessage = String(getProperty(actualPayloadToExtractFrom, 'message.content', '') || '').trim();
+      extractedMessage = extractDialogyIncomingMessageValue(actualPayloadToExtractFrom);
     } else if (evolutionSenderJid) {
       flowContext = 'evolution';
       sessionKeyIdentifier = `evolution_jid_${evolutionSenderJid}`;

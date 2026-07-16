@@ -1,6 +1,6 @@
 
 import OpenAI from 'openai';
-import { pipeline, env } from '@xenova/transformers';
+import { pipeline, env } from '@huggingface/transformers';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_EMBEDDINGS_MODEL } from './models';
@@ -26,26 +26,30 @@ const openai = process.env.OPENAI_API_KEY
 
 interface LocalEmbeddingModelSpec {
     modelName: string;
-    quantized?: boolean;
+    dtype?: 'auto' | 'fp32' | 'fp16' | 'int8' | 'uint8' | 'q8' | 'q4' | 'bnb4' | 'q4f16';
     dimension: number;
     queryPrefix?: string;
     documentPrefix?: string;
 }
 
+const LOCAL_MODEL_FALLBACKS: Record<string, string> = {
+    'local-embeddinggemma': 'local-e5',
+};
+
 const LOCAL_MODEL_SPECS: Record<string, LocalEmbeddingModelSpec> = {
     'local-embeddinggemma': {
         modelName: 'onnx-community/embeddinggemma-300m-ONNX',
-        quantized: true,
+        dtype: 'q8',
         dimension: 768,
     },
     'local-minilm': {
         modelName: 'Xenova/all-MiniLM-L6-v2',
-        quantized: true,
+        dtype: 'q8',
         dimension: 384,
     },
     'local-e5': {
         modelName: 'Xenova/e5-small',
-        quantized: true,
+        dtype: 'q8',
         dimension: 384,
         queryPrefix: 'query: ',
         documentPrefix: 'passage: ',
@@ -57,6 +61,9 @@ class LocalEmbeddingService {
     private static instance: LocalEmbeddingService;
     private pipelines: Record<string, any> = {};
     private embeddingCache: Map<string, number[]> = new Map();
+    private failedModels: Set<string> = new Set();
+    private aliasRedirects: Map<string, string> = new Map();
+    private loggedFallbacks: Set<string> = new Set();
     private cacheLimit = 1000; // Limit cache size
 
     private constructor() { }
@@ -80,64 +87,118 @@ class LocalEmbeddingService {
         return cleaned;
     }
 
+    private getPreferredAlias(modelAlias: string): string {
+        return this.aliasRedirects.get(modelAlias) || modelAlias;
+    }
+
+    private registerFallback(requestedAlias: string, failedAlias: string): string | null {
+        const fallbackAlias = LOCAL_MODEL_FALLBACKS[failedAlias];
+        if (!fallbackAlias || fallbackAlias === failedAlias) {
+            return null;
+        }
+
+        this.aliasRedirects.set(requestedAlias, fallbackAlias);
+        const logKey = `${requestedAlias}->${fallbackAlias}`;
+        if (!this.loggedFallbacks.has(logKey)) {
+            this.loggedFallbacks.add(logKey);
+            console.warn(
+                `[Memory] Falling back from ${failedAlias} to ${fallbackAlias} for embeddings after local model load failure.`
+            );
+        }
+        return fallbackAlias;
+    }
+
+    private async ensurePipeline(modelAlias: string, spec: LocalEmbeddingModelSpec): Promise<any | null> {
+        if (this.pipelines[modelAlias]) {
+            return this.pipelines[modelAlias];
+        }
+
+        if (this.failedModels.has(modelAlias)) {
+            return null;
+        }
+
+        console.log(`[Memory] Loading local embedding model: ${spec.modelName} (${modelAlias})...`);
+        try {
+            this.pipelines[modelAlias] = await pipeline('feature-extraction', spec.modelName, {
+                dtype: spec.dtype ?? 'q8',
+            });
+            console.log(`[Memory] Model ${spec.modelName} loaded successfully.`);
+            return this.pipelines[modelAlias];
+        } catch (e) {
+            this.failedModels.add(modelAlias);
+            delete this.pipelines[modelAlias];
+            console.error(`[Memory] Failed to load model ${spec.modelName}:`, e);
+            return null;
+        }
+    }
+
     public async getEmbedding(
         text: string,
         modelAlias: string,
         options: EmbeddingOptions = {}
     ): Promise<number[] | null> {
-        const spec = LOCAL_MODEL_SPECS[modelAlias];
-        if (!spec) return null;
-
         const role = options.role || 'document';
-        const preparedInput = this.prepareInput(text, spec, role);
-        if (!preparedInput) return null;
+        const attemptedAliases = new Set<string>();
+        let activeAlias = this.getPreferredAlias(modelAlias);
 
-        // 1. Check Cache
-        const cacheKey = this.getCacheKey(preparedInput, modelAlias, role);
-        if (this.embeddingCache.has(cacheKey)) {
-            // console.log('[Memory] Cache hit for embedding');
-            return this.embeddingCache.get(cacheKey)!;
-        }
+        while (activeAlias && !attemptedAliases.has(activeAlias)) {
+            attemptedAliases.add(activeAlias);
 
-        // 2. Load Pipeline (Lazy Loading)
-        if (!this.pipelines[modelAlias]) {
-            console.log(`[Memory] Loading local embedding model: ${spec.modelName} (${modelAlias})...`);
+            const spec = LOCAL_MODEL_SPECS[activeAlias];
+            if (!spec) return null;
+
+            const preparedInput = this.prepareInput(text, spec, role);
+            if (!preparedInput) return null;
+
+            const cacheKey = this.getCacheKey(preparedInput, activeAlias, role);
+            if (this.embeddingCache.has(cacheKey)) {
+                return this.embeddingCache.get(cacheKey)!;
+            }
+
+            const pipe = await this.ensurePipeline(activeAlias, spec);
+            if (!pipe) {
+                const fallbackAlias = this.registerFallback(modelAlias, activeAlias);
+                if (fallbackAlias) {
+                    activeAlias = fallbackAlias;
+                    continue;
+                }
+                return null;
+            }
+
             try {
-                // "feature-extraction" is the task for embeddings
-                this.pipelines[modelAlias] = await pipeline('feature-extraction', spec.modelName, {
-                    quantized: spec.quantized ?? true,
-                });
-                console.log(`[Memory] Model ${spec.modelName} loaded successfully.`);
+                const output = await pipe(preparedInput, { pooling: 'mean', normalize: true });
+                const embedding = Array.from(output.data) as number[];
+                if (embedding.length !== spec.dimension) {
+                    console.warn(
+                        `[Memory] Unexpected embedding dimension for ${activeAlias}. Expected ${spec.dimension}, got ${embedding.length}.`
+                    );
+                }
+
+                if (this.embeddingCache.size >= this.cacheLimit) {
+                    const firstKey = this.embeddingCache.keys().next().value;
+                    if (firstKey) this.embeddingCache.delete(firstKey);
+                }
+                this.embeddingCache.set(cacheKey, embedding);
+
+                if (activeAlias !== modelAlias) {
+                    this.aliasRedirects.set(modelAlias, activeAlias);
+                }
+
+                return embedding;
             } catch (e) {
-                console.error(`[Memory] Failed to load model ${spec.modelName}:`, e);
+                this.failedModels.add(activeAlias);
+                delete this.pipelines[activeAlias];
+                console.error(`[Memory] Error generating embedding for ${activeAlias}:`, e);
+                const fallbackAlias = this.registerFallback(modelAlias, activeAlias);
+                if (fallbackAlias) {
+                    activeAlias = fallbackAlias;
+                    continue;
+                }
                 return null;
             }
         }
 
-        // 3. Generate embedding
-        try {
-            const pipe = this.pipelines[modelAlias];
-            const output = await pipe(preparedInput, { pooling: 'mean', normalize: true });
-
-            const embedding = Array.from(output.data) as number[];
-            if (embedding.length !== spec.dimension) {
-                console.warn(
-                    `[Memory] Unexpected embedding dimension for ${modelAlias}. Expected ${spec.dimension}, got ${embedding.length}.`
-                );
-            }
-
-            // 4. Update cache
-            if (this.embeddingCache.size >= this.cacheLimit) {
-                const firstKey = this.embeddingCache.keys().next().value;
-                if (firstKey) this.embeddingCache.delete(firstKey);
-            }
-            this.embeddingCache.set(cacheKey, embedding);
-
-            return embedding;
-        } catch (e) {
-            console.error(`[Memory] Error generating embedding for ${modelAlias}:`, e);
-            return null;
-        }
+        return null;
     }
 }
 

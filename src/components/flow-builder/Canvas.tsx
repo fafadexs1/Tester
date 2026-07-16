@@ -1,23 +1,46 @@
 "use client";
-import React, { useRef, useEffect, useMemo, useCallback, forwardRef } from 'react';
-import type { DropTargetMonitor } from 'react-dnd';
-import { useDrop } from 'react-dnd';
-import { motion, AnimatePresence } from 'framer-motion';
-import NodeCard from './NodeCard';
 
-import type {
-  NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, WorkspaceData
-} from '@/lib/types';
+import React, {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { DropTargetMonitor } from "react-dnd";
+import { useDrop } from "react-dnd";
 import {
-  ITEM_TYPE_BLOCK, NODE_WIDTH, GRID_SIZE,
-  NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX,
-  START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y,
-} from '@/lib/constants';
-import { cn } from "@/lib/utils";
+  applyNodeChanges,
+  Background,
+  BaseEdge,
+  getBezierPath,
+  MarkerType,
+  ReactFlow,
+  type Connection as ReactFlowConnection,
+  type Edge,
+  type EdgeProps,
+  type Node,
+  type NodeProps,
+  type ReactFlowInstance,
+} from "@xyflow/react";
+import NodeCard from "./NodeCard";
+import type {
+  CanvasOffset,
+  Connection,
+  DraggableBlockItemData,
+  DrawingLineData,
+  NodeData,
+  OrganizationAiKeySummary,
+  WorkspaceData,
+} from "@/lib/types";
+import { GRID_SIZE, ITEM_TYPE_BLOCK, NODE_WIDTH } from "@/lib/constants";
 
 interface CanvasProps {
   nodes: NodeData[];
   connections: Connection[];
+  /** @deprecated React Flow now owns the temporary connection line. */
   drawingLine: DrawingLineData | null;
   canvasOffset: CanvasOffset;
   zoomLevel: number;
@@ -34,41 +57,294 @@ interface CanvasProps {
   availableVariablesByNode: Record<string, string[]>;
   highlightedNodeIdBySession: string | null;
   activeWorkspace: WorkspaceData | undefined | null;
+  organizationGeminiKeys?: OrganizationAiKeySummary[];
   selectedNodeIds: string[];
   onSelectNode: (id: string, shiftKey: boolean) => void;
+  onSelectionChangeIds?: (ids: string[]) => void;
+  /** @deprecated Node dragging is handled by React Flow. */
   onNodeDragStart: (e: React.MouseEvent, id: string) => void;
   onUpdatePosition: (id: string, x: number, y: number) => void;
   onEndConnection: (e: React.MouseEvent, node: NodeData) => void;
   onConfigureNode?: (id: string) => void;
   disableAnimations: boolean;
   tracePathConnectionIds?: Set<string> | null;
+  /** Persists a connection created through React Flow handles. */
+  onConnectNodes?: (connection: Omit<Connection, "id">) => void;
 }
 
-const SVG_CANVAS_DIMENSION = 50000;
+interface CanvasNodeData extends Record<string, unknown> {
+  node: NodeData;
+  onUpdateNode: CanvasProps["onUpdateNode"];
+  onStartConnection: CanvasProps["onStartConnection"];
+  onDeleteNode: CanvasProps["onDeleteNode"];
+  onDuplicateNode: CanvasProps["onDuplicateNode"];
+  onSelectNode: CanvasProps["onSelectNode"];
+  onUpdatePosition: CanvasProps["onUpdatePosition"];
+  onEndConnection: CanvasProps["onEndConnection"];
+  onConfigureNode?: CanvasProps["onConfigureNode"];
+  availableVariables: string[];
+  activeWorkspace: WorkspaceData | undefined | null;
+  organizationGeminiKeys?: OrganizationAiKeySummary[];
+}
+
+interface CanvasEdgeData extends Record<string, unknown> {
+  connectionId: string;
+  highlighted: boolean;
+  traced: boolean;
+  dimmed: boolean;
+  animate: boolean;
+  reduceEffects: boolean;
+  onDelete: (id: string) => void;
+  onHighlight: (id: string | null) => void;
+}
+
+type CanvasFlowNode = Node<CanvasNodeData, "canvasNode">;
+
+const CanvasNode = memo(({ data, selected }: NodeProps<CanvasFlowNode>) => {
+  const { node } = data;
+
+  return (
+    <div data-node-id={node.id} style={{ width: NODE_WIDTH }}>
+      <NodeCard
+        node={node}
+        onUpdateNode={data.onUpdateNode}
+        onStartConnection={data.onStartConnection}
+        onDeleteNode={data.onDeleteNode}
+        onDuplicateNode={data.onDuplicateNode}
+        availableVariables={data.availableVariables}
+        activeWorkspace={data.activeWorkspace}
+        organizationGeminiKeys={data.organizationGeminiKeys}
+        isSelected={selected}
+        onSelect={data.onSelectNode}
+        // React Flow owns the wrapper transform and drag lifecycle.
+        onDragStart={() => undefined}
+        onUpdatePosition={data.onUpdatePosition}
+        onEndConnection={data.onEndConnection}
+        onConfigure={data.onConfigureNode}
+      />
+    </div>
+  );
+});
+CanvasNode.displayName = "CanvasNode";
+
+const CanvasEdge = memo((props: EdgeProps) => {
+  const {
+    id,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    markerEnd,
+  } = props;
+  const data = props.data as CanvasEdgeData | undefined;
+  const [edgePath] = getBezierPath({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+  });
+
+  if (!data) return null;
+
+  const emphasized = data.highlighted || data.traced;
+  const stroke = emphasized
+    ? "#a855f7"
+    : data.dimmed
+      ? "#333333"
+      : "hsl(var(--neon-cyan))";
+
+  return (
+    <g
+      style={{ cursor: "pointer" }}
+      onMouseEnter={() => data.onHighlight(data.connectionId)}
+      onMouseLeave={() => data.onHighlight(null)}
+      onClick={(event) => {
+        event.stopPropagation();
+        data.onDelete(data.connectionId);
+      }}
+    >
+      <title>Clique para remover conexao</title>
+      <BaseEdge
+        id={id}
+        path={edgePath}
+        markerEnd={markerEnd}
+        interactionWidth={24}
+        style={{
+          stroke,
+          strokeOpacity: data.dimmed ? 0.2 : emphasized ? 1 : 0.65,
+          strokeWidth: emphasized ? 3 : 2,
+          transition: "stroke 200ms, stroke-opacity 200ms, stroke-width 200ms",
+        }}
+      />
+
+      {!data.reduceEffects && data.animate && emphasized && (
+        <path
+          d={edgePath}
+          fill="none"
+          stroke="white"
+          strokeDasharray="10 10"
+          strokeWidth={2}
+          opacity={0.8}
+          className="pointer-events-none animate-dash"
+        />
+      )}
+    </g>
+  );
+});
+CanvasEdge.displayName = "CanvasEdge";
+
+const nodeTypes = { canvasNode: CanvasNode };
+const edgeTypes = { canvasEdge: CanvasEdge };
+const SNAP_GRID: [number, number] = [GRID_SIZE, GRID_SIZE];
+const CONNECTION_LINE_STYLE: React.CSSProperties = {
+  stroke: "hsl(var(--primary))",
+  strokeWidth: 2,
+};
+const PRO_OPTIONS = { hideAttribution: true } as const;
 
 const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
-  nodes, connections, drawingLine, canvasOffset, zoomLevel,
-  onDropNode, onUpdateNode, onStartConnection, onDeleteNode, onDuplicateNode, onDeleteConnection,
-  onCanvasMouseDown, isInteracting, highlightedConnectionId, setHighlightedConnectionId,
-  availableVariablesByNode, highlightedNodeIdBySession, activeWorkspace,
-  selectedNodeIds, onSelectNode, onNodeDragStart, onUpdatePosition, onEndConnection, onConfigureNode,
-  disableAnimations, tracePathConnectionIds
-}, ref) => {
-  const localCanvasRef = useRef<HTMLDivElement>(null);
-  const canvasElementRef = (ref || localCanvasRef) as React.RefObject<HTMLDivElement>;
+  nodes,
+  connections,
+  canvasOffset,
+  zoomLevel,
+  onDropNode,
+  onUpdateNode,
+  onStartConnection,
+  onDeleteNode,
+  onDuplicateNode,
+  onDeleteConnection,
+  onCanvasMouseDown,
+  isInteracting,
+  highlightedConnectionId,
+  setHighlightedConnectionId,
+  availableVariablesByNode,
+  activeWorkspace,
+  organizationGeminiKeys,
+  selectedNodeIds,
+  onSelectNode,
+  onSelectionChangeIds,
+  onUpdatePosition,
+  onEndConnection,
+  onConfigureNode,
+  disableAnimations,
+  tracePathConnectionIds,
+  onConnectNodes,
+}, forwardedRef) => {
+  const localRef = useRef<HTMLDivElement>(null);
+  const reactFlow = useRef<ReactFlowInstance<CanvasFlowNode, Edge> | null>(null);
+  const initialViewport = useRef({
+    x: canvasOffset.x,
+    y: canvasOffset.y,
+    zoom: zoomLevel,
+  }).current;
+  const [isFlowInteracting, setIsFlowInteracting] = useState(false);
 
-  const stableOnDropNode = useCallback(
-    (item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
-      const clientOffset = monitor.getClientOffset();
-      if (clientOffset && canvasElementRef.current) {
-        const canvasRect = canvasElementRef.current.getBoundingClientRect();
-        const logicalX = (clientOffset.x - canvasRect.left - canvasOffset.x) / zoomLevel;
-        const logicalY = (clientOffset.y - canvasRect.top - canvasOffset.y) / zoomLevel;
-        onDropNode(item, { x: logicalX, y: logicalY });
-      }
+  const assignRef = useCallback((element: HTMLDivElement | null) => {
+    localRef.current = element;
+    if (typeof forwardedRef === "function") forwardedRef(element);
+    else if (forwardedRef) forwardedRef.current = element;
+  }, [forwardedRef]);
+
+  const mappedNodes = useMemo<CanvasFlowNode[]>(() => nodes.map((node) => ({
+    id: node.id,
+    type: "canvasNode",
+    position: { x: node.x, y: node.y },
+    selected: selectedNodeIds.includes(node.id),
+    data: {
+      node,
+      onUpdateNode,
+      onStartConnection,
+      onDeleteNode,
+      onDuplicateNode,
+      onSelectNode,
+      onUpdatePosition,
+      onEndConnection,
+      onConfigureNode,
+      availableVariables: availableVariablesByNode[node.id] || [],
+      activeWorkspace,
+      organizationGeminiKeys,
     },
-    [onDropNode, zoomLevel, canvasOffset, canvasElementRef]
-  );
+  })), [
+    nodes,
+    selectedNodeIds,
+    onUpdateNode,
+    onStartConnection,
+    onDeleteNode,
+    onDuplicateNode,
+    onSelectNode,
+    onUpdatePosition,
+    onEndConnection,
+    onConfigureNode,
+    availableVariablesByNode,
+    activeWorkspace,
+    organizationGeminiKeys,
+  ]);
+
+  const [flowNodes, setFlowNodes] = useState<CanvasFlowNode[]>(mappedNodes);
+  useEffect(() => setFlowNodes(mappedNodes), [mappedNodes]);
+
+  const performanceMode = nodes.length > 30 || connections.length > 40;
+  const reduceConnectionEffects = isInteracting || isFlowInteracting || performanceMode;
+  const isTracing = Boolean(tracePathConnectionIds?.size);
+  const flowEdges = useMemo<Edge[]>(() => connections.map((connection) => {
+    const traced = Boolean(tracePathConnectionIds?.has(connection.id));
+    const highlighted = highlightedConnectionId === connection.id;
+    return {
+      id: connection.id,
+      source: connection.from,
+      target: connection.to,
+      sourceHandle: connection.sourceHandle || "default",
+      targetHandle: connection.targetHandle || "default",
+      type: "canvasEdge",
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 16,
+        height: 16,
+        color: highlighted || traced ? "#a855f7" : "hsl(var(--neon-cyan))",
+      },
+      data: {
+        connectionId: connection.id,
+        highlighted,
+        traced,
+        dimmed: isTracing && !traced,
+        animate: !disableAnimations && selectedNodeIds.length === 0,
+        reduceEffects: reduceConnectionEffects,
+        onDelete: onDeleteConnection,
+        onHighlight: setHighlightedConnectionId,
+      } satisfies CanvasEdgeData,
+    };
+  }), [
+    connections,
+    tracePathConnectionIds,
+    highlightedConnectionId,
+    isTracing,
+    disableAnimations,
+    selectedNodeIds.length,
+    reduceConnectionEffects,
+    onDeleteConnection,
+    setHighlightedConnectionId,
+  ]);
+
+  const handleConnect = useCallback((connection: ReactFlowConnection) => {
+    if (!connection.source || !connection.target || connection.source === connection.target) return;
+    onConnectNodes?.({
+      from: connection.source,
+      to: connection.target,
+      sourceHandle: connection.sourceHandle || "default",
+      targetHandle: connection.targetHandle || undefined,
+    });
+  }, [onConnectNodes]);
+
+  const stableOnDropNode = useCallback((item: DraggableBlockItemData, monitor: DropTargetMonitor) => {
+    const clientOffset = monitor.getClientOffset();
+    if (!clientOffset || !reactFlow.current) return;
+    const position = reactFlow.current.screenToFlowPosition(clientOffset, { snapToGrid: true });
+    onDropNode(item, position);
+  }, [onDropNode]);
 
   const [, drop] = useDrop(() => ({
     accept: ITEM_TYPE_BLOCK,
@@ -76,366 +352,105 @@ const Canvas = forwardRef<HTMLDivElement, CanvasProps>(({
   }), [stableOnDropNode]);
 
   useEffect(() => {
-    if (canvasElementRef.current) drop(canvasElementRef.current);
+    drop(localRef.current);
     return () => { drop(null); };
-  }, [drop, canvasElementRef]);
+  }, [drop]);
 
-  const drawBezierPath = useCallback((x1: number, y1: number, x2: number, y2: number) => {
-    const dx = Math.abs(x2 - x1) * 0.45;
-    return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+  const handleNodesChange = useCallback((changes: Parameters<typeof applyNodeChanges<CanvasFlowNode>>[0]) => {
+    setFlowNodes((current) => applyNodeChanges(changes, current));
+    changes.forEach((change) => {
+      if (change.type !== "position" || change.dragging !== false || !change.position) return;
+      const x = Math.round(change.position.x / GRID_SIZE) * GRID_SIZE;
+      const y = Math.round(change.position.y / GRID_SIZE) * GRID_SIZE;
+      onUpdatePosition(change.id, x, y);
+    });
+  }, [onUpdatePosition]);
+
+  const handleSelectionChange = useCallback(({ nodes: selectedNodes }: { nodes: CanvasFlowNode[] }) => {
+    const nextIds = selectedNodes.map((node) => node.id);
+    const selectionIsUnchanged = nextIds.length === selectedNodeIds.length
+      && nextIds.every((id) => selectedNodeIds.includes(id));
+    if (!selectionIsUnchanged) onSelectionChangeIds?.(nextIds);
+  }, [onSelectionChangeIds, selectedNodeIds]);
+
+  const beginInteraction = useCallback(() => setIsFlowInteracting(true), []);
+  const endInteraction = useCallback(() => setIsFlowInteracting(false), []);
+  const handlePaneClick = useCallback(() => setHighlightedConnectionId(null), [setHighlightedConnectionId]);
+  const handleInit = useCallback((instance: ReactFlowInstance<CanvasFlowNode, Edge>) => {
+    reactFlow.current = instance;
   }, []);
-
-  const getHandlePosition = useCallback((
-    nodeId: string,
-    handleType: 'source' | 'target' | null,
-    handleId?: string | null
-  ): { x: number; y: number } | null => {
-    if (typeof document === 'undefined' || !canvasElementRef.current) return null;
-
-    const selectorParts = ['[data-connector="true"]', `[data-node-id="${nodeId}"]`];
-    if (handleType) selectorParts.push(`[data-handle-type="${handleType}"]`);
-    if (handleId) selectorParts.push(`[data-handle-id="${handleId}"]`);
-    const selector = selectorParts.join('');
-    const handleEl = document.querySelector(selector) as HTMLElement | null;
-    if (!handleEl) return null;
-
-    const handleRect = handleEl.getBoundingClientRect();
-    const canvasRect = canvasElementRef.current.getBoundingClientRect();
-    const centerX = handleRect.left + handleRect.width / 2;
-    const centerY = handleRect.top + handleRect.height / 2;
-    const logicalX = (centerX - canvasRect.left - canvasOffset.x) / zoomLevel;
-    const logicalY = (centerY - canvasRect.top - canvasOffset.y) / zoomLevel;
-    return { x: logicalX, y: logicalY };
-  }, [canvasElementRef, canvasOffset, zoomLevel]);
-
-  const getHandleCenterOffset = useCallback((node: NodeData, handleId: string | null, type: 'source' | 'target'): number => {
-    // COMPACT NODE LOGIC (Memory, Model, Capability)
-    // These nodes are w-20 h-20 (80px) centered in the 320px wrapper.
-    // Wrapper Padding is ~24px (pt-6).
-    // So the circle starts at Y ~ 24px.
-    // Target Handle should be at Top of circle (-top-1.5) -> Approx Y=22px.
-    if (['ai-memory-config', 'ai-model-config', 'capability'].includes(node.type)) {
-      if (type === 'target') return 22; // Top of the circle
-      if (type === 'source') return 104; // Bottom of the circle (24 + 80 = 104)
-    }
-
-    // 1. Target Handles (Inputs) are always at fixed position relative to node top
-    if (type === 'target') {
-      return 44; // Fixed offset for input handle (top-11 ~ 44px)
-    }
-
-    // 2. Source Handles (Outputs) logic
-    if (!handleId && node.type !== 'start' && node.type !== 'option' && node.type !== 'switch') {
-      // Standard single output node (Message, Api Call, etc)
-      return 44;
-    }
-
-    // 3. Complex Nodes Logic
-    if (node.type === 'start') {
-      // Logic matched with StartNode.tsx rendering
-      // Header ~72px, Content padding ~20px
-      let currentY = 72 + 20; // Start content y
-
-      if (!node.triggers) return currentY;
-
-      for (const trigger of node.triggers) {
-        if (!trigger.enabled) continue;
-
-        if (handleId === trigger.name) {
-          return currentY + 15; // Middle of the main trigger block
-        }
-
-        // Calculate height of this trigger block including user keywords
-        const keywords = (trigger.keyword || '').split(',').map(k => k.trim()).filter(Boolean);
-        const triggerBaseHeight = 40; // Approx height of trigger header
-
-        // Check if handle is one of the keywords
-        const keywordIndex = keywords.findIndex(k => k === handleId);
-        if (keywordIndex !== -1) {
-          // It's a keyword handle
-          return currentY + triggerBaseHeight + (keywordIndex * 32) + 12;
-        }
-
-        // Add total height of this trigger to currentY for next iteration
-        currentY += triggerBaseHeight + (keywords.length * 32) + 10;
-      }
-      return 44; // Fallback
-    }
-
-    if (node.type === 'option') {
-      // Option handles are alongside inputs.
-      const startOfOptionsY = 72 + 20 + 130 + 35; // Approx start of options list
-      const optionHeight = 44; // Height of each option row (input + gap)
-
-      const index = node.options?.findIndex(o => o.id === handleId);
-      if (index !== undefined && index !== -1) {
-        return startOfOptionsY + (index * optionHeight) + 14;
-      }
-      return 44;
-    }
-
-    if (node.type === 'switch') {
-      const startOfCasesY = 72 + 20 + 60 + 35;
-      const caseHeight = 44;
-
-      if (handleId === 'default') {
-        const count = node.switchCases?.length || 0;
-        return startOfCasesY + (count * caseHeight) + 40;
-      }
-
-      const index = node.switchCases?.findIndex(c => c.id === handleId);
-      if (index !== undefined && index !== -1) {
-        return startOfCasesY + (index * caseHeight) + 14;
-      }
-      return 44;
-    }
-
-    // Default fallback for any other named handle
-    return 44;
-  }, []);
-
-  const resolveConnectionPoint = useCallback((
-    node: NodeData,
-    handleType: 'source' | 'target',
-    handleId?: string | null
-  ): { x: number; y: number } => {
-    const handlePosition = getHandlePosition(node.id, handleType, handleId ?? null);
-    if (handlePosition) return handlePosition;
-
-    const yOffset = getHandleCenterOffset(node, handleId ?? null, handleType);
-
-    // For compact nodes, the X should be center of the node wrapper (NODE_WIDTH / 2)
-    // For standard nodes: Source is Right Edge (NODE_WIDTH), Target is Left Edge (0)
-    let xOffset = handleType === 'source' ? NODE_WIDTH : 0;
-
-    if (['ai-memory-config', 'ai-model-config', 'capability'].includes(node.type)) {
-      xOffset = NODE_WIDTH / 2;
-    }
-
-    return { x: node.x + xOffset, y: node.y + yOffset };
-  }, [getHandlePosition, getHandleCenterOffset]);
-
-  const nodeMap = useMemo(() => {
-    const map = new Map<string, NodeData>();
-    nodes.forEach(node => map.set(node.id, node));
-    return map;
-  }, [nodes]);
-
-  const reduceConnectionEffects = isInteracting || connections.length > 120;
-  const canInteractWithConnections = !isInteracting;
-
-  const renderedNodes = useMemo(() => (
-    <AnimatePresence>
-      {nodes.map((node) => (
-        <motion.div
-          key={node.id}
-          className="absolute z-20 will-change-transform"
-          style={{ width: NODE_WIDTH, x: node.x, y: node.y, left: 0, top: 0 }}
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.8, opacity: 0 }}
-          transition={{ type: "spring", stiffness: 350, damping: 25 }}
-        >
-          <NodeCard
-            node={node}
-            onUpdateNode={onUpdateNode}
-            onStartConnection={onStartConnection}
-            onDeleteNode={onDeleteNode}
-            onDuplicateNode={onDuplicateNode}
-            availableVariables={availableVariablesByNode[node.id] || []}
-            activeWorkspace={activeWorkspace}
-            isSelected={selectedNodeIds.includes(node.id)}
-            onSelect={onSelectNode}
-            onDragStart={onNodeDragStart}
-            onUpdatePosition={onUpdatePosition}
-            onEndConnection={onEndConnection}
-            onConfigure={onConfigureNode}
-          />
-        </motion.div>
-      ))}
-    </AnimatePresence>
-  ), [nodes, onUpdateNode, onStartConnection, onDeleteNode, onDuplicateNode, availableVariablesByNode, activeWorkspace, selectedNodeIds, onSelectNode, onNodeDragStart, onUpdatePosition, onEndConnection]);
-
-  const isEditing = selectedNodeIds.length > 0;
-
-  const renderedConnections = useMemo(() => (
-    connections.map((conn) => {
-      const source = nodeMap.get(conn.from);
-      const target = nodeMap.get(conn.to);
-      if (!source || !target) return null;
-
-      const sourcePoint = resolveConnectionPoint(source, 'source', conn.sourceHandle || 'default');
-      const targetPoint = resolveConnectionPoint(target, 'target', conn.targetHandle || 'default');
-
-      const x1 = sourcePoint.x;
-      const y1 = sourcePoint.y;
-      const x2 = targetPoint.x;
-      const y2 = targetPoint.y;
-
-      const isHighlighted = highlightedConnectionId === conn.id;
-      const path = drawBezierPath(x1, y1, x2, y2);
-
-      // Tracing logic from props
-      const isTracingActive = tracePathConnectionIds && tracePathConnectionIds.size > 0;
-      const isTraced = isTracingActive && tracePathConnectionIds?.has(conn.id);
-      const isDimmed = isTracingActive && !isTraced;
-
-      const strokeColor = isHighlighted ? '#a855f7' : (isTraced ? '#a855f7' : (isDimmed ? '#333' : 'url(#connection-gradient)'));
-      const strokeOpacity = isDimmed ? 0.2 : (isHighlighted || isTraced ? 1 : 0.6);
-      const strokeWidth = isHighlighted || isTraced ? 3 : 2;
-
-      return (
-        <g
-          key={conn.id}
-          onMouseEnter={canInteractWithConnections ? () => setHighlightedConnectionId(conn.id) : undefined}
-          onMouseLeave={canInteractWithConnections ? () => setHighlightedConnectionId(null) : undefined}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (canInteractWithConnections) onDeleteConnection(conn.id);
-          }}
-          className="transition-all duration-300"
-          style={{ cursor: canInteractWithConnections ? 'pointer' : 'default', pointerEvents: canInteractWithConnections ? 'auto' : 'none' }}
-        >
-          <title>Clique para remover conexão</title>
-          {/* Background for easier selection - This is the ONLY clickable element */}
-          {canInteractWithConnections && (
-            <path
-              d={path}
-              stroke="transparent"
-              strokeWidth={24}
-              fill="none"
-              style={{ cursor: 'pointer', pointerEvents: 'auto' }}
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                onDeleteConnection(conn.id);
-              }}
-            />
-          )}
-
-          {/* Glow Effect - disable if dimmed */}
-          {!reduceConnectionEffects && !isDimmed && (
-            <path
-              d={path}
-              stroke="hsl(var(--primary))"
-              strokeWidth={isHighlighted || isTraced ? 4 : 2}
-              strokeOpacity={isHighlighted || isTraced ? 0.4 : 0.15}
-              fill="none"
-              filter="url(#glow)"
-              className="transition-all duration-300 pointer-events-none"
-            />
-          )}
-
-          {/* Core Line */}
-          <path
-            d={path}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-            fill="none"
-            strokeOpacity={strokeOpacity}
-            markerEnd={isHighlighted || isTraced ? "url(#arrow-highlight)" : (isDimmed ? "url(#arrow-dimmed)" : "url(#arrow-default)")}
-            className="transition-all duration-300 pointer-events-none"
-          />
-
-          {/* Animated Pulse - Only for highlighted or TRACED connections */}
-          {!reduceConnectionEffects && !isEditing && !disableAnimations && (isHighlighted || isTraced) && (
-            <path
-              d={path}
-              stroke="white"
-              strokeWidth={2}
-              fill="none"
-              strokeDasharray="10,10"
-              className="pointer-events-none animate-dash"
-              opacity="0.8"
-            />
-          )}
-
-          {/* Standard pulse for non-traced (normal state) - hide if tracing is active */}
-          {!reduceConnectionEffects && !isHighlighted && !isEditing && !disableAnimations && !isTracingActive && (
-            <path
-              d={path}
-              stroke="white"
-              strokeWidth={1}
-              strokeOpacity="0.5"
-              fill="none"
-              strokeDasharray="4, 40"
-              className="animate-[dash_4s_linear_infinite] pointer-events-none"
-            />
-          )}
-        </g>
-      );
-    })
-  ), [connections, nodeMap, highlightedConnectionId, drawBezierPath, resolveConnectionPoint, onDeleteConnection, setHighlightedConnectionId, canInteractWithConnections, reduceConnectionEffects, isEditing, tracePathConnectionIds]);
-
-  const visualGridSpacing = GRID_SIZE * zoomLevel;
 
   return (
     <div
-      ref={canvasElementRef}
-      className="relative flex-1 bg-black overflow-hidden select-none tech-grid h-full w-full"
-      onMouseDown={onCanvasMouseDown}
-      style={{
-        cursor: 'grab',
-        backgroundPosition: `${canvasOffset.x % visualGridSpacing}px ${canvasOffset.y % visualGridSpacing}px`,
-        backgroundSize: `${visualGridSpacing}px ${visualGridSpacing}px`,
-        pointerEvents: 'all' // Ensure we can always click the background
+      ref={assignRef}
+      className="relative flex-1 h-full w-full overflow-hidden bg-black select-none"
+      onMouseDown={(event) => {
+        const target = event.target as HTMLElement;
+        if (target.classList.contains("react-flow__pane")) onCanvasMouseDown(event);
       }}
     >
-      <div
-        className="absolute top-0 left-0 will-change-transform"
-        data-canvas-inner="true"
-        style={{
-          width: SVG_CANVAS_DIMENSION,
-          height: SVG_CANVAS_DIMENSION,
-          transform: `translate3d(${canvasOffset.x}px, ${canvasOffset.y}px, 0) scale(${zoomLevel})`,
-          transformOrigin: 'top left',
-        }}
+      <ReactFlow<CanvasFlowNode, Edge>
+        nodes={flowNodes}
+        edges={flowEdges}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        defaultViewport={initialViewport}
+        onInit={handleInit}
+        onNodesChange={handleNodesChange}
+        onSelectionChange={handleSelectionChange}
+        onMoveStart={beginInteraction}
+        onMoveEnd={endInteraction}
+        onNodeDragStart={beginInteraction}
+        onNodeDragStop={endInteraction}
+        onConnect={handleConnect}
+        onPaneClick={handlePaneClick}
+        minZoom={0.2}
+        maxZoom={2}
+        snapToGrid
+        snapGrid={SNAP_GRID}
+        panOnDrag
+        zoomOnScroll
+        zoomOnPinch
+        zoomOnDoubleClick={false}
+        selectionOnDrag={false}
+        multiSelectionKeyCode="Shift"
+        deleteKeyCode={null}
+        connectionLineStyle={CONNECTION_LINE_STYLE}
+        className={performanceMode ? "bg-black performance-flow" : "bg-black"}
+        proOptions={PRO_OPTIONS}
       >
-        <svg width={SVG_CANVAS_DIMENSION} height={SVG_CANVAS_DIMENSION} className="absolute inset-0 z-10 overflow-visible">
-          <defs>
-            <linearGradient id="connection-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="hsl(var(--neon-purple))" />
-              <stop offset="100%" stopColor="hsl(var(--neon-cyan))" />
-            </linearGradient>
-            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="3" result="blur" />
-              <feComposite in="SourceGraphic" in2="blur" operator="over" />
-            </filter>
-            <marker id="arrow-default" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-              <path d="M0,0 L6,3 L0,6" fill="hsl(var(--neon-cyan))" />
-            </marker>
-            <marker id="arrow-highlight" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-              <path d="M0,0 L6,3 L0,6" fill="hsl(var(--neon-purple))" />
-            </marker>
-          </defs>
-          {renderedConnections}
-          {drawingLine && (
-            <path
-              d={drawBezierPath(drawingLine.startX, drawingLine.startY, drawingLine.currentX, drawingLine.currentY)}
-              stroke="hsl(var(--primary))"
-              strokeWidth={1.5}
-              strokeDasharray="5,5"
-              fill="none"
-              className="opacity-50"
-              style={{ pointerEvents: 'none' }}
-            />
-          )}
-        </svg>
-        {renderedNodes}
-      </div>
+        <Background
+          gap={GRID_SIZE}
+          size={1}
+          color="rgba(148, 163, 184, 0.18)"
+        />
+      </ReactFlow>
 
       <style jsx global>{`
         @keyframes dash {
           to { stroke-dashoffset: -100; }
+        }
+        .animate-dash {
+          animation: dash 1.25s linear infinite;
+        }
+        .react-flow__node-canvasNode {
+          background: transparent;
+          border: 0;
+          width: ${NODE_WIDTH}px;
+        }
+        .react-flow__edge-path {
+          stroke-linecap: round;
+        }
+        .performance-flow .neo-glass {
+          -webkit-backdrop-filter: none !important;
+          backdrop-filter: none !important;
+          background-color: rgba(9, 9, 11, 0.96) !important;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45) !important;
         }
       `}</style>
     </div>
   );
 });
 
-Canvas.displayName = 'Canvas';
+Canvas.displayName = "Canvas";
 export default Canvas;

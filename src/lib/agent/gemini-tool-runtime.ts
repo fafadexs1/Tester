@@ -485,14 +485,7 @@ const executeToolCall = async (
 export const runGeminiToolRuntime = async (
   input: GeminiToolRuntimeInput
 ): Promise<GeminiToolRuntimeResult> => {
-  const apiKey = String(
-    input.apiKey ||
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.GOOGLE_GENAI_API_KEY ||
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
-    ''
-  ).trim();
+  const apiKey = String(input.apiKey || '').trim();
 
   if (!apiKey) {
     throw new Error('Gemini API key is missing.');

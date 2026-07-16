@@ -1,4 +1,25 @@
 
+export interface DatabaseConnection {
+  id: string;
+  name: string;
+  type: 'postgres' | 'supabase';
+  host?: string;
+  port?: number;
+  database?: string;
+  username?: string;
+  password?: string;
+  ssl?: boolean;
+  supabaseUrl?: string;
+  supabaseKey?: string;
+}
+
+export interface DbFilterCondition {
+  id: string;
+  column: string;
+  operator: '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'ILIKE' | 'IN' | 'IS NULL' | 'IS NOT NULL';
+  value: string;
+}
+
 
 export interface DraggableBlockItemData {
   type: string;
@@ -33,11 +54,21 @@ export type NodeType =
   | 'send-email'
   | 'google-sheets-append'
   | 'intelligent-agent'
-  | 'supabase-create-row'
   | 'supabase-read-row'
+  | 'supabase-create-row'
   | 'supabase-update-row'
   | 'supabase-delete-row'
+  | 'db-select'
+  | 'db-insert'
+  | 'db-update'
+  | 'db-delete'
+  | 'db-tool'
   | 'dialogy-send-message'
+  | 'dialogy-close-chat'
+  | 'dialogy-transfer-team'
+  | 'dialogy-transfer-ai'
+  | 'dialogy-sgp-second-copy'
+  | 'dialogy-sgp-payment-promise'
   | 'time-of-day'
   | 'intention-router'
   | 'ai-model-config'
@@ -96,6 +127,19 @@ export interface SwitchCase {
   value: string;
 }
 
+export interface OptionNodeOption {
+  id: string;
+  value: string;
+  label?: string;
+}
+
+export interface ResolvedOption {
+  id: string;
+  value: string;
+  description?: string;
+  displayText?: string;
+}
+
 export interface NodeData {
   id: string;
   type: NodeType;
@@ -118,10 +162,11 @@ export interface NodeData {
 
   // Option Node
   questionText?: string;
+  optionFooterText?: string;
   optionsList?: string;
   variableToSaveChoice?: string;
   aiEnabled?: boolean;
-  options?: { id: string; value: string; }[];
+  options?: OptionNodeOption[];
 
   // WhatsApp Nodes (can also be triggered by api-call node)
   instanceName?: string;
@@ -217,6 +262,7 @@ export interface NodeData {
   // AI Text Generation Node
   aiPromptText?: string;
   aiModelName?: string;
+  aiKeyId?: string;
   aiOutputVariable?: string;
 
   // Send Email Node
@@ -243,18 +289,55 @@ export interface NodeData {
   maxConversationTurns?: number;
   temperature?: number;
 
-  // Supabase Nodes
+  // Database Nodes
+  dbConnectionId?: string;
+  dbTableName?: string;
+  dbOperation?: 'select' | 'insert' | 'update' | 'delete';
+  dbFilters?: DbFilterCondition[];
+  dbColumnsToSelect?: string;
+  dbDataJson?: string;
+  dbResultVariable?: string;
+  dbOnError?: 'stop' | 'continue' | 'goto';
+  dbOnErrorNodeId?: string;
+  dbToolName?: string;
+  dbToolDescription?: string;
+
+  // Legacy Supabase nodes kept for compatibility with older saved flows
   supabaseTableName?: string;
   supabaseIdentifierColumn?: string;
   supabaseIdentifierValue?: string;
-  supabaseDataJson?: string;
   supabaseColumnsToSelect?: string;
+  supabaseDataJson?: string;
   supabaseResultVariable?: string;
 
   // Dialogy Node
   dialogyInstanceId?: string;
   dialogyChatId?: string;
   dialogyMessageContent?: string;
+  dialogyTeamId?: string;
+  dialogySystemAgentId?: string;
+  sgpSecondCopyEndpoint?: string;
+  sgpSecondCopyToken?: string;
+  sgpSecondCopyApp?: string;
+  sgpSecondCopyCpfCnpj?: string;
+  sgpSecondCopyDeliveryMode?: 'list' | 'legacy' | 'cloud-template';
+  sgpSecondCopyTemplateInstance?: string;
+  sgpSecondCopyTemplateName?: string;
+  sgpSecondCopyTemplateLanguage?: string;
+  sgpSecondCopyTemplateBodyParameter?: number;
+  sgpSecondCopyTemplateBodyParameterCount?: number;
+  sgpSecondCopyPixTemplateInstance?: string;
+  sgpSecondCopyPixTemplateName?: string;
+  sgpSecondCopyPixTemplateLanguage?: string;
+  sgpSecondCopyPixTemplateBodyParameter?: number;
+  sgpSecondCopyPixTemplateBodyParameterCount?: number;
+  sgpSecondCopyBoletoTemplateInstance?: string;
+  sgpSecondCopyBoletoTemplateName?: string;
+  sgpSecondCopyBoletoTemplateLanguage?: string;
+  sgpSecondCopyBoletoTemplateBodyParameter?: number;
+  sgpSecondCopyBoletoTemplateBodyParameterCount?: number;
+  sgpPaymentPromiseCpfCnpj?: string;
+  sgpPaymentPromiseDeliveryMode?: 'list' | 'legacy';
 
   // Time of Day Node
   startTime?: string;
@@ -267,7 +350,7 @@ export interface NodeData {
   intents?: { id: string; label: string; description: string }[];
 
   // AI Model Config Node
-  aiProvider?: 'google' | 'openai' | 'anthropic' | 'groq';
+  aiProvider?: AiProvider;
   aiApiKey?: string;
 
   // AI Memory Config Node
@@ -347,6 +430,7 @@ export interface WorkspaceData {
   chatwoot_enabled?: boolean;
   chatwoot_instance_id?: string | null;
   dialogy_instance_id?: string | null;
+  databaseConnections?: DatabaseConnection[];
 }
 
 // Version History Type
@@ -441,10 +525,14 @@ export interface FlowSession {
   awaiting_input_type: FlowSessionAwaitingInputType;
   awaiting_input_details: {
     variableToSave?: string;
-    options?: (string | { id: string; value: string })[];
+    options?: (string | ResolvedOption)[];
     originalNodeId?: string;
     aiEnabled?: boolean;
     aiModelName?: string;
+    aiKeyId?: string;
+    workflowKind?: 'sgp-second-copy' | 'sgp-payment-promise';
+    workflowStage?: 'contract' | 'invoice' | 'payment-method';
+    workflowStateVariable?: string;
   } | null;
   session_timeout_seconds?: number;
   last_interaction_at?: string | Date;
@@ -542,6 +630,30 @@ export interface SmtpSettings {
   password?: string | null;
   from_name?: string | null;
   from_email?: string | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+}
+
+export type AiProvider = 'google' | 'openai' | 'anthropic' | 'groq';
+
+export interface OrganizationAiKeySummary {
+  id: string;
+  organization_id: string;
+  provider: AiProvider;
+  name: string;
+  is_default: boolean;
+  masked_key: string;
+  created_at: string | Date;
+  updated_at: string | Date;
+}
+
+export interface OrganizationAiKeyRecord {
+  id: string;
+  organization_id: string;
+  provider: AiProvider;
+  name: string;
+  api_key: string;
+  is_default: boolean;
   created_at: string | Date;
   updated_at: string | Date;
 }

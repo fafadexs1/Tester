@@ -14,17 +14,13 @@ import { cn } from "@/lib/utils";
 import { StartNodeTrigger } from '@/lib/types';
 import { START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y } from '@/lib/constants';
 import { WebhookMappingBuilder } from '../components/WebhookMappingBuilder';
+import { FlowHandle, RefreshNodeInternals } from './FlowHandle';
 
-const Handle = ({ onMouseDown, handleId, color = "primary" }: { onMouseDown: (e: React.MouseEvent) => void, handleId: string, color?: string }) => (
-    <div
-        className="w-2.5 h-2.5 rounded-full bg-black border-2 transition-all duration-300 hover:scale-150 cursor-crosshair shadow-[0_0_10px_rgba(0,0,0,0.5)]"
-        style={{ borderColor: `var(--${color === 'primary' ? 'neon-purple' : color})` }}
-        onMouseDown={onMouseDown}
-        data-connector="true" data-handle-type="source" data-handle-id={handleId}
-    />
+const StartHandle = ({ handleId, color = "primary" }: { handleId: string, color?: string }) => (
+    <FlowHandle id={handleId} className="!border-2 !border-solid !bg-black" colorClass="bg-transparent" style={{ borderColor: `hsl(var(--${color === 'primary' ? 'neon-purple' : color}))` }} />
 );
 
-export const StartNode: React.FC<NodeComponentProps> = ({ node, onUpdate, onStartConnection, activeWorkspace }) => {
+export const StartNode: React.FC<NodeComponentProps> = ({ node, onUpdate, activeWorkspace, renderHandles = true }) => {
     const { toast } = useToast();
     const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/evolution/trigger/${activeWorkspace?.id || '[ID]'}`;
 
@@ -35,7 +31,7 @@ export const StartNode: React.FC<NodeComponentProps> = ({ node, onUpdate, onStar
         onUpdate(node.id, { triggers: updatedTriggers });
     };
 
-    const renderHandles = () => {
+    const renderStartHandles = () => {
         let yOffset = START_NODE_TRIGGER_INITIAL_Y_OFFSET;
         return (node.triggers || [])
             .filter(t => t.enabled)
@@ -46,14 +42,14 @@ export const StartNode: React.FC<NodeComponentProps> = ({ node, onUpdate, onStar
                 yOffset += triggerBlockHeight + 10;
 
                 const triggerOutput = (
-                    <div key={trigger.id} className="absolute -right-2.5 z-30" style={{ top: `${triggerY}px`, transform: 'translateY(-50%)' }}>
-                        <Handle onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, trigger.name); }} handleId={trigger.name} color="neon-green" />
+                    <div key={trigger.id} className="absolute -right-1.5 z-30" style={{ top: `${triggerY}px`, transform: 'translateY(-50%)' }}>
+                        <StartHandle handleId={trigger.name} color="neon-green" />
                     </div>
                 );
 
                 const keywordOutputs = keywords.map((kw, kwIndex) => (
-                    <div key={`${trigger.id}-${kw}`} className="absolute -right-2.5 z-30" style={{ top: `${triggerY + 25 + (kwIndex * START_NODE_TRIGGER_SPACING_Y)}px`, transform: 'translateY(-50%)' }}>
-                        <Handle onMouseDown={(e) => { e.stopPropagation(); onStartConnection(e, node, kw); }} handleId={kw} color="neon-purple" />
+                    <div key={`${trigger.id}-${kw}`} className="absolute -right-1.5 z-30" style={{ top: `${triggerY + 25 + (kwIndex * START_NODE_TRIGGER_SPACING_Y)}px`, transform: 'translateY(-50%)' }}>
+                        <StartHandle handleId={kw} color="neon-purple" />
                     </div>
                 ));
 
@@ -62,7 +58,7 @@ export const StartNode: React.FC<NodeComponentProps> = ({ node, onUpdate, onStar
     }
 
     return (
-        <div className="space-y-3" data-no-drag="true">
+        <div className="nodrag nowheel space-y-3" data-no-drag="true">
             <div className="flex items-center gap-1.5 px-1 opacity-60">
                 <Info className="w-3 h-3" />
                 <span className="text-[9px] uppercase tracking-widest font-bold">Execution Entry Points</span>
@@ -125,7 +121,8 @@ export const StartNode: React.FC<NodeComponentProps> = ({ node, onUpdate, onStar
                     </div>
                 </div>
             ))}
-            {renderHandles()}
+            {renderHandles && renderStartHandles()}
+            {renderHandles && <RefreshNodeInternals nodeId={node.id} signature={node.triggers} />}
         </div>
     );
 };

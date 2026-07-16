@@ -16,6 +16,8 @@ import type {
   Team,
   OrganizationUser,
   SmtpSettings,
+  OrganizationAiKeySummary,
+  OrganizationAiKeyRecord,
   Role,
   Permission,
   WorkspaceVersion,
@@ -46,6 +48,13 @@ const parseJsonField = <T>(value: any, fallback: T): T => {
     }
   }
   return value as T;
+};
+
+const maskSecretValue = (value: string): string => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return '';
+  if (normalized.length <= 8) return `${normalized.slice(0, 2)}****`;
+  return `${normalized.slice(0, 4)}${'*'.repeat(Math.max(4, normalized.length - 8))}${normalized.slice(-4)}`;
 };
 
 function getDbPool(): Pool {
@@ -352,6 +361,26 @@ async function initializeDatabaseSchema(): Promise<void> {
         details JSONB,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS organization_ai_keys (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL,
+        name TEXT NOT NULL,
+        api_key TEXT NOT NULL,
+        is_default BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (organization_id, provider, name)
+      );
+    `);
+
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS organization_ai_keys_single_default_idx
+      ON organization_ai_keys (organization_id, provider)
+      WHERE is_default = TRUE;
     `);
 
     // Workspaces - CRIAÇÃO DA TABELA PRINCIPAL ANTES DAS DEPENDENTES
@@ -722,6 +751,8 @@ async function initializeDatabaseSchema(): Promise<void> {
     await ensureUuidColumn(client, 'user_purchases', 'listing_id');
     await ensureUuidColumn(client, 'roles', 'id');
     await ensureUuidColumn(client, 'roles', 'organization_id');
+    await ensureUuidColumn(client, 'organization_ai_keys', 'id');
+    await ensureUuidColumn(client, 'organization_ai_keys', 'organization_id');
     await ensureUuidColumn(client, 'organization_users', 'user_id');
     await ensureUuidColumn(client, 'organization_users', 'organization_id');
     await ensureUuidColumn(client, 'organization_users', 'role_id');
@@ -1689,6 +1720,308 @@ export async function saveSmtpSettings(settings: Omit<SmtpSettings, 'id' | 'crea
   } catch (error: any) {
     console.error('[DB Actions] Error saving SMTP settings:', error);
     return { success: false, error: `Erro de banco de dados: ${error.message} ` };
+  }
+}
+
+export async function listOrganizationAiKeys(
+  organizationId: string,
+  provider?: OrganizationAiKeyRecord['provider']
+): Promise<OrganizationAiKeySummary[]> {
+  if (!organizationId) return [];
+
+  const query = `
+    SELECT id, organization_id, provider, name, api_key, is_default, created_at, updated_at
+    FROM organization_ai_keys
+    WHERE organization_id = $1
+      AND ($2::text IS NULL OR provider = $2)
+    ORDER BY is_default DESC, LOWER(name) ASC, created_at ASC
+  `;
+
+  const result = await runQuery<OrganizationAiKeyRecord & { api_key: string }>(query, [
+    organizationId,
+    provider || null,
+  ]);
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    organization_id: row.organization_id,
+    provider: row.provider,
+    name: row.name,
+    is_default: row.is_default,
+    masked_key: maskSecretValue(row.api_key),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }));
+}
+
+export async function getOrganizationAiKeysForRuntime(
+  organizationId: string,
+  provider: OrganizationAiKeyRecord['provider'] = 'google'
+): Promise<OrganizationAiKeyRecord[]> {
+  if (!organizationId) return [];
+
+  const result = await runQuery<OrganizationAiKeyRecord>(
+    `
+      SELECT id, organization_id, provider, name, api_key, is_default, created_at, updated_at
+      FROM organization_ai_keys
+      WHERE organization_id = $1 AND provider = $2
+      ORDER BY is_default DESC, LOWER(name) ASC, created_at ASC
+    `,
+    [organizationId, provider]
+  );
+
+  return result.rows;
+}
+
+export async function saveOrganizationAiKey(input: {
+  id?: string;
+  organization_id: string;
+  provider: OrganizationAiKeyRecord['provider'];
+  name: string;
+  api_key?: string;
+  is_default?: boolean;
+}): Promise<{ success: boolean; error?: string; key?: OrganizationAiKeySummary }> {
+  let client;
+  try {
+    const organizationId = String(input.organization_id || '').trim();
+    const provider = input.provider || 'google';
+    const name = String(input.name || '').trim();
+    if (!organizationId || !provider || !name) {
+      return { success: false, error: 'Organização, provider e nome são obrigatórios.' };
+    }
+
+    client = await getDbPool().connect();
+    await client.query('BEGIN');
+
+    let keyId = input.id?.trim() || uuidv4();
+    let apiKey = String(input.api_key || '').trim();
+    let shouldBeDefault = Boolean(input.is_default);
+
+    if (input.id) {
+      const existing = await client.query<OrganizationAiKeyRecord>(
+        `
+          SELECT id, organization_id, provider, name, api_key, is_default, created_at, updated_at
+          FROM organization_ai_keys
+          WHERE id = $1 AND organization_id = $2 AND provider = $3
+          LIMIT 1
+        `,
+        [input.id, organizationId, provider]
+      );
+
+      const existingRow = existing.rows[0];
+      if (!existingRow) {
+        throw new Error('Chave de IA não encontrada para atualização.');
+      }
+
+      keyId = existingRow.id;
+      if (!apiKey) {
+        apiKey = existingRow.api_key;
+      }
+      if (input.is_default === undefined) {
+        shouldBeDefault = existingRow.is_default;
+      }
+    }
+
+    if (!apiKey) {
+      return { success: false, error: 'A API key é obrigatória.' };
+    }
+
+    const countResult = await client.query<{ total: string }>(
+      'SELECT COUNT(*)::text AS total FROM organization_ai_keys WHERE organization_id = $1 AND provider = $2',
+      [organizationId, provider]
+    );
+    const existingCount = Number(countResult.rows[0]?.total || 0);
+    if (existingCount === 0) {
+      shouldBeDefault = true;
+    }
+
+    if (shouldBeDefault) {
+      await client.query(
+        'UPDATE organization_ai_keys SET is_default = FALSE, updated_at = NOW() WHERE organization_id = $1 AND provider = $2 AND id <> $3',
+        [organizationId, provider, keyId]
+      );
+    }
+
+    if (input.id) {
+      await client.query(
+        `
+          UPDATE organization_ai_keys
+          SET name = $1,
+              api_key = $2,
+              is_default = $3,
+              updated_at = NOW()
+          WHERE id = $4 AND organization_id = $5 AND provider = $6
+        `,
+        [name, apiKey, shouldBeDefault, keyId, organizationId, provider]
+      );
+    } else {
+      await client.query(
+        `
+          INSERT INTO organization_ai_keys (id, organization_id, provider, name, api_key, is_default, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+        `,
+        [keyId, organizationId, provider, name, apiKey, shouldBeDefault]
+      );
+    }
+
+    if (!shouldBeDefault) {
+      const defaultResult = await client.query<{ total: string }>(
+        'SELECT COUNT(*)::text AS total FROM organization_ai_keys WHERE organization_id = $1 AND provider = $2 AND is_default = TRUE',
+        [organizationId, provider]
+      );
+      if (Number(defaultResult.rows[0]?.total || 0) === 0) {
+        await client.query(
+          'UPDATE organization_ai_keys SET is_default = TRUE, updated_at = NOW() WHERE id = $1',
+          [keyId]
+        );
+        shouldBeDefault = true;
+      }
+    }
+
+    const savedResult = await client.query<OrganizationAiKeyRecord>(
+      `
+        SELECT id, organization_id, provider, name, api_key, is_default, created_at, updated_at
+        FROM organization_ai_keys
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [keyId]
+    );
+
+    await client.query('COMMIT');
+
+    const saved = savedResult.rows[0];
+    return {
+      success: true,
+      key: saved
+        ? {
+            id: saved.id,
+            organization_id: saved.organization_id,
+            provider: saved.provider,
+            name: saved.name,
+            is_default: saved.is_default,
+            masked_key: maskSecretValue(saved.api_key),
+            created_at: saved.created_at,
+            updated_at: saved.updated_at,
+          }
+        : undefined,
+    };
+  } catch (error: any) {
+    if (client) await client.query('ROLLBACK');
+    console.error('[DB Actions] Error saving organization AI key:', error);
+    if (error.code === '23505') {
+      return { success: false, error: 'Já existe uma chave com esse nome para este provider.' };
+    }
+    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  } finally {
+    if (client) client.release();
+  }
+}
+
+export async function deleteOrganizationAiKey(
+  organizationId: string,
+  keyId: string
+): Promise<{ success: boolean; error?: string }> {
+  let client;
+  try {
+    if (!organizationId || !keyId) {
+      return { success: false, error: 'Organização e chave são obrigatórias.' };
+    }
+
+    client = await getDbPool().connect();
+    await client.query('BEGIN');
+
+    const existing = await client.query<OrganizationAiKeyRecord>(
+      `
+        SELECT id, organization_id, provider, name, api_key, is_default, created_at, updated_at
+        FROM organization_ai_keys
+        WHERE id = $1 AND organization_id = $2
+        LIMIT 1
+      `,
+      [keyId, organizationId]
+    );
+    const existingRow = existing.rows[0];
+    if (!existingRow) {
+      throw new Error('Chave de IA não encontrada.');
+    }
+
+    await client.query('DELETE FROM organization_ai_keys WHERE id = $1 AND organization_id = $2', [keyId, organizationId]);
+
+    if (existingRow.is_default) {
+      const fallback = await client.query<{ id: string }>(
+        `
+          SELECT id
+          FROM organization_ai_keys
+          WHERE organization_id = $1 AND provider = $2
+          ORDER BY created_at ASC
+          LIMIT 1
+        `,
+        [organizationId, existingRow.provider]
+      );
+      const fallbackId = fallback.rows[0]?.id;
+      if (fallbackId) {
+        await client.query(
+          'UPDATE organization_ai_keys SET is_default = TRUE, updated_at = NOW() WHERE id = $1',
+          [fallbackId]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    return { success: true };
+  } catch (error: any) {
+    if (client) await client.query('ROLLBACK');
+    console.error('[DB Actions] Error deleting organization AI key:', error);
+    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  } finally {
+    if (client) client.release();
+  }
+}
+
+export async function setDefaultOrganizationAiKey(
+  organizationId: string,
+  keyId: string
+): Promise<{ success: boolean; error?: string }> {
+  let client;
+  try {
+    if (!organizationId || !keyId) {
+      return { success: false, error: 'Organização e chave são obrigatórias.' };
+    }
+
+    client = await getDbPool().connect();
+    await client.query('BEGIN');
+
+    const existing = await client.query<OrganizationAiKeyRecord>(
+      `
+        SELECT id, organization_id, provider, name, api_key, is_default, created_at, updated_at
+        FROM organization_ai_keys
+        WHERE id = $1 AND organization_id = $2
+        LIMIT 1
+      `,
+      [keyId, organizationId]
+    );
+    const existingRow = existing.rows[0];
+    if (!existingRow) {
+      throw new Error('Chave de IA não encontrada.');
+    }
+
+    await client.query(
+      'UPDATE organization_ai_keys SET is_default = FALSE, updated_at = NOW() WHERE organization_id = $1 AND provider = $2',
+      [organizationId, existingRow.provider]
+    );
+    await client.query(
+      'UPDATE organization_ai_keys SET is_default = TRUE, updated_at = NOW() WHERE id = $1 AND organization_id = $2',
+      [keyId, organizationId]
+    );
+
+    await client.query('COMMIT');
+    return { success: true };
+  } catch (error: any) {
+    if (client) await client.query('ROLLBACK');
+    console.error('[DB Actions] Error setting default organization AI key:', error);
+    return { success: false, error: `Erro de banco de dados: ${error.message}` };
+  } finally {
+    if (client) client.release();
   }
 }
 

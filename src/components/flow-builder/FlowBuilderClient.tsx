@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, WorkspaceData, StartNodeTrigger, User } from '@/lib/types';
+import type { NodeData, Connection, DrawingLineData, CanvasOffset, DraggableBlockItemData, OrganizationAiKeySummary, WorkspaceData, StartNodeTrigger, User } from '@/lib/types';
 import {
   NODE_WIDTH, NODE_HEADER_CONNECTOR_Y_OFFSET, NODE_HEADER_HEIGHT_APPROX, GRID_SIZE,
   START_NODE_TRIGGER_INITIAL_Y_OFFSET, START_NODE_TRIGGER_SPACING_Y,
@@ -23,21 +23,28 @@ import {
   saveWorkspaceToDB,
   loadWorkspaceFromDB
 } from '@/app/actions/databaseActions';
+import { getOrganizationGeminiKeysAction } from '@/app/actions/organizationAiKeysActions';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { ReactFlowProvider } from '@xyflow/react';
 
 
-const LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN = 'nexusflowChatPanelOpen';
 
 const VARIABLE_DEFINING_FIELDS: (keyof NodeData)[] = [
   'variableToSaveResponse', 'variableToSaveChoice', 'variableName',
   'apiOutputVariable', 'variableToSaveDate', 'codeOutputVariable',
   'jsonOutputVariable', 'fileUrlVariable', 'ratingOutputVariable',
-  'aiOutputVariable', 'agentResponseVariable', 'supabaseResultVariable',
+  'aiOutputVariable', 'agentResponseVariable', 'dbResultVariable',
   'capabilityOutputVariable',
 ];
+
+const VARIABLE_SCOPE_AFFECTING_FIELDS = new Set<string>([
+  ...VARIABLE_DEFINING_FIELDS,
+  'triggers',
+  'apiResponseMappings',
+]);
 
 const CHATWOOT_PREFILLED_VARIABLES = [
   'chatwoot_conversation_id',
@@ -276,8 +283,6 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const [canvasOffset, setCanvasOffset] = useState<CanvasOffset>({ x: GRID_SIZE * 2, y: GRID_SIZE * 2 });
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isInteracting, setIsInteracting] = useState(false);
-  const [isSidebarActive, setIsSidebarActive] = useState(false);
-
   const [configuringNodeId, setConfiguringNodeId] = useState<string | null>(null);
 
   const handleConfigureNode = useCallback((id: string) => {
@@ -304,7 +309,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   const canvasOffsetCbRef = useRef(canvasOffset);
   const zoomLevelCbRef = useRef(zoomLevel);
 
-  const [isChatPanelOpen, setIsChatPanelOpen] = useState(true);
+  const [isChatPanelOpen, setIsChatPanelOpen] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
 
   const [availableVariablesByNode, setAvailableVariablesByNode] = useState<Record<string, string[]>>(() => {
@@ -315,6 +320,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     }
     return {};
   });
+  const [organizationGeminiKeys, setOrganizationGeminiKeys] = useState<OrganizationAiKeySummary[]>([]);
 
   useEffect(() => {
     drawingLineRef.current = drawingLine;
@@ -322,16 +328,11 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
 
   useEffect(() => {
     setHasMounted(true);
-    const savedIsChatPanelOpen = localStorage.getItem(LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN);
-    if (savedIsChatPanelOpen !== null) {
-      try {
-        setIsChatPanelOpen(JSON.parse(savedIsChatPanelOpen));
-      } catch (e) {
-        console.warn("[FlowBuilderClient] Failed to parse chat panel state from localStorage.", e);
-        setIsChatPanelOpen(true);
-      }
-    }
   }, []);
+
+  useEffect(() => {
+    setIsChatPanelOpen(false);
+  }, [workspaceId]);
 
   useEffect(() => {
     canvasOffsetCbRef.current = canvasOffset;
@@ -378,14 +379,8 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
 
 
   const toggleChatPanel = useCallback(() => {
-    setIsChatPanelOpen(prev => {
-      const newState = !prev;
-      if (hasMounted) {
-        localStorage.setItem(LOCAL_STORAGE_KEY_CHAT_PANEL_OPEN, JSON.stringify(newState));
-      }
-      return newState;
-    });
-  }, [hasMounted]);
+    setIsChatPanelOpen(prev => !prev);
+  }, []);
 
   const loadWorkspace = useCallback(async () => {
     if (!user || !workspaceId) return;
@@ -425,6 +420,27 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
       }
     }
   }, [workspaceId, hasMounted, loadWorkspace, activeWorkspace]);
+
+  useEffect(() => {
+    if (!activeWorkspace?.organization_id) return;
+
+    let isCancelled = false;
+    const loadOrganizationGeminiKeys = async () => {
+      const result = await getOrganizationGeminiKeysAction(activeWorkspace.organization_id);
+      if (!isCancelled) {
+        if (result.success && result.data) {
+          setOrganizationGeminiKeys(result.data);
+        } else {
+          setOrganizationGeminiKeys([]);
+        }
+      }
+    };
+
+    loadOrganizationGeminiKeys();
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeWorkspace?.organization_id]);
 
   const handleSaveWorkspace = useCallback(async (versionDescription?: string | null) => {
     if (!activeWorkspace || !user) {
@@ -538,11 +554,12 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
   }, [activeWorkspace, updateActiveWorkspace, availableVariablesByNode]);
 
   const updateNode = useCallback((id: string, changes: Partial<NodeData>) => {
-    const isPositionOnly = Object.keys(changes).every(key => key === 'x' || key === 'y');
+    const changedFields = Object.keys(changes);
+    const affectsVariableScope = changedFields.some(field => VARIABLE_SCOPE_AFFECTING_FIELDS.has(field));
     updateActiveWorkspace(ws => ({
       ...ws,
       nodes: (ws.nodes || []).map(n => (n.id === id ? { ...n, ...changes } : n)),
-    }), isPositionOnly);
+    }), !affectsVariableScope);
   }, [updateActiveWorkspace]);
 
   const deleteNode = useCallback((nodeIdToDelete: string) => {
@@ -821,6 +838,53 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
     }));
   }, [updateActiveWorkspace]);
 
+  const connectNodes = useCallback((connection: Omit<Connection, 'id'>) => {
+    if (connection.from === connection.to) return;
+
+    updateActiveWorkspace(ws => {
+      const currentConnections = ws.connections || [];
+      const isDuplicate = currentConnections.some(existing =>
+        existing.from === connection.from &&
+        existing.to === connection.to &&
+        (existing.sourceHandle || 'default') === (connection.sourceHandle || 'default') &&
+        (existing.targetHandle || 'default') === (connection.targetHandle || 'default')
+      );
+      if (isDuplicate) return ws;
+
+      // A source handle represents one deterministic route in the execution
+      // engine. Reconnecting it replaces the previous destination.
+      const withoutPreviousRoute = currentConnections.filter(existing => !(
+        existing.from === connection.from &&
+        (existing.sourceHandle || 'default') === (connection.sourceHandle || 'default')
+      ));
+
+      return {
+        ...ws,
+        connections: [
+          ...withoutPreviousRoute,
+          { id: uuidv4(), ...connection },
+        ],
+      };
+    });
+  }, [updateActiveWorkspace]);
+
+  const handleViewportChange = useCallback((viewport: { x: number; y: number; zoom: number }) => {
+    setCanvasOffset(current => (
+      current.x === viewport.x && current.y === viewport.y
+        ? current
+        : { x: viewport.x, y: viewport.y }
+    ));
+    setZoomLevel(current => current === viewport.zoom ? current : viewport.zoom);
+  }, []);
+
+  const handleSelectionChangeIds = useCallback((nextIds: string[]) => {
+    setSelectedNodeIds(currentIds => {
+      const selectionIsUnchanged = nextIds.length === currentIds.length
+        && nextIds.every(id => currentIds.includes(id));
+      return selectionIsUnchanged ? currentIds : nextIds;
+    });
+  }, []);
+
   useEffect(() => {
     if (!hasMounted) return;
 
@@ -926,6 +990,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
 
   return (
     <DndProvider backend={HTML5Backend}>
+      <ReactFlowProvider>
       <div className="flex flex-col h-screen bg-background font-sans select-none overflow-hidden">
         <TopBar
           workspaceName={activeWorkspace?.name || 'Carregando...'}
@@ -937,12 +1002,9 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
           onHighlightNode={handleHighlightNodeInFlow}
           activeWorkspace={activeWorkspace}
         />
-        <ZoomControls
-          onZoom={handleZoom}
-          currentZoomLevel={zoomLevel}
-        />
+        <ZoomControls />
         <div className="flex-1 flex relative overflow-hidden">
-          <FlowSidebar onInteractionChange={setIsSidebarActive} />
+          <FlowSidebar />
           <div className="flex-1 flex relative overflow-hidden" >
             <Canvas
               ref={canvasRef}
@@ -957,21 +1019,24 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
               onDeleteNode={deleteNode}
               onDuplicateNode={duplicateNode}
               onDeleteConnection={deleteConnection}
-              onCanvasMouseDown={handleCanvasMouseDownForPanning}
+              onCanvasMouseDown={() => setSelectedNodeIds([])}
               isInteracting={isInteracting}
               highlightedConnectionId={highlightedConnectionId}
               setHighlightedConnectionId={setHighlightedConnectionId}
               availableVariablesByNode={availableVariablesByNode}
               highlightedNodeIdBySession={highlightedNodeIdBySession}
               activeWorkspace={activeWorkspace}
+              organizationGeminiKeys={organizationGeminiKeys}
               selectedNodeIds={selectedNodeIds}
               onSelectNode={handleSelectNode}
+              onSelectionChangeIds={handleSelectionChangeIds}
               onNodeDragStart={handleNodeDragStart}
               onUpdatePosition={handleUpdateNodePosition}
               onEndConnection={(e: React.MouseEvent, node: NodeData) => { /* Handle connection end if needed logic here, mostly handled by mouseUp global */ }}
               onConfigureNode={handleConfigureNode}
-              disableAnimations={isSidebarActive}
+              disableAnimations={false}
               tracePathConnectionIds={tracePathConnectionIds}
+              onConnectNodes={connectNodes}
             />
           </div>
 
@@ -1012,11 +1077,13 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
                       <Component
                         node={nodeData}
                         activeWorkspace={activeWorkspace}
+                        organizationGeminiKeys={organizationGeminiKeys}
                         availableVariables={availableVariablesByNode[nodeData.id] || []}
                         onUpdate={updateNode}
                         onStartConnection={() => { }}
                         onEndConnection={() => { }}
                         activeNodeId={nodeData.id}
+                        renderHandles={false}
                       />
                     </div>
                   );
@@ -1026,6 +1093,7 @@ export default function FlowBuilderClient({ workspaceId, user, initialWorkspace 
           </Dialog>
         )}
       </div>
+      </ReactFlowProvider>
     </DndProvider>
   );
 }

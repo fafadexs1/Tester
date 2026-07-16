@@ -9,7 +9,7 @@ import {
   CalendarDays, Mail, Sheet, LayoutTemplate, MonitorSmartphone, Mic, PlayCircle,
   Menu, Cpu, Zap, Database, Search, ChevronRight, Layers, Settings2,
   LogOut, Keyboard, History, FileJson, Share2, Phone, Image as ImageIcon, Users,
-  MailSearch, DatabaseBackup, Clock, Calendar, FileUp, StarHalf, Book
+  MailSearch, DatabaseBackup, Clock, Calendar, FileUp, StarHalf, Book, ReceiptText, CalendarCheck2
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { v4 as uuidv4 } from 'uuid';
@@ -17,31 +17,31 @@ import type { StartNodeTrigger } from '@/lib/types';
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-interface FlowSidebarProps {
-  onInteractionChange?: (isActive: boolean) => void;
-}
-
-const FlowSidebarComponent: React.FC<FlowSidebarProps> = ({ onInteractionChange }) => {
+const FlowSidebarComponent: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeCategory, setActiveCategory] = useState("basic");
 
-  const iconProps = { className: "w-5 h-5 transition-all duration-300" };
+  const iconProps = React.useMemo(
+    () => ({ className: "w-5 h-5 transition-colors duration-150" }),
+    []
+  );
 
-  const defaultTriggers: StartNodeTrigger[] = [
+  const defaultTriggers = React.useMemo<StartNodeTrigger[]>(() => [
     { id: uuidv4(), name: 'Manual', type: 'manual', enabled: true },
     { id: uuidv4(), name: 'Webhook', type: 'webhook', enabled: false, variableMappings: [], sessionTimeoutSeconds: 0 },
-  ];
+  ], []);
 
-  const categories = [
+  const categories = React.useMemo(() => [
     { id: "basic", label: "Essenciais", icon: <Layers {...iconProps} /> },
     { id: "logic", label: "Lógica", icon: <Cpu {...iconProps} /> },
     { id: "ai", label: "Inteligência", icon: <Zap {...iconProps} /> },
+    { id: "dialogy", label: "Dialogy", icon: <Rocket {...iconProps} /> },
     { id: "whatsapp", label: "WhatsApp", icon: <Phone {...iconProps} /> },
     { id: "integrations", label: "Ecossistema", icon: <Blocks {...iconProps} /> },
     { id: "utils", label: "Utilidades", icon: <Settings2 {...iconProps} /> },
-  ];
+  ], [iconProps]);
 
-  const blockCategories: Record<string, any[]> = {
+  const blockCategories = React.useMemo<Record<string, any[]>>(() => ({
     basic: [
       { type: "start", label: "Gatilho", icon: <PlayCircle {...iconProps} className="text-emerald-400" />, description: "Ponto de entrada do fluxo", defaultData: { triggers: defaultTriggers } },
       { type: "message", label: "Enviar Texto", icon: <MessageSquareText {...iconProps} className="text-blue-400" />, defaultData: { text: 'Olá!' } },
@@ -66,9 +66,17 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = ({ onInteractionChange 
       { type: "ai-model-config", label: "AI Model Config", icon: <Cpu {...iconProps} className="text-violet-400" />, defaultData: { aiProvider: 'google' } },
       { type: "ai-memory-config", label: "Memory Config", icon: <Database {...iconProps} className="text-sky-400" />, defaultData: { memoryProvider: 'postgres', memoryScope: 'session' } },
       { type: "intention-router", label: "Intenções", icon: <BrainCircuit {...iconProps} className="text-indigo-500" /> },
-      { type: "dialogy-send-message", label: "Dialogy", icon: <Rocket {...iconProps} className="text-orange-500" /> },
       { type: "http-tool", label: "Ferramenta API", icon: <Webhook {...iconProps} className="text-rose-400" />, defaultData: { httpToolMethod: 'GET', httpToolName: 'minha_ferramenta' } },
       { type: "knowledge", label: "Base de Conhecimento", icon: <Book {...iconProps} className="text-amber-400" />, description: "Informações para o agente consultar", defaultData: {} },
+      { type: "db-tool", label: "Ferramenta BD", icon: <Database {...iconProps} className="text-sky-400" />, description: "Consulta/atualiza BD como tool do agente", defaultData: { dbOperation: 'select', dbToolName: 'consultar_bd', dbResultVariable: 'db_resultado' } },
+    ],
+    dialogy: [
+      { type: "dialogy-send-message", label: "Enviar mensagem", icon: <Rocket {...iconProps} className="text-orange-500" />, description: "Enviar mensagem pela conversa atual da Dialogy" },
+      { type: "dialogy-close-chat", label: "Encerrar chat", icon: <StopCircle {...iconProps} className="text-red-400" />, description: "Encerrar a conversa atual na Dialogy", defaultData: {} },
+      { type: "dialogy-transfer-team", label: "Transferir para equipe", icon: <Users {...iconProps} className="text-orange-400" />, description: "Transferir para uma equipe da workspace Dialogy", defaultData: {} },
+      { type: "dialogy-transfer-ai", label: "Transferir para IA", icon: <BrainCircuit {...iconProps} className="text-orange-400" />, description: "Transferir para um agente de IA da workspace Dialogy", defaultData: {} },
+      { type: "dialogy-sgp-second-copy", label: "Segunda via SGP", icon: <ReceiptText {...iconProps} className="text-emerald-400" />, description: "Consultar contrato, fatura e enviar PIX ou boleto", defaultData: { sgpSecondCopyDeliveryMode: 'list', sgpSecondCopyPixTemplateBodyParameter: 1, sgpSecondCopyBoletoTemplateBodyParameter: 1 } },
+      { type: "dialogy-sgp-payment-promise", label: "Promessa de pagamento", icon: <CalendarCheck2 {...iconProps} className="text-sky-400" />, description: "Selecionar contrato e solicitar liberação provisória no SGP", defaultData: { sgpPaymentPromiseDeliveryMode: 'list' } },
     ],
     whatsapp: [
       { type: "whatsapp-text", label: "Texto WA", icon: <MessageSquareText {...iconProps} className="text-emerald-500" /> },
@@ -80,10 +88,10 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = ({ onInteractionChange 
       { type: "api-call", label: "Requisição HTTP", icon: <Webhook {...iconProps} className="text-rose-500" />, defaultData: { apiUrl: 'https://', apiMethod: 'GET' } },
       { type: "send-email", label: "E-mail", icon: <Mail {...iconProps} className="text-blue-500" /> },
       { type: "google-sheets-append", label: "Google Sheets", icon: <Sheet {...iconProps} className="text-emerald-500" /> },
-      { type: "supabase-create-row", label: "SB Criar", icon: <Database {...iconProps} className="text-emerald-400" /> },
-      { type: "supabase-read-row", label: "SB Ler", icon: <DatabaseBackup {...iconProps} className="text-emerald-500" /> },
-      { type: "supabase-update-row", label: "SB Atualizar", icon: <Database {...iconProps} className="text-blue-400" /> },
-      { type: "supabase-delete-row", label: "SB Deletar", icon: <Database {...iconProps} className="text-red-400" /> },
+      { type: "db-select", label: "DB Consultar", icon: <Search {...iconProps} className="text-sky-400" />, description: "Consultar dados de uma tabela", defaultData: { dbOperation: 'select', dbResultVariable: 'db_resultado' } },
+      { type: "db-insert", label: "DB Inserir", icon: <DatabaseBackup {...iconProps} className="text-emerald-400" />, description: "Inserir dados em uma tabela", defaultData: { dbOperation: 'insert', dbResultVariable: 'db_resultado' } },
+      { type: "db-update", label: "DB Atualizar", icon: <Database {...iconProps} className="text-amber-400" />, description: "Atualizar dados de uma tabela", defaultData: { dbOperation: 'update' } },
+      { type: "db-delete", label: "DB Deletar", icon: <Database {...iconProps} className="text-red-400" />, description: "Deletar dados de uma tabela", defaultData: { dbOperation: 'delete' } },
       { type: "redirect", label: "Redirecionar", icon: <ExternalLink {...iconProps} className="text-zinc-400" /> },
     ],
     utils: [
@@ -92,32 +100,35 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = ({ onInteractionChange 
       { type: "file-upload", label: "Pedir Arquivo", icon: <FileUp {...iconProps} className="text-blue-400" /> },
       { type: "rating-input", label: "Pedir Avaliação", icon: <StarHalf {...iconProps} className="text-yellow-400" /> },
     ]
-  };
+  }), [defaultTriggers, iconProps]);
 
   return (
     <aside
       className={cn(
-        "fixed left-6 top-24 bottom-6 z-40 flex gap-0 transition-all duration-500 group/sidebar",
+        "fixed bottom-6 left-6 top-24 z-40 flex gap-0",
         isExpanded ? "w-[300px]" : "w-16"
       )}
-      onMouseEnter={() => { setIsExpanded(true); onInteractionChange?.(true); }}
-      onMouseLeave={() => { setIsExpanded(false); onInteractionChange?.(false); }}
+      onMouseEnter={() => setIsExpanded(true)}
+      onMouseLeave={() => setIsExpanded(false)}
     >
       {/* Dock Rail */}
-      <div className="w-16 h-full neo-glass flex flex-col items-center py-6 gap-6 rounded-l-[2rem] border-r-0">
+      <div className={cn(
+        "flex h-full w-16 shrink-0 flex-col items-center gap-6 border border-white/10 bg-[#09090b]/95 py-6 shadow-xl",
+        isExpanded ? "rounded-l-[2rem] border-r-0" : "rounded-[2rem]"
+      )}>
         <div className="p-2 bg-primary/10 rounded-2xl aurora-glow">
           <Menu className="w-6 h-6 text-primary" />
         </div>
 
         <div className="flex-1 flex flex-col gap-4 mt-4 w-full px-2">
-          <TooltipProvider delayDuration={0}>
+          <TooltipProvider delayDuration={150}>
             {categories.map((cat) => (
               <Tooltip key={cat.id}>
                 <TooltipTrigger asChild>
                   <button
                     onClick={() => setActiveCategory(cat.id)}
                     className={cn(
-                      "p-3 rounded-2xl transition-all duration-300 relative group/btn",
+                      "group/btn relative rounded-2xl p-3 transition-colors duration-150",
                       activeCategory === cat.id
                         ? "bg-white/10 text-white shadow-[0_0_20px_rgba(255,255,255,0.05)] border border-white/10"
                         : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
@@ -145,8 +156,11 @@ const FlowSidebarComponent: React.FC<FlowSidebarProps> = ({ onInteractionChange 
       {/* Expanded Content */}
       <div
         className={cn(
-          "flex-1 h-full bg-black/60 backdrop-blur-2xl border border-l-0 border-white/10 rounded-r-[2rem] overflow-hidden transition-all duration-500 origin-left flex flex-col",
-          isExpanded ? "opacity-100 scale-x-100 translate-x-0" : "opacity-0 scale-x-0 -translate-x-8 pointer-events-none"
+          "flex h-full flex-1 flex-col overflow-hidden rounded-r-[2rem] border border-l-0 border-white/10 bg-[#09090b]/[0.98] shadow-2xl will-change-transform",
+          "transition-[transform,opacity] duration-150 ease-out",
+          isExpanded
+            ? "pointer-events-auto translate-x-0 opacity-100"
+            : "pointer-events-none -translate-x-3 opacity-0"
         )}
       >
         <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">

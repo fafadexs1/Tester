@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useCallback } from 'react';
-import type { FlowSession, EvolutionInstance, ChatwootInstance, WorkspaceVersion, DialogyInstance, WorkspaceData } from '@/lib/types';
+import type { FlowSession, EvolutionInstance, ChatwootInstance, WorkspaceVersion, DialogyInstance, WorkspaceData, DatabaseConnection } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import {
   SaveAll, UserCircle, Settings, LogOut, PlugZap, PanelRightOpen, PanelRightClose,
   TerminalSquare, History, Download, Upload, Home, ChevronsLeft,
-  Sparkles, Save, Settings2, Pencil, Trash2
+  Sparkles, Save, Settings2, Pencil, Trash2, Database
 } from 'lucide-react';
+import { DatabaseConnectionHub } from './components/DatabaseConnectionHub';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -70,6 +71,7 @@ const TopBar: React.FC<TopBarProps> = ({
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [history, setHistory] = useState<WorkspaceVersion[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isDatabaseHubOpen, setIsDatabaseHubOpen] = useState(false);
 
   const [createInstanceType, setCreateInstanceType] = useState<'evolution' | 'chatwoot' | 'dialogy' | null>(null);
   const [editingInstance, setEditingInstance] = useState<any>(null);
@@ -234,8 +236,17 @@ const TopBar: React.FC<TopBarProps> = ({
             </div>
           </div>
 
-          {/* Center Section: Core Actions (History Only) */}
+          {/* Center Section: Project Actions */}
           <div className="flex items-center gap-3">
+            <Button
+              className="h-9 rounded-full bg-gradient-to-r from-primary to-violet-600 px-4 text-xs font-bold text-white shadow-[0_6px_20px_-8px_rgba(139,92,246,0.8)] hover:from-primary/90 hover:to-violet-500"
+              onClick={() => setIsSaveDialogOpen(true)}
+              disabled={!activeWorkspace}
+              title="Salvar Projeto"
+            >
+              <Save className="mr-2 h-4 w-4" />
+              Salvar Projeto
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -302,6 +313,9 @@ const TopBar: React.FC<TopBarProps> = ({
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={handleOpenInstanceManager}>
                   <PlugZap className="mr-2 h-4 w-4" /> Instâncias
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setIsDatabaseHubOpen(true)}>
+                  <Database className="mr-2 h-4 w-4" /> Banco de Dados
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-white/10" />
                 <DropdownMenuItem onClick={logout} className="text-red-400 focus:text-red-400 focus:bg-red-400/10">
@@ -722,17 +736,6 @@ const TopBar: React.FC<TopBarProps> = ({
 
       </div>
 
-      {/* Floating Save Button */}
-      <div className="fixed bottom-6 right-6 z-[100] pointer-events-auto">
-        <Button
-          className="h-12 px-8 rounded-full font-bold bg-gradient-to-r from-primary to-violet-600 hover:from-primary/90 hover:to-violet-500 text-white shadow-[0_8px_32px_-6px_rgba(139,92,246,0.6)] hover:shadow-[0_8px_40px_-4px_rgba(139,92,246,0.8)] transition-all duration-300 gap-3 border border-white/20 active:scale-95 text-sm cursor-pointer"
-          onClick={() => setIsSaveDialogOpen(true)}
-          disabled={!activeWorkspace}
-        >
-          <Save className="w-4 h-4 fill-white/20" />
-          Salvar Projeto
-        </Button>
-      </div>
       {/* Create/Edit Instance Dialog */}
       <Dialog open={!!createInstanceType} onOpenChange={(open) => !open && setCreateInstanceType(null)}>
         <DialogContent className="neo-glass border-white/10 shadow-2xl rounded-3xl">
@@ -790,6 +793,14 @@ const TopBar: React.FC<TopBarProps> = ({
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Database Connection Hub */}
+      <DatabaseConnectionHub
+        open={isDatabaseHubOpen}
+        onOpenChange={setIsDatabaseHubOpen}
+        connections={activeWorkspace?.databaseConnections || []}
+        onConnectionsChange={(connections) => onUpdateWorkspace({ databaseConnections: connections })}
+      />
 
     </>
   );

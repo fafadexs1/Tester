@@ -3,6 +3,12 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   /* config options here */
+  output: 'standalone',
+  outputFileTracingIncludes: {
+    '/*': [
+      './node_modules/onnxruntime-node/**/*',
+    ],
+  },
   typescript: {
     ignoreBuildErrors: true,
   },

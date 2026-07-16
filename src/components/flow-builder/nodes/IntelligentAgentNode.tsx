@@ -9,12 +9,14 @@ import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { VariableInserter } from '../components/VariableInserter';
 import { TextFormatToolbar } from '../components/TextFormatToolbar';
+import { Position } from '@xyflow/react';
+import { FlowHandle } from './FlowHandle';
 
 export const IntelligentAgentNode: React.FC<NodeComponentProps> = ({
     node,
     onUpdate,
-    onEndConnection,
     activeWorkspace,
+    renderHandles = true,
 }) => {
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -59,7 +61,7 @@ export const IntelligentAgentNode: React.FC<NodeComponentProps> = ({
     }, [activeWorkspace?.nodes]);
 
     return (
-        <div className="space-y-2" data-no-drag="true">
+        <div className="nodrag nowheel space-y-2" data-no-drag="true">
             <div>
                 <Label htmlFor={`${node.id}-agentname`} className="mb-1 block text-[10px] font-medium text-zinc-400">
                     Nome do Agente
@@ -206,18 +208,10 @@ export const IntelligentAgentNode: React.FC<NodeComponentProps> = ({
                 Este no simula uma conversa com um agente de IA. A logica real usa Genkit.
             </p>
 
-            <div className="absolute -bottom-3 left-0 right-0 flex justify-center gap-4 px-2">
+            {renderHandles && <div className="absolute -bottom-3 left-0 right-0 flex justify-center gap-4 px-2">
                 <div className="group/h-model relative flex flex-col items-center gap-1">
-                    <div
-                        className="h-3 w-3 cursor-crosshair rounded-full border border-black bg-violet-500 shadow-[0_0_5px_rgba(139,92,246,0.5)] transition-transform hover:scale-125"
-                        data-connector="true"
-                        data-handle-type="target"
-                        data-handle-id="model"
-                        data-node-id={node.id}
-                        onMouseUp={(event) => {
-                            event.stopPropagation();
-                            onEndConnection?.(event, node, 'model');
-                        }}
+                    <FlowHandle id="model" type="target" position={Position.Bottom}
+                        colorClass="bg-violet-500"
                         title="Connect AI Model"
                     />
                     <span className="absolute -bottom-4 whitespace-nowrap rounded bg-black/80 px-1 text-[8px] font-bold uppercase tracking-tighter text-zinc-500 opacity-0 transition-opacity group-hover/h-model:opacity-100">
@@ -226,16 +220,8 @@ export const IntelligentAgentNode: React.FC<NodeComponentProps> = ({
                 </div>
 
                 <div className="group/h-mem relative flex flex-col items-center gap-1">
-                    <div
-                        className="h-3 w-3 cursor-crosshair rounded-full border border-black bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)] transition-transform hover:scale-125"
-                        data-connector="true"
-                        data-handle-type="target"
-                        data-handle-id="memory"
-                        data-node-id={node.id}
-                        onMouseUp={(event) => {
-                            event.stopPropagation();
-                            onEndConnection?.(event, node, 'memory');
-                        }}
+                    <FlowHandle id="memory" type="target" position={Position.Bottom}
+                        colorClass="bg-blue-500"
                         title="Connect Memory"
                     />
                     <span className="absolute -bottom-4 whitespace-nowrap rounded bg-black/80 px-1 text-[8px] font-bold uppercase tracking-tighter text-zinc-500 opacity-0 transition-opacity group-hover/h-mem:opacity-100">
@@ -244,23 +230,15 @@ export const IntelligentAgentNode: React.FC<NodeComponentProps> = ({
                 </div>
 
                 <div className="group/h-tool relative flex flex-col items-center gap-1">
-                    <div
-                        className="h-3 w-3 cursor-crosshair rounded-full border border-black bg-amber-500 shadow-[0_0_5px_rgba(245,158,11,0.5)] transition-transform hover:scale-125"
-                        data-connector="true"
-                        data-handle-type="target"
-                        data-handle-id="tools"
-                        data-node-id={node.id}
-                        onMouseUp={(event) => {
-                            event.stopPropagation();
-                            onEndConnection?.(event, node, 'tools');
-                        }}
+                    <FlowHandle id="tools" type="target" position={Position.Bottom}
+                        colorClass="bg-amber-500"
                         title="Connect Tools"
                     />
                     <span className="absolute -bottom-4 whitespace-nowrap rounded bg-black/80 px-1 text-[8px] font-bold uppercase tracking-tighter text-zinc-500 opacity-0 transition-opacity group-hover/h-tool:opacity-100">
                         Tools
                     </span>
                 </div>
-            </div>
+            </div>}
         </div>
     );
 };

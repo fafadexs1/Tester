@@ -14,7 +14,14 @@ import {
   withSessionAdvisoryLock,
 } from '@/app/actions/databaseActions';
 import { executeFlow } from '@/lib/flow-engine/engine';
+import {
+  getOptionDisplayText,
+  getOptionId,
+  getOptionValue,
+  matchOptionByHeuristics,
+} from '@/lib/flow-engine/option-matching';
 import { storeRequestDetails } from '@/lib/flow-engine/webhook-handler';
+import { extractDialogyIncomingMessageValue } from '@/lib/flow-engine/dialogy-utils';
 import { findNodeById, findNextNodeId } from '@/lib/flow-engine/utils';
 import { classifyIntent } from '@/ai/flows/intention-classification-flow';
 import type { NodeData, Connection, FlowSession, StartNodeTrigger, WorkspaceData } from '@/lib/types';
@@ -148,12 +155,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     let receivedMessageText = loggedEntry.extractedMessage;
     const flowContext = loggedEntry.flow_context ?? loggedEntry.flowContext ?? 'evolution';
     if (!receivedMessageText || receivedMessageText === '') {
-      receivedMessageText =
-        getProperty(parsedBody, 'message.content') ??
-        getProperty(parsedBody, 'message.body') ??
-        getProperty(parsedBody, 'message.textMessage.text') ??
-        getProperty(parsedBody, 'text') ??
-        '';
+      const dialogyFallback = flowContext === 'dialogy'
+        ? extractDialogyIncomingMessageValue(parsedBody)
+        : '';
+      receivedMessageText = dialogyFallback;
+      if (!receivedMessageText) {
+        receivedMessageText =
+          getProperty(parsedBody, 'message.content') ??
+          getProperty(parsedBody, 'message.body') ??
+          getProperty(parsedBody, 'message.textMessage.text') ??
+          getProperty(parsedBody, 'text') ??
+          '';
+      }
     }
     const normalizeIncomingMessage = (value: string | null | undefined): string => {
       if (!value) return '';
@@ -312,11 +325,45 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             } else {
               nextNodeId = findNextNodeId(awaitingNode.id, 'default', workspace.connections || []);
             }
+          } else if (
+            session.awaiting_input_type === 'option' &&
+            ['sgp-second-copy', 'sgp-payment-promise'].includes(String(session.awaiting_input_details.workflowKind)) &&
+            Array.isArray(session.awaiting_input_details.options)
+          ) {
+            const options = session.awaiting_input_details.options;
+            const received = String(responseValue || '').trim();
+            const directMatch = options.find(option => getOptionId(option) === received);
+            const matched = directMatch
+              ? { id: getOptionId(directMatch), value: getOptionValue(directMatch) }
+              : matchOptionByHeuristics(options, received);
+            const stateVariable = normalizeVariableName(session.awaiting_input_details.workflowStateVariable);
+            const state: any = stateVariable ? getProperty(session.flow_variables, stateVariable) : null;
+
+            if (state && matched) {
+              const stage = session.awaiting_input_details.workflowStage;
+              if (stage === 'contract') {
+                state.selectedContractId = matched.value;
+                state.stage = session.awaiting_input_details.workflowKind === 'sgp-payment-promise' ? 'execute' : 'invoice';
+              } else if (stage === 'invoice') {
+                state.selectedInvoiceId = matched.value;
+                state.stage = 'payment-method';
+              } else if (stage === 'payment-method') {
+                state.selectedPaymentMethod = matched.value;
+                state.stage = 'complete';
+              }
+              state.invalidSelection = false;
+              setProperty(session.flow_variables, stateVariable, state);
+            } else if (state) {
+              state.invalidSelection = true;
+              setProperty(session.flow_variables, stateVariable, state);
+            }
+
+            nextNodeId = awaitingNode.id;
           } else if (session.awaiting_input_type === 'option' && Array.isArray(session.awaiting_input_details.options)) {
             const options = session.awaiting_input_details.options; // Can be string[] or {id, value}[]
 
             let chosenOptionId: string | undefined = undefined;
-            let chosenOptionText: string | undefined = undefined;
+            let chosenOptionValue: string | undefined = undefined;
 
             let valueForOptionMatching = String(responseValue);
             if (isApiCallResponse && awaitingNode.apiResponsePathForValue) {
@@ -325,33 +372,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             }
             const trimmedReceivedMessage = valueForOptionMatching.trim();
 
-            // Helper to get text from option
-            const getOptText = (opt: any) => typeof opt === 'string' ? opt : opt.value;
-            const getOptId = (opt: any) => typeof opt === 'string' ? opt : opt.id;
-
-            const normalizedOptionLabels = options.map(opt => getOptText(opt).trim().replace(/^[\[\s,]+|[\],\s]+$/g, '').toLowerCase());
             const aiEnabled = !!session.awaiting_input_details.aiEnabled;
             const aiModelName = session.awaiting_input_details.aiModelName;
+            const aiKeyId = session.awaiting_input_details.aiKeyId;
 
-            if (aiEnabled) {
+            const heuristicMatch = matchOptionByHeuristics(options, trimmedReceivedMessage);
+            if (heuristicMatch) {
+              chosenOptionValue = heuristicMatch.value;
+              chosenOptionId = heuristicMatch.id;
+            }
+
+            if (!chosenOptionId && aiEnabled) {
               try {
-                const intents = options.map((opt: any) => ({
-                  id: getOptId(opt),
-                  label: getOptText(opt) || 'Option',
-                  description: getOptText(opt) || ''
+                const intents = options.map((opt) => ({
+                  id: getOptionId(opt),
+                  label: getOptionDisplayText(opt) || 'Option',
+                  description: getOptionDisplayText(opt) || ''
                 }));
 
                 const aiResult = await classifyIntent({
                   userMessage: trimmedReceivedMessage,
                   intents: intents,
                   modelName: aiModelName || undefined,
+                  organizationId: workspace.organization_id,
+                  apiKeyId: aiKeyId || undefined,
                 });
 
                 if (aiResult.matchedIntentId) {
-                  const match = options.find((o: any) => getOptId(o) === aiResult.matchedIntentId);
+                  const match = options.find((option) => getOptionId(option) === aiResult.matchedIntentId);
                   if (match) {
-                    chosenOptionText = getOptText(match);
-                    chosenOptionId = getOptId(match);
+                    chosenOptionValue = getOptionValue(match);
+                    chosenOptionId = getOptionId(match);
                   }
                 }
               } catch (error) {
@@ -359,46 +410,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               }
             }
 
-            if (!chosenOptionId) {
-              let isNumberMatch = false;
-              if (/^\d+$/.test(trimmedReceivedMessage)) {
-                const numericChoice = parseInt(trimmedReceivedMessage, 10);
-                if (!isNaN(numericChoice) && numericChoice > 0 && numericChoice <= options.length) {
-                  const match = options[numericChoice - 1];
-                  chosenOptionText = getOptText(match);
-                  chosenOptionId = getOptId(match);
-                  isNumberMatch = true;
-                }
-              }
-
-              if (!isNumberMatch) {
-                const cleanedMessage = trimmedReceivedMessage.replace(/^[\[\s,]+|[\],\s]+$/g, '').toLowerCase();
-                const matchIndex = normalizedOptionLabels.indexOf(cleanedMessage);
-                if (matchIndex >= 0) {
-                  const match = options[matchIndex];
-                  chosenOptionText = getOptText(match);
-                  chosenOptionId = getOptId(match);
-                } else {
-                  const match = options.find((opt: any) => getOptText(opt).trim().toLowerCase() === cleanedMessage);
-                  if (match) {
-                    chosenOptionText = getOptText(match);
-                    chosenOptionId = getOptId(match);
-                  }
-                }
-              }
-            }
-
             if (chosenOptionId) {
               const targetVarName = normalizeVariableName(session.awaiting_input_details.variableToSave);
-              if (targetVarName) {
-                setProperty(session.flow_variables, targetVarName, chosenOptionText); // Save the TEXT (human readable)
+              if (targetVarName && chosenOptionValue !== undefined) {
+                setProperty(session.flow_variables, targetVarName, chosenOptionValue);
               }
               // Route using ID (for new nodes) or Text (legacy)
               nextNodeId = findNextNodeId(awaitingNode.id, chosenOptionId, workspace.connections || []);
 
               // Fallback for legacy connections that might still be using value as handle?
-              if (!nextNodeId && chosenOptionId !== chosenOptionText) {
-                nextNodeId = findNextNodeId(awaitingNode.id, chosenOptionText!, workspace.connections || []);
+              if (!nextNodeId && chosenOptionValue && chosenOptionId !== chosenOptionValue) {
+                nextNodeId = findNextNodeId(awaitingNode.id, chosenOptionValue, workspace.connections || []);
               }
 
               if (!nextNodeId) {
@@ -514,6 +536,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         setProperty(initialVars, 'dialogy_conversation_id', getProperty(payloadToUse, 'conversation.id'));
         setProperty(initialVars, 'dialogy_contact_id', getProperty(payloadToUse, 'contact.id'));
         setProperty(initialVars, 'dialogy_account_id', getProperty(payloadToUse, 'account.id'));
+        setProperty(initialVars, 'dialogy_channel', getProperty(payloadToUse, 'conversation.channel'));
+        setProperty(initialVars, 'dialogy_instance_name', getProperty(payloadToUse, 'conversation.instance_name'));
+        setProperty(initialVars, 'dialogy_instance_type', getProperty(payloadToUse, 'conversation.instance_type'));
         setProperty(initialVars, 'contact_name', getProperty(payloadToUse, 'contact.name'));
         setProperty(initialVars, 'contact_phone', getProperty(payloadToUse, 'contact.phone_number'));
       } else if (flowContext === 'chatwoot') {
